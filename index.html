@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#EAE4D3" />
+  <title>民国纪事 - MiniPhone</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/icons/icon-192.png" type="image/png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- 手机外框容器 -->
+  <div class="phone-frame">
+    <div class="screen">
+      
+      <!-- 1. 顶部状态栏 -->
+      <div id="top-status-bar" class="status-bar">
+        <div class="status-left">
+          <span id="sys-time">00:00</span>
+        </div>
+        <div class="status-right">
+          <div class="battery-icon">
+            <div id="battery-level" class="battery-level" style="width: 100%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 桌面滑动容器 (由 Desktop.js 渲染) -->
+      <div id="desktop-container" class="desktop-container"></div>
+
+      <!-- 3. 底部固定 Dock 栏 -->
+      <div id="dock-container" class="dock-container">
+        <!-- Dock 内的应用由 JS 绑定点击事件，这里使用固定的 HTML 结构 -->
+        <div class="app-icon dock-icon" data-app-id="worldbook">
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="worldbook">世情</button>
+        </div>
+        <div class="app-icon dock-icon" data-app-id="memory">
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="memory">旧事</button>
+        </div>
+        <div class="app-icon dock-icon" data-app-id="settings">
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="settings">设置</button>
+        </div>
+      </div>
+
+      <!-- 4. 隐藏的图片上传表单，供桌面组件触发 -->
+      <input type="file" id="sys-file-upload" accept="image/*" style="display: none;" />
+
+      <!-- 5. 应用窗口容器 -->
+      <div id="window-container" class="window-container"></div>
+
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

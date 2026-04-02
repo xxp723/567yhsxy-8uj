@@ -1,0 +1,508 @@
+/**
+ * 文件名: css/styles.css
+ * 用途: 民国旧报纸风格 UI 样式。
+ *       使用奶咖色、米黄色、米白色、浅灰色系。
+ */
+
+@font-face {
+  font-family: "Huiwen-mincho";
+  /* 假设本地或系统有该字体，或者回退到常见宋体/明朝体 */
+  src: local("汇文明朝体"), local("Huiwen-mincho"), local("STSong"), local("SimSun");
+}
+
+/* =========================
+   全局变量（民国报纸风）
+   ========================= */
+:root {
+  --c-bg-wallpaper: #EAE4D3; /* 默认米黄色壁纸 */
+  --c-milktea: #D2C5B5;      /* 奶咖色 */
+  --c-milktea-trans: rgba(210, 197, 181, 0.5); /* 毛玻璃用奶咖色 */
+  --c-white-rice: #F5F2EB;   /* 米白色 */
+  --c-gray-light: #E0DCD1;   /* 浅灰色 */
+  --c-text-main: #222222;    /* 报纸黑色字体 */
+  --c-border: #333333;       /* 边框黑 */
+  
+  --font-retro: "Huiwen-mincho", "STSong", "SimSun", serif;
+
+  --status-bar-height: 28px;
+  --dock-height: 90px;
+}
+
+/* =========================
+   基础重置
+   ========================= */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #111;
+  font-family: var(--font-retro);
+  color: var(--c-text-main);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* 设置应用外观控制的隐藏类 */
+body.hide-status-bar #top-status-bar {
+  display: none !important;
+}
+
+/* =========================
+   手机外框
+   ========================= */
+.phone-frame {
+  width: min(390px, 100vw);
+  height: min(844px, 100vh);
+  margin: 0 auto;
+  background: #000;
+  border-radius: 34px;
+  border: 8px solid #1c1c1e;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  position: relative;
+}
+
+.screen {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: var(--c-bg-wallpaper); /* 默认壁纸，后续可被 JS 覆盖 */
+  background-size: cover;
+  background-position: center;
+}
+
+/* =========================
+   状态栏 (Top Bar)
+   ========================= */
+.status-bar {
+  height: var(--status-bar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--c-text-main);
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 50;
+  letter-spacing: 1px;
+}
+
+.status-left, .status-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.battery-icon {
+  width: 20px;
+  height: 10px;
+  border: 1.5px solid var(--c-text-main);
+  border-radius: 2px;
+  position: relative;
+  padding: 1px;
+}
+.battery-icon::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 2px;
+  width: 2px;
+  height: 3px;
+  background: var(--c-text-main);
+  border-radius: 0 1px 1px 0;
+}
+.battery-level {
+  height: 100%;
+  background: var(--c-text-main);
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+
+/* =========================
+   桌面容器 (Desktop Container)
+   ========================= */
+.desktop-container {
+  position: absolute;
+  top: var(--status-bar-height);
+  bottom: var(--dock-height);
+  left: 0; right: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+.desktop-container::-webkit-scrollbar { display: none; }
+
+.desktop-page {
+  flex: 0 0 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  padding: 15px 20px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================
+   应用图标 (磨砂毛玻璃拟态奶咖色)
+   ========================= */
+.app-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.app-icon-btn {
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  background: var(--c-milktea-trans);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 2px 4px 10px rgba(0,0,0,0.1), inset 1px 1px 2px rgba(255,255,255,0.3);
+  color: var(--c-text-main);
+  font-family: var(--font-retro);
+  font-size: 18px;
+  font-weight: bold;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.app-icon-btn:active {
+  transform: scale(0.92);
+  box-shadow: 1px 2px 5px rgba(0,0,0,0.1);
+}
+
+.app-icon-label {
+  display: none; /* 民国风图标直接将字写在按钮里，不需要额外label */
+}
+
+/* =========================
+   底部 Dock 栏
+   ========================= */
+.dock-container {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  right: 15px;
+  height: 70px;
+  background: var(--c-milktea-trans);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 24px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  z-index: 100;
+  padding: 0 10px;
+}
+
+.dock-container .app-icon-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+
+/* =========================
+   第一页 (Page 1) 布局
+   ========================= */
+/* 顶部时钟 */
+.p1-clock-widget {
+  text-align: center;
+  margin-bottom: 20px;
+  font-family: var(--font-retro);
+}
+.p1-time {
+  font-size: 48px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+.p1-date {
+  font-size: 14px;
+  margin-top: 5px;
+  letter-spacing: 1px;
+}
+
+/* 中间组件区 (左右并排) */
+.p1-widgets-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  height: 220px;
+  margin-bottom: auto; /* 推挤下方应用到底部 */
+}
+
+/* 左侧：报纸文本组件 */
+.p1-news-widget {
+  flex: 1;
+  background: var(--c-white-rice);
+  border: 2px solid var(--c-border);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+}
+.p1-news-widget::before {
+  /* 内层细边框 */
+  content: ''; position: absolute; top: 3px; left: 3px; right: 3px; bottom: 3px;
+  border: 1px solid var(--c-border); pointer-events: none;
+}
+.p1-news-title {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  border-bottom: 2px solid var(--c-border);
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+  z-index: 1;
+  cursor: text;
+}
+.p1-news-content {
+  flex: 1;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: 1px;
+  z-index: 1;
+  overflow: hidden;
+  cursor: text;
+}
+
+/* 右侧：3:4 头像框组件 */
+.p1-avatar-widget {
+  width: 140px;
+  height: 100%;
+  background: var(--c-white-rice);
+  border: 2px solid var(--c-border);
+  padding: 6px;
+  position: relative;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+.p1-avatar-inner {
+  flex: 1;
+  border: 1px dashed var(--c-border);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+}
+.p1-avatar-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: sepia(0.3) contrast(1.1); /* 微微做旧 */
+}
+.p1-avatar-hint {
+  position: absolute;
+  font-size: 12px;
+  color: var(--c-border);
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
+.p1-avatar-desc {
+  text-align: center;
+  font-size: 12px;
+  margin-top: 5px;
+  border-top: 1px solid var(--c-border);
+  padding-top: 3px;
+}
+
+/* 底部应用区 1x4 */
+.p1-apps-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  margin-bottom: 20px;
+}
+
+/* =========================
+   第二页 (Page 2) 布局
+   ========================= */
+/* 顶部：横向仿民国戏票组件 */
+.p2-ticket-widget {
+  width: 100%;
+  height: 180px;
+  background: var(--c-white-rice);
+  border: 4px solid var(--c-border); /* 外粗边框 */
+  padding: 4px;
+  position: relative;
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+  display: flex;
+  margin-top: 10px;
+  margin-bottom: auto;
+}
+.p2-ticket-inner {
+  flex: 1;
+  border: 1px solid var(--c-border); /* 内细边框 */
+  display: flex;
+  padding: 8px;
+  gap: 12px;
+  position: relative;
+}
+
+/* 左侧：剧院名 (竖排奶咖色背景) */
+.p2-ticket-brand {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  background: var(--c-milktea);
+  border: 1px solid var(--c-border);
+  padding: 8px 4px;
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  display: flex;
+  align-items: center;
+  cursor: text;
+}
+
+/* 中左：正方形图片 */
+.p2-ticket-img-box {
+  width: 100px;
+  height: 100px;
+  border: 1px solid var(--c-border);
+  padding: 3px;
+  align-self: center;
+  cursor: pointer;
+}
+.p2-ticket-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: grayscale(100%) contrast(1.2); /* 黑白老照片感 */
+  background: var(--c-gray-light);
+  display: block;
+}
+
+/* 右侧：文字区 (竖排，从右向左) */
+.p2-ticket-text-zone {
+  flex: 1;
+  display: flex;
+  flex-direction: row-reverse; /* 竖排从右向左的Flex排版 */
+  gap: 10px;
+}
+
+/* 右侧标题 */
+.p2-ticket-title {
+  writing-mode: vertical-rl;
+  font-size: 22px;
+  font-weight: bold;
+  border-left: 2px solid var(--c-border); /* 标题左侧竖线区分正文 */
+  padding-left: 8px;
+  cursor: text;
+}
+
+/* 右侧正文 (三行) */
+.p2-ticket-desc {
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  line-height: 1.8;
+  display: flex;
+  justify-content: space-between;
+  cursor: text;
+}
+
+/* 底部：奶咖色小印章 */
+.p2-ticket-stamp {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: var(--c-milktea);
+  border: 1px solid var(--c-border);
+  padding: 2px 6px;
+  font-size: 10px;
+  transform: rotate(-5deg);
+  box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+  cursor: text;
+}
+
+/* 底部应用区 1x3 (居中排布) */
+.p2-apps-row {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 20px;
+}
+
+/* =========================
+   应用窗口容器
+   ========================= */
+.window-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200; /* 高于桌面和 Dock */
+}
+
+.app-window-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-window {
+  position: absolute;
+  inset: 0;
+  background: var(--c-white-rice);
+  color: var(--c-text-main);
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-window.is-active {
+  transform: translateY(0);
+}
+
+.app-window__header {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  border-bottom: 2px solid var(--c-border);
+  background: var(--c-milktea);
+}
+
+.app-window__title {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.app-window__close {
+  border: 0;
+  background: transparent;
+  color: var(--c-text-main);
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.app-window__content {
+  flex: 1;
+  overflow: auto;
+  padding: 15px;
+  background: var(--c-bg-wallpaper);
+}

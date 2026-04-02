@@ -1,0 +1,25 @@
+{
+  "name": "小手机（MiniPhone）",
+  "short_name": "小手机",
+  "description": "基于Web的仿手机操作系统 PWA - 四层架构框架（UI Layer / Interaction Layer / Logic Layer / Data Layer）。所有数据本地 IndexedDB 持久化，支持离线使用、可安装到手机桌面。",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
