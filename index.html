@@ -34,21 +34,24 @@
           </div>
 
           <div class="p1-widgets-row">
-            <!-- 报纸组件：标题横排，正文竖排右到左 -->
-            <div class="p1-news-widget">
-              <div class="p1-news-title" contenteditable="true" id="cfg-news-title" spellcheck="false">民国日报</div>
-              <div class="p1-news-content" contenteditable="true" id="cfg-news-content" spellcheck="false">
-                旧时光里的人事风烟，<br>皆可在此书写。<br>从右到左的竖排，<br>记录你的报纸头条。
-              </div>
-            </div>
-
-            <!-- 头像框：3:4 比例，支持本地/URL 上传 -->
-            <div class="p1-avatar-widget" id="avatar-trigger" title="点击上传头像（本地或URL）">
+            <!-- 头像框：3:4 比例，点击弹窗编辑 -->
+            <div class="p1-avatar-widget" id="avatar-trigger" title="点击编辑头像">
               <div class="p1-avatar-inner">
                 <img class="p1-avatar-img" id="widget-avatar" style="display:none;" alt="头像" />
                 <div class="p1-avatar-hint" id="widget-avatar-hint">點擊上傳</div>
               </div>
-              <div class="p1-avatar-desc">號加外急<br>0123456789</div>
+              <div class="p1-avatar-desc" id="cfg-avatar-desc">號加外急<br>0123456789</div>
+            </div>
+
+            <!-- 报纸组件：点击弹窗编辑 -->
+            <div class="p1-news-widget" id="news-trigger" title="点击编辑报纸">
+              <div class="p1-news-image" id="widget-news-img-wrap">
+                <img class="p1-news-img" id="widget-news-img" style="display:none;" alt="报纸图片" />
+              </div>
+              <div class="p1-news-title" id="cfg-news-title">民国日报</div>
+              <div class="p1-news-content" id="cfg-news-content">
+                旧时光里的人事风烟，<br>皆可在此书写。<br>从右到左的竖排，<br>记录你的报纸头条。
+              </div>
             </div>
           </div>
 
@@ -81,6 +84,29 @@
                 <img class="app-custom-img" data-app-img="reader" src="" style="display:none;" alt="观书" />
               </button>
               <span class="app-icon-label">观书</span>
+            </div>
+          </div>
+
+          <!-- 民国车票组件 -->
+          <div class="p1-ticket-widget" id="p1-ticket">
+            <div class="p1-ticket-inner">
+              <div class="p1-ticket-brand" id="cfg-p1-ticket-brand">中华民国长江航运公司</div>
+              <div class="p1-ticket-body">
+                <div class="p1-ticket-route">
+                  <div class="p1-ticket-date" id="cfg-p1-ticket-date">民国十四年五月初七</div>
+                  <div class="p1-ticket-arrows">
+                    <span id="cfg-p1-ticket-from">重庆</span>
+                    <span class="p1-ticket-arrow">→</span>
+                    <span id="cfg-p1-ticket-to">汉口</span>
+                  </div>
+                </div>
+                <div class="p1-ticket-footer">
+                  <span id="cfg-p1-ticket-name">乘客：张三</span>
+                  <span id="cfg-p1-ticket-time">开航：辰时</span>
+                  <span id="cfg-p1-ticket-no">票号：M1925-001</span>
+                </div>
+              </div>
+              <div class="p1-ticket-stamp">民国快线</div>
             </div>
           </div>
         </section>
@@ -157,6 +183,54 @@
         </div>
       </div>
 
+      <!-- 组件弹窗 -->
+      <div id="widget-modal" class="widget-modal hidden" aria-hidden="true">
+        <div class="widget-modal__mask"></div>
+        <div class="widget-modal__panel" role="dialog" aria-modal="true">
+          <div class="widget-modal__header">
+            <span id="widget-modal-title">编辑</span>
+            <button type="button" class="widget-modal__close" id="widget-modal-close" aria-label="关闭">×</button>
+          </div>
+          <div class="widget-modal__body">
+            <div class="modal-section" data-modal-section="avatar">
+              <div class="modal-field">
+                <label>头像图片</label>
+                <div class="modal-img-preview">
+                  <img id="modal-avatar-preview" style="display:none;" alt="头像预览" />
+                  <div class="modal-img-placeholder" id="modal-avatar-placeholder">尚未设置</div>
+                </div>
+                <button type="button" class="modal-btn" id="modal-avatar-upload">上传/URL</button>
+              </div>
+              <div class="modal-field">
+                <label>文字内容</label>
+                <textarea id="modal-avatar-desc-input" rows="2" placeholder="输入头像下方说明"></textarea>
+              </div>
+            </div>
+            <div class="modal-section" data-modal-section="news">
+              <div class="modal-field">
+                <label>报纸图片</label>
+                <div class="modal-img-preview">
+                  <img id="modal-news-preview" style="display:none;" alt="报纸预览" />
+                  <div class="modal-img-placeholder" id="modal-news-placeholder">尚未设置</div>
+                </div>
+                <button type="button" class="modal-btn" id="modal-news-upload">上传/URL</button>
+              </div>
+              <div class="modal-field">
+                <label>标题</label>
+                <input id="modal-news-title-input" type="text" placeholder="报纸标题" />
+              </div>
+              <div class="modal-field">
+                <label>正文</label>
+                <textarea id="modal-news-content-input" rows="4" placeholder="报纸正文，支持换行"></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="widget-modal__footer">
+            <button type="button" class="modal-btn primary" id="widget-modal-save">保存</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 隐藏的图片上传表单 -->
       <input type="file" id="sys-file-upload" accept="image/*" style="display: none;" />
 
@@ -175,7 +249,7 @@
       if (statusHidden) document.body.classList.add('hide-status-bar');
 
       // 壁纸（与设置应用对接：localStorage miniphone_wallpaper）
-      const screen = document.getElementById('screen-root');
+      const screen = $('screen-root');
       const savedWallpaper = localStorage.getItem('miniphone_wallpaper');
       if (screen && savedWallpaper) {
         screen.style.backgroundImage = `url(${savedWallpaper})`;
@@ -224,8 +298,50 @@
         }
       }
 
-      // 文本字段持久化
-      const textFields = ['cfg-news-title', 'cfg-news-content', 'cfg-ticket-brand', 'cfg-ticket-title', 'cfg-ticket-desc', 'cfg-ticket-stamp'];
+      // 通用图片应用
+      const applyImage = (target, src) => {
+        if (target === 'avatar') {
+          const img = $('widget-avatar');
+          const hint = $('widget-avatar-hint');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          if (hint) hint.style.display = 'none';
+          localStorage.setItem('miniphone_widget_avatar', src);
+        } else if (target === 'ticket') {
+          const img = $('widget-ticket-img');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          localStorage.setItem('miniphone_widget_ticket', src);
+        } else if (target === 'news') {
+          const img = $('widget-news-img');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          localStorage.setItem('miniphone_widget_news_img', src);
+        }
+      };
+
+      // 恢复图片
+      const savedAvatar = localStorage.getItem('miniphone_widget_avatar');
+      if (savedAvatar) applyImage('avatar', savedAvatar);
+      const savedTicket = localStorage.getItem('miniphone_widget_ticket');
+      if (savedTicket) applyImage('ticket', savedTicket);
+      const savedNewsImg = localStorage.getItem('miniphone_widget_news_img');
+      if (savedNewsImg) applyImage('news', savedNewsImg);
+
+      // 恢复文本
+      const textFields = [
+        'cfg-avatar-desc',
+        'cfg-news-title',
+        'cfg-news-content',
+        'cfg-ticket-brand',
+        'cfg-ticket-title',
+        'cfg-ticket-desc',
+        'cfg-ticket-stamp',
+        'cfg-p1-ticket-brand',
+        'cfg-p1-ticket-date',
+        'cfg-p1-ticket-from',
+        'cfg-p1-ticket-to',
+        'cfg-p1-ticket-name',
+        'cfg-p1-ticket-time',
+        'cfg-p1-ticket-no'
+      ];
       textFields.forEach(id => {
         const el = $(id);
         if (!el) return;
@@ -237,22 +353,72 @@
         el.addEventListener('mousedown', (e) => e.stopPropagation());
       });
 
-      // 图片上传/URL
+      // 弹窗相关
+      const modal = $('widget-modal');
+      const modalClose = $('widget-modal-close');
+      const modalSave = $('widget-modal-save');
+      const modalTitle = $('widget-modal-title');
+      const modalSections = document.querySelectorAll('.modal-section');
+      const modalAvatarUpload = $('modal-avatar-upload');
+      const modalAvatarPreview = $('modal-avatar-preview');
+      const modalAvatarPlaceholder = $('modal-avatar-placeholder');
+      const modalAvatarDescInput = $('modal-avatar-desc-input');
+      const modalNewsUpload = $('modal-news-upload');
+      const modalNewsPreview = $('modal-news-preview');
+      const modalNewsPlaceholder = $('modal-news-placeholder');
+      const modalNewsTitleInput = $('modal-news-title-input');
+      const modalNewsContentInput = $('modal-news-content-input');
+
       const fileInput = $('sys-file-upload');
       let currentUploadTarget = null;
+      let currentModalMode = null;
 
-      const applyImage = (targetStr, src) => {
-        if (targetStr === 'avatar') {
+      const showSection = (mode) => {
+        modalSections.forEach(sec => sec.classList.remove('is-active'));
+        const target = document.querySelector(`.modal-section[data-modal-section="${mode}"]`);
+        if (target) target.classList.add('is-active');
+      };
+
+      const openModal = (mode) => {
+        currentModalMode = mode;
+        modal?.classList.remove('hidden');
+        modal?.setAttribute('aria-hidden', 'false');
+        modalTitle.textContent = mode === 'avatar' ? '编辑头像' : '编辑报纸';
+        showSection(mode);
+
+        if (mode === 'avatar') {
           const img = $('widget-avatar');
-          const hint = $('widget-avatar-hint');
-          if (img) { img.src = src; img.style.display = 'block'; }
-          if (hint) hint.style.display = 'none';
-          localStorage.setItem('miniphone_widget_avatar', src);
-        } else if (targetStr === 'ticket') {
-          const img = $('widget-ticket-img');
-          if (img) { img.src = src; img.style.display = 'block'; }
-          localStorage.setItem('miniphone_widget_ticket', src);
+          if (img && img.style.display !== 'none') {
+            modalAvatarPreview.src = img.src;
+            modalAvatarPreview.style.display = 'block';
+            modalAvatarPlaceholder.style.display = 'none';
+          } else {
+            modalAvatarPreview.style.display = 'none';
+            modalAvatarPlaceholder.style.display = 'block';
+          }
+          const desc = $('cfg-avatar-desc');
+          modalAvatarDescInput.value = desc ? desc.innerText : '';
+        } else if (mode === 'news') {
+          const img = $('widget-news-img');
+          if (img && img.style.display !== 'none') {
+            modalNewsPreview.src = img.src;
+            modalNewsPreview.style.display = 'block';
+            modalNewsPlaceholder.style.display = 'none';
+          } else {
+            modalNewsPreview.style.display = 'none';
+            modalNewsPlaceholder.style.display = 'block';
+          }
+          const title = $('cfg-news-title');
+          const content = $('cfg-news-content');
+          modalNewsTitleInput.value = title ? title.innerText : '';
+          modalNewsContentInput.value = content ? content.innerHTML.replace(/<br\s*\/?>/g, '\n') : '';
         }
+      };
+
+      const hideModal = () => {
+        modal?.classList.add('hidden');
+        modal?.setAttribute('aria-hidden', 'true');
+        currentModalMode = null;
       };
 
       const handleUploadClick = (target) => {
@@ -264,30 +430,78 @@
           const url = prompt('请输入网络图片URL:');
           if (url && url.trim() !== '') {
             applyImage(target, url.trim());
+            if (target === 'avatar') {
+              modalAvatarPreview.src = url.trim();
+              modalAvatarPreview.style.display = 'block';
+              modalAvatarPlaceholder.style.display = 'none';
+            }
+            if (target === 'news') {
+              modalNewsPreview.src = url.trim();
+              modalNewsPreview.style.display = 'block';
+              modalNewsPlaceholder.style.display = 'none';
+            }
           }
         }
       };
 
-      $('avatar-trigger')?.addEventListener('click', () => handleUploadClick('avatar'));
+      $('avatar-trigger')?.addEventListener('click', () => openModal('avatar'));
+      $('news-trigger')?.addEventListener('click', () => openModal('news'));
       $('ticket-img-trigger')?.addEventListener('click', () => handleUploadClick('ticket'));
 
+      modalAvatarUpload?.addEventListener('click', () => handleUploadClick('avatar'));
+      modalNewsUpload?.addEventListener('click', () => handleUploadClick('news'));
+      modalClose?.addEventListener('click', hideModal);
+      modal?.querySelector('.widget-modal__mask')?.addEventListener('click', hideModal);
+
+      if (modalSave) {
+        modalSave.addEventListener('click', () => {
+          if (currentModalMode === 'avatar') {
+            const desc = modalAvatarDescInput.value || '';
+            const descEl = $('cfg-avatar-desc');
+            if (descEl) {
+              descEl.innerText = desc;
+              localStorage.setItem('miniphone_widget_cfg-avatar-desc', descEl.innerHTML);
+            }
+          } else if (currentModalMode === 'news') {
+            const title = modalNewsTitleInput.value || '';
+            const content = modalNewsContentInput.value || '';
+            const titleEl = $('cfg-news-title');
+            const contentEl = $('cfg-news-content');
+            if (titleEl) {
+              titleEl.innerText = title;
+              localStorage.setItem('miniphone_widget_cfg-news-title', titleEl.innerHTML);
+            }
+            if (contentEl) {
+              const html = content.replace(/\n/g, '<br>');
+              contentEl.innerHTML = html;
+              localStorage.setItem('miniphone_widget_cfg-news-content', contentEl.innerHTML);
+            }
+          }
+          hideModal();
+        });
+      }
+
+      // 文件选择
       fileInput?.addEventListener('change', (e) => {
         const file = e.target.files?.[0];
         if (file && currentUploadTarget) {
           const reader = new FileReader();
           reader.onload = (evt) => {
             applyImage(currentUploadTarget, evt.target.result);
+            if (currentUploadTarget === 'avatar') {
+              modalAvatarPreview.src = evt.target.result;
+              modalAvatarPreview.style.display = 'block';
+              modalAvatarPlaceholder.style.display = 'none';
+            } else if (currentUploadTarget === 'news') {
+              modalNewsPreview.src = evt.target.result;
+              modalNewsPreview.style.display = 'block';
+              modalNewsPlaceholder.style.display = 'none';
+            }
             fileInput.value = '';
           };
           reader.readAsDataURL(file);
         }
       });
-
-      // 恢复已保存的图片
-      const savedAvatar = localStorage.getItem('miniphone_widget_avatar');
-      if (savedAvatar) applyImage('avatar', savedAvatar);
-      const savedTicket = localStorage.getItem('miniphone_widget_ticket');
-      if (savedTicket) applyImage('ticket', savedTicket);
 
       // 如果未加载主 JS，给应用按钮一个提示
       document.querySelectorAll('[data-open-app]').forEach(btn => {

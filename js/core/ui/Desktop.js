@@ -68,19 +68,43 @@ export class Desktop {
                   <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
                 </div>
                 <div class="p1-widgets-row">
-                  <div class="p1-news-widget">
-                    <div class="p1-news-title" contenteditable="true" id="cfg-news-title" spellcheck="false">民国日報</div>
-                    <div class="p1-news-content" contenteditable="true" id="cfg-news-content" spellcheck="false">才子佳人，乱世情缘。<br>寻人启事：炮火纷飞，国破家亡，生离死别，苦不堪言。寻影展示，护你一世周全。阴阳两隔，任性蹉跎。这就是真正的民国。</div>
-                  </div>
-                  <div class="p1-avatar-widget" id="avatar-trigger">
+                  <div class="p1-avatar-widget" id="avatar-trigger" title="点击编辑头像">
                     <div class="p1-avatar-inner">
-                      <img class="p1-avatar-img" id="widget-avatar" style="display:none;" />
+                      <img class="p1-avatar-img" id="widget-avatar" style="display:none;" alt="头像" />
                       <div class="p1-avatar-hint" id="widget-avatar-hint">點擊上傳</div>
                     </div>
-                    <div class="p1-avatar-desc">號加外急<br>0123456789</div>
+                    <div class="p1-avatar-desc" id="cfg-avatar-desc">號加外急<br>0123456789</div>
+                  </div>
+                  <div class="p1-news-widget" id="news-trigger" title="点击编辑报纸">
+                    <div class="p1-news-image" id="widget-news-img-wrap">
+                      <img class="p1-news-img" id="widget-news-img" style="display:none;" alt="报纸图片" />
+                    </div>
+                    <div class="p1-news-title" id="cfg-news-title">民国日报</div>
+                    <div class="p1-news-content" id="cfg-news-content">才子佳人，乱世情缘。<br>寻人启事：炮火纷飞，国破家亡，生离死别，苦不堪言。寻影展示，护你一世周全。阴阳两隔，任性蹉跎。这就是真正的民国。</div>
                   </div>
                 </div>
                 ${renderIcons(page.appIds, 'p1-apps-row')}
+                <div class="p1-ticket-widget" id="p1-ticket">
+                  <div class="p1-ticket-inner">
+                    <div class="p1-ticket-brand" id="cfg-p1-ticket-brand">中华民国长江航运公司</div>
+                    <div class="p1-ticket-body">
+                      <div class="p1-ticket-route">
+                        <div class="p1-ticket-date" id="cfg-p1-ticket-date">民国十四年五月初七</div>
+                        <div class="p1-ticket-arrows">
+                          <span id="cfg-p1-ticket-from">重庆</span>
+                          <span class="p1-ticket-arrow">→</span>
+                          <span id="cfg-p1-ticket-to">汉口</span>
+                        </div>
+                      </div>
+                      <div class="p1-ticket-footer">
+                        <span id="cfg-p1-ticket-name">乘客：张三</span>
+                        <span id="cfg-p1-ticket-time">开航：辰时</span>
+                        <span id="cfg-p1-ticket-no">票号：M1925-001</span>
+                      </div>
+                    </div>
+                    <div class="p1-ticket-stamp">民国快线</div>
+                  </div>
+                </div>
               </section>
             `;
           } else if (index === 1) {
@@ -182,30 +206,143 @@ export class Desktop {
   }
 
   initWidgets() {
-    // 处理文件上传 (头像框和戏票图片)
+    // 处理文件上传 (头像、戏票、新闻)
     const avatarTrigger = this.container.querySelector('#avatar-trigger');
+    const newsTrigger = this.container.querySelector('#news-trigger');
     const ticketTrigger = this.container.querySelector('#ticket-img-trigger');
     const fileInput = document.getElementById('sys-file-upload');
     let currentUploadTarget = null;
+    let currentModalMode = null;
+
+    const modal = document.getElementById('widget-modal');
+    const modalClose = document.getElementById('widget-modal-close');
+    const modalSave = document.getElementById('widget-modal-save');
+    const modalTitle = document.getElementById('widget-modal-title');
+    const modalSections = document.querySelectorAll('.modal-section');
+    const modalAvatarUpload = document.getElementById('modal-avatar-upload');
+    const modalAvatarPreview = document.getElementById('modal-avatar-preview');
+    const modalAvatarPlaceholder = document.getElementById('modal-avatar-placeholder');
+    const modalAvatarDescInput = document.getElementById('modal-avatar-desc-input');
+    const modalNewsUpload = document.getElementById('modal-news-upload');
+    const modalNewsPreview = document.getElementById('modal-news-preview');
+    const modalNewsPlaceholder = document.getElementById('modal-news-placeholder');
+    const modalNewsTitleInput = document.getElementById('modal-news-title-input');
+    const modalNewsContentInput = document.getElementById('modal-news-content-input');
+
+    const hideModal = () => {
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        currentModalMode = null;
+      }
+    };
+
+    const showSection = (mode) => {
+      modalSections.forEach(sec => sec.classList.remove('is-active'));
+      const target = document.querySelector(`.modal-section[data-modal-section="${mode}"]`);
+      if (target) target.classList.add('is-active');
+    };
+
+    const openModal = (mode) => {
+      if (!modal) return;
+      currentModalMode = mode;
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      modalTitle.textContent = mode === 'avatar' ? '编辑头像' : '编辑报纸';
+      showSection(mode);
+
+      if (mode === 'avatar') {
+        const img = this.container.querySelector('#widget-avatar');
+        if (img && img.style.display !== 'none') {
+          modalAvatarPreview.src = img.src;
+          modalAvatarPreview.style.display = 'block';
+          modalAvatarPlaceholder.style.display = 'none';
+        } else {
+          modalAvatarPreview.style.display = 'none';
+          modalAvatarPlaceholder.style.display = 'block';
+        }
+        const desc = this.container.querySelector('#cfg-avatar-desc');
+        modalAvatarDescInput.value = desc ? desc.innerText : '';
+      } else if (mode === 'news') {
+        const img = this.container.querySelector('#widget-news-img');
+        if (img && img.style.display !== 'none') {
+          modalNewsPreview.src = img.src;
+          modalNewsPreview.style.display = 'block';
+          modalNewsPlaceholder.style.display = 'none';
+        } else {
+          modalNewsPreview.style.display = 'none';
+          modalNewsPlaceholder.style.display = 'block';
+        }
+        const title = this.container.querySelector('#cfg-news-title');
+        const content = this.container.querySelector('#cfg-news-content');
+        modalNewsTitleInput.value = title ? title.innerText : '';
+        modalNewsContentInput.value = content ? content.innerHTML.replace(/<br\s*\/?>/g, '\n') : '';
+      }
+    };
 
     const handleUploadClick = (target) => {
       const option = confirm("点击确定使用本地上传，点击取消使用网络URL");
       if (option) {
         currentUploadTarget = target;
-        fileInput.click();
+        fileInput?.click();
       } else {
         const url = prompt("请输入网络图片URL:");
         if (url && url.trim() !== "") {
           this.applyImageToTarget(target, url.trim());
+          if (target === 'avatar') {
+            modalAvatarPreview.src = url.trim();
+            modalAvatarPreview.style.display = 'block';
+            modalAvatarPlaceholder.style.display = 'none';
+          }
+          if (target === 'news') {
+            modalNewsPreview.src = url.trim();
+            modalNewsPreview.style.display = 'block';
+            modalNewsPlaceholder.style.display = 'none';
+          }
         }
       }
     };
 
-    if (avatarTrigger) avatarTrigger.addEventListener('click', () => handleUploadClick('avatar'));
+    if (avatarTrigger) avatarTrigger.addEventListener('click', () => openModal('avatar'));
+    if (newsTrigger) newsTrigger.addEventListener('click', () => openModal('news'));
     if (ticketTrigger) ticketTrigger.addEventListener('click', () => handleUploadClick('ticket'));
 
+    if (modalAvatarUpload) modalAvatarUpload.addEventListener('click', () => handleUploadClick('avatar'));
+    if (modalNewsUpload) modalNewsUpload.addEventListener('click', () => handleUploadClick('news'));
+
+    if (modalClose) modalClose.addEventListener('click', hideModal);
+    modal?.querySelector('.widget-modal__mask')?.addEventListener('click', hideModal);
+
+    if (modalSave) {
+      modalSave.addEventListener('click', () => {
+        if (currentModalMode === 'avatar') {
+          const desc = modalAvatarDescInput.value || '';
+          const descEl = this.container.querySelector('#cfg-avatar-desc');
+          if (descEl) {
+            descEl.innerText = desc;
+            localStorage.setItem('miniphone_widget_cfg-avatar-desc', descEl.innerHTML);
+          }
+        } else if (currentModalMode === 'news') {
+          const title = modalNewsTitleInput.value || '';
+          const content = modalNewsContentInput.value || '';
+          const titleEl = this.container.querySelector('#cfg-news-title');
+          const contentEl = this.container.querySelector('#cfg-news-content');
+          if (titleEl) {
+            titleEl.innerText = title;
+            localStorage.setItem('miniphone_widget_cfg-news-title', titleEl.innerHTML);
+          }
+          if (contentEl) {
+            const html = content.replace(/\n/g, '<br>');
+            contentEl.innerHTML = html;
+            localStorage.setItem('miniphone_widget_cfg-news-content', contentEl.innerHTML);
+          }
+        }
+        hideModal();
+      });
+    }
+
     // 防止多次绑定全局事件
-    if (!fileInput.dataset.bound) {
+    if (fileInput && !fileInput.dataset.bound) {
       fileInput.dataset.bound = "true";
       fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -213,6 +350,15 @@ export class Desktop {
           const reader = new FileReader();
           reader.onload = (evt) => {
             this.applyImageToTarget(currentUploadTarget, evt.target.result);
+            if (currentUploadTarget === 'avatar') {
+              modalAvatarPreview.src = evt.target.result;
+              modalAvatarPreview.style.display = 'block';
+              modalAvatarPlaceholder.style.display = 'none';
+            } else if (currentUploadTarget === 'news') {
+              modalNewsPreview.src = evt.target.result;
+              modalNewsPreview.style.display = 'block';
+              modalNewsPlaceholder.style.display = 'none';
+            }
             fileInput.value = ''; // 清空方便下次选择
           };
           reader.readAsDataURL(file);
@@ -235,6 +381,10 @@ export class Desktop {
       const img = this.container.querySelector('#widget-ticket-img');
       if (img) { img.src = src; img.style.display = 'block'; }
       localStorage.setItem('miniphone_widget_ticket', src);
+    } else if (targetStr === 'news') {
+      const img = this.container.querySelector('#widget-news-img');
+      if (img) { img.src = src; img.style.display = 'block'; }
+      localStorage.setItem('miniphone_widget_news_img', src);
     }
   }
 
@@ -246,28 +396,34 @@ export class Desktop {
     const savedTicket = localStorage.getItem('miniphone_widget_ticket');
     if (savedTicket) this.applyImageToTarget('ticket', savedTicket);
 
-    // 恢复和监听文本编辑
-    // 添加应用图标的图片上传交互
-    const appBtns = this.container.querySelectorAll('.app-icon-btn');
-    appBtns.forEach(btn => {
-      // 通过在应用图标上长按或特殊的绑定，这里为了简便：双击可以换图标，单击是打开应用。
-      // 因为这是桌面端/移动端模拟，其实更好的做法是在设置里改。
-      // 目前不需要在这里写双击事件，因为用户说了：“之后还需要在设置应用里做”。
-      // 所以我们这里只负责读取和渲染 customImg 即可。
-    });
+    const savedNewsImg = localStorage.getItem('miniphone_widget_news_img');
+    if (savedNewsImg) this.applyImageToTarget('news', savedNewsImg);
 
-    const textFields = ['cfg-news-title', 'cfg-news-content', 'cfg-ticket-brand', 'cfg-ticket-title', 'cfg-ticket-desc', 'cfg-ticket-stamp'];
+    // 恢复文本
+    const textFields = [
+      'cfg-avatar-desc',
+      'cfg-news-title',
+      'cfg-news-content',
+      'cfg-ticket-brand',
+      'cfg-ticket-title',
+      'cfg-ticket-desc',
+      'cfg-ticket-stamp',
+      'cfg-p1-ticket-brand',
+      'cfg-p1-ticket-date',
+      'cfg-p1-ticket-from',
+      'cfg-p1-ticket-to',
+      'cfg-p1-ticket-name',
+      'cfg-p1-ticket-time',
+      'cfg-p1-ticket-no'
+    ];
     textFields.forEach(id => {
       const el = this.container.querySelector('#' + id);
       if (el) {
         const saved = localStorage.getItem('miniphone_widget_' + id);
         if (saved) el.innerHTML = saved;
-        
         el.addEventListener('blur', () => {
           localStorage.setItem('miniphone_widget_' + id, el.innerHTML);
         });
-        
-        // 防止拖拽和编辑冲突
         el.addEventListener('mousedown', (e) => e.stopPropagation());
       }
     });
