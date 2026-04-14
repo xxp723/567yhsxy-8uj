@@ -50,7 +50,10 @@ export class DesktopConfig {
 
   async initDefaults() {
     const existing = await this.store.getConfig();
-    if (existing) {
+    
+    // 检查旧配置的结构，如果存在但不是分多页的结构，则强制重置以防页面渲染白屏
+    // 例如旧版 pages[0].id 是 'page-1' 但只含有所有应用
+    if (existing && existing.pages && existing.pages.length === 2 && existing.pages[0].appIds.includes('archive')) {
       this.config = existing;
       return existing;
     }

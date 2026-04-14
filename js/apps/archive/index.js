@@ -1,30 +1,40 @@
-import { App } from '../../core/logic/AppManager.js';
+/**
+ * 文件名: js/apps/archive/index.js
+ * 用途: 档案（Archive）应用占位模块，采用民国旧报纸风格。
+ *       后续可扩展档案列表、标签、检索、预览等能力。
+ * 位置: /js/apps/archive/index.js
+ * 架构层: 应用层（由 AppManager 动态加载）
+ */
+export async function mount(container, context) {
+  const { appMeta } = context;
 
-export class ArchiveApp extends App {
-    constructor() {
-        super('档案', 'archive');
-    }
+  container.innerHTML = `
+    <div class="archive-app">
+      <header class="archive-header">
+        <div class="archive-title">
+          <span class="archive-title-glyph">${appMeta?.icon || '档'}</span>
+          <div>
+            <div class="archive-title-main">${appMeta?.name || '档案'}</div>
+            <div class="archive-title-sub">旧事·存卷</div>
+          </div>
+        </div>
+        <div class="archive-stamp">No.001925</div>
+      </header>
 
-    async render(container) {
-        container.innerHTML = `
-            <div class="archive-app-container" style="padding: 20px; color: var(--c-text); height: 100%; box-sizing: border-box; overflow-y: auto; background-color: var(--c-black);">
-                <h2 style="color: var(--c-cyan); border-bottom: 1px solid var(--c-cyan); padding-bottom: 10px; text-shadow: 0 0 8px var(--c-cyan-glow); margin-top: 0; display: flex; justify-content: space-between; align-items: center;">
-                    <span>SYSTEM.ARCHIVE</span>
-                    <span style="font-size: 12px; color: var(--c-pink); letter-spacing: 2px;">SECURE_ENCLAVE</span>
-                </h2>
-                
-                <div class="archive-content" style="margin-top: 20px;">
-                    <p style="opacity: 0.8; font-size: 14px; letter-spacing: 1px;">> Accessing encrypted data stream...</p>
-                    <div style="margin-top: 15px; border-left: 2px solid var(--c-pink); padding-left: 10px; background: linear-gradient(90deg, rgba(224, 36, 213, 0.1), transparent);">
-                        <div style="font-weight: bold; color: var(--c-pink); margin-bottom: 10px;">CLASSIFIED DIRECTORIES</div>
-                        <ul style="list-style: none; padding-left: 0; font-size: 13px; line-height: 2.5; margin: 0;">
-                            <li style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--c-cyan)'" onmouseout="this.style.color='var(--c-text)'">[ 01 ] PROJECT_GENESIS // 创世纪档案</li>
-                            <li style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--c-cyan)'" onmouseout="this.style.color='var(--c-text)'">[ 02 ] SUBJECT_RECORDS // 实验体代号记录</li>
-                            <li style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--c-cyan)'" onmouseout="this.style.color='var(--c-text)'">[ 03 ] UNKNOWN_ARTIFACTS // 未知截获信标</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
+      <section class="archive-card">
+        <p class="ui-muted">这里是档案应用占位页。</p>
+        <p class="ui-muted">后续可在此处实现档案的创建、标签、时间线与全文检索。</p>
+      </section>
+    </div>
+  `;
+
+  return {
+    destroy() {}
+  };
+}
+
+export async function unmount(instance) {
+  if (instance && typeof instance.destroy === 'function') {
+    instance.destroy();
+  }
 }

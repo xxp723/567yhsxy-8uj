@@ -28,88 +28,130 @@ export class Desktop {
 
   render(config) {
     if (!this.container || !config) return;
-    const apps = this.appManager.registry.getAll();
-    const appMap = new Map(apps.map((app) => [app.id, app]));
 
-    const pages = Array.isArray(config.pages) ? config.pages : [];
-    
-    // 生成应用图标的通用方法
-    const renderIcons = (appIds, rowClass) => {
-      const iconsHtml = (appIds || [])
-        .map((appId) => {
-          const app = appMap.get(appId);
-          if (!app) return '';
-          // 将应用的名字（app.name）作为文字显示在图标按钮中，去掉原有的 emoji icon
-          return `
-            <div class="app-icon" draggable="true" data-app-id="${app.id}" title="${app.name}">
-              <button class="app-icon-btn" type="button" data-open-app="${app.id}" aria-label="打开${app.name}">
-                ${app.name}
-              </button>
-            </div>
-          `;
-        })
-        .join('');
-      return `<div class="${rowClass}">${iconsHtml}</div>`;
-    };
+    // 如果已有静态布局（data-static-layout="true"），不重建 DOM，只做增强：绑定事件、恢复图标
+    const isStaticLayout = this.container.dataset.staticLayout === 'true';
 
-    const html = pages
-      .map((page, index) => {
-        if (index === 0) {
-          // 第一页特有组件
-          return `
-            <section class="desktop-page" data-page-id="${page.id}">
-              <div class="p1-clock-widget">
-                <div class="p1-time" id="widget-time">00:00</div>
-                <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+    if (!isStaticLayout) {
+      // 原有动态渲染路径（保留兼容性）
+      const apps = this.appManager.registry.getAll();
+      const appMap = new Map(apps.map((app) => [app.id, app]));
+      const pages = Array.isArray(config.pages) ? config.pages : [];
+      const renderIcons = (appIds, rowClass) => {
+        const iconsHtml = (appIds || [])
+          .map((appId) => {
+            const app = appMap.get(appId);
+            if (!app) return '';
+            const customImg = localStorage.getItem(`miniphone_app_icon_${app.id}`);
+            const imgStyle = customImg ? '' : 'display:none;';
+            return `
+              <div class="app-icon" draggable="true" data-app-id="${app.id}" title="${app.name}">
+                <button class="app-icon-btn" type="button" data-open-app="${app.id}" aria-label="打开${app.name}">
+                  <span class="app-icon-glyph">${app.icon || ''}</span>
+                  <img class="app-custom-img" src="${customImg || ''}" style="${imgStyle}" alt="${app.name}" />
+                </button>
+                <span class="app-icon-label">${app.name}</span>
               </div>
-              <div class="p1-widgets-row">
-                <div class="p1-news-widget">
-                  <div class="p1-news-title" contenteditable="true" id="cfg-news-title" spellcheck="false">民国日報</div>
-                  <div class="p1-news-content" contenteditable="true" id="cfg-news-content" spellcheck="false">才子佳人，乱世情缘。<br>寻人启事：炮火纷飞，国破家亡，生离死别，苦不堪言。寻影展示，护你一世周全。阴阳两隔，任性蹉跎。这就是真正的民国。</div>
+            `;
+          })
+          .join('');
+        return `<div class="${rowClass}">${iconsHtml}</div>`;
+      };
+
+      const html = pages
+        .map((page, index) => {
+          if (index === 0) {
+            return `
+              <section class="desktop-page" data-page-id="${page.id}">
+                <div class="p1-clock-widget">
+                  <div class="p1-time" id="widget-time">00:00</div>
+                  <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
                 </div>
-                <div class="p1-avatar-widget" id="avatar-trigger">
-                  <div class="p1-avatar-inner">
-                    <img class="p1-avatar-img" id="widget-avatar" style="display:none;" />
-                    <div class="p1-avatar-hint" id="widget-avatar-hint">點擊上傳</div>
+                <div class="p1-widgets-row">
+                  <div class="p1-news-widget">
+                    <div class="p1-news-title" contenteditable="true" id="cfg-news-title" spellcheck="false">民国日報</div>
+                    <div class="p1-news-content" contenteditable="true" id="cfg-news-content" spellcheck="false">才子佳人，乱世情缘。<br>寻人启事：炮火纷飞，国破家亡，生离死别，苦不堪言。寻影展示，护你一世周全。阴阳两隔，任性蹉跎。这就是真正的民国。</div>
                   </div>
-                  <div class="p1-avatar-desc">號加外急<br>0123456789</div>
+                  <div class="p1-avatar-widget" id="avatar-trigger">
+                    <div class="p1-avatar-inner">
+                      <img class="p1-avatar-img" id="widget-avatar" style="display:none;" />
+                      <div class="p1-avatar-hint" id="widget-avatar-hint">點擊上傳</div>
+                    </div>
+                    <div class="p1-avatar-desc">號加外急<br>0123456789</div>
+                  </div>
                 </div>
-              </div>
-              ${renderIcons(page.appIds, 'p1-apps-row')}
-            </section>
-          `;
-        } else if (index === 1) {
-          // 第二页特有组件
-          return `
-            <section class="desktop-page" data-page-id="${page.id}">
-              <div class="p2-ticket-widget">
-                <div class="p2-ticket-inner">
-                  <div class="p2-ticket-brand" contenteditable="true" id="cfg-ticket-brand" spellcheck="false">浮生劇院</div>
-                  <div class="p2-ticket-img-box" id="ticket-img-trigger">
-                    <img class="p2-ticket-img" id="widget-ticket-img" style="display:none;" />
-                  </div>
-                  <div class="p2-ticket-text-zone">
-                    <div class="p2-ticket-title" contenteditable="true" id="cfg-ticket-title" spellcheck="false">霸王別姬</div>
-                    <div class="p2-ticket-desc" contenteditable="true" id="cfg-ticket-desc" spellcheck="false">
-                      <span>辛已年五月廿十</span>
-                      <span>渝州縣橫河街</span>
-                      <span>經典劇目 悲慘世界</span>
+                ${renderIcons(page.appIds, 'p1-apps-row')}
+              </section>
+            `;
+          } else if (index === 1) {
+            return `
+              <section class="desktop-page" data-page-id="${page.id}">
+                <div class="p2-ticket-widget">
+                  <div class="p2-ticket-inner">
+                    <div class="p2-ticket-brand" contenteditable="true" id="cfg-ticket-brand" spellcheck="false">浮生劇院</div>
+                    <div class="p2-ticket-img-box" id="ticket-img-trigger">
+                      <img class="p2-ticket-img" id="widget-ticket-img" style="display:none;" />
+                    </div>
+                    <div class="p2-ticket-text-zone">
+                      <div class="p2-ticket-title" contenteditable="true" id="cfg-ticket-title" spellcheck="false">霸王別姬</div>
+                      <div class="p2-ticket-desc" contenteditable="true" id="cfg-ticket-desc" spellcheck="false">
+                        <span>辛已年五月廿十</span>
+                        <span>渝州縣橫河街</span>
+                        <span>經典劇目 悲慘世界</span>
+                      </div>
                     </div>
                   </div>
+                  <div class="p2-ticket-stamp" contenteditable="true" id="cfg-ticket-stamp" spellcheck="false">No.001925 憑券入場</div>
                 </div>
-                <div class="p2-ticket-stamp" contenteditable="true" id="cfg-ticket-stamp" spellcheck="false">No.001925 憑券入場</div>
-              </div>
-              ${renderIcons(page.appIds, 'p2-apps-row')}
-            </section>
-          `;
-        } else {
-          // 其他页默认渲染
-          return `<section class="desktop-page" data-page-id="${page.id}">${renderIcons(page.appIds, 'p1-apps-row')}</section>`;
-        }
-      })
-      .join('');
+                ${renderIcons(page.appIds, 'p2-apps-row')}
+              </section>
+            `;
+          } else {
+            return `<section class="desktop-page" data-page-id="${page.id}">${renderIcons(page.appIds, 'p1-apps-row')}</section>`;
+          }
+        })
+        .join('');
 
-    this.container.innerHTML = html;
+      this.container.innerHTML = html;
+    } else {
+      // 静态布局：仅恢复图标图片、绑定事件
+      const apps = this.appManager.registry.getAll();
+      const appMap = new Map(apps.map((app) => [app.id, app]));
+
+      // 恢复自定义图标
+      this.container.querySelectorAll('[data-app-id]').forEach((el) => {
+        const appId = el.getAttribute('data-app-id');
+        const app = appMap.get(appId);
+        if (!app) return;
+        const btn = el.querySelector('.app-icon-btn');
+        const img = el.querySelector('.app-custom-img');
+        const glyph = el.querySelector('.app-icon-glyph');
+        if (glyph && !glyph.textContent.trim()) glyph.textContent = app.icon || '';
+        const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
+        if (img && customImg) {
+          img.src = customImg;
+          img.style.display = 'block';
+          btn?.classList.add('has-img');
+        }
+      });
+
+      // Dock 图标自定义
+      document.querySelectorAll('#dock-container [data-app-id]').forEach((el) => {
+        const appId = el.getAttribute('data-app-id');
+        const img = el.querySelector('.app-custom-img');
+        const btn = el.querySelector('.app-icon-btn');
+        const glyph = el.querySelector('.app-icon-glyph');
+        const app = appMap.get(appId);
+        if (glyph && app && !glyph.textContent.trim()) glyph.textContent = app.icon || '';
+        const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
+        if (img && customImg) {
+          img.src = customImg;
+          img.style.display = 'block';
+          btn?.classList.add('has-img');
+        }
+      });
+    }
+
     this.bindIconEvents();
     this.initWidgets();
   }
@@ -205,6 +247,15 @@ export class Desktop {
     if (savedTicket) this.applyImageToTarget('ticket', savedTicket);
 
     // 恢复和监听文本编辑
+    // 添加应用图标的图片上传交互
+    const appBtns = this.container.querySelectorAll('.app-icon-btn');
+    appBtns.forEach(btn => {
+      // 通过在应用图标上长按或特殊的绑定，这里为了简便：双击可以换图标，单击是打开应用。
+      // 因为这是桌面端/移动端模拟，其实更好的做法是在设置里改。
+      // 目前不需要在这里写双击事件，因为用户说了：“之后还需要在设置应用里做”。
+      // 所以我们这里只负责读取和渲染 customImg 即可。
+    });
+
     const textFields = ['cfg-news-title', 'cfg-news-content', 'cfg-ticket-brand', 'cfg-ticket-title', 'cfg-ticket-desc', 'cfg-ticket-stamp'];
     textFields.forEach(id => {
       const el = this.container.querySelector('#' + id);

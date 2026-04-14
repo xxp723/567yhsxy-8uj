@@ -174,21 +174,57 @@ body.hide-status-bar #top-status-bar {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 2px 4px 10px rgba(0,0,0,0.1), inset 1px 1px 2px rgba(255,255,255,0.3);
-  color: var(--c-text-main);
-  font-family: var(--font-retro);
-  font-size: 18px;
-  font-weight: bold;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+  padding: 6px; /* 给内部图片留出一些内边距，呈现底座感 */
+  position: relative;
 }
 .app-icon-btn:active {
   transform: scale(0.92);
   box-shadow: 1px 2px 5px rgba(0,0,0,0.1);
 }
 
+.app-icon-btn::before {
+  /* 当没有图片时的默认内部复古纹理占位 */
+  content: '✦';
+  font-size: 24px;
+  color: var(--c-text-main);
+  opacity: 0.3;
+  position: absolute;
+}
+
+.app-icon-glyph {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: var(--c-text-main);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-custom-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px; /* 内部图片的圆角 */
+  position: relative;
+  z-index: 1; /* 盖住默认占位符 */
+}
+
+.app-icon-btn.has-img .app-icon-glyph {
+  display: none;
+}
+
 .app-icon-label {
-  display: none; /* 民国风图标直接将字写在按钮里，不需要额外label */
+  display: block; /* 恢复显示名称 */
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--c-text-main);
+  text-shadow: 1px 1px 0 rgba(255,255,255,0.6); /* 增加白边，避免壁纸太花看不清 */
+  letter-spacing: 1px;
 }
 
 /* =========================
@@ -199,7 +235,7 @@ body.hide-status-bar #top-status-bar {
   bottom: 15px;
   left: 15px;
   right: 15px;
-  height: 70px;
+  height: 80px; /* 稍微增加高度以容纳图标+文字 */
   background: var(--c-milktea-trans);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -210,14 +246,30 @@ body.hide-status-bar #top-status-bar {
   align-items: center;
   box-shadow: 0 10px 20px rgba(0,0,0,0.1);
   z-index: 100;
-  padding: 0 10px;
+  padding: 5px 10px;
+}
+
+.dock-container .app-icon {
+  gap: 4px; /* 图标和文字间距减小 */
 }
 
 .dock-container .app-icon-btn {
-  width: 50px;
-  height: 50px;
+  width: 48px;
+  height: 48px;
   border-radius: 14px;
-  font-size: 16px;
+  padding: 4px;
+}
+
+.dock-container .app-icon-btn::before {
+  font-size: 20px;
+}
+
+.dock-container .app-icon-label {
+  font-size: 11px;
+}
+
+.dock-container .app-icon-glyph {
+  font-size: 18px;
 }
 
 /* =========================
@@ -505,4 +557,64 @@ body.hide-status-bar #top-status-bar {
   overflow: auto;
   padding: 15px;
   background: var(--c-bg-wallpaper);
+}
+
+/* =========================
+   档案应用（Archive）
+   ========================= */
+.archive-app {
+  font-family: var(--font-retro);
+  color: var(--c-text-main);
+}
+.archive-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 2px solid var(--c-border);
+  background: var(--c-white-rice);
+  padding: 10px 12px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.12);
+  margin-bottom: 12px;
+}
+.archive-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.archive-title-glyph {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-milktea);
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+.archive-title-main {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.archive-title-sub {
+  font-size: 12px;
+  color: #555;
+}
+.archive-stamp {
+  font-size: 12px;
+  background: var(--c-milktea);
+  border: 1px solid var(--c-border);
+  padding: 2px 6px;
+  transform: rotate(-4deg);
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.15);
+}
+.archive-card {
+  border: 2px solid var(--c-border);
+  background: var(--c-white-rice);
+  padding: 12px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.12);
+  line-height: 1.6;
+  letter-spacing: 0.5px;
 }

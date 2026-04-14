@@ -113,10 +113,18 @@ class MiniPhoneApp {
       // 7) 注册 service worker
       await this.registerServiceWorker();
 
+      // 移除防白屏过渡
+      const splash = document.getElementById('sys-boot-splash');
+      if (splash) {
+        splash.style.display = 'none';
+      }
+
       Logger.info('MiniPhone 启动完成');
       this.eventBus.emit('app:ready', { time: Date.now() });
+      window.__MINIPHONE_APP_READY__ = true;
     } catch (error) {
       Logger.error('MiniPhone 启动失败', error);
+      window.__MINIPHONE_APP_READY__ = false;
     }
   }
 

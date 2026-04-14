@@ -10,11 +10,9 @@
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <!-- 手机外框容器 -->
   <div class="phone-frame">
-    <div class="screen">
-      
-      <!-- 1. 顶部状态栏 -->
+    <div class="screen" id="screen-root">
+      <!-- 顶部状态栏（可在设置中隐藏/显示） -->
       <div id="top-status-bar" class="status-bar">
         <div class="status-left">
           <span id="sys-time">00:00</span>
@@ -26,32 +24,283 @@
         </div>
       </div>
 
-      <!-- 2. 桌面滑动容器 (由 Desktop.js 渲染) -->
-      <div id="desktop-container" class="desktop-container"></div>
+      <!-- 桌面容器：静态两页结构，可直接 file:// 预览 -->
+      <div id="desktop-container" class="desktop-container" data-static-layout="true">
+        <!-- 第一页 -->
+        <section class="desktop-page page-1" data-page-id="page-1">
+          <div class="p1-clock-widget">
+            <div class="p1-time" id="widget-time">00:00</div>
+            <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+          </div>
 
-      <!-- 3. 底部固定 Dock 栏 -->
+          <div class="p1-widgets-row">
+            <!-- 报纸组件：标题横排，正文竖排右到左 -->
+            <div class="p1-news-widget">
+              <div class="p1-news-title" contenteditable="true" id="cfg-news-title" spellcheck="false">民国日报</div>
+              <div class="p1-news-content" contenteditable="true" id="cfg-news-content" spellcheck="false">
+                旧时光里的人事风烟，<br>皆可在此书写。<br>从右到左的竖排，<br>记录你的报纸头条。
+              </div>
+            </div>
+
+            <!-- 头像框：3:4 比例，支持本地/URL 上传 -->
+            <div class="p1-avatar-widget" id="avatar-trigger" title="点击上传头像（本地或URL）">
+              <div class="p1-avatar-inner">
+                <img class="p1-avatar-img" id="widget-avatar" style="display:none;" alt="头像" />
+                <div class="p1-avatar-hint" id="widget-avatar-hint">點擊上傳</div>
+              </div>
+              <div class="p1-avatar-desc">號加外急<br>0123456789</div>
+            </div>
+          </div>
+
+          <!-- 四个应用：闲谈、档案、茶馆、观书 -->
+          <div class="p1-apps-row">
+            <div class="app-icon" draggable="true" data-app-id="chat" title="闲谈">
+              <button class="app-icon-btn" type="button" data-open-app="chat" aria-label="打开闲谈">
+                <span class="app-icon-glyph">闲</span>
+                <img class="app-custom-img" data-app-img="chat" src="" style="display:none;" alt="闲谈" />
+              </button>
+              <span class="app-icon-label">闲谈</span>
+            </div>
+            <div class="app-icon" draggable="true" data-app-id="archive" title="档案">
+              <button class="app-icon-btn" type="button" data-open-app="archive" aria-label="打开档案">
+                <span class="app-icon-glyph">档</span>
+                <img class="app-custom-img" data-app-img="archive" src="" style="display:none;" alt="档案" />
+              </button>
+              <span class="app-icon-label">档案</span>
+            </div>
+            <div class="app-icon" draggable="true" data-app-id="forum" title="茶馆">
+              <button class="app-icon-btn" type="button" data-open-app="forum" aria-label="打开茶馆">
+                <span class="app-icon-glyph">茶</span>
+                <img class="app-custom-img" data-app-img="forum" src="" style="display:none;" alt="茶馆" />
+              </button>
+              <span class="app-icon-label">茶馆</span>
+            </div>
+            <div class="app-icon" draggable="true" data-app-id="reader" title="观书">
+              <button class="app-icon-btn" type="button" data-open-app="reader" aria-label="打开观书">
+                <span class="app-icon-glyph">书</span>
+                <img class="app-custom-img" data-app-img="reader" src="" style="display:none;" alt="观书" />
+              </button>
+              <span class="app-icon-label">观书</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 第二页 -->
+        <section class="desktop-page page-2" data-page-id="page-2">
+          <div class="p2-ticket-widget">
+            <div class="p2-ticket-inner">
+              <div class="p2-ticket-brand" contenteditable="true" id="cfg-ticket-brand" spellcheck="false">浮生剧院</div>
+              <div class="p2-ticket-img-box" id="ticket-img-trigger" title="点击上传戏票图（本地或URL）">
+                <img class="p2-ticket-img" id="widget-ticket-img" style="display:none;" alt="戏票图" />
+              </div>
+              <div class="p2-ticket-text-zone">
+                <div class="p2-ticket-title" contenteditable="true" id="cfg-ticket-title" spellcheck="false">旧戏新梦</div>
+                <div class="p2-ticket-desc" contenteditable="true" id="cfg-ticket-desc" spellcheck="false">
+                  <span>首映：辛已年五月廿十</span>
+                  <span>地点：渝州县横河街</span>
+                  <span>剧目：经年旧事，浮生若梦</span>
+                </div>
+              </div>
+            </div>
+            <div class="p2-ticket-stamp" contenteditable="true" id="cfg-ticket-stamp" spellcheck="false">No.001925 凭券入场</div>
+          </div>
+
+          <!-- 三个应用：戏笔、梦笺、游戏 -->
+          <div class="p2-apps-row">
+            <div class="app-icon" draggable="true" data-app-id="doujin" title="戏笔">
+              <button class="app-icon-btn" type="button" data-open-app="doujin" aria-label="打开戏笔">
+                <span class="app-icon-glyph">戏</span>
+                <img class="app-custom-img" data-app-img="doujin" src="" style="display:none;" alt="戏笔" />
+              </button>
+              <span class="app-icon-label">戏笔</span>
+            </div>
+            <div class="app-icon" draggable="true" data-app-id="textgame" title="梦笺">
+              <button class="app-icon-btn" type="button" data-open-app="textgame" aria-label="打开梦笺">
+                <span class="app-icon-glyph">梦</span>
+                <img class="app-custom-img" data-app-img="textgame" src="" style="display:none;" alt="梦笺" />
+              </button>
+              <span class="app-icon-label">梦笺</span>
+            </div>
+            <div class="app-icon" draggable="true" data-app-id="game" title="游戏">
+              <button class="app-icon-btn" type="button" data-open-app="game" aria-label="打开游戏">
+                <span class="app-icon-glyph">游</span>
+                <img class="app-custom-img" data-app-img="game" src="" style="display:none;" alt="游戏" />
+              </button>
+              <span class="app-icon-label">游戏</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 底部 Dock 栏 -->
       <div id="dock-container" class="dock-container">
-        <!-- Dock 内的应用由 JS 绑定点击事件，这里使用固定的 HTML 结构 -->
         <div class="app-icon dock-icon" data-app-id="worldbook">
-          <button class="app-icon-btn dock-btn" type="button" data-open-app="worldbook">世情</button>
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="worldbook">
+            <span class="app-icon-glyph">世</span>
+            <img class="app-custom-img" data-dock-img="worldbook" src="" style="display:none;" alt="世情"/>
+          </button>
+          <span class="app-icon-label">世情</span>
         </div>
         <div class="app-icon dock-icon" data-app-id="memory">
-          <button class="app-icon-btn dock-btn" type="button" data-open-app="memory">旧事</button>
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="memory">
+            <span class="app-icon-glyph">旧</span>
+            <img class="app-custom-img" data-dock-img="memory" src="" style="display:none;" alt="旧事"/>
+          </button>
+          <span class="app-icon-label">旧事</span>
         </div>
         <div class="app-icon dock-icon" data-app-id="settings">
-          <button class="app-icon-btn dock-btn" type="button" data-open-app="settings">设置</button>
+          <button class="app-icon-btn dock-btn" type="button" data-open-app="settings">
+            <span class="app-icon-glyph">设</span>
+            <img class="app-custom-img" data-dock-img="settings" src="" style="display:none;" alt="设置"/>
+          </button>
+          <span class="app-icon-label">设置</span>
         </div>
       </div>
 
-      <!-- 4. 隐藏的图片上传表单，供桌面组件触发 -->
+      <!-- 隐藏的图片上传表单 -->
       <input type="file" id="sys-file-upload" accept="image/*" style="display: none;" />
 
-      <!-- 5. 应用窗口容器 -->
+      <!-- 应用窗口容器 -->
       <div id="window-container" class="window-container"></div>
-
     </div>
   </div>
 
+  <!-- 直接打开文件也能运行的基础脚本（非模块） -->
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+
+      // 状态栏显示控制（与设置应用对接：localStorage miniphone_status_bar_hidden = '1'）
+      const statusHidden = localStorage.getItem('miniphone_status_bar_hidden') === '1';
+      if (statusHidden) document.body.classList.add('hide-status-bar');
+
+      // 壁纸（与设置应用对接：localStorage miniphone_wallpaper）
+      const screen = document.getElementById('screen-root');
+      const savedWallpaper = localStorage.getItem('miniphone_wallpaper');
+      if (screen && savedWallpaper) {
+        screen.style.backgroundImage = `url(${savedWallpaper})`;
+        screen.style.backgroundSize = 'cover';
+        screen.style.backgroundPosition = 'center';
+      }
+
+      // 时钟（顶部 & 组件）
+      const updateClock = () => {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const days = ['日', '一', '二', '三', '四', '五', '六'];
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        const day = days[now.getDay()];
+
+        const timeStr = `${hh}:${mm}`;
+        const dateStr = `${year}年${month}月${date}日 星期${day}`;
+
+        const topTime = $('sys-time');
+        const widgetTime = $('widget-time');
+        const widgetDate = $('widget-date');
+        if (topTime) topTime.textContent = timeStr;
+        if (widgetTime) widgetTime.textContent = timeStr;
+        if (widgetDate) widgetDate.textContent = dateStr;
+      };
+      updateClock();
+      setInterval(updateClock, 10000);
+
+      // 电池
+      const batteryLevelEl = $('battery-level');
+      if (batteryLevelEl) {
+        if ('getBattery' in navigator) {
+          navigator.getBattery().then((battery) => {
+            const updateBattery = () => {
+              batteryLevelEl.style.width = (battery.level * 100) + '%';
+              batteryLevelEl.style.background = battery.level <= 0.2 ? '#e74c3c' : 'var(--c-text-main)';
+            };
+            updateBattery();
+            battery.addEventListener('levelchange', updateBattery);
+          });
+        } else {
+          batteryLevelEl.style.width = '80%';
+        }
+      }
+
+      // 文本字段持久化
+      const textFields = ['cfg-news-title', 'cfg-news-content', 'cfg-ticket-brand', 'cfg-ticket-title', 'cfg-ticket-desc', 'cfg-ticket-stamp'];
+      textFields.forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        const saved = localStorage.getItem('miniphone_widget_' + id);
+        if (saved) el.innerHTML = saved;
+        el.addEventListener('blur', () => {
+          localStorage.setItem('miniphone_widget_' + id, el.innerHTML);
+        });
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+      });
+
+      // 图片上传/URL
+      const fileInput = $('sys-file-upload');
+      let currentUploadTarget = null;
+
+      const applyImage = (targetStr, src) => {
+        if (targetStr === 'avatar') {
+          const img = $('widget-avatar');
+          const hint = $('widget-avatar-hint');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          if (hint) hint.style.display = 'none';
+          localStorage.setItem('miniphone_widget_avatar', src);
+        } else if (targetStr === 'ticket') {
+          const img = $('widget-ticket-img');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          localStorage.setItem('miniphone_widget_ticket', src);
+        }
+      };
+
+      const handleUploadClick = (target) => {
+        const option = confirm('点击确定使用本地上传，点击取消使用网络URL');
+        if (option) {
+          currentUploadTarget = target;
+          fileInput?.click();
+        } else {
+          const url = prompt('请输入网络图片URL:');
+          if (url && url.trim() !== '') {
+            applyImage(target, url.trim());
+          }
+        }
+      };
+
+      $('avatar-trigger')?.addEventListener('click', () => handleUploadClick('avatar'));
+      $('ticket-img-trigger')?.addEventListener('click', () => handleUploadClick('ticket'));
+
+      fileInput?.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file && currentUploadTarget) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            applyImage(currentUploadTarget, evt.target.result);
+            fileInput.value = '';
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // 恢复已保存的图片
+      const savedAvatar = localStorage.getItem('miniphone_widget_avatar');
+      if (savedAvatar) applyImage('avatar', savedAvatar);
+      const savedTicket = localStorage.getItem('miniphone_widget_ticket');
+      if (savedTicket) applyImage('ticket', savedTicket);
+
+      // 如果未加载主 JS，给应用按钮一个提示
+      document.querySelectorAll('[data-open-app]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (!window.__MINIPHONE_APP_READY__) {
+            console.warn('模块未加载，仅预览静态桌面。');
+          }
+        });
+      });
+    })();
+  </script>
+
+  <!-- 模块主入口：通过 HTTP 服务时加载增强功能 -->
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

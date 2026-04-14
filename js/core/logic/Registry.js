@@ -14,16 +14,16 @@ export class Registry {
 
   async initDefaults() {
     const defaultApps = [
-      { id: 'settings', name: '设置', icon: '⚙️', entry: '/js/apps/settings/index.js' },
-      { id: 'chat', name: '闲谈', icon: '💬', entry: '/js/apps/chat/index.js' },
-      { id: 'archive', name: '档案', icon: '📁', entry: '/js/apps/archive/index.js' },
-      { id: 'memory', name: '旧事', icon: '🧠', entry: '/js/apps/memory/index.js' },
-      { id: 'forum', name: '茶馆', icon: '🗂️', entry: '/js/apps/forum/index.js' },
-      { id: 'worldbook', name: '世情', icon: '📚', entry: '/js/apps/worldbook/index.js' },
-      { id: 'reader', name: '观书', icon: '📖', entry: '/js/apps/reader/index.js' },
-      { id: 'doujin', name: '戏笔', icon: '🎨', entry: '/js/apps/doujin/index.js' },
-      { id: 'textgame', name: '梦笺', icon: '🕹️', entry: '/js/apps/textgame/index.js' },
-      { id: 'game', name: '游戏', icon: '🎮', entry: '/js/apps/game/index.js' }
+      { id: 'settings', name: '设置', icon: '设', entry: '/js/apps/settings/index.js' },
+      { id: 'chat', name: '闲谈', icon: '闲', entry: '/js/apps/chat/index.js' },
+      { id: 'archive', name: '档案', icon: '档', entry: '/js/apps/archive/index.js' },
+      { id: 'memory', name: '旧事', icon: '旧', entry: '/js/apps/memory/index.js' },
+      { id: 'forum', name: '茶馆', icon: '茶', entry: '/js/apps/forum/index.js' },
+      { id: 'worldbook', name: '世情', icon: '世', entry: '/js/apps/worldbook/index.js' },
+      { id: 'reader', name: '观书', icon: '书', entry: '/js/apps/reader/index.js' },
+      { id: 'doujin', name: '戏笔', icon: '戏', entry: '/js/apps/doujin/index.js' },
+      { id: 'textgame', name: '梦笺', icon: '梦', entry: '/js/apps/textgame/index.js' },
+      { id: 'game', name: '游戏', icon: '游', entry: '/js/apps/game/index.js' }
     ];
 
     defaultApps.forEach((app) => this.register(app));
