@@ -26,6 +26,7 @@ export class DB {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const transaction = event.target.transaction;
 
         if (!db.objectStoreNames.contains('desktop')) {
           db.createObjectStore('desktop', { keyPath: 'id' });
@@ -37,14 +38,14 @@ export class DB {
 
         if (!db.objectStoreNames.contains('memories')) {
           db.createObjectStore('memories', { keyPath: 'key' });
-          db.transaction.objectStore('memories').createIndex('sourceApp', 'sourceApp', {
+          transaction.objectStore('memories').createIndex('sourceApp', 'sourceApp', {
             unique: false
           });
         }
 
         if (!db.objectStoreNames.contains('appsData')) {
           db.createObjectStore('appsData', { keyPath: 'id' });
-          db.transaction.objectStore('appsData').createIndex('appId', 'appId', { unique: false });
+          transaction.objectStore('appsData').createIndex('appId', 'appId', { unique: false });
         }
       };
 
