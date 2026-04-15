@@ -206,320 +206,317 @@ export class Desktop {
   }
 
   initWidgets() {
-    // 处理文件上传 (头像、戏票、新闻)
-    const avatarTrigger = this.container.querySelector('#avatar-trigger');
-    const newsTrigger = this.container.querySelector('#news-trigger');
-    const p1TicketTrigger = this.container.querySelector('#p1-ticket');
-    const p2TicketTrigger = this.container.querySelector('#p2-ticket-trigger');
-    const fileInput = document.getElementById('sys-file-upload');
-    let currentUploadTarget = null;
-    let currentModalMode = null;
+    // 静态布局模式下，内联脚本已经处理了弹窗事件绑定，
+    // Desktop.js 只负责恢复数据，不重复绑定弹窗事件以避免冲突
+    const isStaticLayout = this.container.dataset.staticLayout === 'true';
 
-    const modal = document.getElementById('widget-modal');
-    const modalClose = document.getElementById('widget-modal-close');
-    const modalSave = document.getElementById('widget-modal-save');
-    const modalTitle = document.getElementById('widget-modal-title');
-    const modalSections = document.querySelectorAll('.modal-section');
-    const modalAvatarUpload = document.getElementById('modal-avatar-upload');
-    const modalAvatarPreview = document.getElementById('modal-avatar-preview');
-    const modalAvatarPlaceholder = document.getElementById('modal-avatar-placeholder');
-    const modalAvatarDescInput = document.getElementById('modal-avatar-desc-input');
-    const modalNewsUpload = document.getElementById('modal-news-upload');
-    const modalNewsPreview = document.getElementById('modal-news-preview');
-    const modalNewsPlaceholder = document.getElementById('modal-news-placeholder');
-    const modalNewsTitleInput = document.getElementById('modal-news-title-input');
-    const modalNewsContentInput = document.getElementById('modal-news-content-input');
+    if (!isStaticLayout) {
+      // 非静态布局时（动态渲染），由 Desktop.js 处理弹窗
+      const avatarTrigger = this.container.querySelector('#avatar-trigger');
+      const newsTrigger = this.container.querySelector('#news-trigger');
+      const p1TicketTrigger = this.container.querySelector('#p1-ticket');
+      const p2TicketTrigger = this.container.querySelector('#p2-ticket-trigger');
+      const fileInput = document.getElementById('sys-file-upload');
+      let currentUploadTarget = null;
+      let currentModalMode = null;
 
-    const modalP1TicketUpload = document.getElementById('modal-p1-ticket-upload');
-    const modalP1TicketPreview = document.getElementById('modal-p1-ticket-preview');
-    const modalP1TicketPlaceholder = document.getElementById('modal-p1-ticket-placeholder');
-    const modalP1TicketBrandInput = document.getElementById('modal-p1-ticket-brand-input');
-    const modalP1TicketDateInput = document.getElementById('modal-p1-ticket-date-input');
-    const modalP1TicketFromInput = document.getElementById('modal-p1-ticket-from-input');
-    const modalP1TicketToInput = document.getElementById('modal-p1-ticket-to-input');
-    const modalP1TicketInfoInput = document.getElementById('modal-p1-ticket-info-input');
+      const modal = document.getElementById('widget-modal');
+      const modalClose = document.getElementById('widget-modal-close');
+      const modalSave = document.getElementById('widget-modal-save');
+      const modalTitle = document.getElementById('widget-modal-title');
+      const modalSections = document.querySelectorAll('.modal-section');
+      const modalAvatarUpload = document.getElementById('modal-avatar-upload');
+      const modalAvatarPreview = document.getElementById('modal-avatar-preview');
+      const modalAvatarPlaceholder = document.getElementById('modal-avatar-placeholder');
+      const modalAvatarDescInput = document.getElementById('modal-avatar-desc-input');
+      const modalNewsUpload = document.getElementById('modal-news-upload');
+      const modalNewsPreview = document.getElementById('modal-news-preview');
+      const modalNewsPlaceholder = document.getElementById('modal-news-placeholder');
+      const modalNewsTitleInput = document.getElementById('modal-news-title-input');
+      const modalNewsContentInput = document.getElementById('modal-news-content-input');
 
-    const modalP2TicketUpload = document.getElementById('modal-ticket2-upload');
-    const modalP2TicketPreview = document.getElementById('modal-ticket2-preview');
-    const modalP2TicketPlaceholder = document.getElementById('modal-ticket2-placeholder');
-    const modalP2TicketBrandInput = document.getElementById('modal-ticket2-brand-input');
-    const modalP2TicketTitleInput = document.getElementById('modal-ticket2-title-input');
-    const modalP2TicketDescInput = document.getElementById('modal-ticket2-desc-input');
-    const modalP2TicketStampInput = document.getElementById('modal-ticket2-stamp-input');
+      const modalP1TicketUpload = document.getElementById('modal-p1-ticket-upload');
+      const modalP1TicketPreview = document.getElementById('modal-p1-ticket-preview');
+      const modalP1TicketPlaceholder = document.getElementById('modal-p1-ticket-placeholder');
+      const modalP1TicketBrandInput = document.getElementById('modal-p1-ticket-brand-input');
+      const modalP1TicketDateInput = document.getElementById('modal-p1-ticket-date-input');
+      const modalP1TicketFromInput = document.getElementById('modal-p1-ticket-from-input');
+      const modalP1TicketToInput = document.getElementById('modal-p1-ticket-to-input');
+      const modalP1TicketInfoInput = document.getElementById('modal-p1-ticket-info-input');
 
-    const modalAvatarDelete = document.getElementById('modal-avatar-delete');
-    const modalP2TicketDelete = document.getElementById('modal-ticket2-delete');
+      const modalP2TicketUpload = document.getElementById('modal-ticket2-upload');
+      const modalP2TicketPreview = document.getElementById('modal-ticket2-preview');
+      const modalP2TicketPlaceholder = document.getElementById('modal-ticket2-placeholder');
+      const modalP2TicketBrandInput = document.getElementById('modal-ticket2-brand-input');
+      const modalP2TicketTitleInput = document.getElementById('modal-ticket2-title-input');
+      const modalP2TicketDescInput = document.getElementById('modal-ticket2-desc-input');
+      const modalP2TicketStampInput = document.getElementById('modal-ticket2-stamp-input');
 
-    const hideModal = () => {
-      if (modal) {
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-        currentModalMode = null;
-      }
-    };
+      const modalAvatarDelete = document.getElementById('modal-avatar-delete');
+      const modalP2TicketDelete = document.getElementById('modal-ticket2-delete');
 
-    const showSection = (mode) => {
-      modalSections.forEach(sec => sec.classList.remove('is-active'));
-      const target = document.querySelector(`.modal-section[data-modal-section="${mode}"]`);
-      if (target) target.classList.add('is-active');
-    };
-
-    const openModal = (mode) => {
-      if (!modal) return;
-      currentModalMode = mode;
-      modal.classList.remove('hidden');
-      modal.setAttribute('aria-hidden', 'false');
-      const modalTitleMap = {
-        avatar: '编辑头像',
-        news: '编辑报纸',
-        p1ticket: '编辑航运车票',
-        p2ticket: '编辑戏票组件'
+      const hideModal = () => {
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.setAttribute('aria-hidden', 'true');
+          currentModalMode = null;
+        }
       };
-      modalTitle.textContent = modalTitleMap[mode] || '编辑';
-      showSection(mode);
 
-      if (mode === 'avatar') {
-        const img = this.container.querySelector('#widget-avatar');
-        if (img && img.style.display !== 'none') {
-          modalAvatarPreview.src = img.src;
-          modalAvatarPreview.style.display = 'block';
-          modalAvatarPlaceholder.style.display = 'none';
-        } else {
-          modalAvatarPreview.style.display = 'none';
-          modalAvatarPlaceholder.style.display = 'block';
-        }
-        const desc = this.container.querySelector('#cfg-avatar-desc');
-        modalAvatarDescInput.value = desc ? desc.innerText : '';
-      } else if (mode === 'news') {
-        const img = this.container.querySelector('#widget-news-img');
-        if (img && img.style.display !== 'none') {
-          modalNewsPreview.src = img.src;
-          modalNewsPreview.style.display = 'block';
-          modalNewsPlaceholder.style.display = 'none';
-        } else {
-          modalNewsPreview.style.display = 'none';
-          modalNewsPlaceholder.style.display = 'block';
-        }
-        const title = this.container.querySelector('#cfg-news-title');
-        const content = this.container.querySelector('#cfg-news-content');
-        modalNewsTitleInput.value = title ? title.innerText : '';
-        modalNewsContentInput.value = content ? content.innerHTML.replace(/<br\s*\/?>/g, '\n') : '';
-      } else if (mode === 'p1ticket') {
-        const img = this.container.querySelector('#widget-p1-ticket-img');
-        if (img && img.style.display !== 'none') {
-          modalP1TicketPreview.src = img.src;
-          modalP1TicketPreview.style.display = 'block';
-          modalP1TicketPlaceholder.style.display = 'none';
-        } else {
-          modalP1TicketPreview.style.display = 'none';
-          modalP1TicketPlaceholder.style.display = 'block';
-        }
-        modalP1TicketBrandInput.value = this.container.querySelector('#cfg-p1-ticket-brand')?.innerText || '';
-        modalP1TicketDateInput.value = this.container.querySelector('#cfg-p1-ticket-date')?.innerText || '';
-        modalP1TicketFromInput.value = this.container.querySelector('#cfg-p1-ticket-from')?.innerText || '';
-        modalP1TicketToInput.value = this.container.querySelector('#cfg-p1-ticket-to')?.innerText || '';
-        const info = [
-          this.container.querySelector('#cfg-p1-ticket-name')?.innerText || '',
-          this.container.querySelector('#cfg-p1-ticket-time')?.innerText || '',
-          this.container.querySelector('#cfg-p1-ticket-no')?.innerText || ''
-        ].filter(Boolean).join('\n');
-        modalP1TicketInfoInput.value = info;
-      } else if (mode === 'p2ticket') {
-        const img = this.container.querySelector('#widget-ticket-img');
-        if (img && img.style.display !== 'none') {
-          modalP2TicketPreview.src = img.src;
-          modalP2TicketPreview.style.display = 'block';
-          modalP2TicketPlaceholder.style.display = 'none';
-        } else {
-          modalP2TicketPreview.style.display = 'none';
-          modalP2TicketPlaceholder.style.display = 'block';
-        }
-        modalP2TicketBrandInput.value = this.container.querySelector('#cfg-ticket-brand')?.innerText || '';
-        modalP2TicketTitleInput.value = this.container.querySelector('#cfg-ticket-title')?.innerText || '';
-        modalP2TicketDescInput.value = this.container.querySelector('#cfg-ticket-desc')?.innerText || '';
-        modalP2TicketStampInput.value = this.container.querySelector('#cfg-ticket-stamp')?.innerText || '';
-      }
-    };
+      const showSection = (mode) => {
+        modalSections.forEach(sec => sec.classList.remove('is-active'));
+        const target = document.querySelector(`.modal-section[data-modal-section="${mode}"]`);
+        if (target) target.classList.add('is-active');
+      };
 
-    const handleUploadClick = (target) => {
-      const option = confirm("点击确定使用本地上传，点击取消使用网络URL");
-      if (option) {
-        currentUploadTarget = target;
-        fileInput?.click();
-      } else {
-        const url = prompt("请输入网络图片URL:");
-        if (url && url.trim() !== "") {
-          this.applyImageToTarget(target, url.trim());
-          if (target === 'avatar') {
-            modalAvatarPreview.src = url.trim();
+      const openModal = (mode) => {
+        if (!modal) return;
+        currentModalMode = mode;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        const modalTitleMap = {
+          avatar: '编辑头像',
+          news: '编辑报纸',
+          ticket1: '编辑航运车票',
+          ticket2: '编辑戏票组件'
+        };
+        modalTitle.textContent = modalTitleMap[mode] || '编辑';
+        showSection(mode);
+
+        if (mode === 'avatar') {
+          const img = this.container.querySelector('#widget-avatar');
+          if (img && img.style.display !== 'none') {
+            modalAvatarPreview.src = img.src;
             modalAvatarPreview.style.display = 'block';
             modalAvatarPlaceholder.style.display = 'none';
+          } else {
+            modalAvatarPreview.style.display = 'none';
+            modalAvatarPlaceholder.style.display = 'block';
           }
-          if (target === 'news') {
-            modalNewsPreview.src = url.trim();
+          const desc = this.container.querySelector('#cfg-avatar-desc');
+          modalAvatarDescInput.value = desc ? desc.innerText : '';
+        } else if (mode === 'news') {
+          const img = this.container.querySelector('#widget-news-img');
+          if (img && img.style.display !== 'none') {
+            modalNewsPreview.src = img.src;
             modalNewsPreview.style.display = 'block';
             modalNewsPlaceholder.style.display = 'none';
+          } else {
+            modalNewsPreview.style.display = 'none';
+            modalNewsPlaceholder.style.display = 'block';
           }
-          if (target === 'p1ticket') {
-            modalP1TicketPreview.src = url.trim();
-            modalP1TicketPreview.style.display = 'block';
-            modalP1TicketPlaceholder.style.display = 'none';
-          }
-          if (target === 'ticket') {
-            modalP2TicketPreview.src = url.trim();
+          const title = this.container.querySelector('#cfg-news-title');
+          const content = this.container.querySelector('#cfg-news-content');
+          modalNewsTitleInput.value = title ? title.innerText : '';
+          modalNewsContentInput.value = content ? content.innerHTML.replace(/<br\s*\/?>/g, '\n') : '';
+        } else if (mode === 'ticket1') {
+          modalP1TicketBrandInput.value = this.container.querySelector('#cfg-p1-ticket-brand')?.innerText || '';
+          modalP1TicketDateInput.value = this.container.querySelector('#cfg-p1-ticket-date')?.innerText || '';
+          modalP1TicketFromInput.value = this.container.querySelector('#cfg-p1-ticket-from')?.innerText || '';
+          modalP1TicketToInput.value = this.container.querySelector('#cfg-p1-ticket-to')?.innerText || '';
+          const info = [
+            this.container.querySelector('#cfg-p1-ticket-name')?.innerText || '',
+            this.container.querySelector('#cfg-p1-ticket-time')?.innerText || '',
+            this.container.querySelector('#cfg-p1-ticket-no')?.innerText || ''
+          ].filter(Boolean).join('\n');
+          modalP1TicketInfoInput.value = info;
+        } else if (mode === 'ticket2') {
+          const img = this.container.querySelector('#widget-ticket-img');
+          if (img && img.style.display !== 'none') {
+            modalP2TicketPreview.src = img.src;
             modalP2TicketPreview.style.display = 'block';
             modalP2TicketPlaceholder.style.display = 'none';
+          } else {
+            modalP2TicketPreview.style.display = 'none';
+            modalP2TicketPlaceholder.style.display = 'block';
           }
+          modalP2TicketBrandInput.value = this.container.querySelector('#cfg-ticket-brand')?.innerText || '';
+          modalP2TicketTitleInput.value = this.container.querySelector('#cfg-ticket-title')?.innerText || '';
+          modalP2TicketDescInput.value = this.container.querySelector('#cfg-ticket-desc')?.innerText || '';
+          modalP2TicketStampInput.value = this.container.querySelector('#cfg-ticket-stamp')?.innerText || '';
         }
-      }
-    };
+      };
 
-    if (avatarTrigger) avatarTrigger.addEventListener('click', () => openModal('avatar'));
-    if (newsTrigger) newsTrigger.addEventListener('click', () => openModal('news'));
-    if (p1TicketTrigger) p1TicketTrigger.addEventListener('click', () => openModal('p1ticket'));
-    if (p2TicketTrigger) p2TicketTrigger.addEventListener('click', () => openModal('p2ticket'));
-
-    if (modalAvatarUpload) modalAvatarUpload.addEventListener('click', () => handleUploadClick('avatar'));
-    if (modalNewsUpload) modalNewsUpload.addEventListener('click', () => handleUploadClick('news'));
-    if (modalP1TicketUpload) modalP1TicketUpload.addEventListener('click', () => handleUploadClick('p1ticket'));
-    if (modalP2TicketUpload) modalP2TicketUpload.addEventListener('click', () => handleUploadClick('ticket'));
-
-    // 删除按钮事件
-    if (modalAvatarDelete) modalAvatarDelete.addEventListener('click', () => {
-      this.removeImageFromTarget('avatar');
-      modalAvatarPreview.style.display = 'none';
-      modalAvatarPlaceholder.style.display = 'block';
-    });
-    if (modalP2TicketDelete) modalP2TicketDelete.addEventListener('click', () => {
-      this.removeImageFromTarget('ticket');
-      modalP2TicketPreview.style.display = 'none';
-      modalP2TicketPlaceholder.style.display = 'block';
-    });
-
-    if (modalClose) modalClose.addEventListener('click', hideModal);
-    modal?.querySelector('.widget-modal__mask')?.addEventListener('click', hideModal);
-
-    if (modalSave) {
-      modalSave.addEventListener('click', () => {
-        if (currentModalMode === 'avatar') {
-          const desc = modalAvatarDescInput.value || '';
-          const descEl = this.container.querySelector('#cfg-avatar-desc');
-          if (descEl) {
-            descEl.innerText = desc;
-            localStorage.setItem('miniphone_widget_cfg-avatar-desc', descEl.innerHTML);
-          }
-        } else if (currentModalMode === 'news') {
-          const title = modalNewsTitleInput.value || '';
-          const content = modalNewsContentInput.value || '';
-          const titleEl = this.container.querySelector('#cfg-news-title');
-          const contentEl = this.container.querySelector('#cfg-news-content');
-          if (titleEl) {
-            titleEl.innerText = title;
-            localStorage.setItem('miniphone_widget_cfg-news-title', titleEl.innerHTML);
-          }
-          if (contentEl) {
-            const html = content.replace(/\n/g, '<br>');
-            contentEl.innerHTML = html;
-            localStorage.setItem('miniphone_widget_cfg-news-content', contentEl.innerHTML);
-          }
-        } else if (currentModalMode === 'p1ticket') {
-          const brandEl = this.container.querySelector('#cfg-p1-ticket-brand');
-          const dateEl = this.container.querySelector('#cfg-p1-ticket-date');
-          const fromEl = this.container.querySelector('#cfg-p1-ticket-from');
-          const toEl = this.container.querySelector('#cfg-p1-ticket-to');
-          const nameEl = this.container.querySelector('#cfg-p1-ticket-name');
-          const timeEl = this.container.querySelector('#cfg-p1-ticket-time');
-          const noEl = this.container.querySelector('#cfg-p1-ticket-no');
-
-          if (brandEl) {
-            brandEl.innerText = modalP1TicketBrandInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-brand', brandEl.innerHTML);
-          }
-          if (dateEl) {
-            dateEl.innerText = modalP1TicketDateInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-date', dateEl.innerHTML);
-          }
-          if (fromEl) {
-            fromEl.innerText = modalP1TicketFromInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-from', fromEl.innerHTML);
-          }
-          if (toEl) {
-            toEl.innerText = modalP1TicketToInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-to', toEl.innerHTML);
-          }
-
-          const infoLines = (modalP1TicketInfoInput.value || '').split('\n').map((s) => s.trim()).filter(Boolean);
-          if (nameEl) {
-            nameEl.innerText = infoLines[0] || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-name', nameEl.innerHTML);
-          }
-          if (timeEl) {
-            timeEl.innerText = infoLines[1] || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-time', timeEl.innerHTML);
-          }
-          if (noEl) {
-            noEl.innerText = infoLines[2] || '';
-            localStorage.setItem('miniphone_widget_cfg-p1-ticket-no', noEl.innerHTML);
-          }
-        } else if (currentModalMode === 'p2ticket') {
-          const brandEl = this.container.querySelector('#cfg-ticket-brand');
-          const titleEl = this.container.querySelector('#cfg-ticket-title');
-          const descEl = this.container.querySelector('#cfg-ticket-desc');
-          const stampEl = this.container.querySelector('#cfg-ticket-stamp');
-
-          if (brandEl) {
-            brandEl.innerText = modalP2TicketBrandInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-ticket-brand', brandEl.innerHTML);
-          }
-          if (titleEl) {
-            titleEl.innerText = modalP2TicketTitleInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-ticket-title', titleEl.innerHTML);
-          }
-          if (descEl) {
-            const html = (modalP2TicketDescInput.value || '').replace(/\n/g, '<br>');
-            descEl.innerHTML = html;
-            localStorage.setItem('miniphone_widget_cfg-ticket-desc', descEl.innerHTML);
-          }
-          if (stampEl) {
-            stampEl.innerText = modalP2TicketStampInput.value || '';
-            localStorage.setItem('miniphone_widget_cfg-ticket-stamp', stampEl.innerHTML);
-          }
-        }
-        hideModal();
-      });
-    }
-
-    // 防止多次绑定全局事件
-    if (fileInput && !fileInput.dataset.bound) {
-      fileInput.dataset.bound = "true";
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file && currentUploadTarget) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            this.applyImageToTarget(currentUploadTarget, evt.target.result);
-            if (currentUploadTarget === 'avatar') {
-              modalAvatarPreview.src = evt.target.result;
+      const handleUploadClick = (target) => {
+        const option = confirm("点击确定使用本地上传，点击取消使用网络URL");
+        if (option) {
+          currentUploadTarget = target;
+          fileInput?.click();
+        } else {
+          const url = prompt("请输入网络图片URL:");
+          if (url && url.trim() !== "") {
+            this.applyImageToTarget(target, url.trim());
+            if (target === 'avatar') {
+              modalAvatarPreview.src = url.trim();
               modalAvatarPreview.style.display = 'block';
               modalAvatarPlaceholder.style.display = 'none';
-            } else if (currentUploadTarget === 'news') {
-              modalNewsPreview.src = evt.target.result;
+            }
+            if (target === 'news') {
+              modalNewsPreview.src = url.trim();
               modalNewsPreview.style.display = 'block';
               modalNewsPlaceholder.style.display = 'none';
-            } else if (currentUploadTarget === 'p1ticket') {
-              modalP1TicketPreview.src = evt.target.result;
+            }
+            if (target === 'p1ticket') {
+              modalP1TicketPreview.src = url.trim();
               modalP1TicketPreview.style.display = 'block';
               modalP1TicketPlaceholder.style.display = 'none';
-            } else if (currentUploadTarget === 'ticket') {
-              modalP2TicketPreview.src = evt.target.result;
+            }
+            if (target === 'ticket') {
+              modalP2TicketPreview.src = url.trim();
               modalP2TicketPreview.style.display = 'block';
               modalP2TicketPlaceholder.style.display = 'none';
             }
-            fileInput.value = ''; // 清空方便下次选择
-          };
-          reader.readAsDataURL(file);
+          }
         }
+      };
+
+      if (avatarTrigger) avatarTrigger.addEventListener('click', () => openModal('avatar'));
+      if (newsTrigger) newsTrigger.addEventListener('click', () => openModal('news'));
+      if (p1TicketTrigger) p1TicketTrigger.addEventListener('click', () => openModal('ticket1'));
+      if (p2TicketTrigger) p2TicketTrigger.addEventListener('click', () => openModal('ticket2'));
+
+      if (modalAvatarUpload) modalAvatarUpload.addEventListener('click', () => handleUploadClick('avatar'));
+      if (modalNewsUpload) modalNewsUpload.addEventListener('click', () => handleUploadClick('news'));
+      if (modalP1TicketUpload) modalP1TicketUpload.addEventListener('click', () => handleUploadClick('p1ticket'));
+      if (modalP2TicketUpload) modalP2TicketUpload.addEventListener('click', () => handleUploadClick('ticket'));
+
+      // 删除按钮事件
+      if (modalAvatarDelete) modalAvatarDelete.addEventListener('click', () => {
+        this.removeImageFromTarget('avatar');
+        modalAvatarPreview.style.display = 'none';
+        modalAvatarPlaceholder.style.display = 'block';
       });
+      if (modalP2TicketDelete) modalP2TicketDelete.addEventListener('click', () => {
+        this.removeImageFromTarget('ticket');
+        modalP2TicketPreview.style.display = 'none';
+        modalP2TicketPlaceholder.style.display = 'block';
+      });
+
+      if (modalClose) modalClose.addEventListener('click', hideModal);
+      modal?.querySelector('.widget-modal__mask')?.addEventListener('click', hideModal);
+
+      if (modalSave) {
+        modalSave.addEventListener('click', () => {
+          if (currentModalMode === 'avatar') {
+            const desc = modalAvatarDescInput.value || '';
+            const descEl = this.container.querySelector('#cfg-avatar-desc');
+            if (descEl) {
+              descEl.innerText = desc;
+              localStorage.setItem('miniphone_widget_cfg-avatar-desc', descEl.innerHTML);
+            }
+          } else if (currentModalMode === 'news') {
+            const title = modalNewsTitleInput.value || '';
+            const content = modalNewsContentInput.value || '';
+            const titleEl = this.container.querySelector('#cfg-news-title');
+            const contentEl = this.container.querySelector('#cfg-news-content');
+            if (titleEl) {
+              titleEl.innerText = title;
+              localStorage.setItem('miniphone_widget_cfg-news-title', titleEl.innerHTML);
+            }
+            if (contentEl) {
+              const html = content.replace(/\n/g, '<br>');
+              contentEl.innerHTML = html;
+              localStorage.setItem('miniphone_widget_cfg-news-content', contentEl.innerHTML);
+            }
+          } else if (currentModalMode === 'ticket1') {
+            const brandEl = this.container.querySelector('#cfg-p1-ticket-brand');
+            const dateEl = this.container.querySelector('#cfg-p1-ticket-date');
+            const fromEl = this.container.querySelector('#cfg-p1-ticket-from');
+            const toEl = this.container.querySelector('#cfg-p1-ticket-to');
+            const nameEl = this.container.querySelector('#cfg-p1-ticket-name');
+            const timeEl = this.container.querySelector('#cfg-p1-ticket-time');
+            const noEl = this.container.querySelector('#cfg-p1-ticket-no');
+
+            if (brandEl) {
+              brandEl.innerText = modalP1TicketBrandInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-brand', brandEl.innerHTML);
+            }
+            if (dateEl) {
+              dateEl.innerText = modalP1TicketDateInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-date', dateEl.innerHTML);
+            }
+            if (fromEl) {
+              fromEl.innerText = modalP1TicketFromInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-from', fromEl.innerHTML);
+            }
+            if (toEl) {
+              toEl.innerText = modalP1TicketToInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-to', toEl.innerHTML);
+            }
+
+            const infoLines = (modalP1TicketInfoInput.value || '').split('\n').map((s) => s.trim()).filter(Boolean);
+            if (nameEl) {
+              nameEl.innerText = infoLines[0] || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-name', nameEl.innerHTML);
+            }
+            if (timeEl) {
+              timeEl.innerText = infoLines[1] || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-time', timeEl.innerHTML);
+            }
+            if (noEl) {
+              noEl.innerText = infoLines[2] || '';
+              localStorage.setItem('miniphone_widget_cfg-p1-ticket-no', noEl.innerHTML);
+            }
+          } else if (currentModalMode === 'ticket2') {
+            const brandEl = this.container.querySelector('#cfg-ticket-brand');
+            const titleEl = this.container.querySelector('#cfg-ticket-title');
+            const descEl = this.container.querySelector('#cfg-ticket-desc');
+            const stampEl = this.container.querySelector('#cfg-ticket-stamp');
+
+            if (brandEl) {
+              brandEl.innerText = modalP2TicketBrandInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-ticket-brand', brandEl.innerHTML);
+            }
+            if (titleEl) {
+              titleEl.innerText = modalP2TicketTitleInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-ticket-title', titleEl.innerHTML);
+            }
+            if (descEl) {
+              const html = (modalP2TicketDescInput.value || '').replace(/\n/g, '<br>');
+              descEl.innerHTML = html;
+              localStorage.setItem('miniphone_widget_cfg-ticket-desc', descEl.innerHTML);
+            }
+            if (stampEl) {
+              stampEl.innerText = modalP2TicketStampInput.value || '';
+              localStorage.setItem('miniphone_widget_cfg-ticket-stamp', stampEl.innerHTML);
+            }
+          }
+          hideModal();
+        });
+      }
+
+      // 防止多次绑定全局事件
+      if (fileInput && !fileInput.dataset.bound) {
+        fileInput.dataset.bound = "true";
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file && currentUploadTarget) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              this.applyImageToTarget(currentUploadTarget, evt.target.result);
+              if (currentUploadTarget === 'avatar') {
+                modalAvatarPreview.src = evt.target.result;
+                modalAvatarPreview.style.display = 'block';
+                modalAvatarPlaceholder.style.display = 'none';
+              } else if (currentUploadTarget === 'news') {
+                modalNewsPreview.src = evt.target.result;
+                modalNewsPreview.style.display = 'block';
+                modalNewsPlaceholder.style.display = 'none';
+              } else if (currentUploadTarget === 'p1ticket') {
+                modalP1TicketPreview.src = evt.target.result;
+                modalP1TicketPreview.style.display = 'block';
+                modalP1TicketPlaceholder.style.display = 'none';
+              } else if (currentUploadTarget === 'ticket') {
+                modalP2TicketPreview.src = evt.target.result;
+                modalP2TicketPreview.style.display = 'block';
+                modalP2TicketPlaceholder.style.display = 'none';
+              }
+              fileInput.value = ''; // 清空方便下次选择
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
     }
 
     // 从 localStorage 恢复自定义文本和图片

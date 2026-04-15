@@ -8,7 +8,7 @@
  * 
  * 安装时预缓存核心文件，fetch 时优先使用缓存，activate 时清理旧缓存。
  */
-const CACHE_NAME = 'miniphone-v1';
+const CACHE_NAME = 'miniphone-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

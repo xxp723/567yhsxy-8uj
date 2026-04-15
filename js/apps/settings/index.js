@@ -141,7 +141,7 @@ export async function mount(container, context) {
       </div>
 
       <!-- 底部TAB栏 -->
-      <div id="settings-tab-bar" class="settings-tab-bar hidden">
+      <div id="settings-tab-bar" class="settings-tab-bar">
         <button class="settings-tab-bar__btn" id="back-to-desktop">
           <div class="settings-tab-bar__icon">🏠</div>
           <span class="settings-tab-bar__label">返回桌面</span>
@@ -168,13 +168,7 @@ export async function mount(container, context) {
 
     currentPage = page;
 
-    // 控制TAB栏显示
-    const tabBar = container.querySelector('#settings-tab-bar');
-    if (page === 'home') {
-      tabBar?.classList.add('hidden');
-    } else {
-      tabBar?.classList.remove('hidden');
-    }
+    // TAB栏始终显示（仅在关闭设置应用时消失）
   };
 
   // 卡片点击事件

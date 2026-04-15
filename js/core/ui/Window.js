@@ -43,7 +43,7 @@ export class WindowManager {
     const header = document.createElement('header');
     header.className = 'app-window__header';
     header.innerHTML = `
-      <div class="app-window__title">${appMeta.icon} ${appMeta.name}</div>
+      <div class="app-window__title">${appMeta.name}</div>
       <button class="app-window__close" type="button" aria-label="关闭应用">✕</button>
     `;
 
