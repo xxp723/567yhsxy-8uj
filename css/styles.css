@@ -313,26 +313,34 @@ body.hide-status-bar #top-status-bar {
   aspect-ratio: 2 / 3;
   height: auto;
   background: var(--c-white-rice);
-  border: 2px solid var(--c-border);
+  border: 4px solid var(--c-border);
   border-radius: 0;
-  padding: 16px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08), inset 0 0 0 1px var(--c-border);
+  box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
   cursor: pointer;
   overflow: hidden;
+}
+.p1-news-widget::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--c-border);
+  pointer-events: none;
+  z-index: 0;
 }
 .p1-news-title {
   font-size: 18px;
   font-weight: bold;
   text-align: center;
   border-bottom: 2px solid var(--c-border);
-  padding-bottom: 8px;
-  margin-bottom: 12px;
+  padding: 8px 8px 8px 8px;
+  margin: 8px 8px 12px 8px;
   z-index: 1;
-  width: 100%;
+  width: calc(100% - 16px);
   max-width: 6em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -348,7 +356,8 @@ body.hide-status-bar #top-status-bar {
   z-index: 1;
   overflow: hidden;
   align-self: flex-end;
-  max-width: 100%;
+  max-width: calc(100% - 16px);
+  margin-right: 8px;
 }
 
 /* 右侧：2:3 头像框组件 */
@@ -424,7 +433,7 @@ body.hide-status-bar #top-status-bar {
   padding: 8px;
   gap: 12px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* 左侧：剧院名 (竖排奶咖色背景) */
@@ -439,16 +448,22 @@ body.hide-status-bar #top-status-bar {
   letter-spacing: 4px;
   display: flex;
   align-items: center;
+  justify-content: center;
   cursor: text;
 }
 
-/* 中左：正方形图片 */
+/* 中左：正方形图片区域 */
 .p2-ticket-img-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.p2-ticket-img-box > img {
   width: 100px;
   height: 100px;
   border: 1px solid var(--c-border);
   padding: 3px;
-  align-self: center;
   cursor: pointer;
 }
 .p2-ticket-img {
@@ -493,19 +508,16 @@ body.hide-status-bar #top-status-bar {
   display: block;
 }
 
-/* 底部：奶咖色小印章 */
+/* 印章：位于图片下方，横向显示 */
 .p2-ticket-stamp {
-  position: absolute;
-  bottom: 3px;
-  right: 3px;
   background: var(--c-milktea);
   border: 1px solid var(--c-border);
-  padding: 1px 4px;
+  padding: 2px 6px;
   font-size: 9px;
-  transform: rotate(-5deg);
   box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
   cursor: text;
   opacity: 0.85;
+  white-space: nowrap;
 }
 
 /* 底部应用区 1x3 (居中排布) */
@@ -524,7 +536,7 @@ body.hide-status-bar #top-status-bar {
    ========================= */
 .p1-ticket-widget {
   width: 92%;
-  height: auto;
+  height: 180px;
   background: var(--c-white-rice);
   border: 3px solid var(--c-border);
   padding: 6px;
@@ -533,44 +545,35 @@ body.hide-status-bar #top-status-bar {
   margin: 0 auto;
   margin-bottom: 10px;
 }
-.p1-ticket-widget::before, .p1-ticket-widget::after {
-  content: '';
-  position: absolute;
-  left: 6px; right: 6px;
-  height: 6px;
-  border-top: 1px dashed var(--c-border);
-}
-.p1-ticket-widget::before { top: 10px; }
-.p1-ticket-widget::after { bottom: 10px; }
 .p1-ticket-inner {
   border: 1px solid var(--c-border);
   padding: 10px;
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: center;
   position: relative;
   overflow: hidden;
 }
 .p1-ticket-brand {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
+  text-align: center;
   background: var(--c-milktea);
   border: 1px solid var(--c-border);
-  padding: 10px 6px;
-  font-size: 16px;
+  padding: 6px 10px;
+  font-size: 14px;
   font-weight: bold;
-  letter-spacing: 3px;
-  align-self: center;
+  letter-spacing: 2px;
+  width: 100%;
 }
 .p1-ticket-body {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
+  align-items: center;
+  justify-content: space-between;
 }
 .p1-ticket-route {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 10px;
 }
@@ -580,7 +583,7 @@ body.hide-status-bar #top-status-bar {
   letter-spacing: 1px;
 }
 .p1-ticket-arrows {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: bold;
   letter-spacing: 2px;
 }
@@ -593,17 +596,6 @@ body.hide-status-bar #top-status-bar {
   gap: 10px;
   font-size: 12px;
   letter-spacing: 0.5px;
-}
-.p1-ticket-stamp {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  padding: 4px 8px;
-  border: 1px solid var(--c-border);
-  background: var(--c-milktea);
-  transform: rotate(-6deg);
-  box-shadow: 1px 1px 0 rgba(0,0,0,0.2);
-  font-size: 12px;
 }
 
 /* =========================

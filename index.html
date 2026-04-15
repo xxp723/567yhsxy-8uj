@@ -4,9 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#EAE4D3" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="小手机" />
   <title>民国纪事 - MiniPhone</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="assets/icons/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -86,16 +90,16 @@
 
           <!-- 民国车票组件 -->
           <div class="p1-ticket-widget" id="p1-ticket-trigger" title="点击编辑">
-            <div class="p1-ticket-brand" id="cfg-p1-ticket-brand">中华民国长江航运公司</div>
             <div class="p1-ticket-inner">
+              <div class="p1-ticket-brand" id="cfg-p1-ticket-brand">中华民国长江航运公司</div>
               <div class="p1-ticket-body">
                 <div class="p1-ticket-route">
-                  <div class="p1-ticket-date" id="cfg-p1-ticket-date">民国十四年五月初七</div>
                   <div class="p1-ticket-arrows">
                     <span id="cfg-p1-ticket-from">重庆</span>
                     <span class="p1-ticket-arrow">→</span>
                     <span id="cfg-p1-ticket-to">汉口</span>
                   </div>
+                  <div class="p1-ticket-date" id="cfg-p1-ticket-date">民国十四年五月初七</div>
                 </div>
                 <div class="p1-ticket-footer">
                   <span id="cfg-p1-ticket-name">乘客：张三</span>
@@ -103,7 +107,6 @@
                   <span id="cfg-p1-ticket-no">票号：M1925-001</span>
                 </div>
               </div>
-              <div class="p1-ticket-stamp" id="cfg-p1-ticket-stamp">民国快线</div>
             </div>
           </div>
         </section>
@@ -115,6 +118,7 @@
               <div class="p2-ticket-brand" id="cfg-ticket-brand">浮生剧院</div>
               <div class="p2-ticket-img-box">
                 <img class="p2-ticket-img" id="widget-ticket-img" style="display:none;" alt="戏票图" />
+                <div class="p2-ticket-stamp" id="cfg-ticket-stamp">No.001925 凭券入场</div>
               </div>
               <div class="p2-ticket-text-zone">
                 <div class="p2-ticket-title" id="cfg-ticket-title">旧戏新梦</div>
@@ -125,7 +129,6 @@
                 </div>
               </div>
             </div>
-            <div class="p2-ticket-stamp" id="cfg-ticket-stamp">No.001925 凭券入场</div>
           </div>
 
           <!-- 三个应用：戏笔、梦笺、游戏 -->
@@ -234,10 +237,6 @@
               <div class="modal-field">
                 <label>票号</label>
                 <input id="modal-ticket1-no-input" type="text" />
-              </div>
-              <div class="modal-field">
-                <label>印章内容</label>
-                <input id="modal-ticket1-stamp-input" type="text" />
               </div>
             </div>
             <div class="modal-section" data-modal-section="ticket2">
@@ -419,7 +418,6 @@
       const modalTicket1Name = $('modal-ticket1-name-input');
       const modalTicket1Time = $('modal-ticket1-time-input');
       const modalTicket1No = $('modal-ticket1-no-input');
-      const modalTicket1Stamp = $('modal-ticket1-stamp-input');
 
       const modalTicket2Upload = $('modal-ticket2-upload');
       const modalTicket2Preview = $('modal-ticket2-preview');
@@ -487,7 +485,6 @@
           modalTicket1Time.value = tTime;
           modalTicket1No.value = tNo;
           
-          modalTicket1Stamp.value = $('cfg-p1-ticket-stamp')?.innerText || '';
         } else if (mode === 'ticket2') {
           const img = $('widget-ticket-img');
           if (img && img.style.display !== 'none') {
@@ -590,7 +587,6 @@
             saveText('cfg-p1-ticket-name', modalTicket1Name.value || '');
             saveText('cfg-p1-ticket-time', modalTicket1Time.value || '');
             saveText('cfg-p1-ticket-no', modalTicket1No.value || '');
-            saveText('cfg-p1-ticket-stamp', modalTicket1Stamp.value || '');
           } else if (currentModalMode === 'ticket2') {
             const saveText = (id, val) => {
               const el = $(id);
