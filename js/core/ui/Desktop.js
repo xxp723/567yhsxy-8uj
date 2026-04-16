@@ -24,6 +24,96 @@ export class Desktop {
     this.eventBus.on('desktop:changed', ({ config }) => {
       this.render(config);
     });
+
+    this.eventBus.on('desktop:edit-mode', () => {
+      this.enterEditMode();
+    });
+  }
+
+  isEditMode = false;
+
+  enterEditMode() {
+    if (this.isEditMode) return;
+    this.isEditMode = true;
+    document.body.classList.add('desktop-edit-mode');
+
+    const overlay = document.querySelector('.desktop-edit-overlay');
+    if (overlay) overlay.classList.add('is-active');
+
+    this._addDeleteBadges();
+
+    const doneBtn = document.querySelector('.edit-mode-done');
+    if (doneBtn) {
+      // 避免重复绑定
+      doneBtn.replaceWith(doneBtn.cloneNode(true));
+      document.querySelector('.edit-mode-done').addEventListener('click', () => {
+        this.exitEditMode();
+      });
+    }
+
+    // 给组件加上拖拽属性和数据 ID
+    this.container.querySelectorAll('[id$="-widget"]').forEach(w => {
+      w.setAttribute('draggable', 'true');
+      w.classList.add('desktop-widget-item');
+      if (!w.dataset.widgetId) {
+        w.dataset.widgetId = w.id; // fallback
+      }
+    });
+  }
+
+  exitEditMode() {
+    if (!this.isEditMode) return;
+    this.isEditMode = false;
+    document.body.classList.remove('desktop-edit-mode');
+
+    const overlay = document.querySelector('.desktop-edit-overlay');
+    if (overlay) overlay.classList.remove('is-active');
+
+    this._removeDeleteBadges();
+
+    this.container.querySelectorAll('.desktop-widget-item').forEach(w => {
+      w.removeAttribute('draggable');
+    });
+  }
+
+  _addDeleteBadges() {
+    // 为桌面图标添加删除按钮
+    this.container.querySelectorAll('.app-icon').forEach(icon => {
+      if (!icon.querySelector('.delete-badge')) {
+        const badge = document.createElement('div');
+        badge.className = 'delete-badge';
+        badge.innerHTML = '×';
+        badge.onclick = (e) => {
+          e.stopPropagation();
+          const appId = icon.dataset.appId;
+          if (appId) {
+            this.eventBus.emit('desktop:remove-app', { appId });
+          }
+        };
+        icon.appendChild(badge);
+      }
+    });
+
+    // 为组件添加删除按钮
+    this.container.querySelectorAll('[id$="-widget"]').forEach(w => {
+      if (!w.querySelector('.delete-badge')) {
+        const badge = document.createElement('div');
+        badge.className = 'delete-badge';
+        badge.innerHTML = '×';
+        badge.onclick = (e) => {
+          e.stopPropagation();
+          const widgetId = w.dataset.widgetId || w.id;
+          if (widgetId) {
+            this.eventBus.emit('desktop:remove-widget', { widgetId });
+          }
+        };
+        w.appendChild(badge);
+      }
+    });
+  }
+
+  _removeDeleteBadges() {
+    this.container.querySelectorAll('.delete-badge').forEach(b => b.remove());
   }
 
   render(config) {
