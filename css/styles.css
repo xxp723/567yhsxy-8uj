@@ -190,13 +190,6 @@ body.hide-status-bar #top-status-bar {
   opacity: 0.85;
 }
 
-.app-icon-btn::before {
-  content: '✦';
-  font-size: 24px;
-  color: var(--c-text-main);
-  opacity: 0.25;
-  position: absolute;
-}
 
 .app-icon-glyph {
   font-size: 20px;
@@ -205,6 +198,11 @@ body.hide-status-bar #top-status-bar {
   color: var(--c-text-main);
   z-index: 2;
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .app-custom-img {
@@ -260,9 +258,6 @@ body.hide-status-bar #top-status-bar {
   padding: 4px;
 }
 
-.dock-container .app-icon-btn::before {
-  font-size: 20px;
-}
 
 .dock-container .app-icon-label {
   font-size: 11px;
@@ -766,16 +761,22 @@ body.hide-status-bar #top-status-bar {
   height: 50px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 18px;
   border-bottom: none;
   background: var(--c-white-rice);
+  position: relative;
 }
 
 .app-window__title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
   font-size: 16px;
   font-weight: bold;
   letter-spacing: 0.5px;
+  pointer-events: none;
 }
 
 .app-window__close {
@@ -1127,4 +1128,8 @@ body.fullscreen-mode .phone-frame {
   border: none;
   box-shadow: none;
   margin: 0;
+}
+
+body.fullscreen-mode .app-window {
+  top: 0;
 }

@@ -44,7 +44,7 @@ export class WindowManager {
     header.className = 'app-window__header';
     header.innerHTML = `
       <div class="app-window__title">${appMeta.name}</div>
-      <button class="app-window__close" type="button" aria-label="关闭应用">✕</button>
+      <button class="app-window__close" type="button" aria-label="关闭应用"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><path d="M24 44c11.046 0 20-8.954 20-20S35.046 4 24 4 4 12.954 4 24s8.954 20 20 20Z" stroke="currentColor" stroke-width="3"/><path d="M29.657 18.343 18.343 29.657M18.343 18.343l11.314 11.314" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     `;
 
     const content = document.createElement('div');

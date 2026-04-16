@@ -150,7 +150,7 @@ export class Desktop {
         const btn = el.querySelector('.app-icon-btn');
         const img = el.querySelector('.app-custom-img');
         const glyph = el.querySelector('.app-icon-glyph');
-        if (glyph && !glyph.textContent.trim()) glyph.textContent = app.icon || '';
+        if (glyph && !glyph.innerHTML.trim()) glyph.innerHTML = app.icon || '';
         const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
         if (img && customImg) {
           img.src = customImg;
@@ -166,7 +166,7 @@ export class Desktop {
         const btn = el.querySelector('.app-icon-btn');
         const glyph = el.querySelector('.app-icon-glyph');
         const app = appMap.get(appId);
-        if (glyph && app && !glyph.textContent.trim()) glyph.textContent = app.icon || '';
+        if (glyph && app && !glyph.innerHTML.trim()) glyph.innerHTML = app.icon || '';
         const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
         if (img && customImg) {
           img.src = customImg;
