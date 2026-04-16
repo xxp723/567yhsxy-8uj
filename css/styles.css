@@ -874,6 +874,11 @@ body.is-edit-mode .desktop-item * {
   pointer-events: none !important;
 }
 
+/* 删除按钮需要在编辑模式下保持可点击 */
+body.is-edit-mode .desktop-item .edit-delete-btn {
+  pointer-events: auto !important;
+}
+
 .desktop-item.is-dragging {
   animation: none !important;
   opacity: 0.9;
@@ -1038,7 +1043,7 @@ body.is-edit-mode .edit-toolbar {
     linear-gradient(to bottom, rgba(125, 90, 68, 0.15) 1px, transparent 1px);
 }
 body.is-edit-mode .grid-lines {
-  opacity: 1;
+  opacity: 0;
 }
 
 /* Toast 提示 */

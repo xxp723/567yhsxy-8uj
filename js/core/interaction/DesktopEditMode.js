@@ -20,6 +20,8 @@ export class DesktopEditMode {
     // UI 元素
     this.toolbar = document.getElementById('edit-toolbar');
     this.btnAdd = document.getElementById('edit-btn-add');
+    this.btnAddPage = document.getElementById('edit-btn-add-page');
+    this.btnRemovePage = document.getElementById('edit-btn-remove-page');
     this.btnReset = document.getElementById('edit-btn-reset');
     this.btnDone = document.getElementById('edit-btn-done');
     this.btnClose = document.getElementById('edit-btn-close');
@@ -75,6 +77,14 @@ export class DesktopEditMode {
 
     if (this.btnAdd) {
       this.btnAdd.addEventListener('click', () => this.showAddPanel());
+    }
+
+    if (this.btnAddPage) {
+      this.btnAddPage.addEventListener('click', () => this.addDesktopPage());
+    }
+
+    if (this.btnRemovePage) {
+      this.btnRemovePage.addEventListener('click', () => this.removeCurrentDesktopPage());
     }
     
     if (this.addPanelMask) {
@@ -182,6 +192,80 @@ export class DesktopEditMode {
   hideAddPanel() {
     if (this.addPanel) this.addPanel.classList.remove('is-visible');
     if (this.addPanelMask) this.addPanelMask.classList.remove('is-visible');
+  }
+
+  addDesktopPage() {
+    const pages = Array.from(this.desktopContainer.querySelectorAll('.desktop-page'));
+    const nextIndex = pages.length;
+    const pageId = `page-${nextIndex + 1}`;
+
+    const pageEl = document.createElement('section');
+    pageEl.className = 'desktop-page';
+    pageEl.setAttribute('data-page-id', pageId);
+    this.desktopContainer.appendChild(pageEl);
+
+    this.layout[pageId] = [];
+    this.currentPageId = pageId;
+
+    const width = this.desktopContainer.clientWidth || 0;
+    this.desktopContainer.scrollTo({
+      left: nextIndex * width,
+      behavior: 'smooth'
+    });
+
+    this.positionItemsDOM();
+    this.showToast('已新增桌面页');
+  }
+
+  removeCurrentDesktopPage() {
+    const pages = Array.from(this.desktopContainer.querySelectorAll('.desktop-page'));
+    if (pages.length <= 1) {
+      this.showToast('至少保留一页');
+      return;
+    }
+
+    let currentPageEl = this.desktopContainer.querySelector(`.desktop-page[data-page-id="${this.currentPageId}"]`);
+    if (!currentPageEl) {
+      currentPageEl = pages[pages.length - 1];
+    }
+
+    const removedIndex = pages.indexOf(currentPageEl);
+    const removedId = currentPageEl.getAttribute('data-page-id');
+
+    currentPageEl.remove();
+    delete this.layout[removedId];
+
+    this.reindexDesktopPages();
+
+    const remainPages = Array.from(this.desktopContainer.querySelectorAll('.desktop-page'));
+    const targetIndex = Math.min(removedIndex, remainPages.length - 1);
+    const targetPage = remainPages[targetIndex];
+
+    if (targetPage) {
+      this.currentPageId = targetPage.getAttribute('data-page-id');
+      const width = this.desktopContainer.clientWidth || 0;
+      this.desktopContainer.scrollTo({
+        left: targetIndex * width,
+        behavior: 'smooth'
+      });
+    }
+
+    this.positionItemsDOM();
+    this.showToast('已删除桌面页');
+  }
+
+  reindexDesktopPages() {
+    const pages = Array.from(this.desktopContainer.querySelectorAll('.desktop-page'));
+    const nextLayout = {};
+
+    pages.forEach((page, index) => {
+      const oldId = page.getAttribute('data-page-id');
+      const newId = `page-${index + 1}`;
+      page.setAttribute('data-page-id', newId);
+      nextLayout[newId] = this.layout[oldId] || [];
+    });
+
+    this.layout = nextLayout;
   }
 
   addItemToDesktop(type, id) {
