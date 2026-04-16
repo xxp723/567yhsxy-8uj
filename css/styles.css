@@ -11,16 +11,16 @@
 }
 
 /* =========================
-   全局变量（民国报纸风）
+   全局变量（轻奢高级感）
    ========================= */
 :root {
-  --c-bg-wallpaper: #EAE4D3; /* 默认米黄色壁纸 */
-  --c-milktea: #D2C5B5;      /* 奶咖色 */
-  --c-milktea-trans: rgba(210, 197, 181, 0.5); /* 毛玻璃用奶咖色 */
-  --c-white-rice: #F5F2EB;   /* 米白色 */
-  --c-gray-light: #E0DCD1;   /* 浅灰色 */
-  --c-text-main: #222222;    /* 报纸黑色字体 */
-  --c-border: #333333;       /* 边框黑 */
+  --c-bg-wallpaper: #F5F1EA; /* Linen 亚麻色壁纸 */
+  --c-milktea: #D7C9B8;      /* Khaki 卡其色 */
+  --c-milktea-trans: rgba(215, 201, 184, 0.5); /* Khaki 半透明 */
+  --c-white-rice: #F5F1EA;   /* Linen 亚麻色 */
+  --c-gray-light: #D7C9B8;   /* Khaki 卡其色 */
+  --c-text-main: #4A342A;    /* Espresso 浓缩咖啡字体 */
+  --c-border: #7D5A44;       /* Cocoa 可可色边框 */
   
   --font-retro: "Huiwen-mincho", "STSong", "SimSun", serif;
 
@@ -569,7 +569,7 @@ body.hide-status-bar #top-status-bar {
 }
 .p1-ticket-date {
   font-size: 12px;
-  color: #444;
+  color: #7D5A44;
   letter-spacing: 1px;
 }
 .p1-ticket-arrows {
@@ -709,7 +709,7 @@ body.hide-status-bar #top-status-bar {
 }
 .modal-img-placeholder {
   font-size: 12px;
-  color: #999;
+  color: #B2967D;
 }
 .modal-btn {
   border: none;
@@ -876,7 +876,7 @@ body.hide-status-bar #top-status-bar {
 }
 
 .ui-card .ui-muted {
-  color: #888;
+  color: #B2967D;
   font-size: 12px;
 }
 
@@ -949,7 +949,7 @@ body.hide-status-bar #top-status-bar {
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #999;
+  color: #B2967D;
   font-size: 14px;
 }
 
@@ -1005,7 +1005,7 @@ body.hide-status-bar #top-status-bar {
 }
 .archive-title-sub {
   font-size: 12px;
-  color: #888;
+  color: #B2967D;
 }
 .archive-stamp {
   font-size: 12px;
@@ -1042,7 +1042,7 @@ body.hide-status-bar #top-status-bar {
 }
 
 .settings-card {
-  background: #fff;
+  background: var(--c-white-rice);
   border: none;
   border-radius: 14px;
   padding: 14px 12px;

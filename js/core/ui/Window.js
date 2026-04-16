@@ -48,9 +48,12 @@ export class WindowManager {
       </button>
       <div class="app-window__title">${appMeta.name}</div>
       <button class="app-window__close" type="button" aria-label="关闭应用">
-        <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
-          <rect x="14" y="4" width="20" height="40" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M22 24v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 4V44" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M38 4V44" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 4H38" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 44H44" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="28" cy="24" r="2.5" fill="currentColor"/>
         </svg>
       </button>
     `;
