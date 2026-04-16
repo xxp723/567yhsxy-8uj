@@ -267,6 +267,19 @@ body.hide-status-bar #top-status-bar {
   font-size: 18px;
 }
 
+/* Dock 进入编辑态时与桌面图标一致：抖动 + 禁止打开应用，仅保留删除按钮可点 */
+.dock-container.is-edit-mode .app-icon {
+  animation: shake-icon 0.3s infinite ease-in-out;
+}
+
+body.is-edit-mode #dock-container.is-edit-mode .app-icon [data-open-app] {
+  pointer-events: none;
+}
+
+body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
+  pointer-events: auto;
+}
+
 /* =========================
    第一页 (Page 1) 布局
    ========================= */
@@ -444,10 +457,13 @@ body.hide-status-bar #top-status-bar {
 
 /* 中左：正方形图片区域 */
 .p2-ticket-img-box {
+  position: relative;
+  width: 100px;
+  height: 124px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22px;
 }
 .p2-ticket-img-box > img {
   width: 100px;
@@ -498,15 +514,20 @@ body.hide-status-bar #top-status-bar {
   display: block;
 }
 
-/* 印章：位于图片下方，横向显示 */
+/* 印章：固定在戏票图片上方 */
 .p2-ticket-stamp {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
   background: var(--c-milktea);
   border: 1px solid var(--c-border);
   padding: 2px 6px;
   font-size: 9px;
   box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
   cursor: text;
-  opacity: 0.85;
+  opacity: 0.9;
   white-space: nowrap;
 }
 
@@ -935,12 +956,19 @@ body.is-edit-mode .edit-delete-btn {
   pointer-events: none;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid var(--c-border);
+  cursor: move;
+  touch-action: none;
 }
 
 body.is-edit-mode .edit-toolbar {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
   pointer-events: auto;
+}
+
+.edit-toolbar.is-custom-position,
+body.is-edit-mode .edit-toolbar.is-custom-position {
+  transform: translate3d(0, 0, 0) !important;
 }
 
 .edit-toolbar-btn {
@@ -1026,23 +1054,118 @@ body.is-edit-mode .edit-toolbar {
 }
 
 .add-panel-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.add-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.add-panel-section-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--c-text-main);
+  letter-spacing: 1px;
+}
+
+.add-panel-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.add-panel-row .add-panel-empty {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #8f7a66;
+  padding: 10px 6px;
 }
 
 .add-panel-item {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
+  scroll-snap-align: start;
 }
-.add-panel-item .app-icon-btn {
-  transform: scale(0.8);
-}
-.add-panel-item span {
+
+.add-panel-item-label {
   font-size: 12px;
+  line-height: 1.2;
+  color: var(--c-text-main);
+}
+
+.add-panel-item--app {
+  width: 72px;
+  align-items: center;
+}
+
+.add-panel-item--app .app-icon-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  transform: none;
+}
+
+.add-panel-item--app .add-panel-item-label {
+  text-align: center;
+}
+
+.add-panel-item--widget {
+  width: 190px;
+  align-items: flex-start;
+}
+
+.add-panel-item--widget .add-panel-item-label {
+  width: 100%;
+  text-align: left;
+}
+
+.add-panel-widget-preview {
+  width: 100%;
+  height: 132px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: #f7f3ec;
+  overflow: hidden;
+  position: relative;
+  padding: 6px;
+}
+
+.add-panel-widget-preview-scale {
+  position: absolute;
+  inset: 6px;
+  transform: scale(0.26);
+  transform-origin: top left;
+  width: calc(100% / 0.26);
+  height: calc(100% / 0.26);
+}
+
+.add-panel-widget-preview-scale > * {
+  pointer-events: none !important;
+  animation: none !important;
+  margin: 0 !important;
+}
+
+.add-panel-widget-preview-scale .edit-delete-btn {
+  display: none !important;
+}
+
+.add-panel-widget-preview-empty {
+  font-size: 12px;
+  color: #8f7a66;
+  height: 100%;
+  display: grid;
+  place-items: center;
 }
 
 /* 网格线 */

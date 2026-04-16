@@ -115,6 +115,7 @@ export class Desktop {
                     <div class="p2-ticket-brand" contenteditable="true" id="cfg-ticket-brand" spellcheck="false">浮生劇院</div>
                     <div class="p2-ticket-img-box" id="ticket-img-trigger">
                       <img class="p2-ticket-img" id="widget-ticket-img" style="display:none;" />
+                      <div class="p2-ticket-stamp" contenteditable="true" id="cfg-ticket-stamp" spellcheck="false">No.001925 憑券入場</div>
                     </div>
                     <div class="p2-ticket-text-zone">
                       <div class="p2-ticket-title" contenteditable="true" id="cfg-ticket-title" spellcheck="false">霸王別姬</div>
@@ -125,7 +126,6 @@ export class Desktop {
                       </div>
                     </div>
                   </div>
-                  <div class="p2-ticket-stamp" contenteditable="true" id="cfg-ticket-stamp" spellcheck="false">No.001925 憑券入場</div>
                 </div>
                 ${renderIcons(page.appIds, 'p2-apps-row')}
               </section>

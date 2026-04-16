@@ -29,11 +29,22 @@ export class DesktopEditMode {
     this.addPanelMask = document.getElementById('add-panel-mask');
     this.addPanelGrid = document.getElementById('add-panel-grid');
     this.toastEl = document.getElementById('desktop-toast');
+    this.dockContainer = document.getElementById('dock-container');
 
     // 状态数据
     this.layout = {};
     this.savedLayoutSnapshot = {};
     this.currentPageId = 'page-1';
+
+    // Dock 状态（仅控制显示/隐藏）
+    this.dockState = [];
+    this.savedDockSnapshot = [];
+
+    // 工具栏拖拽状态
+    this.toolbarPosStorageKey = 'miniphone_edit_toolbar_pos';
+    this.toolbarDragState = null;
+    this.onToolbarDragMove = this.onToolbarDragMove.bind(this);
+    this.onToolbarDragEnd = this.onToolbarDragEnd.bind(this);
 
     // 可添加组件元数据
     this.widgetLibrary = [
@@ -46,6 +57,8 @@ export class DesktopEditMode {
 
     this.bindEvents();
     this.loadLayout();
+    this.loadDockState();
+    this.initToolbarDrag();
   }
 
   bindEvents() {
@@ -70,6 +83,8 @@ export class DesktopEditMode {
         // 关闭时不保存：恢复到最近一次已保存（或初始化）的快照
         this.layout = this.cloneLayout(this.savedLayoutSnapshot);
         this.applyLayoutToDOM();
+        this.dockState = Array.isArray(this.savedDockSnapshot) ? [...this.savedDockSnapshot] : [];
+        this.applyDockStateToDOM();
         this.exitEditMode();
       });
     }
@@ -113,6 +128,11 @@ export class DesktopEditMode {
 
     // 应用当前 layout 到 DOM
     this.applyLayoutToDOM();
+    this.applyDockStateToDOM();
+    this.enableDockEditState();
+
+    // 工具栏位置恢复（可拖动）
+    this.restoreToolbarPosition();
 
     // 激活 DragDrop 的自由拖拽
     if (this.dragDrop) {
@@ -121,6 +141,7 @@ export class DesktopEditMode {
 
     // 给所有元素添加删除按钮
     this.attachDeleteButtons();
+    this.attachDockDeleteButtons();
   }
 
   exitEditMode() {
@@ -128,6 +149,8 @@ export class DesktopEditMode {
     this.isEditMode = false;
     document.body.classList.remove('is-edit-mode');
     this.hideAddPanel();
+    this.disableDockEditState();
+    this.cleanupToolbarDragListeners();
 
     if (this.dragDrop) {
       this.dragDrop.disableFreeDrag();
@@ -143,6 +166,221 @@ export class DesktopEditMode {
     }, 2000);
   }
 
+  // =========================
+  // 工具栏拖动
+  // =========================
+  initToolbarDrag() {
+    if (!this.toolbar || this.toolbar.dataset.dragBound === 'true') return;
+    this.toolbar.dataset.dragBound = 'true';
+
+    const onStart = (e) => {
+      if (!this.isEditMode) return;
+      if (e.target.closest('.edit-toolbar-btn')) return;
+      this.onToolbarDragStart(e);
+    };
+
+    this.toolbar.addEventListener('mousedown', onStart);
+    this.toolbar.addEventListener('touchstart', onStart, { passive: false });
+  }
+
+  onToolbarDragStart(e) {
+    if (!this.toolbar) return;
+
+    const isTouch = e.type === 'touchstart';
+    const pointer = isTouch ? e.touches[0] : e;
+    if (!pointer) return;
+    if (!isTouch && e.button !== 0) return;
+
+    e.preventDefault();
+
+    const parent = this.toolbar.offsetParent || document.body;
+    const parentRect = parent.getBoundingClientRect();
+    const rect = this.toolbar.getBoundingClientRect();
+
+    // 首次拖动时，从当前视觉位置切换到绝对 left/top 定位
+    this.toolbar.classList.add('is-custom-position');
+    this.toolbar.style.bottom = 'auto';
+    this.toolbar.style.left = `${rect.left - parentRect.left}px`;
+    this.toolbar.style.top = `${rect.top - parentRect.top}px`;
+
+    this.toolbarDragState = {
+      parentRect,
+      startX: pointer.clientX,
+      startY: pointer.clientY,
+      startLeft: rect.left - parentRect.left,
+      startTop: rect.top - parentRect.top
+    };
+
+    document.addEventListener('mousemove', this.onToolbarDragMove);
+    document.addEventListener('mouseup', this.onToolbarDragEnd);
+    document.addEventListener('touchmove', this.onToolbarDragMove, { passive: false });
+    document.addEventListener('touchend', this.onToolbarDragEnd);
+  }
+
+  onToolbarDragMove(e) {
+    if (!this.toolbar || !this.toolbarDragState) return;
+
+    const pointer = e.type.startsWith('touch') ? e.touches[0] : e;
+    if (!pointer) return;
+
+    e.preventDefault();
+
+    const dx = pointer.clientX - this.toolbarDragState.startX;
+    const dy = pointer.clientY - this.toolbarDragState.startY;
+
+    let left = this.toolbarDragState.startLeft + dx;
+    let top = this.toolbarDragState.startTop + dy;
+
+    const maxLeft = this.toolbarDragState.parentRect.width - this.toolbar.offsetWidth;
+    const maxTop = this.toolbarDragState.parentRect.height - this.toolbar.offsetHeight;
+
+    left = Math.max(0, Math.min(left, Math.max(0, maxLeft)));
+    top = Math.max(0, Math.min(top, Math.max(0, maxTop)));
+
+    this.toolbar.style.left = `${left}px`;
+    this.toolbar.style.top = `${top}px`;
+  }
+
+  onToolbarDragEnd() {
+    if (!this.toolbar || !this.toolbarDragState) return;
+    this.persistToolbarPosition();
+    this.toolbarDragState = null;
+    this.cleanupToolbarDragListeners();
+  }
+
+  cleanupToolbarDragListeners() {
+    document.removeEventListener('mousemove', this.onToolbarDragMove);
+    document.removeEventListener('mouseup', this.onToolbarDragEnd);
+    document.removeEventListener('touchmove', this.onToolbarDragMove);
+    document.removeEventListener('touchend', this.onToolbarDragEnd);
+  }
+
+  persistToolbarPosition() {
+    if (!this.toolbar || !this.toolbar.classList.contains('is-custom-position')) return;
+    const left = parseFloat(this.toolbar.style.left || '');
+    const top = parseFloat(this.toolbar.style.top || '');
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    localStorage.setItem(this.toolbarPosStorageKey, JSON.stringify({ left, top }));
+  }
+
+  restoreToolbarPosition() {
+    if (!this.toolbar) return;
+    const saved = localStorage.getItem(this.toolbarPosStorageKey);
+    if (!saved) return;
+
+    try {
+      const pos = JSON.parse(saved);
+      if (!Number.isFinite(pos?.left) || !Number.isFinite(pos?.top)) return;
+
+      this.toolbar.classList.add('is-custom-position');
+      this.toolbar.style.bottom = 'auto';
+      this.toolbar.style.left = `${pos.left}px`;
+      this.toolbar.style.top = `${pos.top}px`;
+    } catch (_) {
+      // 忽略坏数据
+    }
+  }
+
+  // =========================
+  // Dock 编辑模式（显示/隐藏）
+  // =========================
+  getDockItems() {
+    return Array.from(document.querySelectorAll('#dock-container .app-icon[data-app-id]'));
+  }
+
+  loadDockState() {
+    const saved = localStorage.getItem('miniphone_dock_layout');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        this.dockState = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        Logger.error('解析 Dock 布局失败', e);
+        this.initDefaultDockState();
+      }
+    } else {
+      this.initDefaultDockState();
+    }
+
+    this.savedDockSnapshot = Array.isArray(this.dockState) ? [...this.dockState] : [];
+    this.applyDockStateToDOM();
+  }
+
+  initDefaultDockState() {
+    this.dockState = this.getDockItems()
+      .map((item) => item.getAttribute('data-app-id'))
+      .filter(Boolean);
+  }
+
+  updateDockDataFromDOM() {
+    this.dockState = this.getDockItems()
+      .filter((item) => item.style.display !== 'none')
+      .map((item) => item.getAttribute('data-app-id'))
+      .filter(Boolean);
+  }
+
+  applyDockStateToDOM() {
+    const dockSet = new Set(this.dockState || []);
+    this.getDockItems().forEach((item) => {
+      const appId = item.getAttribute('data-app-id');
+      item.style.display = dockSet.has(appId) ? '' : 'none';
+    });
+  }
+
+  saveDockState() {
+    this.updateDockDataFromDOM();
+    localStorage.setItem('miniphone_dock_layout', JSON.stringify(this.dockState));
+    this.savedDockSnapshot = [...this.dockState];
+  }
+
+  ensureDockDeleteButton(item) {
+    if (item.querySelector('.edit-delete-btn')) return;
+    const btn = document.createElement('div');
+    btn.className = 'edit-delete-btn';
+    btn.innerHTML = '×';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.removeDockItem(item);
+    });
+    item.appendChild(btn);
+  }
+
+  attachDockDeleteButtons() {
+    this.getDockItems().forEach((item) => this.ensureDockDeleteButton(item));
+  }
+
+  removeDockItem(itemEl) {
+    if (!itemEl) return;
+    itemEl.style.display = 'none';
+    this.updateDockDataFromDOM();
+    this.showToast('已移除');
+  }
+
+  enableDockEditState() {
+    if (!this.dockContainer) return;
+    this.dockContainer.classList.add('is-edit-mode');
+  }
+
+  disableDockEditState() {
+    if (!this.dockContainer) return;
+    this.dockContainer.classList.remove('is-edit-mode');
+  }
+
+  getActiveDockAppIdSet() {
+    const set = new Set();
+    this.getDockItems().forEach((item) => {
+      const appId = item.getAttribute('data-app-id');
+      if (!appId) return;
+      if (item.style.display === 'none') return;
+      set.add(appId);
+    });
+    return set;
+  }
+
+  // =========================
+  // 桌面项删除按钮
+  // =========================
   attachDeleteButtons() {
     const items = this.desktopContainer.querySelectorAll('.desktop-item');
     items.forEach((item) => this.ensureDeleteButton(item));
@@ -193,40 +431,96 @@ export class DesktopEditMode {
     return el || null;
   }
 
+  sanitizeWidgetPreviewNode(root) {
+    if (!root) return;
+    const nodes = [root, ...root.querySelectorAll('*')];
+
+    nodes.forEach((node) => {
+      if (node.classList?.contains('edit-delete-btn')) {
+        node.remove();
+        return;
+      }
+
+      node.removeAttribute?.('id');
+      node.removeAttribute?.('title');
+      node.removeAttribute?.('aria-label');
+      node.removeAttribute?.('contenteditable');
+      node.removeAttribute?.('data-open-app');
+      node.classList?.remove('desktop-item', 'absolute-layout', 'is-dragging');
+
+      // 避免预览继承编辑态绝对定位
+      if (node === root) {
+        node.style.position = 'relative';
+        node.style.left = '';
+        node.style.top = '';
+        node.style.width = '';
+        node.style.height = '';
+        if (node.style.display === 'none') node.style.display = '';
+      }
+    });
+  }
+
+  buildWidgetPreviewHtml(widget) {
+    const source = this.getWidgetElementById(widget.id);
+    if (!source) {
+      return `<div class="add-panel-widget-preview-empty">暂无预览</div>`;
+    }
+
+    const clone = source.cloneNode(true);
+    this.sanitizeWidgetPreviewNode(clone);
+    return `<div class="add-panel-widget-preview-scale">${clone.outerHTML}</div>`;
+  }
+
   showAddPanel() {
     if (!this.addPanel || !this.addPanelGrid) return;
 
     this.updateLayoutDataFromDOM();
+    this.updateDockDataFromDOM();
 
-    // 可添加应用（去重）
+    const dockAppSet = this.getActiveDockAppIdSet();
+
+    // 可添加应用（去重：桌面 + Dock）
     const apps = this.appManager.registry.getAll();
-    const availableApps = apps.filter((app) => !this.isItemInLayout(`app-${app.id}`));
+    const availableApps = apps.filter((app) => {
+      if (dockAppSet.has(app.id)) return false;
+      return !this.isItemInLayout(`app-${app.id}`);
+    });
 
     // 可添加组件（去重）
     const availableWidgets = this.widgetLibrary.filter((w) => !this.isItemInLayout(w.id));
 
-    const appHtml = availableApps.map((app) => `
-      <div class="add-panel-item" data-add-type="app" data-add-id="${app.id}">
-        <div class="app-icon-btn">
-          <span class="app-icon-glyph">${app.icon || ''}</span>
+    const appHtml = availableApps.length
+      ? availableApps.map((app) => `
+        <div class="add-panel-item add-panel-item--app" data-add-type="app" data-add-id="${app.id}">
+          <div class="app-icon-btn">
+            <span class="app-icon-glyph">${app.icon || ''}</span>
+          </div>
+          <span class="add-panel-item-label">${app.name}</span>
         </div>
-        <span>${app.name}</span>
-      </div>
-    `);
+      `).join('')
+      : `<div class="add-panel-empty">无可添加应用</div>`;
 
-    const widgetHtml = availableWidgets.map((widget) => `
-      <div class="add-panel-item" data-add-type="widget" data-add-id="${widget.id}">
-        <div class="app-icon-btn">
-          <span class="app-icon-glyph">${widget.icon}</span>
+    const widgetHtml = availableWidgets.length
+      ? availableWidgets.map((widget) => `
+        <div class="add-panel-item add-panel-item--widget" data-add-type="widget" data-add-id="${widget.id}">
+          <div class="add-panel-widget-preview">
+            ${this.buildWidgetPreviewHtml(widget)}
+          </div>
+          <span class="add-panel-item-label">${widget.name}</span>
         </div>
-        <span>${widget.name}</span>
-      </div>
-    `);
+      `).join('')
+      : `<div class="add-panel-empty">无可添加组件</div>`;
 
-    const allHtml = [...appHtml, ...widgetHtml];
-    this.addPanelGrid.innerHTML = allHtml.length
-      ? allHtml.join('')
-      : `<div style="grid-column:1/-1;text-align:center;color:#7D5A44;">当前没有可添加的应用或组件</div>`;
+    this.addPanelGrid.innerHTML = `
+      <div class="add-panel-section">
+        <div class="add-panel-section-title">应用</div>
+        <div class="add-panel-row add-panel-row--apps">${appHtml}</div>
+      </div>
+      <div class="add-panel-section">
+        <div class="add-panel-section-title">组件</div>
+        <div class="add-panel-row add-panel-row--widgets">${widgetHtml}</div>
+      </div>
+    `;
 
     // 绑定添加事件
     this.addPanelGrid.querySelectorAll('.add-panel-item').forEach((item) => {
@@ -528,6 +822,9 @@ export class DesktopEditMode {
     this.updateLayoutDataFromDOM();
     localStorage.setItem('miniphone_desktop_layout', JSON.stringify(this.layout));
     this.savedLayoutSnapshot = this.cloneLayout(this.layout);
+
+    // 同步保存 Dock 可见状态
+    this.saveDockState();
   }
 
   initDefaultLayout() {
