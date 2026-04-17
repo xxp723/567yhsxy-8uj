@@ -356,6 +356,10 @@ export class DesktopEditMode {
     itemEl.style.paddingTop = '';
     itemEl.style.justifyContent = '';
     itemEl.style.display = '';
+
+    // [模块标注] Dock显示模块：Dock中的应用不显示名称
+    const labelEl = itemEl.querySelector('.app-icon-label');
+    if (labelEl) labelEl.style.display = 'none';
   }
 
   normalizeDesktopAppElement(itemEl, pageId, col, row) {
@@ -372,6 +376,10 @@ export class DesktopEditMode {
     itemEl.setAttribute('data-colspan', '1');
     itemEl.setAttribute('data-rowspan', '1');
     itemEl.style.display = '';
+
+    // [模块标注] 桌面显示模块：桌面中的应用显示名称
+    const labelEl = itemEl.querySelector('.app-icon-label');
+    if (labelEl) labelEl.style.display = '';
 
     const pageEl = this.desktopContainer.querySelector(`.desktop-page[data-page-id="${pageId}"]`);
     if (pageEl && itemEl.parentElement !== pageEl) {
