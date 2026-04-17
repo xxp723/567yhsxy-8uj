@@ -98,16 +98,16 @@ export class DragDrop {
     // 把拖拽元素移动到目标页
     targetPage.appendChild(this.activeDrag.el);
 
-    // 同步滚动到目标页
+    // 同步滚动到目标页；拖拽切页改为即时滚动，避免 smooth 动画导致落点计算滞后
     const width = this.desktopContainer.clientWidth || 0;
     this.desktopContainer.scrollTo({
       left: targetIndex * width,
-      behavior: 'smooth'
+      behavior: 'auto'
     });
 
     // 重置拖拽参考坐标，确保切页后仍然跟手
-    const parentRect = targetPage.getBoundingClientRect();
     const rect = this.activeDrag.el.getBoundingClientRect();
+    const parentRect = targetPage.getBoundingClientRect();
 
     this.activeDrag.pageEl = targetPage;
     this.activeDrag.parentRect = parentRect;
@@ -347,8 +347,16 @@ export class DragDrop {
   snapToGrid() {
     if (!this.activeDrag || this.activeDrag.isDockItem) return;
 
-    const { el, pageEl, colSpan, rowSpan, parentRect } = this.activeDrag;
+    const { el, pageEl, colSpan, rowSpan } = this.activeDrag;
+    const pointer = this.lastPointer;
+    const resolvedPageEl = (pointer && this.editMode?.getDesktopPageByPointer?.(pointer)) || pageEl || el.closest('.desktop-page');
 
+    if (!resolvedPageEl) return;
+    if (el.parentElement !== resolvedPageEl) {
+      resolvedPageEl.appendChild(el);
+    }
+
+    const parentRect = resolvedPageEl.getBoundingClientRect();
     const marginX = 20;
     const marginY = 15;
     const gridH = 90;
@@ -370,7 +378,7 @@ export class DragDrop {
     targetCol = Math.max(0, Math.min(targetCol, gridCols - colSpan));
     targetRow = Math.max(0, Math.min(targetRow, gridRows - rowSpan));
 
-    const pageId = pageEl.getAttribute('data-page-id');
+    const pageId = resolvedPageEl.getAttribute('data-page-id');
     const draggedItemId = el.getAttribute('data-item-id');
 
     // 在 layout 里找到被拖拽项（可能来自其它页）
@@ -440,7 +448,7 @@ export class DragDrop {
         el.setAttribute('data-col', myItem.col);
         el.setAttribute('data-row', myItem.row);
 
-        const conflictEl = pageEl.querySelector(`[data-item-id="${conflictItem.id}"]`);
+        const conflictEl = resolvedPageEl.querySelector(`[data-item-id="${conflictItem.id}"]`);
         if (conflictEl) {
           conflictEl.setAttribute('data-col', conflictItem.col);
           conflictEl.setAttribute('data-row', conflictItem.row);

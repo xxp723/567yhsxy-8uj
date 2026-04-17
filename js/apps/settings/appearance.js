@@ -2,6 +2,7 @@ import { Logger } from '../../utils/Logger.js';
 
 const CUSTOM_WIDGET_STORAGE_KEY = 'miniphone_custom_widgets';
 const CUSTOM_WIDGET_DRAFT_KEY = 'miniphone_custom_widget_draft';
+const HIDDEN_WIDGET_STORAGE_KEY = 'miniphone_hidden_widget_library_ids';
 
 const DEFAULT_CUSTOM_WIDGET_TEMPLATE = `{
   "id": "custom-polaroid-note",
@@ -24,6 +25,19 @@ function getSavedCustomWidgets() {
 
 function saveCustomWidgets(widgets) {
   localStorage.setItem(CUSTOM_WIDGET_STORAGE_KEY, JSON.stringify(Array.isArray(widgets) ? widgets : []));
+}
+
+function getHiddenWidgetIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HIDDEN_WIDGET_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? [...new Set(parsed.filter(Boolean))] : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveHiddenWidgetIds(ids) {
+  localStorage.setItem(HIDDEN_WIDGET_STORAGE_KEY, JSON.stringify([...new Set((ids || []).filter(Boolean))]));
 }
 
 function saveDraft(code) {
@@ -80,6 +94,139 @@ function parseCustomWidgetCode(source) {
   };
 }
 
+function getBaseLibraryWidgets(icons) {
+  return [
+    {
+      id: 'clock',
+      name: '时钟',
+      source: 'system',
+      width: 4,
+      height: 1,
+      iconSvg: icons.clockWidget,
+      description: '当前桌面已有组件，已纳入统一组件库。'
+    },
+    {
+      id: 'avatar',
+      name: '头像框',
+      source: 'system',
+      width: 2,
+      height: 2,
+      iconSvg: icons.avatarWidget,
+      description: '保留原有头像框组件，并支持在编辑模式中重排。'
+    },
+    {
+      id: 'news',
+      name: '报纸',
+      source: 'system',
+      width: 2,
+      height: 2,
+      iconSvg: icons.newsWidget,
+      description: '保留原有报纸组件，并纳入统一组件管理。'
+    },
+    {
+      id: 'ticket1',
+      name: '船票',
+      source: 'system',
+      width: 4,
+      height: 2,
+      iconSvg: icons.shipTicketWidget,
+      description: '保留原有船票组件，可在桌面内移动位置。'
+    },
+    {
+      id: 'ticket2',
+      name: '戏票',
+      source: 'system',
+      width: 4,
+      height: 2,
+      iconSvg: icons.theatreTicketWidget,
+      description: '保留原有戏票组件，可在编辑模式内添加与移除。'
+    },
+    {
+      id: 'music',
+      name: '音乐',
+      source: 'builtin',
+      width: 4,
+      height: 2,
+      iconSvg: icons.musicWidget,
+      description: '仿手机播放器卡片，包含封面、进度与播放状态。'
+    },
+    {
+      id: 'calendar',
+      name: '日历',
+      source: 'builtin',
+      width: 2,
+      height: 2,
+      iconSvg: icons.calendarWidget,
+      description: '仿手机日历小组件，适合放在桌面卡片区域。'
+    },
+    {
+      id: 'polaroid',
+      name: '拍立得',
+      source: 'builtin',
+      width: 2,
+      height: 2,
+      iconSvg: icons.polaroidWidget,
+      description: '仿照片卡片式组件，用于展示纪念图像与注记。'
+    },
+    {
+      id: 'profile',
+      name: '个人名片',
+      source: 'builtin',
+      width: 2,
+      height: 2,
+      iconSvg: icons.profileWidget,
+      description: '展示昵称、身份标签与一句简介的卡片式组件。'
+    },
+    {
+      id: 'todo',
+      name: '待办事项',
+      source: 'builtin',
+      width: 2,
+      height: 2,
+      iconSvg: icons.todoWidget,
+      description: '仿系统待办卡片，可展示当天任务列表。'
+    },
+    {
+      id: 'memo',
+      name: '快捷标签',
+      source: 'builtin',
+      width: 2,
+      height: 2,
+      iconSvg: icons.memoWidget,
+      description: '仿轻量记事卡片，用来显示摘要与关键词。'
+    }
+  ];
+}
+
+function getAllLibraryWidgets(icons, options = {}) {
+  const { includeHidden = false } = options;
+  const customWidgets = getSavedCustomWidgets().map((widget) => ({
+    id: widget.id,
+    name: widget.name,
+    source: 'custom',
+    width: widget.width,
+    height: widget.height,
+    iconSvg: widget.iconSvg || icons.widgetCustom,
+    description: '已加入组件库，可在桌面编辑模式中添加与排列。长按卡片可单独删除，也可使用多选删除。'
+  }));
+
+  const allWidgets = [...getBaseLibraryWidgets(icons), ...customWidgets];
+  if (includeHidden) return allWidgets;
+
+  const hiddenIds = new Set(getHiddenWidgetIds());
+  return allWidgets.filter((widget) => !hiddenIds.has(widget.id));
+}
+
+function getLibraryWidgetMap(icons, options = {}) {
+  return new Map(getAllLibraryWidgets(icons, options).map((item) => [item.id, item]));
+}
+
+function getSourceLabel(source) {
+  if (source === 'custom') return '自定义';
+  if (source === 'builtin') return '内建';
+  return '系统';
+}
+
 function renderCustomWidgetPreview(parsed) {
   if (!parsed) {
     return `
@@ -103,31 +250,32 @@ function renderCustomWidgetPreview(parsed) {
   `;
 }
 
-function renderCustomWidgetLibraryItems(icons) {
-  const widgets = getSavedCustomWidgets();
+function renderWidgetLibraryItems(icons) {
+  const widgets = getAllLibraryWidgets(icons);
 
   if (!widgets.length) {
-    return `<div class="component-library-empty">当前还没有导入过自定义组件，保存后会同步出现在组件库与桌面编辑模式。</div>`;
+    return `<div class="component-library-empty">当前组件库为空，保存自定义组件或恢复默认组件后会显示在这里。</div>`;
   }
 
   return widgets.map((widget) => `
     <article
-      class="component-library-card component-library-card--custom"
-      data-custom-widget-id="${widget.id}"
+      class="component-library-card component-library-card--${widget.source}"
+      data-widget-library-id="${widget.id}"
+      data-widget-library-source="${widget.source}"
       tabindex="0"
       role="button"
-      aria-label="自定义组件：${widget.name}"
+      aria-label="${getSourceLabel(widget.source)}组件：${widget.name}"
     >
       <div class="component-library-card__select-indicator">${icons.checkmark}</div>
       <div class="component-library-card__head">
-        <div class="component-library-card__badge">自定义</div>
+        <div class="component-library-card__badge">${getSourceLabel(widget.source)}</div>
         <div class="component-library-card__size">${widget.width}×${widget.height}</div>
       </div>
       <div class="component-library-card__title-row">
         <div class="component-library-card__icon">${widget.iconSvg || icons.widgetCustom}</div>
         <div>
           <h4 class="component-library-card__title">${widget.name}</h4>
-          <p class="component-library-card__desc">已加入组件库，可在桌面编辑模式中添加与排列。长按卡片可单独删除，也可使用多选删除。</p>
+          <p class="component-library-card__desc">${widget.description}</p>
         </div>
       </div>
     </article>
@@ -238,159 +386,14 @@ export function renderAppearanceSections({ current, icons }) {
         <div class="settings-detail__body">
           <section class="ui-card">
             <h3>组件库</h3>
-            <p class="ui-muted" style="margin-bottom: 10px;">以下组件均可在桌面编辑模式的“添加应用与组件”中添加，并支持自由排列组合。所有新增操作图标均统一使用 IconPark 风格图案。</p>
-            <div class="component-library-grid">
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">4×1</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.clockWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">时钟</h4>
-                    <p class="component-library-card__desc">当前桌面已有组件，已纳入统一组件库。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.avatarWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">头像框</h4>
-                    <p class="component-library-card__desc">保留原有头像框组件，并支持在编辑模式中重排。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.newsWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">报纸</h4>
-                    <p class="component-library-card__desc">保留原有报纸组件，并纳入统一组件管理。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">4×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.shipTicketWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">船票</h4>
-                    <p class="component-library-card__desc">保留原有船票组件，可在桌面内移动位置。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">4×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.theatreTicketWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">戏票</h4>
-                    <p class="component-library-card__desc">保留原有戏票组件，可在编辑模式内添加与移除。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">4×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.musicWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">音乐</h4>
-                    <p class="component-library-card__desc">仿手机播放器卡片，包含封面、进度与播放状态。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.calendarWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">日历</h4>
-                    <p class="component-library-card__desc">仿手机日历小组件，适合放在桌面卡片区域。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.polaroidWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">拍立得</h4>
-                    <p class="component-library-card__desc">仿照片卡片式组件，用于展示纪念图像与注记。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.profileWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">个人名片</h4>
-                    <p class="component-library-card__desc">展示昵称、身份标签与一句简介的卡片式组件。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.todoWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">待办事项</h4>
-                    <p class="component-library-card__desc">仿系统待办卡片，可展示当天任务列表。</p>
-                  </div>
-                </div>
-              </article>
-              <article class="component-library-card">
-                <div class="component-library-card__head">
-                  <div class="component-library-card__badge">系统</div>
-                  <div class="component-library-card__size">2×2</div>
-                </div>
-                <div class="component-library-card__title-row">
-                  <div class="component-library-card__icon">${icons.memoWidget}</div>
-                  <div>
-                    <h4 class="component-library-card__title">快捷标签</h4>
-                    <p class="component-library-card__desc">仿轻量记事卡片，用来显示摘要与关键词。</p>
-                  </div>
-                </div>
-              </article>
-            </div>
+            <p class="ui-muted" style="margin-bottom: 10px;">以下组件均可在桌面编辑模式的“添加应用与组件”中添加，并支持自由排列组合。当前页面的长按单删与多选删除，已统一覆盖系统组件、内建组件与自定义组件。</p>
           </section>
 
           <section class="ui-card">
             <div class="component-library-section-head">
               <div>
-                <h3>已导入的自定义组件</h3>
-                <p class="ui-muted" style="margin-bottom: 0;">这里会展示你从“自定义”保存进组件库的项目，它们同样会出现在桌面编辑模式中。长按可单独删除，也可多选后批量删除。</p>
+                <h3>全部组件</h3>
+                <p class="ui-muted" style="margin-bottom: 0;">长按任意组件卡片可单独删除；点击“多选删除”后可批量移除。被删除的组件会同步从桌面与编辑模式组件列表中移除。</p>
               </div>
               <div class="component-library-controls">
                 <button class="ui-button" type="button" id="custom-widget-select-toggle">${icons.multiSelect}<span>多选删除</span></button>
@@ -399,7 +402,7 @@ export function renderAppearanceSections({ current, icons }) {
               </div>
             </div>
             <div id="custom-widget-library-list" class="component-library-grid">
-              ${renderCustomWidgetLibraryItems(icons)}
+              ${renderWidgetLibraryItems(icons)}
             </div>
           </section>
         </div>
@@ -460,10 +463,18 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   let isSelectionMode = false;
   let selectedWidgetIds = new Set();
 
-  const getCustomWidgetCards = () => Array.from(container.querySelectorAll('[data-custom-widget-id]'));
+  const getWidgetCards = () => Array.from(container.querySelectorAll('[data-widget-library-id]'));
 
   const emitCustomWidgetsChanged = (widgets) => {
     eventBus?.emit('desktop:custom-widgets-changed', { widgets });
+  };
+
+  const emitWidgetLibraryChanged = (removedIds = []) => {
+    eventBus?.emit('desktop:widget-library-changed', {
+      widgets: getSavedCustomWidgets(),
+      hiddenIds: getHiddenWidgetIds(),
+      removedIds: Array.isArray(removedIds) ? removedIds : []
+    });
   };
 
   const updateBulkDeleteButtonState = () => {
@@ -494,8 +505,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       bulkDeleteBtn.style.display = isSelectionMode ? '' : 'none';
     }
 
-    getCustomWidgetCards().forEach((card) => {
-      const widgetId = card.getAttribute('data-custom-widget-id');
+    getWidgetCards().forEach((card) => {
+      const widgetId = card.getAttribute('data-widget-library-id');
       const checked = !!widgetId && selectedWidgetIds.has(widgetId);
       card.classList.toggle('is-selectable', isSelectionMode);
       card.classList.toggle('is-selected', checked);
@@ -515,21 +526,32 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     renderSelectionState();
   };
 
-  const deleteCustomWidgets = (widgetIds) => {
+  const deleteWidgetLibraryItems = (widgetIds) => {
     const ids = Array.from(new Set((widgetIds || []).filter(Boolean)));
     if (!ids.length) return;
 
-    const saved = getSavedCustomWidgets();
-    const next = saved.filter((item) => !ids.includes(item.id));
-    saveCustomWidgets(next);
+    const currentCustomWidgets = getSavedCustomWidgets();
+    const customIdSet = new Set(currentCustomWidgets.map((item) => item.id));
+    const customIds = ids.filter((id) => customIdSet.has(id));
+    const builtinOrSystemIds = ids.filter((id) => !customIdSet.has(id));
+
+    const nextCustomWidgets = currentCustomWidgets.filter((item) => !customIds.includes(item.id));
+    saveCustomWidgets(nextCustomWidgets);
+
+    const hiddenIds = new Set(getHiddenWidgetIds());
+    builtinOrSystemIds.forEach((id) => hiddenIds.add(id));
+    customIds.forEach((id) => hiddenIds.delete(id));
+    saveHiddenWidgetIds([...hiddenIds]);
+
     selectedWidgetIds = new Set([...selectedWidgetIds].filter((id) => !ids.includes(id)));
-    updateCustomWidgetLibraryList();
-    emitCustomWidgetsChanged(next);
-    Logger.info(`已删除 ${ids.length} 个自定义组件`);
+    updateWidgetLibraryList();
+    emitCustomWidgetsChanged(nextCustomWidgets);
+    emitWidgetLibraryChanged(ids);
+    Logger.info(`已删除 ${ids.length} 个组件`);
   };
 
-  const bindCustomWidgetLibraryInteractions = () => {
-    getCustomWidgetCards().forEach((card) => {
+  const bindWidgetLibraryInteractions = () => {
+    getWidgetCards().forEach((card) => {
       let pressTimer = null;
       let longPressTriggered = false;
 
@@ -540,7 +562,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         }
       };
 
-      const widgetId = card.getAttribute('data-custom-widget-id');
+      const widgetId = card.getAttribute('data-widget-library-id');
 
       card.addEventListener('click', (event) => {
         event.preventDefault();
@@ -561,12 +583,12 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         clearPressTimer();
         pressTimer = setTimeout(() => {
           longPressTriggered = true;
-          const currentWidgets = getSavedCustomWidgets();
-          const hit = currentWidgets.find((item) => item.id === widgetId);
+          const libraryMap = getLibraryWidgetMap(icons, { includeHidden: true });
+          const hit = libraryMap.get(widgetId);
           if (!hit) return;
-          const confirmed = window.confirm(`确定要删除组件“${hit.name}”吗？此操作只删除该自定义组件。`);
+          const confirmed = window.confirm(`确定要删除组件“${hit.name}”吗？此操作会把该组件从组件库和桌面中移除。`);
           if (confirmed) {
-            deleteCustomWidgets([widgetId]);
+            deleteWidgetLibraryItems([widgetId]);
           }
         }, 550);
       };
@@ -587,11 +609,11 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     });
   };
 
-  const updateCustomWidgetLibraryList = () => {
+  const updateWidgetLibraryList = () => {
     const list = container.querySelector('#custom-widget-library-list');
     if (!list) return;
-    list.innerHTML = renderCustomWidgetLibraryItems(icons);
-    bindCustomWidgetLibraryInteractions();
+    list.innerHTML = renderWidgetLibraryItems(icons);
+    bindWidgetLibraryInteractions();
     renderSelectionState();
   };
 
@@ -669,10 +691,16 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       saved.push(parsed);
       saveCustomWidgets(saved);
       saveDraft(code);
-      updateCustomWidgetLibraryList();
+
+      const hiddenIds = new Set(getHiddenWidgetIds());
+      hiddenIds.delete(parsed.id);
+      saveHiddenWidgetIds([...hiddenIds]);
+
+      updateWidgetLibraryList();
       updatePreview();
 
       emitCustomWidgetsChanged(saved);
+      emitWidgetLibraryChanged([]);
       Logger.info(`自定义组件已加入组件库: ${parsed.name}`);
     } catch (error) {
       Logger.error(error.message);
@@ -706,24 +734,27 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   container.querySelector('#custom-widget-bulk-delete')?.addEventListener('click', () => {
     const ids = [...selectedWidgetIds];
     if (!ids.length) return;
-    const confirmed = window.confirm(`确定要删除已选中的 ${ids.length} 个自定义组件吗？`);
+    const confirmed = window.confirm(`确定要删除已选中的 ${ids.length} 个组件吗？`);
     if (!confirmed) return;
-    deleteCustomWidgets(ids);
+    deleteWidgetLibraryItems(ids);
     isSelectionMode = false;
     selectedWidgetIds.clear();
     renderSelectionState();
   });
 
-  updateCustomWidgetLibraryList();
+  updateWidgetLibraryList();
 }
 
 export function getAppearanceCustomWidgetState() {
   return {
     storageKey: CUSTOM_WIDGET_STORAGE_KEY,
     draftKey: CUSTOM_WIDGET_DRAFT_KEY,
+    hiddenKey: HIDDEN_WIDGET_STORAGE_KEY,
     defaultTemplate: DEFAULT_CUSTOM_WIDGET_TEMPLATE,
     getSavedCustomWidgets,
     saveCustomWidgets,
+    getHiddenWidgetIds,
+    saveHiddenWidgetIds,
     parseCustomWidgetCode
   };
 }

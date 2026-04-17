@@ -16,8 +16,7 @@ import { renderDataSection, bindDataEvents } from './data.js';
 import { renderLogsSection, bindLogsEvents } from './logs.js';
 
 const {
-  defaultTemplate,
-  getSavedCustomWidgets
+  defaultTemplate
 } = getAppearanceCustomWidgetState();
 
 // IconPark SVG 图标定义
@@ -62,33 +61,6 @@ export async function mount(container, context) {
   let currentPage = 'home';
 
   const getCustomCodeEl = () => container.querySelector('#custom-widget-code');
-
-  const syncCustomWidgetLibrary = () => {
-    const list = container.querySelector('#custom-widget-library-list');
-    if (!list) return;
-
-    const widgets = getSavedCustomWidgets();
-    if (!widgets.length) {
-      list.innerHTML = `<div class="component-library-empty">当前还没有导入过自定义组件，保存后会同步出现在组件库与桌面编辑模式。</div>`;
-      return;
-    }
-
-    list.innerHTML = widgets.map((widget) => `
-      <article class="component-library-card component-library-card--custom">
-        <div class="component-library-card__head">
-          <div class="component-library-card__badge">自定义</div>
-          <div class="component-library-card__size">${widget.width}×${widget.height}</div>
-        </div>
-        <div class="component-library-card__title-row">
-          <div class="component-library-card__icon">${widget.iconSvg || '✦'}</div>
-          <div>
-            <h4 class="component-library-card__title">${widget.name}</h4>
-            <p class="component-library-card__desc">已加入组件库，可在桌面编辑模式中添加与排列。</p>
-          </div>
-        </div>
-      </article>
-    `).join('');
-  };
 
   const triggerPreviewRefresh = () => {
     const codeEl = getCustomCodeEl();
@@ -258,11 +230,6 @@ export async function mount(container, context) {
       const page = card.dataset.page;
       navigateTo(page);
     });
-  });
-
-  // [模块标注] 自定义组件同步模块：保存后刷新组件库展示
-  eventBus?.on?.('desktop:custom-widgets-changed', () => {
-    syncCustomWidgetLibrary();
   });
 
   // 绑定拆分后的模块事件

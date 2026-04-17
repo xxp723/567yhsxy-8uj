@@ -77,6 +77,36 @@ export class DesktopEditMode {
       this.currentPageId = `page-${pageIndex + 1}`;
     });
 
+    this.eventBus.on('app:ready', () => {
+      this.ensureLayoutPagesExist();
+      this.applyLayoutToDOM(true);
+      this.applyDockStateToDOM();
+      if (this.isEditMode) {
+        this.attachDeleteButtons();
+        this.attachDockDeleteButtons();
+      }
+    });
+
+    this.eventBus.on('desktop:custom-widgets-changed', () => {
+      this.applyLayoutToDOM();
+      if (this.isEditMode) {
+        this.attachDeleteButtons();
+      }
+    });
+
+    this.eventBus.on('desktop:widget-library-changed', ({ removedIds = [], hiddenIds = [] } = {}) => {
+      const idsToRemove = [...new Set([...(removedIds || []), ...(hiddenIds || [])])];
+      if (!idsToRemove.length) return;
+
+      this.removeWidgetItemsFromLayout(idsToRemove);
+      this.applyLayoutToDOM();
+      this.persistCurrentLayoutSilently();
+
+      if (this.isEditMode) {
+        this.attachDeleteButtons();
+      }
+    });
+
     if (this.btnDone) {
       this.btnDone.addEventListener('click', () => {
         this.saveLayout();
@@ -386,12 +416,18 @@ export class DesktopEditMode {
 
   bindManagedModalAction(elementId, handler) {
     const el = document.getElementById(elementId);
-    if (!el || el.dataset.desktopEditActionBound === 'true') return;
+    if (!el) return;
+
+    el.__desktopEditActionHandler = handler;
+
+    if (el.dataset.desktopEditActionBound === 'true') return;
     el.dataset.desktopEditActionBound = 'true';
     el.addEventListener('click', async (event) => {
       if (this.widgetModalState?.owner !== 'desktop-edit-mode') return;
+      const currentHandler = el.__desktopEditActionHandler;
+      if (typeof currentHandler !== 'function') return;
       event.preventDefault();
-      await handler();
+      await currentHandler();
     });
   }
 
@@ -1127,6 +1163,24 @@ export class DesktopEditMode {
     return null;
   }
 
+  ensureLayoutPagesExist() {
+    const pageIds = Object.keys(this.layout || {}).sort((a, b) => {
+      const aNum = parseInt(String(a).replace('page-', ''), 10) || 0;
+      const bNum = parseInt(String(b).replace('page-', ''), 10) || 0;
+      return aNum - bNum;
+    });
+
+    pageIds.forEach((pageId) => {
+      const exists = this.desktopContainer.querySelector(`.desktop-page[data-page-id="${pageId}"]`);
+      if (exists) return;
+
+      const pageEl = document.createElement('section');
+      pageEl.className = 'desktop-page';
+      pageEl.setAttribute('data-page-id', pageId);
+      this.desktopContainer.appendChild(pageEl);
+    });
+  }
+
   pointerToGrid(pageEl, pointer, colSpan = 1, rowSpan = 1) {
     if (!pageEl || !pointer) return null;
 
@@ -1339,7 +1393,42 @@ export class DesktopEditMode {
     }
   }
 
+  getHiddenWidgetIds() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('miniphone_hidden_widget_library_ids') || '[]');
+      return Array.isArray(parsed) ? [...new Set(parsed.filter(Boolean))] : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  persistCurrentLayoutSilently() {
+    localStorage.setItem('miniphone_desktop_layout', JSON.stringify(this.layout || {}));
+    this.savedLayoutSnapshot = this.cloneLayout(this.layout);
+  }
+
+  removeWidgetItemsFromLayout(widgetIds = []) {
+    const idSet = new Set((widgetIds || []).filter(Boolean));
+    if (!idSet.size) return;
+
+    Object.keys(this.layout || {}).forEach((pageId) => {
+      this.layout[pageId] = (this.layout[pageId] || []).filter((item) => {
+        if (!item || item.type !== 'widget') return true;
+        return !idSet.has(item.id);
+      });
+    });
+
+    idSet.forEach((id) => {
+      this.desktopContainer
+        .querySelectorAll(`.desktop-item[data-item-id="${id}"], .widget-custom-card[data-custom-widget-id="${id}"]`)
+        .forEach((node) => {
+          node.style.display = 'none';
+        });
+    });
+  }
+
   getMergedWidgetLibrary() {
+    const hiddenIds = new Set(this.getHiddenWidgetIds());
     const customWidgets = this.getCustomWidgetLibrary().map((widget) => ({
       id: widget.id,
       name: widget.name,
@@ -1351,7 +1440,7 @@ export class DesktopEditMode {
       customConfig: widget
     }));
 
-    return [...this.widgetLibrary, ...customWidgets];
+    return [...this.widgetLibrary, ...customWidgets].filter((widget) => !hiddenIds.has(widget.id));
   }
 
   getWidgetMeta(id) {
@@ -2077,7 +2166,10 @@ export class DesktopEditMode {
       }
 
       const meta = this.getWidgetMeta(id);
-      if (!meta) return false;
+      if (!meta) {
+        this.showToast('该组件已被移出组件库');
+        return false;
+      }
 
       const colSpan = meta.colSpan || 1;
       const rowSpan = meta.rowSpan || 1;
@@ -2169,8 +2261,11 @@ export class DesktopEditMode {
       this.initDefaultLayout();
     }
 
+    this.removeWidgetItemsFromLayout(this.getHiddenWidgetIds());
+
     // [模块标注] 唯一性与重叠清理模块：加载历史布局后先清理重复与重叠
     this.sanitizeLayoutForUniquenessAndOverlap();
+    this.ensureLayoutPagesExist();
 
     this.savedLayoutSnapshot = this.cloneLayout(this.layout);
     this.applyLayoutToDOM(true);
@@ -2229,6 +2324,8 @@ export class DesktopEditMode {
 
   applyLayoutToDOM(initialLoad = false) {
     if (!this.layout || Object.keys(this.layout).length === 0) return;
+
+    this.ensureLayoutPagesExist();
 
     // 先清理原有的排版容器 (p1-widgets-row, p1-apps-row 等)
     // 把里面的 item 提取到 page 直属下面
