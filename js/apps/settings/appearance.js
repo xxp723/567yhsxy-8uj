@@ -429,7 +429,7 @@ export function renderAppearanceSections({ current, icons }) {
             <div class="custom-widget-toolbar">
               <div>
                 <h3 style="margin-bottom: 4px;">组件代码编辑器</h3>
-                <p class="ui-muted">标题栏右侧提供导入 / 导出按钮，位置位于返回键左侧。</p>
+                <p class="ui-muted">标题栏右侧提供导入 / 导出按钮，位置位于“自定义”标题与返回桌面的门图标之间。</p>
               </div>
               <label class="custom-widget-toggle">
                 <span>预览</span>

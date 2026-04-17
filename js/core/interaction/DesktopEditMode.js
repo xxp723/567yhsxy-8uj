@@ -1180,6 +1180,127 @@ export class DesktopEditMode {
     }) || null;
   }
 
+  isItemsOverlapping(a, b) {
+    if (!a || !b) return false;
+    return (
+      a.col < b.col + b.colSpan
+      && a.col + a.colSpan > b.col
+      && a.row < b.row + b.rowSpan
+      && a.row + a.rowSpan > b.row
+    );
+  }
+
+  getLayoutItemById(pageId, itemId) {
+    if (!pageId || !itemId) return null;
+    return (this.layout[pageId] || []).find((item) => item.id === itemId) || null;
+  }
+
+  findNearestFreeSpot(pageId, colSpan, rowSpan, preferredCol = 0, preferredRow = 0, excludeItemId = null) {
+    const pageItems = this.layout[pageId] || [];
+    const candidates = [];
+
+    for (let row = 0; row <= this.gridRows - rowSpan; row++) {
+      for (let col = 0; col <= this.gridCols - colSpan; col++) {
+        const probe = {
+          id: '__probe__',
+          col,
+          row,
+          colSpan,
+          rowSpan
+        };
+
+        const blocked = pageItems.some((item) => {
+          if (!item || item.id === excludeItemId) return false;
+          return this.isItemsOverlapping(probe, item);
+        });
+
+        if (!blocked) {
+          candidates.push({
+            col,
+            row,
+            rowDistance: Math.abs(row - preferredRow),
+            colDistance: Math.abs(col - preferredCol)
+          });
+        }
+      }
+    }
+
+    if (!candidates.length) return null;
+
+    candidates.sort((a, b) => {
+      if (a.rowDistance !== b.rowDistance) return a.rowDistance - b.rowDistance;
+      if (a.colDistance !== b.colDistance) return a.colDistance - b.colDistance;
+      if (a.row !== b.row) return a.row - b.row;
+      return a.col - b.col;
+    });
+
+    return {
+      col: candidates[0].col,
+      row: candidates[0].row
+    };
+  }
+
+  syncLayoutPageToDOM(pageId) {
+    if (!pageId) return;
+    const pageEl = this.desktopContainer.querySelector(`.desktop-page[data-page-id="${pageId}"]`);
+    if (!pageEl) return;
+
+    (this.layout[pageId] || []).forEach((item) => {
+      const node = pageEl.querySelector(`.desktop-item[data-item-id="${item.id}"]`);
+      if (!node) return;
+      node.setAttribute('data-col', String(item.col));
+      node.setAttribute('data-row', String(item.row));
+      node.setAttribute('data-colspan', String(item.colSpan));
+      node.setAttribute('data-rowspan', String(item.rowSpan));
+      node.style.display = '';
+    });
+  }
+
+  resolveItemPlacementWithDisplacement(pageId, itemId, targetCol, targetRow) {
+    const pageItems = this.layout[pageId] || [];
+    const movingItem = pageItems.find((item) => item.id === itemId);
+    if (!movingItem) return false;
+
+    movingItem.col = targetCol;
+    movingItem.row = targetRow;
+
+    const queue = [movingItem];
+    const processed = new Set();
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || processed.has(current.id)) continue;
+      processed.add(current.id);
+
+      const conflicts = pageItems.filter((item) => {
+        if (!item || item.id === current.id) return false;
+        return this.isItemsOverlapping(current, item);
+      });
+
+      for (const conflict of conflicts) {
+        const nextSpot = this.findNearestFreeSpot(
+          pageId,
+          conflict.colSpan,
+          conflict.rowSpan,
+          conflict.col,
+          conflict.row,
+          conflict.id
+        );
+
+        if (!nextSpot) {
+          return false;
+        }
+
+        conflict.col = nextSpot.col;
+        conflict.row = nextSpot.row;
+        queue.push(conflict);
+      }
+    }
+
+    this.syncLayoutPageToDOM(pageId);
+    return true;
+  }
+
   getDesktopPageByPointer(pointer) {
     if (!pointer) return null;
     const pages = Array.from(this.desktopContainer.querySelectorAll('.desktop-page'));
@@ -1310,19 +1431,30 @@ export class DesktopEditMode {
     const dragDockEl = this.dockContainer?.querySelector(`.app-icon[data-app-id="${appId}"]`);
     if (!dragDockEl) return false;
 
-    const targetDesktop = this.getDesktopAppItemAt(pageId, cell.col, cell.row, appId);
-
-    // [模块标注] 桌面占位强规则模块：Dock->桌面落点若已占位则直接拒绝，禁止覆盖/互换
-    if (targetDesktop?.appId) {
-      this.showToast('该位置已被占用');
-      return false;
-    }
-
     const nextDock = (this.dockState || []).filter((id) => id !== appId);
 
     this.normalizeDesktopAppElement(dragDockEl, pageId, cell.col, cell.row);
     this.ensureDeleteButton(dragDockEl);
     this.upsertAppInLayout(pageId, appId, cell.col, cell.row);
+
+    const placed = this.resolveItemPlacementWithDisplacement(pageId, `app-${appId}`, cell.col, cell.row);
+    if (!placed) {
+      const fallback = this.findNearestFreeSpot(pageId, 1, 1, cell.col, cell.row, `app-${appId}`);
+      if (!fallback) {
+        this.normalizeDockItemElement(dragDockEl);
+        this.applyDockStateToDOM();
+        this.showToast('当前页面空间不足');
+        return false;
+      }
+
+      const appItem = this.getLayoutItemById(pageId, `app-${appId}`);
+      if (!appItem) return false;
+      appItem.col = fallback.col;
+      appItem.row = fallback.row;
+      dragDockEl.setAttribute('data-col', String(fallback.col));
+      dragDockEl.setAttribute('data-row', String(fallback.row));
+      this.syncLayoutPageToDOM(pageId);
+    }
 
     this.dockState = this.dedupeDockState(nextDock);
     this.applyDockStateToDOM();

@@ -284,7 +284,7 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
    第一页 (Page 1) 布局
    ========================= */
 /* 顶部时钟 */
-/* [模块标注] 现代化时钟卡片样式模块：统一为居中显示的 iPhone 风格信息卡片 */
+/* [模块标注] 透明时钟组件样式模块：移除标签，仅保留时间与日期的透明玻璃卡片 */
 .p1-clock-widget {
   margin-bottom: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -296,21 +296,21 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   width: min(100%, 330px);
   min-height: 106px;
   margin: 0 auto;
-  padding: 16px 20px;
+  padding: 18px 20px;
   border-radius: 30px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 236, 227, 0.98) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   box-shadow:
-    0 18px 40px rgba(74, 52, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    0 12px 30px rgba(74, 52, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   text-align: center;
   overflow: hidden;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .p1-clock-shell::before {
@@ -318,43 +318,9 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.68) 0%, transparent 42%),
-    radial-gradient(circle at bottom right, rgba(215, 201, 184, 0.22) 0%, transparent 46%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 100%),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.22) 0%, transparent 42%);
   pointer-events: none;
-}
-
-.p1-clock-meta {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.p1-clock-badge,
-.p1-clock-caption {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.p1-clock-badge {
-  background: rgba(74, 52, 42, 0.08);
-  color: var(--c-text-main);
-}
-
-.p1-clock-caption {
-  background: rgba(215, 201, 184, 0.42);
-  color: #7D5A44;
 }
 
 .p1-time {
@@ -366,6 +332,7 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   line-height: 0.96;
   color: #2f2119;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgba(255, 255, 255, 0.22);
 }
 
 .p1-date {
@@ -374,7 +341,7 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   font-size: 13px;
   letter-spacing: 0.4px;
   line-height: 1.35;
-  color: rgba(74, 52, 42, 0.72);
+  color: rgba(74, 52, 42, 0.78);
 }
 
 /* 中间组件区 (左右并排) */
@@ -972,26 +939,35 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
 
 .app-window--widget-custom .app-window__header {
   justify-content: flex-start;
-}
-
-.app-window--widget-custom .app-window__actions {
-  order: 1;
-  gap: 6px;
-  margin-left: 8px;
-  margin-right: 0;
+  gap: 10px;
 }
 
 .app-window--widget-custom .app-window__back {
   order: 0;
 }
 
-.app-window--widget-custom .app-window__close {
-  margin-left: auto;
-  order: 3;
+.app-window--widget-custom .app-window__title {
+  padding: 0 128px 0 92px;
 }
 
-.app-window--widget-custom .app-window__title {
-  padding: 0 84px;
+.app-window--widget-custom .app-window__actions {
+  order: 1;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 12px;
+}
+
+.app-window--widget-custom .app-window__close {
+  order: 3;
+  margin-left: 0;
+}
+
+.app-window--widget-custom .app-window__action-btn.is-import,
+.app-window--widget-custom .app-window__action-btn.is-export {
+  width: 30px;
+  height: 30px;
+  border-radius: 12px;
+  background: rgba(215, 201, 184, 0.24);
 }
 
 .app-window__content {

@@ -424,35 +424,31 @@ export class DragDrop {
     const oldCol = myItem.col;
     const oldRow = myItem.row;
 
-    let conflictItem = null;
-    for (const item of targetPageItems) {
-      if (item.id === draggedItemId) continue;
-
-      const overlapX = targetCol < item.col + item.colSpan && targetCol + colSpan > item.col;
-      const overlapY = targetRow < item.row + item.rowSpan && targetRow + rowSpan > item.row;
-
-      if (overlapX && overlapY) {
-        conflictItem = item;
-        break;
-      }
+    let placed = false;
+    if (typeof this.editMode.resolveItemPlacementWithDisplacement === 'function') {
+      placed = !!this.editMode.resolveItemPlacementWithDisplacement(
+        pageId,
+        draggedItemId,
+        targetCol,
+        targetRow
+      );
     }
 
-    if (conflictItem) {
-      // [模块标注] 桌面占位强规则模块：同一页面目标网格被占用时，禁止覆盖和互换，直接回退
+    if (!placed) {
       myItem.col = oldCol;
       myItem.row = oldRow;
-      el.setAttribute('data-col', myItem.col);
-      el.setAttribute('data-row', myItem.row);
+      el.setAttribute('data-col', String(oldCol));
+      el.setAttribute('data-row', String(oldRow));
 
       if (this.editMode?.showToast) {
-        this.editMode.showToast('该位置已被占用');
+        this.editMode.showToast('当前页面空间不足');
       }
     } else {
-      // 无冲突，直接更新
-      myItem.col = targetCol;
-      myItem.row = targetRow;
-      el.setAttribute('data-col', targetCol);
-      el.setAttribute('data-row', targetRow);
+      const resolvedItem = this.editMode.getLayoutItemById?.(pageId, draggedItemId) || myItem;
+      el.setAttribute('data-col', String(resolvedItem.col));
+      el.setAttribute('data-row', String(resolvedItem.row));
+      el.setAttribute('data-colspan', String(resolvedItem.colSpan));
+      el.setAttribute('data-rowspan', String(resolvedItem.rowSpan));
     }
 
     // 动画回到正确位置
