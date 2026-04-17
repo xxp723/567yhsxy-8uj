@@ -438,26 +438,14 @@ export class DragDrop {
     }
 
     if (conflictItem) {
-      // 发生冲突：若尺寸相同，则互换位置；否则恢复原位
-      if (colSpan === conflictItem.colSpan && rowSpan === conflictItem.rowSpan) {
-        myItem.col = conflictItem.col;
-        myItem.row = conflictItem.row;
-        conflictItem.col = oldCol;
-        conflictItem.row = oldRow;
+      // [模块标注] 桌面占位强规则模块：同一页面目标网格被占用时，禁止覆盖和互换，直接回退
+      myItem.col = oldCol;
+      myItem.row = oldRow;
+      el.setAttribute('data-col', myItem.col);
+      el.setAttribute('data-row', myItem.row);
 
-        el.setAttribute('data-col', myItem.col);
-        el.setAttribute('data-row', myItem.row);
-
-        const conflictEl = resolvedPageEl.querySelector(`[data-item-id="${conflictItem.id}"]`);
-        if (conflictEl) {
-          conflictEl.setAttribute('data-col', conflictItem.col);
-          conflictEl.setAttribute('data-row', conflictItem.row);
-        }
-      } else {
-        myItem.col = oldCol;
-        myItem.row = oldRow;
-        el.setAttribute('data-col', myItem.col);
-        el.setAttribute('data-row', myItem.row);
+      if (this.editMode?.showToast) {
+        this.editMode.showToast('该位置已被占用');
       }
     } else {
       // 无冲突，直接更新

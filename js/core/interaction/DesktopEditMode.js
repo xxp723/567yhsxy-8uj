@@ -79,8 +79,8 @@ export class DesktopEditMode {
 
     this.eventBus.on('app:ready', () => {
       this.ensureLayoutPagesExist();
-      this.applyLayoutToDOM(true);
       this.applyDockStateToDOM();
+      this.applyLayoutToDOM(true);
       if (this.isEditMode) {
         this.attachDeleteButtons();
         this.attachDockDeleteButtons();
@@ -851,6 +851,35 @@ export class DesktopEditMode {
     if (labelEl) labelEl.style.display = 'none';
   }
 
+  getAppDisplayName(appId) {
+    if (!appId) return '';
+    return this.appManager?.registry?.get?.(appId)?.name || appId;
+  }
+
+  // [模块标注] 桌面编辑模式图标模块：编辑态删除按钮统一使用 IconPark 风格 SVG
+  getEditModeIconSvg(type) {
+    if (type === 'delete') {
+      return `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14"><path d="M14 14L34 34" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M34 14L14 34" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+    }
+
+    return '';
+  }
+
+  // [模块标注] 桌面名称约束模块：桌面应用若缺少名称节点，则自动补齐名称，确保非 Dock 区域始终显示应用名称
+  ensureAppLabelElement(itemEl, appId) {
+    if (!itemEl || !appId) return null;
+
+    let labelEl = itemEl.querySelector('.app-icon-label');
+    if (!labelEl) {
+      labelEl = document.createElement('span');
+      labelEl.className = 'app-icon-label';
+      itemEl.appendChild(labelEl);
+    }
+
+    labelEl.textContent = this.getAppDisplayName(appId);
+    return labelEl;
+  }
+
   normalizeDesktopAppElement(itemEl, pageId, col, row) {
     if (!itemEl) return;
     const appId = itemEl.getAttribute('data-app-id');
@@ -867,7 +896,7 @@ export class DesktopEditMode {
     itemEl.style.display = '';
 
     // [模块标注] 桌面显示模块：桌面中的应用显示名称
-    const labelEl = itemEl.querySelector('.app-icon-label');
+    const labelEl = this.ensureAppLabelElement(itemEl, appId);
     if (labelEl) labelEl.style.display = '';
 
     const pageEl = this.desktopContainer.querySelector(`.desktop-page[data-page-id="${pageId}"]`);
@@ -934,6 +963,8 @@ export class DesktopEditMode {
     const items = this.desktopContainer.querySelectorAll('.desktop-page .app-icon[data-app-id]');
 
     items.forEach((item) => {
+      if (item.style.display === 'none') return;
+
       const appId = item.getAttribute('data-app-id');
       if (!appId) return;
 
@@ -1038,7 +1069,7 @@ export class DesktopEditMode {
 
     const btn = document.createElement('div');
     btn.className = 'edit-delete-btn';
-    btn.innerHTML = '×';
+    btn.innerHTML = this.getEditModeIconSvg('delete');
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -1281,28 +1312,13 @@ export class DesktopEditMode {
 
     const targetDesktop = this.getDesktopAppItemAt(pageId, cell.col, cell.row, appId);
 
-    let nextDock = (this.dockState || []).filter((id) => id !== appId);
-
+    // [模块标注] 桌面占位强规则模块：Dock->桌面落点若已占位则直接拒绝，禁止覆盖/互换
     if (targetDesktop?.appId) {
-      const targetAppId = targetDesktop.appId;
-      this.removeAppFromLayout(targetAppId);
-
-      const insertIndex = Number.isFinite(sourceDockIndex) ? sourceDockIndex : nextDock.length;
-      const safeIndex = Math.max(0, Math.min(insertIndex, nextDock.length));
-      nextDock.splice(safeIndex, 0, targetAppId);
-
-      const targetDesktopEl = this.desktopContainer.querySelector(
-        `.desktop-page .desktop-item[data-app-id="${targetAppId}"]`
-      );
-      if (targetDesktopEl) {
-        this.normalizeDockItemElement(targetDesktopEl);
-        if (this.dockContainer && targetDesktopEl.parentElement !== this.dockContainer) {
-          this.dockContainer.appendChild(targetDesktopEl);
-        }
-        this.ensureDockDeleteButton(targetDesktopEl);
-        if (this.dragDrop) this.dragDrop.makeElementDraggable(targetDesktopEl, this);
-      }
+      this.showToast('该位置已被占用');
+      return false;
     }
+
+    const nextDock = (this.dockState || []).filter((id) => id !== appId);
 
     this.normalizeDesktopAppElement(dragDockEl, pageId, cell.col, cell.row);
     this.ensureDeleteButton(dragDockEl);
@@ -1345,7 +1361,7 @@ export class DesktopEditMode {
 
     const btn = document.createElement('div');
     btn.className = 'edit-delete-btn';
-    btn.innerHTML = '×';
+    btn.innerHTML = this.getEditModeIconSvg('delete');
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -2072,7 +2088,7 @@ export class DesktopEditMode {
         <img class="app-custom-img" src="${customImg || ''}" style="${imgStyle}" alt="${app.name}" />
       </button>
       <span class="app-icon-label">${app.name}</span>
-      <div class="edit-delete-btn">×</div>
+      <div class="edit-delete-btn">${this.getEditModeIconSvg('delete')}</div>
     `;
 
     const deleteBtn = itemEl.querySelector('.edit-delete-btn');
@@ -2143,7 +2159,7 @@ export class DesktopEditMode {
       itemEl.setAttribute('data-rowspan', String(rowSpan));
 
       // [模块标注] 桌面名称显示修复模块：桌面上的应用必须显示应用名称
-      const labelEl = itemEl.querySelector('.app-icon-label');
+      const labelEl = this.ensureAppLabelElement(itemEl, app.id);
       if (labelEl) labelEl.style.display = '';
 
       this.ensureDeleteButton(itemEl);
@@ -2403,7 +2419,7 @@ export class DesktopEditMode {
 
           // [模块标注] 桌面名称显示修复模块：桌面区应用始终显示名称
           if (itemData.type === 'app') {
-            const labelEl = el.querySelector('.app-icon-label');
+            const labelEl = this.ensureAppLabelElement(el, itemData.appId);
             if (labelEl) labelEl.style.display = '';
           }
 
@@ -2521,7 +2537,7 @@ export class DesktopEditMode {
           }
 
           // [模块标注] 桌面名称显示修复模块：采样桌面应用时强制显示名称
-          const labelEl = item.querySelector('.app-icon-label');
+          const labelEl = this.ensureAppLabelElement(item, itemData.appId);
           if (labelEl) labelEl.style.display = '';
         }
 

@@ -30,9 +30,16 @@
       <div id="desktop-container" class="desktop-container" data-static-layout="true">
         <!-- 第一页 -->
         <section class="desktop-page page-1" data-page-id="page-1">
+          <!-- [模块标注] 时钟组件样式模块：统一为居中、现代 iPhone 风格时钟卡片 -->
           <div class="p1-clock-widget">
-            <div class="p1-time" id="widget-time">00:00</div>
-            <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+            <div class="p1-clock-shell">
+              <div class="p1-clock-meta">
+                <span class="p1-clock-badge">系统时钟</span>
+                <span class="p1-clock-caption">实时</span>
+              </div>
+              <div class="p1-time" id="widget-time">00:00</div>
+              <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+            </div>
           </div>
 
           <div class="p1-widgets-row">
@@ -396,7 +403,7 @@
       <!-- 隐藏的图片上传表单 -->
       <input type="file" id="sys-file-upload" accept="image/*" style="display: none;" />
 
-      <!-- 桌面编辑模式工具栏 -->
+      <!-- [模块标注] 桌面编辑模式图标模块：此区域按键图标统一使用 IconPark 风格 SVG -->
       <div id="edit-toolbar" class="edit-toolbar">
         <button type="button" class="edit-toolbar-btn primary" id="edit-btn-add" title="添加应用/组件" aria-label="添加应用/组件">
           <span class="edit-toolbar-icon" aria-hidden="true">

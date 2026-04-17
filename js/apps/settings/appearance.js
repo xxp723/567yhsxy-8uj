@@ -4,10 +4,11 @@ const CUSTOM_WIDGET_STORAGE_KEY = 'miniphone_custom_widgets';
 const CUSTOM_WIDGET_DRAFT_KEY = 'miniphone_custom_widget_draft';
 const HIDDEN_WIDGET_STORAGE_KEY = 'miniphone_hidden_widget_library_ids';
 
+// [模块标注] 组件代码编辑器默认框架模块：默认模板图标统一使用 IconPark 风格 SVG，便于继续扩展自定义组件
 const DEFAULT_CUSTOM_WIDGET_TEMPLATE = `{
   "id": "custom-polaroid-note",
   "name": "自定义拍立得便签",
-  "iconSvg": "<svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M10 8H38V40H10V8Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/><path d='M16 14H32V26H16V14Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/><path d='M16 32H28' stroke='currentColor' stroke-width='3' stroke-linecap='round'/></svg>",
+  "iconSvg": "<svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M24 6L27.0902 14.9098L36 18L27.0902 21.0902L24 30L20.9098 21.0902L12 18L20.9098 14.9098L24 6Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/><path d='M10 34H38' stroke='currentColor' stroke-width='3' stroke-linecap='round'/><path d='M16 42H32' stroke='currentColor' stroke-width='3' stroke-linecap='round'/></svg>",
   "width": 2,
   "height": 2,
   "css": ".widget-card{height:100%;padding:12px;border-radius:22px;background:linear-gradient(180deg,#fffdf9 0%,#f0e5d8 100%);border:1px solid rgba(74,52,42,.12);box-shadow:0 10px 24px rgba(74,52,42,.12);display:flex;flex-direction:column;justify-content:space-between;color:#4A342A;}.widget-title{font-size:14px;font-weight:700;letter-spacing:.5px;}.widget-photo{height:74px;border-radius:16px;background:linear-gradient(135deg,#d8c1a8,#f5efe6);display:flex;align-items:center;justify-content:center;font-size:28px;}.widget-desc{font-size:11px;line-height:1.5;color:rgba(74,52,42,.72);}",
@@ -365,7 +366,7 @@ export function renderAppearanceSections({ current, icons }) {
         </div>
       </div>
 
-      <!-- [模块标注] 组件设置入口页 -->
+      <!-- [模块标注] 组件设置入口页：入口卡片图标统一使用 IconPark 风格 SVG -->
       <div id="settings-appearance-widget" class="settings-detail">
         <div class="settings-detail__body">
           <div class="settings-cards-grid">
@@ -381,7 +382,7 @@ export function renderAppearanceSections({ current, icons }) {
         </div>
       </div>
 
-      <!-- [模块标注] 组件库说明页 -->
+      <!-- [模块标注] 组件库说明页：组件库操作按钮图标统一使用 IconPark 风格 SVG -->
       <div id="settings-appearance-widget-library" class="settings-detail">
         <div class="settings-detail__body">
           <section class="ui-card">
@@ -408,7 +409,7 @@ export function renderAppearanceSections({ current, icons }) {
         </div>
       </div>
 
-      <!-- [模块标注] 自定义页 -->
+      <!-- [模块标注] 自定义页：组件代码编辑器与保存按钮图标统一使用 IconPark 风格 SVG -->
       <div id="settings-appearance-widget-custom" class="settings-detail">
         <div class="settings-detail__body">
           <section class="ui-card">

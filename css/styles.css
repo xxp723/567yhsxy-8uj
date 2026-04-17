@@ -284,38 +284,61 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
    第一页 (Page 1) 布局
    ========================= */
 /* 顶部时钟 */
+/* [模块标注] 现代化时钟卡片样式模块：统一为居中显示的 iPhone 风格信息卡片 */
 .p1-clock-widget {
   margin-bottom: 20px;
-  font-family: var(--font-retro);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .p1-clock-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  width: min(100%, 320px);
+  width: min(100%, 330px);
+  min-height: 106px;
   margin: 0 auto;
-  padding: 16px 18px 14px;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(241, 230, 217, 0.96) 100%);
-  border: 1px solid rgba(125, 90, 68, 0.12);
-  box-shadow: 0 12px 30px rgba(74, 52, 42, 0.08);
+  padding: 16px 20px;
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 236, 227, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 18px 40px rgba(74, 52, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
   text-align: center;
+  overflow: hidden;
+  backdrop-filter: blur(14px);
+}
+
+.p1-clock-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.68) 0%, transparent 42%),
+    radial-gradient(circle at bottom right, rgba(215, 201, 184, 0.22) 0%, transparent 46%);
+  pointer-events: none;
 }
 
 .p1-clock-meta {
+  position: relative;
+  z-index: 1;
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .p1-clock-badge,
 .p1-clock-caption {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 24px;
   padding: 0 10px;
   border-radius: 999px;
@@ -330,21 +353,27 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
 }
 
 .p1-clock-caption {
-  background: rgba(215, 201, 184, 0.5);
+  background: rgba(215, 201, 184, 0.42);
   color: #7D5A44;
 }
 
 .p1-time {
-  font-size: 46px;
+  position: relative;
+  z-index: 1;
+  font-size: clamp(46px, 10vw, 58px);
   font-weight: 700;
-  letter-spacing: 1.5px;
-  line-height: 1;
-  color: var(--c-text-main);
+  letter-spacing: -1.2px;
+  line-height: 0.96;
+  color: #2f2119;
+  font-variant-numeric: tabular-nums;
 }
 
 .p1-date {
+  position: relative;
+  z-index: 1;
   font-size: 13px;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.4px;
+  line-height: 1.35;
   color: rgba(74, 52, 42, 0.72);
 }
 
