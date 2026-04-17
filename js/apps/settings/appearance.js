@@ -300,7 +300,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">4×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -313,7 +313,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">2×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -326,7 +326,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">2×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -339,7 +339,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">2×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -352,7 +352,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">2×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -365,7 +365,7 @@ export function renderAppearanceSections({ current, icons }) {
               </article>
               <article class="component-library-card">
                 <div class="component-library-card__head">
-                  <div class="component-library-card__badge">新增</div>
+                  <div class="component-library-card__badge">系统</div>
                   <div class="component-library-card__size">2×2</div>
                 </div>
                 <div class="component-library-card__title-row">
@@ -432,7 +432,6 @@ export function renderAppearanceSections({ current, icons }) {
             </div>
 
             <div class="custom-widget-actions">
-              <button class="ui-button" id="custom-widget-apply-preview">${icons.previewToggle}<span>生成预览</span></button>
               <button class="ui-button primary" id="custom-widget-save">${icons.saveWidget}<span>加入组件库</span></button>
             </div>
           </section>
@@ -534,11 +533,14 @@ export function bindAppearanceEvents(container, { settings, eventBus, current })
 
   container.querySelector('#save-ui-settings')?.addEventListener('click', onSaveUiSettings);
   container.querySelector('#save-icon-settings')?.addEventListener('click', onSaveIconSettings);
-  container.querySelector('#custom-widget-apply-preview')?.addEventListener('click', updatePreview);
   container.querySelector('#custom-widget-save')?.addEventListener('click', onSaveCustomWidget);
   container.querySelector('#custom-widget-preview-toggle')?.addEventListener('change', updatePreview);
   container.querySelector('#custom-widget-code')?.addEventListener('input', (event) => {
     saveDraft(event.target.value);
+    const previewToggle = container.querySelector('#custom-widget-preview-toggle');
+    if (previewToggle?.checked) {
+      updatePreview();
+    }
   });
 }
 

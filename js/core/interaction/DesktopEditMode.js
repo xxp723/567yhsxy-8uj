@@ -943,121 +943,511 @@ export class DesktopEditMode {
     return this.getMergedWidgetLibrary().find((w) => w.id === id) || null;
   }
 
-  createBuiltinWidgetElement(id) {
-    const el = document.createElement('div');
-    el.className = 'desktop-widget-card desktop-item absolute-layout';
+  escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
+  getBuiltinWidgetStorageKey(id) {
+    return `miniphone_builtin_widget_${id}`;
+  }
+
+  getBuiltinWidgetDefaultState(id) {
     if (id === 'music') {
-      el.classList.add('widget-music-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--music">
-          <div class="widget-music-cover">♫</div>
-          <div class="widget-music-body">
-            <div class="widget-title-row">
-              <span class="widget-eyebrow">NOW PLAYING</span>
-              <span class="widget-dot"></span>
-            </div>
-            <div class="widget-title-main">夜航旧梦</div>
-            <div class="widget-subtitle">白露唱片 · 03:28</div>
-            <div class="widget-progress"><span style="width: 68%;"></span></div>
-            <div class="widget-inline-meta">
-              <span>随机播放</span>
-              <span>高保真</span>
-            </div>
-          </div>
-        </div>
-      `;
-      return el;
+      return {
+        title: '旧梦留声机',
+        subtitle: '点击卡片编辑封面与音频',
+        coverSrc: '',
+        audioSrc: '',
+        audioName: '',
+        progress: 0
+      };
     }
 
     if (id === 'calendar') {
-      el.classList.add('widget-calendar-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--calendar">
-          <div class="widget-calendar-top">
-            <span>APR</span>
-            <strong>17</strong>
-          </div>
-          <div class="widget-calendar-body">
-            <div class="widget-title-main">周五行程</div>
-            <div class="widget-calendar-event">
-              <span>09:30</span>
-              <span>编辑部会议</span>
-            </div>
-            <div class="widget-calendar-event">
-              <span>14:00</span>
-              <span>江边取景</span>
-            </div>
-          </div>
-        </div>
-      `;
-      return el;
+      return {
+        title: '今日行程',
+        lines: ['09:30 编辑部会议', '14:00 江边取景']
+      };
     }
 
     if (id === 'polaroid') {
-      el.classList.add('widget-polaroid-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--polaroid">
-          <div class="widget-polaroid-photo">✦</div>
-          <div class="widget-polaroid-caption">
-            <div class="widget-title-main">昨日底片</div>
-            <div class="widget-subtitle">把此刻留在桌面上</div>
-          </div>
-        </div>
-      `;
-      return el;
+      return {
+        title: '昨日底片',
+        subtitle: '把此刻留在桌面上',
+        imageSrc: ''
+      };
     }
 
     if (id === 'profile') {
-      el.classList.add('widget-profile-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--profile">
-          <div class="widget-profile-avatar">L</div>
-          <div class="widget-title-main">Lenovo</div>
-          <div class="widget-subtitle">民国风桌面设计者</div>
-          <div class="widget-profile-tags">
-            <span>排版</span>
-            <span>复古</span>
-            <span>组件</span>
-          </div>
-        </div>
-      `;
-      return el;
+      return {
+        name: 'MiniPhone',
+        role: '系统默认组件',
+        tags: ['桌面', '名片', '系统']
+      };
     }
 
     if (id === 'todo') {
-      el.classList.add('widget-todo-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--todo">
-          <div class="widget-title-row">
-            <span class="widget-title-main">今日待办</span>
-            <span class="widget-counter">3</span>
-          </div>
-          <div class="widget-todo-item"><i></i><span>整理桌面组件库</span></div>
-          <div class="widget-todo-item"><i></i><span>导出自定义组件模板</span></div>
-          <div class="widget-todo-item is-done"><i></i><span>完成图标统一</span></div>
-        </div>
-      `;
-      return el;
+      return {
+        title: '今日待办',
+        items: ['整理桌面组件库', '导入自定义组件模板', '完成图标统一']
+      };
     }
 
     if (id === 'memo') {
-      el.classList.add('widget-memo-card');
-      el.innerHTML = `
-        <div class="widget-surface widget-surface--memo">
-          <div class="widget-eyebrow">QUICK NOTE</div>
-          <div class="widget-title-main">灵感速记</div>
-          <div class="widget-memo-lines">
-            <span>• 组件预览开关需更轻盈</span>
-            <span>• 卡片圆角向 iPhone 靠拢</span>
-            <span>• 标题栏导入导出独立显示</span>
+      return {
+        title: '灵感速记',
+        lines: ['组件预览显示完整样式', '支持桌面单独点击编辑', '按钮图标统一为 IconPark']
+      };
+    }
+
+    return {};
+  }
+
+  loadBuiltinWidgetState(id) {
+    const defaults = this.getBuiltinWidgetDefaultState(id);
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.getBuiltinWidgetStorageKey(id)) || '{}');
+      return { ...defaults, ...(parsed || {}) };
+    } catch (_) {
+      return { ...defaults };
+    }
+  }
+
+  saveBuiltinWidgetState(id, nextState) {
+    const merged = { ...this.getBuiltinWidgetDefaultState(id), ...(nextState || {}) };
+    localStorage.setItem(this.getBuiltinWidgetStorageKey(id), JSON.stringify(merged));
+    return merged;
+  }
+
+  getWidgetIconSvg(type) {
+    if (type === 'play') {
+      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 12L36 24L18 36V12Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+    }
+
+    if (type === 'pause') {
+      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 10V38" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M32 10V38" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+    }
+
+    return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="3"/></svg>`;
+  }
+
+  renderBuiltinWidgetContent(id, state) {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const date = now.getDate();
+
+    if (id === 'music') {
+      return `
+        <div class="widget-surface widget-surface--music">
+          <div class="widget-music-cover">
+            ${state.coverSrc
+              ? `<img class="widget-music-cover-img" src="${this.escapeHtml(state.coverSrc)}" alt="${this.escapeHtml(state.title)}" />`
+              : `<span class="widget-music-cover-placeholder">♫</span>`}
+          </div>
+          <div class="widget-music-body">
+            <div class="widget-title-row">
+              <span class="widget-eyebrow">SYSTEM MUSIC</span>
+              <button class="widget-music-play-btn" type="button" aria-label="播放或暂停音乐">${this.getWidgetIconSvg('play')}</button>
+            </div>
+            <div class="widget-title-main">${this.escapeHtml(state.title)}</div>
+            <div class="widget-subtitle">${this.escapeHtml(state.subtitle)}</div>
+            <div class="widget-progress"><span style="width:${Number(state.progress) || 0}%;"></span></div>
+            <div class="widget-inline-meta">
+              <span>${this.escapeHtml(state.audioName || '未导入音频')}</span>
+              <span>${state.audioSrc ? '点击播放' : '点击编辑'}</span>
+            </div>
+            <audio class="widget-music-audio" preload="metadata" src="${this.escapeHtml(state.audioSrc || '')}"></audio>
           </div>
         </div>
       `;
-      return el;
     }
 
-    return null;
+    if (id === 'calendar') {
+      const lines = Array.isArray(state.lines) ? state.lines.slice(0, 3) : [];
+      return `
+        <div class="widget-surface widget-surface--calendar">
+          <div class="widget-calendar-top">
+            <span>${month}月</span>
+            <strong>${date}</strong>
+          </div>
+          <div class="widget-calendar-body">
+            <div class="widget-title-main">${this.escapeHtml(state.title)}</div>
+            ${(lines.length ? lines : ['暂无安排']).map((line) => {
+              const text = this.escapeHtml(line);
+              const parts = text.split(/\s+/);
+              const time = parts.shift() || '—';
+              const content = parts.join(' ') || text;
+              return `
+                <div class="widget-calendar-event">
+                  <span>${time}</span>
+                  <span>${content}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    if (id === 'polaroid') {
+      return `
+        <div class="widget-surface widget-surface--polaroid">
+          <div class="widget-polaroid-photo">
+            ${state.imageSrc
+              ? `<img class="widget-polaroid-img" src="${this.escapeHtml(state.imageSrc)}" alt="${this.escapeHtml(state.title)}" />`
+              : `<span class="widget-polaroid-placeholder">✦</span>`}
+          </div>
+          <div class="widget-polaroid-caption">
+            <div class="widget-title-main">${this.escapeHtml(state.title)}</div>
+            <div class="widget-subtitle">${this.escapeHtml(state.subtitle)}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (id === 'profile') {
+      const tags = Array.isArray(state.tags) ? state.tags.slice(0, 4) : [];
+      const avatarText = this.escapeHtml((state.name || 'M').slice(0, 1).toUpperCase());
+      return `
+        <div class="widget-surface widget-surface--profile">
+          <div class="widget-profile-avatar">${avatarText}</div>
+          <div class="widget-title-main">${this.escapeHtml(state.name)}</div>
+          <div class="widget-subtitle">${this.escapeHtml(state.role)}</div>
+          <div class="widget-profile-tags">
+            ${tags.map((tag) => `<span>${this.escapeHtml(tag)}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    if (id === 'todo') {
+      const items = Array.isArray(state.items) ? state.items.slice(0, 4) : [];
+      return `
+        <div class="widget-surface widget-surface--todo">
+          <div class="widget-title-row">
+            <span class="widget-title-main">${this.escapeHtml(state.title)}</span>
+            <span class="widget-counter">${items.length}</span>
+          </div>
+          ${(items.length ? items : ['暂无待办']).map((line) => {
+            const isDone = /^\s*(\[x\]|✔|√)/i.test(line);
+            const text = line.replace(/^\s*(\[x\]|\[ \]|✔|√|-)\s*/i, '');
+            return `<div class="widget-todo-item ${isDone ? 'is-done' : ''}"><i></i><span>${this.escapeHtml(text || '未命名事项')}</span></div>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    if (id === 'memo') {
+      const lines = Array.isArray(state.lines) ? state.lines.slice(0, 4) : [];
+      return `
+        <div class="widget-surface widget-surface--memo">
+          <div class="widget-eyebrow">QUICK NOTE</div>
+          <div class="widget-title-main">${this.escapeHtml(state.title)}</div>
+          <div class="widget-memo-lines">
+            ${(lines.length ? lines : ['暂无内容']).map((line) => `<span>• ${this.escapeHtml(line)}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    return '';
+  }
+
+  bindMusicAudioProgress(el) {
+    const audio = el?.querySelector('.widget-music-audio');
+    const progress = el?.querySelector('.widget-progress span');
+    const playBtn = el?.querySelector('.widget-music-play-btn');
+    if (!audio || !progress || audio.dataset.bound === 'true') return;
+
+    const update = () => {
+      const value = audio.duration ? Math.min(100, (audio.currentTime / audio.duration) * 100) : 0;
+      progress.style.width = `${value}%`;
+    };
+
+    const resetBtn = () => {
+      if (playBtn) playBtn.innerHTML = this.getWidgetIconSvg('play');
+    };
+
+    audio.dataset.bound = 'true';
+    audio.addEventListener('loadedmetadata', update);
+    audio.addEventListener('timeupdate', update);
+    audio.addEventListener('pause', resetBtn);
+    audio.addEventListener('ended', () => {
+      update();
+      resetBtn();
+    });
+  }
+
+  bindBuiltinWidgetInteractions(id, el) {
+    if (!el) return;
+    el.setAttribute('data-builtin-widget-id', id);
+
+    if (el.dataset.widgetInteractionBound !== 'true') {
+      el.dataset.widgetInteractionBound = 'true';
+      el.addEventListener('click', (event) => {
+        if (this.isEditMode) return;
+
+        const widgetId = el.getAttribute('data-builtin-widget-id');
+        if (!widgetId) return;
+
+        if (widgetId === 'music' && event.target.closest('.widget-music-play-btn')) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.toggleMusicPlayback(el);
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        void this.openBuiltinWidgetEditor(widgetId, el);
+      });
+    }
+
+    if (id === 'music') {
+      this.bindMusicAudioProgress(el);
+    }
+  }
+
+  renderBuiltinWidgetElement(id, el) {
+    if (!el) return null;
+
+    el.className = 'desktop-widget-card desktop-item absolute-layout';
+    if (id === 'music') el.classList.add('widget-music-card');
+    if (id === 'calendar') el.classList.add('widget-calendar-card');
+    if (id === 'polaroid') el.classList.add('widget-polaroid-card');
+    if (id === 'profile') el.classList.add('widget-profile-card');
+    if (id === 'todo') el.classList.add('widget-todo-card');
+    if (id === 'memo') el.classList.add('widget-memo-card');
+
+    el.innerHTML = this.renderBuiltinWidgetContent(id, this.loadBuiltinWidgetState(id));
+    this.bindBuiltinWidgetInteractions(id, el);
+    return el;
+  }
+
+  async pickLocalResource(accept) {
+    return await new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = accept;
+      input.style.display = 'none';
+      document.body.appendChild(input);
+
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          input.remove();
+          resolve(null);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          input.remove();
+          resolve({
+            src: String(reader.result || ''),
+            name: file.name || ''
+          });
+        };
+        reader.onerror = () => {
+          input.remove();
+          resolve(null);
+        };
+        reader.readAsDataURL(file);
+      }, { once: true });
+
+      input.click();
+    });
+  }
+
+  async pickResourceFromLocalOrUrl(label, accept, urlHint) {
+    const useLocal = confirm(`点击“确定”从本地导入${label}，点击“取消”输入${urlHint || 'URL 链接'}`);
+    if (useLocal) {
+      return await this.pickLocalResource(accept);
+    }
+
+    const url = prompt(`请输入${label}的URL链接：`);
+    if (!url || !url.trim()) return null;
+
+    const cleanUrl = url.trim();
+    return {
+      src: cleanUrl,
+      name: cleanUrl.split('/').pop() || label
+    };
+  }
+
+  toggleMusicPlayback(el) {
+    const audio = el?.querySelector('.widget-music-audio');
+    const btn = el?.querySelector('.widget-music-play-btn');
+    if (!audio || !btn) return;
+
+    if (!audio.getAttribute('src')) {
+      this.showToast('请先导入 mp3 / wav 音频');
+      return;
+    }
+
+    document.querySelectorAll('.widget-music-audio').forEach((node) => {
+      if (node !== audio) node.pause();
+    });
+    document.querySelectorAll('.widget-music-play-btn').forEach((node) => {
+      if (node !== btn) node.innerHTML = this.getWidgetIconSvg('play');
+    });
+
+    if (audio.paused) {
+      audio.play().then(() => {
+        btn.innerHTML = this.getWidgetIconSvg('pause');
+      }).catch(() => {
+        this.showToast('音频播放失败');
+      });
+    } else {
+      audio.pause();
+      btn.innerHTML = this.getWidgetIconSvg('play');
+    }
+  }
+
+  async openBuiltinWidgetEditor(id, el) {
+    if (id === 'music') {
+      const current = this.loadBuiltinWidgetState(id);
+      const title = prompt('请输入音乐组件标题：', current.title || '');
+      if (title === null) return;
+      const subtitle = prompt('请输入音乐组件说明文字：', current.subtitle || '');
+      if (subtitle === null) return;
+
+      const next = {
+        ...current,
+        title: title.trim() || '未命名音乐',
+        subtitle: subtitle.trim() || '点击卡片编辑封面与音频'
+      };
+
+      const coverAction = prompt('封面操作：1=保持当前，2=更换图片（本地/URL），3=删除图片', '1');
+      if (coverAction === '2') {
+        const media = await this.pickResourceFromLocalOrUrl('音乐封面图片', 'image/*', '图片 URL');
+        if (media?.src) next.coverSrc = media.src;
+      } else if (coverAction === '3') {
+        next.coverSrc = '';
+      }
+
+      const audioAction = prompt('音频操作：1=保持当前，2=更换音频（本地 mp3/wav 或 URL），3=删除音频', '1');
+      if (audioAction === '2') {
+        const media = await this.pickResourceFromLocalOrUrl('音频文件', '.mp3,.wav,audio/mpeg,audio/wav', '音频 URL');
+        if (media?.src) {
+          next.audioSrc = media.src;
+          next.audioName = media.name || '已导入音频';
+          next.progress = 0;
+        }
+      } else if (audioAction === '3') {
+        next.audioSrc = '';
+        next.audioName = '';
+        next.progress = 0;
+      }
+
+      this.saveBuiltinWidgetState(id, next);
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('音乐组件已更新');
+      return;
+    }
+
+    if (id === 'calendar') {
+      const current = this.loadBuiltinWidgetState(id);
+      const title = prompt('请输入日历组件标题：', current.title || '');
+      if (title === null) return;
+      const lines = prompt('请输入日历内容，每行一条：', (current.lines || []).join('\n'));
+      if (lines === null) return;
+
+      this.saveBuiltinWidgetState(id, {
+        title: title.trim() || '今日行程',
+        lines: lines.split('\n').map((line) => line.trim()).filter(Boolean)
+      });
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('日历组件已更新');
+      return;
+    }
+
+    if (id === 'polaroid') {
+      const current = this.loadBuiltinWidgetState(id);
+      const title = prompt('请输入拍立得标题：', current.title || '');
+      if (title === null) return;
+      const subtitle = prompt('请输入拍立得说明文字：', current.subtitle || '');
+      if (subtitle === null) return;
+
+      const next = {
+        ...current,
+        title: title.trim() || '未命名拍立得',
+        subtitle: subtitle.trim() || '点击卡片编辑图片与文字'
+      };
+
+      const imageAction = prompt('图片操作：1=保持当前，2=更换图片（本地/URL），3=删除图片', '1');
+      if (imageAction === '2') {
+        const media = await this.pickResourceFromLocalOrUrl('拍立得图片', 'image/*', '图片 URL');
+        if (media?.src) next.imageSrc = media.src;
+      } else if (imageAction === '3') {
+        next.imageSrc = '';
+      }
+
+      this.saveBuiltinWidgetState(id, next);
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('拍立得组件已更新');
+      return;
+    }
+
+    if (id === 'profile') {
+      const current = this.loadBuiltinWidgetState(id);
+      const name = prompt('请输入个人名片名称：', current.name || '');
+      if (name === null) return;
+      const role = prompt('请输入个人名片副标题：', current.role || '');
+      if (role === null) return;
+      const tags = prompt('请输入标签，使用换行或逗号分隔：', Array.isArray(current.tags) ? current.tags.join('\n') : '');
+      if (tags === null) return;
+
+      this.saveBuiltinWidgetState(id, {
+        name: name.trim() || 'MiniPhone',
+        role: role.trim() || '系统默认组件',
+        tags: tags.split(/\n|，|,/).map((tag) => tag.trim()).filter(Boolean)
+      });
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('个人名片组件已更新');
+      return;
+    }
+
+    if (id === 'todo') {
+      const current = this.loadBuiltinWidgetState(id);
+      const title = prompt('请输入待办事项标题：', current.title || '');
+      if (title === null) return;
+      const items = prompt('请输入待办内容，每行一条；已完成可用 [x] 开头：', Array.isArray(current.items) ? current.items.join('\n') : '');
+      if (items === null) return;
+
+      this.saveBuiltinWidgetState(id, {
+        title: title.trim() || '今日待办',
+        items: items.split('\n').map((line) => line.trim()).filter(Boolean)
+      });
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('待办组件已更新');
+      return;
+    }
+
+    if (id === 'memo') {
+      const current = this.loadBuiltinWidgetState(id);
+      const title = prompt('请输入快捷便签标题：', current.title || '');
+      if (title === null) return;
+      const lines = prompt('请输入便签内容，每行一条：', Array.isArray(current.lines) ? current.lines.join('\n') : '');
+      if (lines === null) return;
+
+      this.saveBuiltinWidgetState(id, {
+        title: title.trim() || '灵感速记',
+        lines: lines.split('\n').map((line) => line.trim()).filter(Boolean)
+      });
+      this.renderBuiltinWidgetElement(id, el);
+      this.showToast('快捷便签组件已更新');
+    }
+  }
+
+  createBuiltinWidgetElement(id) {
+    const el = document.createElement('div');
+    return this.renderBuiltinWidgetElement(id, el);
   }
 
   createCustomWidgetElement(meta) {
@@ -1137,13 +1527,18 @@ export class DesktopEditMode {
 
   buildWidgetPreviewHtml(widget) {
     const source = this.getWidgetElementById(widget.id);
+    const size = `${widget.colSpan || 1}x${widget.rowSpan || 1}`;
     if (!source) {
-      return `<div class="add-panel-widget-preview-empty">暂无预览</div>`;
+      return `<div class="add-panel-widget-preview" data-widget-size="${size}"><div class="add-panel-widget-preview-empty">暂无预览</div></div>`;
     }
 
     const clone = source.cloneNode(true);
     this.sanitizeWidgetPreviewNode(clone);
-    return `<div class="add-panel-widget-preview-scale">${clone.outerHTML}</div>`;
+    return `
+      <div class="add-panel-widget-preview" data-widget-size="${size}">
+        <div class="add-panel-widget-preview-scale">${clone.outerHTML}</div>
+      </div>
+    `;
   }
 
   showAddPanel() {
@@ -1178,9 +1573,7 @@ export class DesktopEditMode {
     const widgetHtml = availableWidgets.length
       ? availableWidgets.map((widget) => `
         <div class="add-panel-item add-panel-item--widget" data-add-type="widget" data-add-id="${widget.id}">
-          <div class="add-panel-widget-preview">
-            ${this.buildWidgetPreviewHtml(widget)}
-          </div>
+          ${this.buildWidgetPreviewHtml(widget)}
           <span class="add-panel-item-label">${widget.name}</span>
         </div>
       `).join('')

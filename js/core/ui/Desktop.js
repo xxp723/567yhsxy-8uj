@@ -64,8 +64,14 @@ export class Desktop {
             return `
               <section class="desktop-page" data-page-id="${page.id}">
                 <div class="p1-clock-widget">
-                  <div class="p1-time" id="widget-time">00:00</div>
-                  <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+                  <div class="p1-clock-shell">
+                    <div class="p1-clock-meta">
+                      <span class="p1-clock-badge">系统</span>
+                      <span class="p1-clock-caption">时钟</span>
+                    </div>
+                    <div class="p1-time" id="widget-time">00:00</div>
+                    <div class="p1-date" id="widget-date">1925年1月1日 星期一</div>
+                  </div>
                 </div>
                 <div class="p1-widgets-row">
                   <div class="p1-avatar-widget" id="avatar-trigger" title="点击编辑头像">

@@ -87,7 +87,13 @@ export async function mount(container, context) {
   };
 
   const triggerPreviewRefresh = () => {
-    container.querySelector('#custom-widget-apply-preview')?.click();
+    const codeEl = getCustomCodeEl();
+    const previewToggle = container.querySelector('#custom-widget-preview-toggle');
+    if (!codeEl) return;
+
+    if (previewToggle?.checked) {
+      codeEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   };
 
   const ensureImportInput = () => {
