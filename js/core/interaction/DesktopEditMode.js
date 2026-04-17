@@ -299,6 +299,35 @@ export class DesktopEditMode {
     return result;
   }
 
+  // [模块标注] Dock去重清理模块：清理 Dock 内同 appId 的重复节点，避免交换/删除后命中错误实例
+  sanitizeDockDomDuplicates() {
+    const allItems = this.getDockItems();
+    const map = new Map();
+    const duplicates = [];
+
+    allItems.forEach((item) => {
+      const appId = item.getAttribute('data-app-id');
+      if (!appId) return;
+
+      if (!map.has(appId)) {
+        map.set(appId, item);
+        return;
+      }
+
+      const kept = map.get(appId);
+      const shouldKeepCurrent = kept.style.display === 'none' && item.style.display !== 'none';
+
+      if (shouldKeepCurrent) {
+        duplicates.push(kept);
+        map.set(appId, item);
+      } else {
+        duplicates.push(item);
+      }
+    });
+
+    duplicates.forEach((item) => item.remove());
+  }
+
   getDockIndexByAppId(appId) {
     return (this.dockState || []).indexOf(appId);
   }
@@ -425,6 +454,7 @@ export class DesktopEditMode {
   applyDockStateToDOM() {
     if (!this.dockContainer) return;
 
+    this.sanitizeDockDomDuplicates();
     this.dockState = this.dedupeDockState(this.dockState || []);
     const allItems = this.getDockItems();
     const map = new Map();
@@ -648,6 +678,7 @@ export class DesktopEditMode {
       const safeDockIndex = targetIndex >= 0 ? targetIndex : nextDock.length;
       nextDock.splice(safeDockIndex, 0, appId);
 
+      this.sanitizeDockDomDuplicates();
       const targetDockEl = this.dockContainer?.querySelector(`.app-icon[data-app-id="${targetDockAppId}"]`);
       if (targetDockEl) {
         this.dockState = this.dedupeDockState(nextDock);
