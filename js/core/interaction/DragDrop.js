@@ -357,22 +357,27 @@ export class DragDrop {
     }
 
     const parentRect = resolvedPageEl.getBoundingClientRect();
-    const marginX = 20;
-    const marginY = 15;
-    const gridH = 90;
-    const w = parentRect.width;
     const gridCols = this.editMode.gridCols;
     const gridRows = this.editMode.gridRows;
-    const gridW = (w - marginX * 2) / gridCols;
+    const metrics = this.editMode?.getGridMetrics?.(parentRect.width) || {
+      marginX: 20,
+      marginY: 15,
+      columnGap: 12,
+      rowGap: 12,
+      gridH: 90,
+      gridW: (parentRect.width - 40 - 12 * (gridCols - 1)) / gridCols,
+      pitchX: ((parentRect.width - 40 - 12 * (gridCols - 1)) / gridCols) + 12,
+      pitchY: 102
+    };
 
     const rect = el.getBoundingClientRect();
 
-    // 计算中心点所在的格子
+    // [模块标注] 桌面网格间距调整模块：拖拽吸附按统一网格节距计算，保持相邻项目留白
     const centerX = rect.left - parentRect.left + rect.width / 2;
     const centerY = rect.top - parentRect.top + rect.height / 2;
 
-    let targetCol = Math.floor((centerX - marginX) / gridW);
-    let targetRow = Math.floor((centerY - marginY) / gridH);
+    let targetCol = Math.floor((centerX - metrics.marginX) / metrics.pitchX);
+    let targetRow = Math.floor((centerY - metrics.marginY) / metrics.pitchY);
 
     // 边界限制
     targetCol = Math.max(0, Math.min(targetCol, gridCols - colSpan));

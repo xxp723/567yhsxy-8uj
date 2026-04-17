@@ -156,7 +156,7 @@ export async function mount(container, context) {
             <div class="settings-card__icon">${ICONS.data}</div>
             <h3 class="settings-card__title">数据设置</h3>
           </div>
-          <div class="settings-card" data-page="logs">
+          <div class="settings-card settings-card--logs" data-page="logs">
             <div class="settings-card__icon">${ICONS.logs}</div>
             <h3 class="settings-card__title">日志</h3>
           </div>

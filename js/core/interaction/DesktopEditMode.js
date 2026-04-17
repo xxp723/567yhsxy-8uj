@@ -1315,6 +1315,28 @@ export class DesktopEditMode {
     return null;
   }
 
+  // [模块标注] 桌面网格间距调整模块：统一桌面编辑模式的网格留白参数，确保相邻项目之间保留视觉空隙
+  getGridMetrics(pageWidth = 0) {
+    const marginX = 20;
+    const marginY = 15;
+    const columnGap = 12;
+    const rowGap = 12;
+    const gridH = 90;
+    const usableWidth = Math.max(0, pageWidth - marginX * 2 - columnGap * (this.gridCols - 1));
+    const gridW = usableWidth / this.gridCols;
+
+    return {
+      marginX,
+      marginY,
+      columnGap,
+      rowGap,
+      gridW,
+      gridH,
+      pitchX: gridW + columnGap,
+      pitchY: gridH + rowGap
+    };
+  }
+
   ensureLayoutPagesExist() {
     const pageIds = Object.keys(this.layout || {}).sort((a, b) => {
       const aNum = parseInt(String(a).replace('page-', ''), 10) || 0;
@@ -1336,14 +1358,11 @@ export class DesktopEditMode {
   pointerToGrid(pageEl, pointer, colSpan = 1, rowSpan = 1) {
     if (!pageEl || !pointer) return null;
 
-    const marginX = 20;
-    const marginY = 15;
-    const gridH = 90;
     const pageRect = pageEl.getBoundingClientRect();
-    const gridW = (pageRect.width - marginX * 2) / this.gridCols;
+    const metrics = this.getGridMetrics(pageRect.width);
 
-    let targetCol = Math.floor((pointer.clientX - pageRect.left - marginX) / gridW);
-    let targetRow = Math.floor((pointer.clientY - pageRect.top - marginY) / gridH);
+    let targetCol = Math.floor((pointer.clientX - pageRect.left - metrics.marginX) / metrics.pitchX);
+    let targetRow = Math.floor((pointer.clientY - pageRect.top - metrics.marginY) / metrics.pitchY);
 
     targetCol = Math.max(0, Math.min(targetCol, this.gridCols - colSpan));
     targetRow = Math.max(0, Math.min(targetRow, this.gridRows - rowSpan));
@@ -2582,16 +2601,12 @@ export class DesktopEditMode {
 
   positionItemsDOM() {
     // 根据 data-col, data-row 计算绝对定位
-    const marginX = 20;
-    const marginY = 15;
-    const gridH = 90;
-
     const pages = this.desktopContainer.querySelectorAll('.desktop-page');
     pages.forEach((page) => {
       const w = page.clientWidth;
       if (w === 0) return;
 
-      const gridW = (w - marginX * 2) / this.gridCols;
+      const metrics = this.getGridMetrics(w);
 
       const items = page.querySelectorAll('.desktop-item.absolute-layout');
       items.forEach((item) => {
@@ -2602,10 +2617,10 @@ export class DesktopEditMode {
         const colSpan = parseInt(item.getAttribute('data-colspan')) || 1;
         const rowSpan = parseInt(item.getAttribute('data-rowspan')) || 1;
 
-        const left = marginX + col * gridW;
-        const top = marginY + row * gridH;
-        const width = gridW * colSpan;
-        const height = gridH * rowSpan;
+        const left = metrics.marginX + col * metrics.pitchX;
+        const top = metrics.marginY + row * metrics.pitchY;
+        const width = metrics.gridW * colSpan + metrics.columnGap * Math.max(0, colSpan - 1);
+        const height = metrics.gridH * rowSpan + metrics.rowGap * Math.max(0, rowSpan - 1);
 
         item.style.position = 'absolute';
         item.style.left = `${left}px`;
