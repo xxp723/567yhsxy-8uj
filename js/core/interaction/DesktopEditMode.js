@@ -46,13 +46,19 @@ export class DesktopEditMode {
     this.onToolbarDragMove = this.onToolbarDragMove.bind(this);
     this.onToolbarDragEnd = this.onToolbarDragEnd.bind(this);
 
-    // 可添加组件元数据
+    // [模块标注] 组件库注册模块：统一维护系统组件、新增仿手机组件与自定义组件
     this.widgetLibrary = [
-      { id: 'clock', name: '时钟', icon: '🕰', selector: '.p1-clock-widget', colSpan: 4, rowSpan: 1 },
-      { id: 'avatar', name: '头像框', icon: '🖼', selector: '.p1-avatar-widget', colSpan: 2, rowSpan: 2 },
-      { id: 'news', name: '报纸', icon: '📰', selector: '.p1-news-widget', colSpan: 2, rowSpan: 2 },
-      { id: 'ticket1', name: '船票', icon: '🎫', selector: '.p1-ticket-widget', colSpan: 4, rowSpan: 2 },
-      { id: 'ticket2', name: '戏票', icon: '🎟', selector: '.p2-ticket-widget', colSpan: 4, rowSpan: 2 }
+      { id: 'clock', name: '时钟', icon: '🕰', selector: '.p1-clock-widget', colSpan: 4, rowSpan: 1, source: 'system' },
+      { id: 'avatar', name: '头像框', icon: '🖼', selector: '.p1-avatar-widget', colSpan: 2, rowSpan: 2, source: 'system' },
+      { id: 'news', name: '报纸', icon: '📰', selector: '.p1-news-widget', colSpan: 2, rowSpan: 2, source: 'system' },
+      { id: 'ticket1', name: '船票', icon: '🎫', selector: '.p1-ticket-widget', colSpan: 4, rowSpan: 2, source: 'system' },
+      { id: 'ticket2', name: '戏票', icon: '🎟', selector: '.p2-ticket-widget', colSpan: 4, rowSpan: 2, source: 'system' },
+      { id: 'music', name: '音乐', icon: '♫', selector: '.widget-music-card', colSpan: 4, rowSpan: 2, source: 'builtin' },
+      { id: 'calendar', name: '日历', icon: '📅', selector: '.widget-calendar-card', colSpan: 2, rowSpan: 2, source: 'builtin' },
+      { id: 'polaroid', name: '拍立得', icon: '▣', selector: '.widget-polaroid-card', colSpan: 2, rowSpan: 2, source: 'builtin' },
+      { id: 'profile', name: '个人名片', icon: '◉', selector: '.widget-profile-card', colSpan: 2, rowSpan: 2, source: 'builtin' },
+      { id: 'todo', name: '待办事项', icon: '☑', selector: '.widget-todo-card', colSpan: 2, rowSpan: 2, source: 'builtin' },
+      { id: 'memo', name: '快捷便签', icon: '✎', selector: '.widget-memo-card', colSpan: 2, rowSpan: 2, source: 'builtin' }
     ];
 
     this.bindEvents();
@@ -909,19 +915,195 @@ export class DesktopEditMode {
     );
   }
 
+  getCustomWidgetLibrary() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('miniphone_custom_widgets') || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  getMergedWidgetLibrary() {
+    const customWidgets = this.getCustomWidgetLibrary().map((widget) => ({
+      id: widget.id,
+      name: widget.name,
+      icon: widget.iconSvg || '✦',
+      selector: `.widget-custom-card[data-custom-widget-id="${widget.id}"]`,
+      colSpan: Math.max(1, Math.min(4, Number(widget.width) || 2)),
+      rowSpan: Math.max(1, Math.min(3, Number(widget.height) || 2)),
+      source: 'custom',
+      customConfig: widget
+    }));
+
+    return [...this.widgetLibrary, ...customWidgets];
+  }
+
   getWidgetMeta(id) {
-    return this.widgetLibrary.find((w) => w.id === id) || null;
+    return this.getMergedWidgetLibrary().find((w) => w.id === id) || null;
+  }
+
+  createBuiltinWidgetElement(id) {
+    const el = document.createElement('div');
+    el.className = 'desktop-widget-card desktop-item absolute-layout';
+
+    if (id === 'music') {
+      el.classList.add('widget-music-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--music">
+          <div class="widget-music-cover">♫</div>
+          <div class="widget-music-body">
+            <div class="widget-title-row">
+              <span class="widget-eyebrow">NOW PLAYING</span>
+              <span class="widget-dot"></span>
+            </div>
+            <div class="widget-title-main">夜航旧梦</div>
+            <div class="widget-subtitle">白露唱片 · 03:28</div>
+            <div class="widget-progress"><span style="width: 68%;"></span></div>
+            <div class="widget-inline-meta">
+              <span>随机播放</span>
+              <span>高保真</span>
+            </div>
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    if (id === 'calendar') {
+      el.classList.add('widget-calendar-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--calendar">
+          <div class="widget-calendar-top">
+            <span>APR</span>
+            <strong>17</strong>
+          </div>
+          <div class="widget-calendar-body">
+            <div class="widget-title-main">周五行程</div>
+            <div class="widget-calendar-event">
+              <span>09:30</span>
+              <span>编辑部会议</span>
+            </div>
+            <div class="widget-calendar-event">
+              <span>14:00</span>
+              <span>江边取景</span>
+            </div>
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    if (id === 'polaroid') {
+      el.classList.add('widget-polaroid-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--polaroid">
+          <div class="widget-polaroid-photo">✦</div>
+          <div class="widget-polaroid-caption">
+            <div class="widget-title-main">昨日底片</div>
+            <div class="widget-subtitle">把此刻留在桌面上</div>
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    if (id === 'profile') {
+      el.classList.add('widget-profile-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--profile">
+          <div class="widget-profile-avatar">L</div>
+          <div class="widget-title-main">Lenovo</div>
+          <div class="widget-subtitle">民国风桌面设计者</div>
+          <div class="widget-profile-tags">
+            <span>排版</span>
+            <span>复古</span>
+            <span>组件</span>
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    if (id === 'todo') {
+      el.classList.add('widget-todo-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--todo">
+          <div class="widget-title-row">
+            <span class="widget-title-main">今日待办</span>
+            <span class="widget-counter">3</span>
+          </div>
+          <div class="widget-todo-item"><i></i><span>整理桌面组件库</span></div>
+          <div class="widget-todo-item"><i></i><span>导出自定义组件模板</span></div>
+          <div class="widget-todo-item is-done"><i></i><span>完成图标统一</span></div>
+        </div>
+      `;
+      return el;
+    }
+
+    if (id === 'memo') {
+      el.classList.add('widget-memo-card');
+      el.innerHTML = `
+        <div class="widget-surface widget-surface--memo">
+          <div class="widget-eyebrow">QUICK NOTE</div>
+          <div class="widget-title-main">灵感速记</div>
+          <div class="widget-memo-lines">
+            <span>• 组件预览开关需更轻盈</span>
+            <span>• 卡片圆角向 iPhone 靠拢</span>
+            <span>• 标题栏导入导出独立显示</span>
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    return null;
+  }
+
+  createCustomWidgetElement(meta) {
+    const config = meta?.customConfig;
+    if (!config) return null;
+
+    const el = document.createElement('div');
+    el.className = 'desktop-widget-card desktop-item absolute-layout widget-custom-card';
+    el.setAttribute('data-custom-widget-id', config.id);
+    el.innerHTML = `
+      <div class="widget-surface widget-surface--custom">
+        <div class="widget-renderer">
+          <style>${config.css || ''}</style>
+          ${config.html || ''}
+        </div>
+      </div>
+    `;
+    return el;
+  }
+
+  getOrCreateWidgetElement(meta) {
+    if (!meta) return null;
+
+    let el = this.desktopContainer.querySelector(`.desktop-item[data-item-id="${meta.id}"]`);
+    if (el) return el;
+
+    if (meta.selector) {
+      el = this.desktopContainer.querySelector(meta.selector);
+      if (el) return el;
+    }
+
+    if (meta.source === 'builtin') {
+      return this.createBuiltinWidgetElement(meta.id);
+    }
+
+    if (meta.source === 'custom') {
+      return this.createCustomWidgetElement(meta);
+    }
+
+    return null;
   }
 
   getWidgetElementById(id) {
-    let el = this.desktopContainer.querySelector(`.desktop-item[data-item-id="${id}"]`);
-    if (el) return el;
-
     const meta = this.getWidgetMeta(id);
     if (!meta) return null;
-
-    el = this.desktopContainer.querySelector(meta.selector);
-    return el || null;
+    return this.getOrCreateWidgetElement(meta);
   }
 
   sanitizeWidgetPreviewNode(root) {
@@ -980,7 +1162,7 @@ export class DesktopEditMode {
     });
 
     // 可添加组件（去重）
-    const availableWidgets = this.widgetLibrary.filter((w) => !this.isItemInLayout(w.id));
+    const availableWidgets = this.getMergedWidgetLibrary().filter((w) => !this.isItemInLayout(w.id));
 
     const appHtml = availableApps.length
       ? availableApps.map((app) => `

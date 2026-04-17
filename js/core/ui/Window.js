@@ -47,6 +47,7 @@ export class WindowManager {
         <svg width="22" height="22" viewBox="0 0 48 48" fill="none"><path d="M16 12L32 24L16 36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="app-window__title">${appMeta.name}</div>
+      <div class="app-window__actions" aria-label="窗口操作区"></div>
       <button class="app-window__close" type="button" aria-label="关闭应用">
         <svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M10 4V44" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -113,6 +114,28 @@ export class WindowManager {
       newBtn.style.opacity = '0';
       newBtn.style.pointerEvents = 'none';
     }
+  }
+
+  setHeaderActions(appId, actions = []) {
+    const win = this.windows.get(appId);
+    if (!win) return;
+
+    const actionsEl = win.querySelector('.app-window__actions');
+    if (!actionsEl) return;
+
+    actionsEl.innerHTML = '';
+
+    actions.forEach((action) => {
+      if (!action || typeof action.onClick !== 'function') return;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `app-window__action-btn ${action.className || ''}`.trim();
+      btn.setAttribute('aria-label', action.label || '操作');
+      btn.innerHTML = action.icon || '';
+      btn.addEventListener('click', action.onClick);
+      actionsEl.appendChild(btn);
+    });
   }
 
   showError(appId, message) {
