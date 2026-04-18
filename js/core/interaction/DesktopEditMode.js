@@ -1822,7 +1822,7 @@ export class DesktopEditMode {
   }
 
   getBuiltinWidgetDefaultState(id) {
-    // [模块标注] 音乐组件默认数据模块：统一维护新 2×2 音乐卡片的封面、歌曲名、滑动开关与进度状态
+    // [模块标注] 音乐组件默认数据模块：统一维护新 2×2 音乐卡片的封面、歌曲名、三角播放按钮与进度状态
     if (id === 'music') {
       return {
         title: '旧梦留声机',
@@ -1830,7 +1830,7 @@ export class DesktopEditMode {
         audioSrc: '',
         audioName: '',
         progress: 0,
-        enabled: true
+        playing: false
       };
     }
 
@@ -1912,10 +1912,10 @@ export class DesktopEditMode {
     const month = now.getMonth() + 1;
     const date = now.getDate();
 
-    // [模块标注] 音乐组件新样式渲染模块：新版音乐组件固定为 2×2，仅保留封面、歌曲名、滑动开关与进度区域
+    // [模块标注] 音乐组件新样式渲染模块：新版音乐组件固定为 2×2，仅保留封面、歌曲名、三角播放按钮与进度区域
     if (id === 'music') {
       const musicName = this.escapeHtml(state.audioName || state.title || '未导入音频');
-      const enabled = state.enabled !== false;
+      const playing = state.playing === true;
       return `
         <div class="widget-surface widget-surface--music">
           <div class="widget-music-cover">
@@ -1928,10 +1928,9 @@ export class DesktopEditMode {
           <div class="widget-music-body">
             <div class="widget-music-head">
               <div class="widget-music-name">${musicName}</div>
-              <label class="widget-music-switch" aria-label="音乐开关">
-                <input class="widget-music-switch-input" type="checkbox" ${enabled ? 'checked' : ''}>
-                <span class="widget-music-switch-slider"></span>
-              </label>
+              <button type="button" class="widget-music-play-btn" aria-label="${playing ? '暂停播放' : '开始播放'}">
+                ${this.getWidgetIconSvg(playing ? 'pause' : 'play')}
+              </button>
             </div>
             <div class="widget-progress widget-progress--music"><span style="width:${Number(state.progress) || 0}%;"></span></div>
             <audio class="widget-music-audio" preload="metadata" src="${this.escapeHtml(state.audioSrc || '')}"></audio>
@@ -2072,11 +2071,13 @@ export class DesktopEditMode {
     }
 
     if (id === 'music') {
-      const toggleInput = el.querySelector('.widget-music-switch-input');
-      if (toggleInput && toggleInput.dataset.bound !== 'true') {
-        toggleInput.dataset.bound = 'true';
-        toggleInput.addEventListener('change', () => {
-          this.toggleMusicPlayback(el, !!toggleInput.checked);
+      const playBtn = el.querySelector('.widget-music-play-btn');
+      if (playBtn && playBtn.dataset.bound !== 'true') {
+        playBtn.dataset.bound = 'true';
+        playBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.toggleMusicPlayback(el);
         });
       }
 
@@ -2159,11 +2160,24 @@ export class DesktopEditMode {
 
   toggleMusicPlayback(el, forcePlay = null) {
     const audio = el?.querySelector('.widget-music-audio');
-    const toggleInput = el?.querySelector('.widget-music-switch-input');
+    const playBtn = el?.querySelector('.widget-music-play-btn');
     if (!audio) return;
 
+    const syncMusicButton = (isPlaying) => {
+      if (!playBtn) return;
+      playBtn.innerHTML = this.getWidgetIconSvg(isPlaying ? 'pause' : 'play');
+      playBtn.setAttribute('aria-label', isPlaying ? '暂停播放' : '开始播放');
+    };
+
+    if (!audio.dataset.musicStateBound) {
+      audio.dataset.musicStateBound = 'true';
+      audio.addEventListener('pause', () => syncMusicButton(false));
+      audio.addEventListener('play', () => syncMusicButton(true));
+      audio.addEventListener('ended', () => syncMusicButton(false));
+    }
+
     if (!audio.getAttribute('src')) {
-      if (toggleInput) toggleInput.checked = false;
+      syncMusicButton(false);
       this.showToast('请先导入 mp3 / wav 音频');
       return;
     }
@@ -2176,14 +2190,14 @@ export class DesktopEditMode {
 
     if (shouldPlay) {
       audio.play().then(() => {
-        if (toggleInput) toggleInput.checked = true;
+        syncMusicButton(true);
       }).catch(() => {
-        if (toggleInput) toggleInput.checked = false;
+        syncMusicButton(false);
         this.showToast('音频播放失败');
       });
     } else {
       audio.pause();
-      if (toggleInput) toggleInput.checked = false;
+      syncMusicButton(false);
     }
   }
 

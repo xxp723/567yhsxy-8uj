@@ -2123,11 +2123,14 @@ body.fullscreen-mode .app-window {
   min-height: 148px;
 }
 
-.custom-widget-actions {
+/* [模块标注] 短按钮右对齐布局模块：统一确认/取消这类短按钮的动作区右对齐，不影响全宽主按钮 */
+.custom-widget-actions,
+.short-action-row {
   display: flex;
   gap: 10px;
   margin-top: 14px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .custom-widget-actions .ui-button svg {
@@ -2149,15 +2152,15 @@ body.fullscreen-mode .app-window {
   border: 1px solid rgba(125, 90, 68, 0.12);
 }
 
-/* [模块标注] 音乐组件样式模块：统一新版 2×2 音乐卡片的封面、歌曲名、滑动开关与进度区域，便于后续单独调整 */
+/* [模块标注] 音乐组件样式模块：统一新版 2×2 音乐卡片的封面、歌曲名、三角播放按钮与进度区域，便于后续单独调整 */
 .widget-surface--music {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
   background:
-    radial-gradient(circle at top left, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 34%),
-    linear-gradient(145deg, #fffdf9 0%, #f2e7db 52%, #e8d8c8 100%);
+    radial-gradient(circle at top left, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0) 34%),
+    linear-gradient(160deg, #fffdfa 0%, #f4e9dd 56%, #ead9c8 100%);
 }
 
 .widget-music-cover {
@@ -2171,16 +2174,18 @@ body.fullscreen-mode .app-window {
 .widget-music-cover__frame {
   position: relative;
   width: 100%;
-  min-height: 104px;
-  border-radius: 22px;
+  min-height: 108px;
+  border-radius: 24px;
   overflow: hidden;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(125, 90, 68, 0.14);
-  background: linear-gradient(180deg, rgba(255,255,255,0.72) 0%, rgba(233, 215, 199, 0.96) 100%);
+  border: 1px solid rgba(125, 90, 68, 0.12);
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,0.54) 0%, rgba(255,255,255,0) 38%),
+    linear-gradient(180deg, rgba(255,255,255,0.76) 0%, rgba(232, 214, 198, 0.98) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.65),
-    0 10px 24px rgba(74, 52, 42, 0.12);
+    inset 0 1px 0 rgba(255,255,255,0.68),
+    0 10px 22px rgba(74, 52, 42, 0.1);
 }
 
 .widget-music-cover__frame::after {
@@ -2188,7 +2193,7 @@ body.fullscreen-mode .app-window {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.24);
   pointer-events: none;
 }
 
@@ -2203,8 +2208,8 @@ body.fullscreen-mode .app-window {
 .widget-music-cover-placeholder {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   color: rgba(74, 52, 42, 0.72);
   z-index: 1;
 }
@@ -2224,14 +2229,13 @@ body.fullscreen-mode .app-window {
 }
 
 .widget-music-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
 .widget-music-name {
-  flex: 1;
   min-width: 0;
   font-size: 14px;
   font-weight: 700;
@@ -2242,6 +2246,32 @@ body.fullscreen-mode .app-window {
   white-space: nowrap;
 }
 
+.widget-music-play-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #4A342A 0%, #6b5142 100%);
+  color: var(--c-white-rice);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.18);
+  transition: transform 0.12s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.widget-music-play-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.widget-music-play-btn:active {
+  transform: scale(0.94);
+  opacity: 0.86;
+}
+
 .widget-surface--music .widget-progress.widget-progress--music {
   margin: 0;
   height: 7px;
@@ -2249,7 +2279,7 @@ body.fullscreen-mode .app-window {
 }
 
 .widget-surface--music .widget-progress.widget-progress--music span {
-  background: linear-gradient(90deg, #b59375 0%, #4A342A 100%);
+  background: linear-gradient(90deg, #c4a487 0%, #4A342A 100%);
 }
 
 .widget-title-row {
@@ -2538,11 +2568,14 @@ body.fullscreen-mode .app-window {
     align-items: flex-start;
   }
 
-  .custom-widget-actions {
+  .custom-widget-actions,
+  .short-action-row {
     flex-direction: column;
   }
 
-  .custom-widget-actions .ui-button {
+  .custom-widget-actions .ui-button,
+  .short-action-row .ui-button,
+  .short-action-row .modal-btn {
     width: 100%;
   }
 }
