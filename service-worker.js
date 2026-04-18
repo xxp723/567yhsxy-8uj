@@ -8,7 +8,7 @@
  * 
  * 安装时预缓存核心文件，fetch 时优先使用缓存，activate 时清理旧缓存。
  */
-const CACHE_NAME = 'miniphone-v2';
+const CACHE_NAME = 'miniphone-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -25,16 +25,14 @@ self.addEventListener('install', (event) => {
       return cache.addAll(STATIC_ASSETS);
     })
   );
+  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse; // cache-first
-      }
-      return fetch(event.request).then((response) => {
-        // 可选：动态缓存新资源（仅限同域）
+    fetch(event.request)
+      .then((response) => {
+        // network-first：优先网络，成功后回写缓存
         if (response && response.status === 200) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -42,8 +40,11 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return response;
-      });
-    })
+      })
+      .catch(() => {
+        // 离线或网络失败时回退缓存
+        return caches.match(event.request);
+      })
   );
 });
 
@@ -60,4 +61,5 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  self.clients.claim();
 });
