@@ -18,33 +18,37 @@ const PROVIDER_META = {
     shortLabel: 'OpenAI',
     label: 'OpenAI 官方接口',
     defaultBaseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o-mini',
-    presetModels: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini']
+    defaultModel: 'gpt-4o-mini'
   },
   gemini: {
     id: 'gemini',
     shortLabel: 'Gemini',
     label: 'Gemini 官方接口',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultModel: 'gemini-2.0-flash',
-    presetModels: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro']
+    defaultModel: 'gemini-2.0-flash'
   },
   claude: {
     id: 'claude',
     shortLabel: 'Claude',
     label: 'Claude 官方接口',
     defaultBaseUrl: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-3-5-haiku-latest',
-    presetModels: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0']
+    defaultModel: 'claude-3-5-haiku-latest'
   },
   deepseek: {
     id: 'deepseek',
     shortLabel: 'DeepSeek',
     label: 'DeepSeek 官方接口',
     defaultBaseUrl: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat',
-    presetModels: ['deepseek-chat', 'deepseek-reasoner']
+    defaultModel: 'deepseek-chat'
   }
+};
+
+// [模块标注] 模型真实来源模块：仅保留真实拉取结果与当前已选模型，屏蔽旧版本遗留的示例模型列表
+const LEGACY_PROVIDER_PRESET_MODELS = {
+  openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini'],
+  gemini: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
+  claude: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner']
 };
 
 // IconPark SVG（统一图标风格 + 用途标注，方便后续修改）
@@ -179,6 +183,18 @@ function uniqueStrings(values) {
   return [...new Set((values || []).filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
 }
 
+function stripLegacyPresetModels(providerId, models) {
+  const normalized = uniqueStrings(models || []);
+  const legacyPresetModels = uniqueStrings(LEGACY_PROVIDER_PRESET_MODELS[providerId] || []);
+  if (!normalized.length || !legacyPresetModels.length) return normalized;
+
+  const isExactLegacyPresetList =
+    normalized.length === legacyPresetModels.length &&
+    normalized.every((model) => legacyPresetModels.includes(model));
+
+  return isExactLegacyPresetList ? [] : normalized;
+}
+
 function mergeModelOptions(providerId, models, selectedModel) {
   return uniqueStrings([...(models || []), selectedModel]);
 }
@@ -192,7 +208,11 @@ function normalizeProfileConfig(profileInput, fallbackProvider = 'openai') {
     apiKey: profileInput?.apiKey || '',
     baseUrl: profileInput?.baseUrl || PROVIDER_META[provider].defaultBaseUrl,
     model,
-    availableModels: mergeModelOptions(provider, profileInput?.availableModels, model),
+    availableModels: mergeModelOptions(
+      provider,
+      stripLegacyPresetModels(provider, profileInput?.availableModels),
+      model
+    ),
     stream: typeof profileInput?.stream === 'boolean' ? profileInput.stream : true
   };
 }
@@ -406,6 +426,7 @@ function renderProviderModalOptions(selectedProvider) {
     .join('');
 }
 
+// [模块标注] 模型项极简展示模块：模型弹窗内仅展示模型名与选中状态，不显示三横杠图标与模型来源文案
 function renderModelModalOptions(profile) {
   const models = mergeModelOptions(profile.provider, profile.availableModels, profile.model);
 
@@ -421,7 +442,6 @@ function renderModelModalOptions(profile) {
   return models
     .map((model) => {
       const isSelected = model === profile.model;
-      const providerMeta = PROVIDER_META[profile.provider] || PROVIDER_META.openai;
       return `
         <button
           class="api-model-option ${isSelected ? 'is-selected' : ''}"
@@ -430,10 +450,8 @@ function renderModelModalOptions(profile) {
           data-model="${escapeHtml(model)}"
         >
           <span class="api-model-option__main">
-            <span class="api-model-option__icon">${ICONS.model}</span>
             <span class="api-model-option__label">${escapeHtml(model)}</span>
           </span>
-          <span class="api-model-option__desc">${escapeHtml(providerMeta.shortLabel)} 模型</span>
           <span class="api-model-option__check">${isSelected ? ICONS.selected : ICONS.unselected}</span>
         </button>
       `;
@@ -461,6 +479,7 @@ function renderProviderModal() {
   `;
 }
 
+// [模块标注] 模型弹窗极简标题模块：移除顶部说明文案，仅保留标题与可滚动模型列表
 function renderModelModal() {
   return `
     <div id="api-model-modal" class="api-model-modal hidden" aria-hidden="true" data-profile="">
@@ -473,7 +492,6 @@ function renderModelModal() {
           </button>
         </div>
         <div class="api-model-modal__body">
-          <p class="api-model-modal__hint">模型选择弹窗已与“API 服务商接口”窗口风格保持一致，统一主界面视觉。</p>
           <div id="api-model-modal-options" class="api-model-modal__options"></div>
         </div>
       </div>
@@ -636,7 +654,6 @@ export function renderApiSection({ current }) {
             #settings-api .api-provider-modal__close-icon,
             #settings-api .api-model-trigger__icon,
             #settings-api .api-model-trigger__arrow,
-            #settings-api .api-model-option__icon,
             #settings-api .api-model-option__check,
             #settings-api .api-model-empty-state__icon,
             #settings-api .api-model-modal__close-icon {
@@ -1036,6 +1053,13 @@ export function renderApiSection({ current }) {
               overflow: hidden;
             }
 
+            /* [模块标注] 模型弹窗滚动模块：模型列表过长时仅列表区域纵向滚动，不影响弹窗头部 */
+            #settings-api .api-model-modal__panel {
+              max-height: min(620px, calc(100vh - 96px));
+              display: flex;
+              flex-direction: column;
+            }
+
             #settings-api .api-provider-modal__header,
             #settings-api .api-model-modal__header {
               display: flex;
@@ -1076,6 +1100,12 @@ export function renderApiSection({ current }) {
               padding: 16px 18px 18px;
             }
 
+            #settings-api .api-model-modal__body {
+              flex: 1 1 auto;
+              min-height: 0;
+              padding-top: 14px;
+            }
+
             #settings-api .api-provider-modal__hint,
             #settings-api .api-model-modal__hint {
               margin: 0;
@@ -1088,6 +1118,14 @@ export function renderApiSection({ current }) {
             #settings-api .api-model-modal__options {
               display: grid;
               gap: 10px;
+            }
+
+            #settings-api .api-model-modal__options {
+              flex: 1 1 auto;
+              min-height: 0;
+              max-height: min(420px, calc(100vh - 220px));
+              overflow-y: auto;
+              padding-right: 2px;
             }
 
             #settings-api .api-provider-option,
@@ -1106,6 +1144,11 @@ export function renderApiSection({ current }) {
               cursor: pointer;
             }
 
+            #settings-api .api-model-option {
+              gap: 12px;
+              padding: 15px 14px;
+            }
+
             #settings-api .api-provider-option.is-selected,
             #settings-api .api-model-option.is-selected {
               border-color: rgba(74, 52, 42, 0.26);
@@ -1122,6 +1165,7 @@ export function renderApiSection({ current }) {
               font-weight: 700;
             }
 
+            /* [模块标注] 模型名省略显示模块：弹窗内外的模型名均保持单行省略 */
             #settings-api .api-provider-option__label,
             #settings-api .api-model-option__label {
               min-width: 0;
@@ -1130,8 +1174,7 @@ export function renderApiSection({ current }) {
               white-space: nowrap;
             }
 
-            #settings-api .api-provider-option__desc,
-            #settings-api .api-model-option__desc {
+            #settings-api .api-provider-option__desc {
               grid-column: 1 / 2;
               font-size: 11px;
               color: rgba(74, 52, 42, 0.68);
@@ -1144,6 +1187,10 @@ export function renderApiSection({ current }) {
               color: var(--c-text-main, #4A342A);
               justify-self: end;
               align-self: center;
+            }
+
+            #settings-api .api-model-option__check {
+              grid-row: 1 / 2;
             }
 
             #settings-api .api-model-empty-state {

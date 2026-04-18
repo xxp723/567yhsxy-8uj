@@ -496,7 +496,7 @@ export class DesktopEditMode {
           const next = this.saveBuiltinWidgetState(id, {
             ...draft,
             title: titleInput?.value?.trim() || '旧梦留声机',
-            subtitle: subtitleInput?.value?.trim() || '点击卡片编辑封面与音频'
+            subtitle: subtitleInput?.value?.trim() || '与当前主题一致的唱片卡片'
           });
           this.renderBuiltinWidgetElement(id, el);
           this.bindBuiltinWidgetInteractions(id, el);
@@ -1628,10 +1628,11 @@ export class DesktopEditMode {
   }
 
   getBuiltinWidgetDefaultState(id) {
+    // [模块标注] 音乐组件默认数据模块：统一维护新 4×2 音乐卡片的默认标题、副标题与音频状态
     if (id === 'music') {
       return {
         title: '旧梦留声机',
-        subtitle: '点击卡片编辑封面与音频',
+        subtitle: '与当前主题一致的唱片卡片',
         coverSrc: '',
         audioSrc: '',
         audioName: '',
@@ -1695,13 +1696,18 @@ export class DesktopEditMode {
     return merged;
   }
 
+  // [模块标注] 音乐组件 IconPark 图标模块：播放/暂停/唱片占位图统一切换为 IconPark 风格 SVG，便于后续继续替换
   getWidgetIconSvg(type) {
     if (type === 'play') {
-      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 12L36 24L18 36V12Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 15.5455V32.4545C19 33.5545 20.1667 34.2652 21.1333 33.7545L34.8 26.8C35.8667 26.2545 35.8667 24.7455 34.8 24.2L21.1333 17.2455C20.1667 16.7348 19 17.4455 19 18.5455Z" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
     }
 
     if (type === 'pause') {
-      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 10V38" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M32 10V38" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+      return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 12V36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M32 12V36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+    }
+
+    if (type === 'music-record') {
+      return `<svg viewBox="0 0 48 48" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="4" stroke="currentColor" stroke-width="3"/><path d="M34 14L39 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`;
     }
 
     return `<svg viewBox="0 0 48 48" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="3"/></svg>`;
@@ -1712,27 +1718,34 @@ export class DesktopEditMode {
     const month = now.getMonth() + 1;
     const date = now.getDate();
 
+    // [模块标注] 音乐组件新样式渲染模块：保持 4×2 占位，仅替换为更贴合主题的新版唱片卡片结构
     if (id === 'music') {
       return `
         <div class="widget-surface widget-surface--music">
-          <div class="widget-music-cover">
-            ${state.coverSrc
-              ? `<img class="widget-music-cover-img" src="${this.escapeHtml(state.coverSrc)}" alt="${this.escapeHtml(state.title)}" />`
-              : `<span class="widget-music-cover-placeholder">♫</span>`}
-          </div>
           <div class="widget-music-body">
-            <div class="widget-title-row">
-              <span class="widget-eyebrow">SYSTEM MUSIC</span>
+            <div class="widget-music-kicker">
+              <span class="widget-music-kicker__icon">${this.getWidgetIconSvg('music-record')}</span>
+              <span>留声唱片</span>
+            </div>
+            <div class="widget-music-title">${this.escapeHtml(state.title)}</div>
+            <div class="widget-music-subtitle">${this.escapeHtml(state.subtitle)}</div>
+            <div class="widget-progress widget-progress--music"><span style="width:${Number(state.progress) || 0}%;"></span></div>
+            <div class="widget-music-footer">
+              <div class="widget-music-meta">
+                <span class="widget-music-meta__label">当前音频</span>
+                <span class="widget-music-meta__name">${this.escapeHtml(state.audioName || '未导入音频')}</span>
+              </div>
               <button class="widget-music-play-btn" type="button" aria-label="播放或暂停音乐">${this.getWidgetIconSvg('play')}</button>
             </div>
-            <div class="widget-title-main">${this.escapeHtml(state.title)}</div>
-            <div class="widget-subtitle">${this.escapeHtml(state.subtitle)}</div>
-            <div class="widget-progress"><span style="width:${Number(state.progress) || 0}%;"></span></div>
-            <div class="widget-inline-meta">
-              <span>${this.escapeHtml(state.audioName || '未导入音频')}</span>
-              <span>${state.audioSrc ? '点击播放' : '点击编辑'}</span>
-            </div>
             <audio class="widget-music-audio" preload="metadata" src="${this.escapeHtml(state.audioSrc || '')}"></audio>
+          </div>
+          <div class="widget-music-cover">
+            <div class="widget-music-cover__frame">
+              ${state.coverSrc
+                ? `<img class="widget-music-cover-img" src="${this.escapeHtml(state.coverSrc)}" alt="${this.escapeHtml(state.title)}" />`
+                : `<span class="widget-music-cover-placeholder">${this.getWidgetIconSvg('music-record')}</span>`}
+            </div>
+            <div class="widget-music-cover__badge">${state.audioSrc ? '点击播放' : '点击编辑'}</div>
           </div>
         </div>
       `;
