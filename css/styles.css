@@ -778,6 +778,108 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   color: var(--c-white-rice);
 }
 
+/* [模块标注] 图片资源主题弹窗样式模块：统一本地图片 / URL 图片弹窗的主题外观，便于后续单独调整 */
+.managed-resource-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.managed-resource-modal.hidden {
+  display: none;
+}
+
+.managed-resource-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(33, 24, 18, 0.38);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.managed-resource-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 360px);
+  border-radius: 24px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(245,241,234,0.98) 100%);
+  border: 1px solid rgba(125, 90, 68, 0.12);
+  box-shadow: 0 20px 48px rgba(54, 38, 30, 0.22);
+}
+
+.managed-resource-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(125, 90, 68, 0.1);
+}
+
+.managed-resource-modal__header span {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--c-text-main);
+}
+
+.managed-resource-modal__close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(215, 201, 184, 0.22);
+  color: var(--c-text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.managed-resource-modal__close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.managed-resource-modal__close:active {
+  background: rgba(215, 201, 184, 0.42);
+  transform: scale(0.94);
+}
+
+.managed-resource-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.managed-resource-modal__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8f7a66;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(215, 201, 184, 0.14);
+}
+
+.managed-resource-modal__body .modal-field {
+  gap: 8px;
+}
+
+.managed-resource-modal__body .modal-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 /* =========================
    应用窗口容器 (Flat 2.0)
    ========================= */
@@ -1995,48 +2097,47 @@ body.fullscreen-mode .app-window {
   border: 1px solid rgba(125, 90, 68, 0.12);
 }
 
-/* [模块标注] 音乐组件样式模块：统一新版 4×2 唱片卡片的布局、按钮、封面与文案区域，便于后续单独调整 */
+/* [模块标注] 音乐组件样式模块：统一新版 4×1 横向音乐卡片的封面、歌曲名与进度区域，便于后续单独调整 */
 .widget-surface--music {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px;
-  gap: 14px;
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
   background:
-    radial-gradient(circle at top left, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0) 36%),
-    linear-gradient(145deg, #fffdf9 0%, #efe2d4 54%, #e4d1bf 100%);
+    radial-gradient(circle at top left, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 34%),
+    linear-gradient(145deg, #fffdf9 0%, #f2e7db 52%, #e8d8c8 100%);
 }
 
 .widget-music-cover {
-  min-width: 0;
+  flex: 0 0 78px;
+  width: 78px;
+  min-width: 78px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: center;
 }
 
 .widget-music-cover__frame {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 999px;
+  border-radius: 22px;
   overflow: hidden;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(125, 90, 68, 0.16);
-  background:
-    radial-gradient(circle at center, rgba(244, 233, 221, 0.98) 0 15%, rgba(108, 79, 61, 0.95) 15.5% 18%, rgba(56, 40, 32, 0.98) 18.5% 58%, rgba(104, 76, 60, 0.98) 58.5% 73%, rgba(40, 28, 24, 0.98) 73.5% 100%);
+  border: 1px solid rgba(125, 90, 68, 0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.72) 0%, rgba(233, 215, 199, 0.96) 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.08),
-    0 10px 24px rgba(74, 52, 42, 0.16);
+    inset 0 1px 0 rgba(255,255,255,0.65),
+    0 10px 24px rgba(74, 52, 42, 0.12);
 }
 
 .widget-music-cover__frame::after {
   content: "";
   position: absolute;
-  inset: 14%;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.08);
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
   pointer-events: none;
 }
 
@@ -2045,32 +2146,16 @@ body.fullscreen-mode .app-window {
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: inherit;
 }
 
 .widget-music-cover-placeholder {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  color: rgba(255, 248, 241, 0.9);
+  width: 26px;
+  height: 26px;
+  color: rgba(74, 52, 42, 0.72);
   z-index: 1;
-}
-
-.widget-music-cover__badge {
-  width: 100%;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.54);
-  border: 1px solid rgba(125, 90, 68, 0.12);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  color: #6d5446;
-  white-space: nowrap;
 }
 
 .widget-music-body,
@@ -2085,110 +2170,28 @@ body.fullscreen-mode .app-window {
 .widget-music-body {
   flex: 1;
   min-width: 0;
-  justify-content: space-between;
+  justify-content: center;
   gap: 10px;
 }
 
-.widget-music-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: 100%;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.52);
-  color: #6f5749;
-  font-size: 10px;
+.widget-music-name {
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 1px;
-  white-space: nowrap;
-}
-
-.widget-music-kicker__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: #4A342A;
-  flex-shrink: 0;
-}
-
-.widget-music-title {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: 0.2px;
+  line-height: 1.35;
   color: #4A342A;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.widget-music-subtitle {
-  font-size: 12px;
-  line-height: 1.55;
-  color: rgba(74, 52, 42, 0.72);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.widget-progress--music {
+.widget-surface--music .widget-progress.widget-progress--music {
   margin: 0;
+  height: 7px;
+  background: rgba(74, 52, 42, 0.12);
 }
 
-.widget-music-footer {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.widget-music-meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.widget-music-meta__label {
-  font-size: 10px;
-  color: rgba(74, 52, 42, 0.52);
-  letter-spacing: 0.9px;
-}
-
-.widget-music-meta__name {
-  font-size: 12px;
-  font-weight: 700;
-  color: #4A342A;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.widget-music-play-btn {
-  width: 42px;
-  height: 42px;
-  border: none;
-  border-radius: 50%;
-  background: #4A342A;
-  color: #F5F1EA;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.18);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease;
-}
-
-.widget-music-play-btn:active {
-  transform: scale(0.94);
-  opacity: 0.9;
+.widget-surface--music .widget-progress.widget-progress--music span {
+  background: linear-gradient(90deg, #b59375 0%, #4A342A 100%);
 }
 
 .widget-title-row {

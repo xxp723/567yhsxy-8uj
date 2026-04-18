@@ -147,9 +147,9 @@ function getBaseLibraryWidgets(icons) {
       name: '音乐',
       source: 'builtin',
       width: 4,
-      height: 2,
+      height: 1,
       iconSvg: icons.musicWidget,
-      description: '仿手机播放器卡片，包含封面、进度与播放状态。'
+      description: '新版横向音乐组件，统一为 4×1，仅保留封面、歌曲名称与进度显示区域。'
     },
     {
       id: 'calendar',

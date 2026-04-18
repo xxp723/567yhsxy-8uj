@@ -73,8 +73,6 @@ const ICONS = {
   apply: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M8 24H40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M26 12L40 24L26 36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // IconPark: delete / 删除已保存配置
   delete: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M10 12H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 12V8H30V12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 12L16 40H32L34 12" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20 20V32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M28 20V32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-  // IconPark: list-view / 模型选择触发按钮
-  model: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M10 12H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M10 24H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M10 36H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   // IconPark: down / 下拉指示
   chevronDown: `<svg viewBox="0 0 48 48" fill="none" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path d="M36 18L24 30L12 18" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // IconPark: check / 成功结果
@@ -377,6 +375,8 @@ function renderProviderTrigger(profileKey, profile) {
   `;
 }
 
+// [模块标注] 模型选择极简触发器模块：去除左侧三横杠图标，仅保留模型名、省略显示与右侧数量/箭头
+// [模块标注] 模型名称省略模块：模型名过长时固定单行并以 … 省略，便于后续仅调整这一处
 function renderModelTrigger(profileKey, profile) {
   const models = mergeModelOptions(profile.provider, profile.availableModels, profile.model);
   const selectedModel = profile.model || '';
@@ -391,8 +391,7 @@ function renderModelTrigger(profileKey, profile) {
       aria-haspopup="dialog"
     >
       <span class="api-model-trigger__main">
-        <span class="api-model-trigger__icon">${ICONS.model}</span>
-        <span class="api-model-trigger__text">${escapeHtml(selectedModel || '请先拉取模型')}</span>
+        <span class="api-model-trigger__text" title="${escapeHtml(selectedModel || '请先拉取模型')}">${escapeHtml(selectedModel || '请先拉取模型')}</span>
       </span>
       <span class="api-model-trigger__side">
         <span class="api-model-trigger__meta">${hasModels ? `共 ${models.length} 个` : '暂无模型'}</span>
@@ -652,7 +651,6 @@ export function renderApiSection({ current }) {
             #settings-api .api-provider-option__icon,
             #settings-api .api-provider-option__check,
             #settings-api .api-provider-modal__close-icon,
-            #settings-api .api-model-trigger__icon,
             #settings-api .api-model-trigger__arrow,
             #settings-api .api-model-option__check,
             #settings-api .api-model-empty-state__icon,
@@ -757,15 +755,19 @@ export function renderApiSection({ current }) {
             }
 
             #settings-api .api-model-trigger__main {
-              display: inline-flex;
+              display: flex;
               align-items: center;
-              gap: 8px;
               min-width: 0;
               flex: 1 1 auto;
+              overflow: hidden;
             }
 
+            /* [模块标注] 模型选择框省略样式模块：仅控制模型选择框内长模型名的单行省略，不影响其他控件 */
             #settings-api .api-model-trigger__text {
+              display: block;
               min-width: 0;
+              max-width: 100%;
+              width: 100%;
               overflow: hidden;
               text-overflow: ellipsis;
               white-space: nowrap;
@@ -775,8 +777,11 @@ export function renderApiSection({ current }) {
             #settings-api .api-model-trigger__side {
               display: inline-flex;
               align-items: center;
+              justify-content: flex-end;
               gap: 8px;
               flex: 0 0 auto;
+              margin-left: 8px;
+              white-space: nowrap;
             }
 
             #settings-api .api-model-trigger__meta {
@@ -1614,8 +1619,7 @@ function updateModelTrigger(container, profileKey) {
   trigger.classList.toggle('is-empty', !hasModels);
   trigger.innerHTML = `
     <span class="api-model-trigger__main">
-      <span class="api-model-trigger__icon">${ICONS.model}</span>
-      <span class="api-model-trigger__text">${escapeHtml(selectedModel || '请先拉取模型')}</span>
+      <span class="api-model-trigger__text" title="${escapeHtml(selectedModel || '请先拉取模型')}">${escapeHtml(selectedModel || '请先拉取模型')}</span>
     </span>
     <span class="api-model-trigger__side">
       <span class="api-model-trigger__meta">${hasModels ? `共 ${models.length} 个` : '暂无模型'}</span>
