@@ -2,12 +2,12 @@ import { Logger } from '../../utils/Logger.js';
 
 /**
  * 文件名: js/apps/settings/api.js
- * 用途: 设置应用 - API 配置页（重构版）
+ * 用途: 设置应用 - API 配置页
  * 说明:
  * 1) 仅修改本文件，不影响其它设置页/应用页
- * 2) 删除旧占位：生图 API、MiniMax TTS
- * 3) 新增四家官方接口配置 + 主/副 API 板块 + 全局参数 + 测试连接/模型
- * 4) 本地持久化：settings.update + localStorage 双写
+ * 2) API 设置按主 API / 副 API 独立配置
+ * 3) 图标统一使用 IconPark 风格 SVG
+ * 4) 支持模型拉取、连接测试、主 API 已保存配置快速切换
  */
 
 const API_LOCAL_STORAGE_KEY = 'miniphone:api-config-v2';
@@ -15,24 +15,28 @@ const API_LOCAL_STORAGE_KEY = 'miniphone:api-config-v2';
 const PROVIDER_META = {
   openai: {
     id: 'openai',
+    shortLabel: 'OpenAI',
     label: 'OpenAI 官方接口',
     defaultBaseUrl: 'https://api.openai.com/v1',
     models: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini']
   },
   gemini: {
     id: 'gemini',
+    shortLabel: 'Gemini',
     label: 'Gemini 官方接口',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     models: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro']
   },
   claude: {
     id: 'claude',
+    shortLabel: 'Claude',
     label: 'Claude 官方接口',
     defaultBaseUrl: 'https://api.anthropic.com/v1',
     models: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0']
   },
   deepseek: {
     id: 'deepseek',
+    shortLabel: 'DeepSeek',
     label: 'DeepSeek 官方接口',
     defaultBaseUrl: 'https://api.deepseek.com/v1',
     models: ['deepseek-chat', 'deepseek-reasoner']
@@ -46,10 +50,13 @@ const ICONS = {
   secondary: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M6 24C6 14.0589 14.0589 6 24 6C33.9411 6 42 14.0589 42 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 24C42 33.9411 33.9411 42 24 42C14.0589 42 6 33.9411 6 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="24" r="4" fill="currentColor"/></svg>`,
   global: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" stroke="currentColor" stroke-width="3"/><path d="M4 24H44" stroke="currentColor" stroke-width="3"/><path d="M24 4C24 4 32 11 32 24C32 37 24 44 24 44" stroke="currentColor" stroke-width="3"/><path d="M24 4C24 4 16 11 16 24C16 37 24 44 24 44" stroke="currentColor" stroke-width="3"/></svg>`,
   save: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M10 8H34L40 14V40H10V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M16 8V18H30V8" stroke="currentColor" stroke-width="3"/><path d="M16 30H32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  storage: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><ellipse cx="24" cy="12" rx="14" ry="6" stroke="currentColor" stroke-width="3"/><path d="M10 12V24C10 27.3137 16.268 30 24 30C31.732 30 38 27.3137 38 24V12" stroke="currentColor" stroke-width="3"/><path d="M10 24V36C10 39.3137 16.268 42 24 42C31.732 42 38 39.3137 38 36V24" stroke="currentColor" stroke-width="3"/></svg>`,
   test: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M6 24H42" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M28 12L42 24L28 36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  fetch: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M24 6V30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 20L24 30L34 20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 38H40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  apply: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M8 24H40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M26 12L40 24L26 36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  delete: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M10 12H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 12V8H30V12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 12L16 40H32L34 12" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20 20V32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M28 20V32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   ok: `<svg viewBox="0 0 48 48" fill="none" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path d="M10 25L20 34L38 14" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   error: `<svg viewBox="0 0 48 48" fill="none" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M18 18L30 30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M30 18L18 30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-  chevron: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M10 18L24 32L38 18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   openai: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="3"/><path d="M24 12L34 18V30L24 36L14 30V18L24 12Z" stroke="currentColor" stroke-width="3"/></svg>`,
   gemini: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M24 6L28.5 19.5L42 24L28.5 28.5L24 42L19.5 28.5L6 24L19.5 19.5L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   claude: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="32" height="32" rx="10" stroke="currentColor" stroke-width="3"/><path d="M18 24H30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
@@ -105,210 +112,307 @@ function trimSlash(url) {
   return String(url || '').replace(/\/+$/, '');
 }
 
-function getDefaultApiSettings() {
-  const providers = {};
-  Object.keys(PROVIDER_META).forEach((id) => {
-    const meta = PROVIDER_META[id];
-    providers[id] = {
-      apiKey: '',
-      baseUrl: meta.defaultBaseUrl,
-      model: meta.models[0],
-      temperature: 0.7,
-      maxTokens: 2048,
-      stream: true
-    };
-  });
+function normalizeProviderId(providerId, fallback = 'openai') {
+  return PROVIDER_META[providerId] ? providerId : fallback;
+}
 
+function getDefaultProfileConfig(providerId = 'openai') {
+  const safeProviderId = normalizeProviderId(providerId, 'openai');
+  const meta = PROVIDER_META[safeProviderId];
   return {
-    version: 2,
-    activeProfile: 'primary', // 全局默认响应通道
-    primary: { provider: 'openai' },
-    secondary: { provider: 'gemini' },
+    provider: safeProviderId,
+    apiKey: '',
+    baseUrl: meta.defaultBaseUrl,
+    model: meta.models[0],
+    availableModels: [...meta.models],
+    stream: true
+  };
+}
+
+function getDefaultApiSettings() {
+  return {
+    version: 3,
+    activeProfile: 'primary',
+    primary: getDefaultProfileConfig('openai'),
+    secondary: getDefaultProfileConfig('gemini'),
     global: {
       temperature: 0.7,
       maxTokens: 2048,
       useGlobalTemperature: true,
-      useGlobalMaxTokens: false
+      useGlobalMaxTokens: true
     },
-    providers
+    savedPrimaryConfigs: []
   };
 }
 
-function normalizeProviderId(providerId, fallback = 'openai') {
-  return PROVIDER_META[providerId] ? providerId : fallback;
+function uniqueStrings(values) {
+  return [...new Set((values || []).filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
+}
+
+function mergeModelOptions(providerId, models, selectedModel) {
+  const defaults = PROVIDER_META[providerId]?.models || [];
+  const merged = uniqueStrings([...(models || []), ...defaults, selectedModel]);
+  return merged.length ? merged : [...defaults];
+}
+
+function normalizeProfileConfig(profileInput, fallbackProvider = 'openai') {
+  const provider = normalizeProviderId(profileInput?.provider, fallbackProvider);
+  const defaults = getDefaultProfileConfig(provider);
+  const model = profileInput?.model || defaults.model;
+  return {
+    provider,
+    apiKey: profileInput?.apiKey || '',
+    baseUrl: profileInput?.baseUrl || PROVIDER_META[provider].defaultBaseUrl,
+    model,
+    availableModels: mergeModelOptions(provider, profileInput?.availableModels, model),
+    stream: typeof profileInput?.stream === 'boolean' ? profileInput.stream : true
+  };
+}
+
+function migrateLegacyProfile(source, profileKey, fallbackProvider) {
+  const selectedProvider = normalizeProviderId(source?.[profileKey]?.provider, fallbackProvider);
+  const providerSource = source?.providers?.[selectedProvider] || {};
+  return normalizeProfileConfig(
+    {
+      provider: selectedProvider,
+      apiKey: providerSource.apiKey,
+      baseUrl: providerSource.baseUrl,
+      model: providerSource.model,
+      availableModels: PROVIDER_META[selectedProvider].models,
+      stream: providerSource.stream
+    },
+    selectedProvider
+  );
+}
+
+function normalizeSavedPrimaryConfigs(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  return rawList
+    .map((item, index) => {
+      const profile = normalizeProfileConfig(item, item?.provider || 'openai');
+      const providerMeta = PROVIDER_META[profile.provider];
+      const name =
+        item?.name ||
+        `${providerMeta.shortLabel} · ${profile.model || providerMeta.models[0]} · ${index + 1}`;
+      return {
+        id: item?.id || `saved-${Date.now()}-${index}`,
+        name,
+        provider: profile.provider,
+        apiKey: profile.apiKey,
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+        availableModels: profile.availableModels,
+        stream: profile.stream
+      };
+    })
+    .slice(0, 20);
 }
 
 function normalizeApiSettings(inputApi) {
   const defaults = getDefaultApiSettings();
   const storageBackup = readApiConfigFromLocalStorage();
   const source =
-    inputApi && inputApi.providers
+    inputApi && typeof inputApi === 'object'
       ? inputApi
-      : (storageBackup && storageBackup.providers ? storageBackup : (inputApi || {}));
+      : (storageBackup && typeof storageBackup === 'object' ? storageBackup : {});
 
-  const normalized = {
-    version: 2,
+  const isNewStructure =
+    source?.version >= 3 &&
+    source?.primary &&
+    source?.secondary &&
+    typeof source.primary === 'object' &&
+    typeof source.secondary === 'object';
+
+  const primary = isNewStructure
+    ? normalizeProfileConfig(source.primary, defaults.primary.provider)
+    : migrateLegacyProfile(source, 'primary', defaults.primary.provider);
+
+  const secondary = isNewStructure
+    ? normalizeProfileConfig(source.secondary, defaults.secondary.provider)
+    : migrateLegacyProfile(source, 'secondary', defaults.secondary.provider);
+
+  return {
+    version: 3,
     activeProfile: source.activeProfile === 'secondary' ? 'secondary' : 'primary',
-    primary: {
-      provider: normalizeProviderId(source?.primary?.provider, defaults.primary.provider)
-    },
-    secondary: {
-      provider: normalizeProviderId(source?.secondary?.provider, defaults.secondary.provider)
-    },
+    primary,
+    secondary,
     global: {
       temperature: clampNumber(source?.global?.temperature, 0, 2, defaults.global.temperature),
       maxTokens: clampInt(source?.global?.maxTokens, 1, 32768, defaults.global.maxTokens),
-      useGlobalTemperature:
-        typeof source?.global?.useGlobalTemperature === 'boolean'
-          ? source.global.useGlobalTemperature
-          : defaults.global.useGlobalTemperature,
-      useGlobalMaxTokens:
-        typeof source?.global?.useGlobalMaxTokens === 'boolean'
-          ? source.global.useGlobalMaxTokens
-          : defaults.global.useGlobalMaxTokens
+      useGlobalTemperature: true,
+      useGlobalMaxTokens: true
     },
-    providers: {}
+    savedPrimaryConfigs: normalizeSavedPrimaryConfigs(source?.savedPrimaryConfigs)
   };
-
-  Object.keys(PROVIDER_META).forEach((id) => {
-    const meta = PROVIDER_META[id];
-    const providerSource = source?.providers?.[id] || {};
-    normalized.providers[id] = {
-      apiKey: providerSource.apiKey || '',
-      baseUrl: providerSource.baseUrl || meta.defaultBaseUrl,
-      model: providerSource.model || meta.models[0],
-      temperature: clampNumber(providerSource.temperature, 0, 2, 0.7),
-      maxTokens: clampInt(providerSource.maxTokens, 1, 32768, 2048),
-      stream: typeof providerSource.stream === 'boolean' ? providerSource.stream : true
-    };
-  });
-
-  return normalized;
-}
-
-function renderModelOptions(providerId, selectedModel) {
-  const meta = PROVIDER_META[providerId];
-  const baseOptions = [...meta.models];
-  const selected = selectedModel || baseOptions[0];
-  if (!baseOptions.includes(selected)) {
-    baseOptions.unshift(selected);
-  }
-
-  return baseOptions
-    .map((model) => {
-      const selectedAttr = model === selected ? 'selected' : '';
-      const customSuffix = meta.models.includes(model) ? '' : '（自定义）';
-      return `<option value="${escapeHtml(model)}" ${selectedAttr}>${escapeHtml(model)}${customSuffix}</option>`;
-    })
-    .join('');
 }
 
 function renderProviderIcon(providerId) {
   return ICONS[providerId] || ICONS.api;
 }
 
-function renderProviderCard(providerId, providerConfig, expanded = false) {
-  const meta = PROVIDER_META[providerId];
-  const cardCollapsedClass = expanded ? '' : ' is-collapsed';
-  const tempValue = Number(providerConfig.temperature || 0.7).toFixed(1);
+function renderProviderOptions(selectedProvider) {
+  return Object.keys(PROVIDER_META)
+    .map((id) => {
+      const selectedAttr = selectedProvider === id ? 'selected' : '';
+      return `<option value="${id}" ${selectedAttr}>${escapeHtml(PROVIDER_META[id].shortLabel)}</option>`;
+    })
+    .join('');
+}
+
+function renderModelOptions(profile) {
+  const models = mergeModelOptions(profile.provider, profile.availableModels, profile.model);
+  return models
+    .map((model) => {
+      const selectedAttr = model === profile.model ? 'selected' : '';
+      const customSuffix = PROVIDER_META[profile.provider].models.includes(model) ? '' : '（自定义）';
+      return `<option value="${escapeHtml(model)}" ${selectedAttr}>${escapeHtml(model)}${customSuffix}</option>`;
+    })
+    .join('');
+}
+
+function renderSavedPrimaryConfigs(savedPrimaryConfigs) {
+  if (!savedPrimaryConfigs.length) {
+    return `
+      <div class="api-empty-state">
+        <span class="api-empty-state__icon">${ICONS.storage}</span>
+        <span>当前还没有已保存的主 API 配置</span>
+      </div>
+    `;
+  }
 
   return `
-    <section class="ui-card api-provider-card${cardCollapsedClass}" data-provider-card="${providerId}">
-      <button class="api-provider-card__header" type="button" data-action="toggle-provider" data-provider="${providerId}">
-        <span class="api-provider-card__title">
-          <span class="api-provider-card__icon">${renderProviderIcon(providerId)}</span>
-          <span>${meta.label}</span>
+    <div class="api-saved-list">
+      ${savedPrimaryConfigs
+        .map((item) => {
+          const providerMeta = PROVIDER_META[item.provider] || PROVIDER_META.openai;
+          return `
+            <div class="api-saved-item" data-saved-primary-id="${escapeHtml(item.id)}">
+              <div class="api-saved-item__main">
+                <div class="api-saved-item__title">
+                  <span class="api-saved-item__icon">${renderProviderIcon(item.provider)}</span>
+                  <span>${escapeHtml(item.name)}</span>
+                </div>
+                <div class="api-saved-item__meta">
+                  <span>${escapeHtml(providerMeta.shortLabel)}</span>
+                  <span>${escapeHtml(item.model || '-')}</span>
+                </div>
+              </div>
+              <div class="api-saved-item__actions">
+                <button class="ui-button api-btn api-btn--ghost api-btn--small" type="button" data-action="apply-saved-primary" data-saved-id="${escapeHtml(item.id)}">
+                  <span class="api-btn__icon">${ICONS.apply}</span>
+                  <span>应用</span>
+                </button>
+                <button class="ui-button api-btn api-btn--danger api-btn--small" type="button" data-action="delete-saved-primary" data-saved-id="${escapeHtml(item.id)}">
+                  <span class="api-btn__icon">${ICONS.delete}</span>
+                  <span>删除</span>
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join('')}
+    </div>
+  `;
+}
+
+function renderProfileSection(profileKey, title, icon, profile, { isPrimary = false } = {}) {
+  const providerMeta = PROVIDER_META[profile.provider];
+  return `
+    <section class="ui-card api-section-card" data-profile-section="${profileKey}">
+      <div class="api-section-head">
+        <h3 class="api-section-title">
+          ${icon}
+          <span class="api-module-mark">模块标注</span>
+          <span>${title}</span>
+        </h3>
+        <span class="api-provider-badge">
+          <span class="api-provider-badge__icon">${renderProviderIcon(profile.provider)}</span>
+          <span>${escapeHtml(providerMeta.shortLabel)}</span>
         </span>
-        <span class="api-provider-card__chevron">${ICONS.chevron}</span>
-      </button>
+      </div>
 
-      <div class="api-provider-card__content">
-        <div class="api-field-group">
-          <label class="api-label" for="api-${providerId}-key">API Key</label>
-          <input
-            id="api-${providerId}-key"
-            class="api-input"
-            type="password"
-            placeholder="请输入 ${meta.label} API Key"
-            value="${escapeHtml(providerConfig.apiKey || '')}"
-            autocomplete="off"
-          >
-        </div>
+      <div class="api-field-group">
+        <label class="api-label" for="api-${profileKey}-provider">API 服务商接口</label>
+        <select id="api-${profileKey}-provider" class="api-select" data-profile-provider="${profileKey}">
+          ${renderProviderOptions(profile.provider)}
+        </select>
+      </div>
 
-        <div class="api-field-group">
-          <label class="api-label" for="api-${providerId}-url">接口地址 / Base URL</label>
-          <input
-            id="api-${providerId}-url"
-            class="api-input"
-            type="text"
-            placeholder="${meta.defaultBaseUrl}"
-            value="${escapeHtml(providerConfig.baseUrl || meta.defaultBaseUrl)}"
-          >
-        </div>
+      <div class="api-field-group">
+        <label class="api-label" for="api-${profileKey}-url">API 地址</label>
+        <input
+          id="api-${profileKey}-url"
+          class="api-input"
+          type="text"
+          value="${escapeHtml(profile.baseUrl)}"
+          placeholder="${escapeHtml(providerMeta.defaultBaseUrl)}"
+          data-profile-base-url="${profileKey}"
+        >
+      </div>
 
-        <div class="api-field-group">
-          <label class="api-label" for="api-${providerId}-model">模型选择</label>
-          <select id="api-${providerId}-model" class="api-select">
-            ${renderModelOptions(providerId, providerConfig.model)}
+      <div class="api-field-group">
+        <label class="api-label" for="api-${profileKey}-key">API 密钥</label>
+        <input
+          id="api-${profileKey}-key"
+          class="api-input"
+          type="password"
+          value="${escapeHtml(profile.apiKey || '')}"
+          placeholder="请输入 ${escapeHtml(providerMeta.shortLabel)} API Key"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="api-field-group">
+        <label class="api-label" for="api-${profileKey}-model">模型选择</label>
+        <div class="api-inline-actions">
+          <select id="api-${profileKey}-model" class="api-select">
+            ${renderModelOptions(profile)}
           </select>
-        </div>
-
-        <div class="api-field-group">
-          <div class="api-label-row">
-            <label class="api-label" for="api-${providerId}-temp">温度（Temperature）</label>
-            <span class="api-inline-value" id="api-${providerId}-temp-value">${tempValue}</span>
-          </div>
-          <input
-            id="api-${providerId}-temp"
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            value="${tempValue}"
-            class="api-range"
-          >
-        </div>
-
-        <div class="api-field-group">
-          <label class="api-label" for="api-${providerId}-max-tokens">最大生成长度（maxTokens）</label>
-          <input
-            id="api-${providerId}-max-tokens"
-            class="api-input"
-            type="number"
-            min="1"
-            max="32768"
-            step="1"
-            value="${providerConfig.maxTokens || 2048}"
-          >
-        </div>
-
-        <div class="api-row-between">
-          <span class="api-label">流式输出（Stream）</span>
-          <label class="ios-switch">
-            <input id="api-${providerId}-stream" class="ios-switch__input" type="checkbox" ${providerConfig.stream ? 'checked' : ''}>
-            <span class="ios-switch__slider"></span>
-          </label>
-        </div>
-
-        <div class="api-actions">
-          <button class="ui-button api-btn" data-action="save-provider" data-provider="${providerId}" type="button">
-            <span class="api-btn__icon">${ICONS.save}</span>
-            <span>保存当前配置</span>
-          </button>
-          <button class="ui-button api-btn api-btn--ghost" data-action="test-provider" data-test-type="connection" data-provider="${providerId}" type="button">
-            <span class="api-btn__icon">${ICONS.test}</span>
-            <span>测试连接</span>
-          </button>
-          <button class="ui-button api-btn api-btn--ghost" data-action="test-provider" data-test-type="model" data-provider="${providerId}" type="button">
-            <span class="api-btn__icon">${ICONS.test}</span>
-            <span>测试模型</span>
+          <button class="ui-button api-btn api-btn--ghost api-btn--compact" type="button" data-action="fetch-models" data-profile="${profileKey}">
+            <span class="api-btn__icon">${ICONS.fetch}</span>
+            <span>拉取模型</span>
           </button>
         </div>
+      </div>
 
-        <div class="api-test-result" id="api-${providerId}-test-result">
-          <span class="api-test-result__icon">${ICONS.global}</span>
-          <span class="api-test-result__text">尚未测试</span>
-        </div>
+      <div class="api-row-between">
+        <span class="api-label">流式输出（Stream）</span>
+        <label class="ios-switch">
+          <input id="api-${profileKey}-stream" class="ios-switch__input" type="checkbox" ${profile.stream ? 'checked' : ''}>
+          <span class="ios-switch__slider"></span>
+        </label>
+      </div>
+
+      <div class="api-actions api-actions--two-column">
+        <button class="ui-button api-btn" data-action="save-profile" data-profile="${profileKey}" type="button">
+          <span class="api-btn__icon">${ICONS.save}</span>
+          <span>保存${isPrimary ? '主' : '副'}API</span>
+        </button>
+        <button class="ui-button api-btn api-btn--ghost" data-action="test-profile" data-test-type="connection" data-profile="${profileKey}" type="button">
+          <span class="api-btn__icon">${ICONS.test}</span>
+          <span>测试连接</span>
+        </button>
+        <button class="ui-button api-btn api-btn--ghost" data-action="test-profile" data-test-type="model" data-profile="${profileKey}" type="button">
+          <span class="api-btn__icon">${ICONS.test}</span>
+          <span>测试模型</span>
+        </button>
+        ${
+          isPrimary
+            ? `
+              <button class="ui-button api-btn api-btn--ghost" data-action="save-primary-preset" type="button">
+                <span class="api-btn__icon">${ICONS.storage}</span>
+                <span>保存到已保存配置</span>
+              </button>
+            `
+            : `
+              <div class="api-actions__placeholder"></div>
+            `
+        }
+      </div>
+
+      <div class="api-test-result" id="api-${profileKey}-result">
+        <span class="api-test-result__icon">${ICONS.global}</span>
+        <span class="api-test-result__text">尚未操作</span>
       </div>
     </section>
   `;
@@ -317,110 +421,126 @@ function renderProviderCard(providerId, providerConfig, expanded = false) {
 export function renderApiSection({ current }) {
   const api = normalizeApiSettings(current?.api);
 
-  const providerOptions = Object.keys(PROVIDER_META)
-    .map((id) => {
-      const selectedPrimary = api.primary.provider === id ? 'selected' : '';
-      const selectedSecondary = api.secondary.provider === id ? 'selected' : '';
-      return {
-        id,
-        label: PROVIDER_META[id].label,
-        selectedPrimary,
-        selectedSecondary
-      };
-    });
-
-  const expandedProviders = new Set([api.primary.provider, api.secondary.provider]);
-  expandedProviders.add('openai');
-
   return `
-      <!-- API设置详情页（重构：主/副API + 四家官方接口 + 全局参数 + 测试功能） -->
       <div id="settings-api" class="settings-detail">
         <div class="settings-detail__body">
-          <!-- 模块样式：仅作用于 API 设置页 -->
           <style>
             #settings-api .settings-detail__body { gap: 10px; }
-            #settings-api .api-intro {
+
+            #settings-api .api-section-card {
+              margin-bottom: 12px;
+            }
+
+            #settings-api .api-section-head {
               display: flex;
               align-items: flex-start;
+              justify-content: space-between;
               gap: 10px;
-            }
-            #settings-api .api-intro__icon {
-              color: var(--c-ink, #2f2f2f);
-              flex: 0 0 auto;
-              margin-top: 2px;
-            }
-            #settings-api .api-intro__title {
-              margin: 0;
-              font-size: 14px;
-              font-weight: 700;
-              color: var(--c-ink, #2f2f2f);
-            }
-            #settings-api .api-intro__desc {
-              margin: 4px 0 0;
-              font-size: 12px;
-              line-height: 1.5;
-              color: var(--c-muted, #666);
+              margin-bottom: 12px;
             }
 
             #settings-api .api-section-title {
               display: flex;
               align-items: center;
+              flex-wrap: wrap;
               gap: 6px;
-              margin: 0 0 10px;
-              font-size: 13px;
+              margin: 0;
+              font-size: 14px;
               font-weight: 700;
-              color: var(--c-ink, #2f2f2f);
+              color: var(--c-text-main, #4A342A);
             }
+
             #settings-api .api-section-title svg { color: currentColor; }
 
-            #settings-api .api-profile-grid {
-              display: grid;
-              grid-template-columns: 1fr;
-              gap: 10px;
+            #settings-api .api-module-mark {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 22px;
+              padding: 0 8px;
+              border-radius: 999px;
+              background: rgba(215, 201, 184, 0.45);
+              color: var(--c-text-main, #4A342A);
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.3px;
+            }
+
+            #settings-api .api-provider-badge {
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              padding: 6px 10px;
+              border-radius: 999px;
+              background: rgba(215, 201, 184, 0.22);
+              color: var(--c-text-main, #4A342A);
+              font-size: 11px;
+              white-space: nowrap;
+              border: 1px solid rgba(125, 90, 68, 0.14);
+            }
+
+            #settings-api .api-provider-badge__icon,
+            #settings-api .api-saved-item__icon,
+            #settings-api .api-empty-state__icon {
+              line-height: 0;
+              display: inline-flex;
             }
 
             #settings-api .api-field-group {
               display: grid;
               gap: 6px;
+              margin-bottom: 10px;
             }
+
             #settings-api .api-label {
               font-size: 12px;
-              color: var(--c-muted, #666);
+              color: rgba(74, 52, 42, 0.76);
             }
+
             #settings-api .api-label-row {
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 8px;
             }
+
             #settings-api .api-inline-value {
               font-size: 12px;
-              font-weight: 600;
-              color: var(--c-ink, #222);
+              font-weight: 700;
+              color: var(--c-text-main, #4A342A);
+            }
+
+            #settings-api .api-inline-actions {
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) auto;
+              gap: 8px;
+              align-items: center;
             }
 
             #settings-api .api-input,
             #settings-api .api-select {
               width: 100%;
-              min-height: 36px;
-              border: 1px solid rgba(0, 0, 0, 0.1);
+              min-height: 38px;
+              border: 1px solid rgba(125, 90, 68, 0.2);
               border-radius: 12px;
-              background: rgba(255, 255, 255, 0.92);
+              background: var(--c-bg-wallpaper, #F5F1EA);
               padding: 8px 10px;
               font-size: 12px;
-              color: var(--c-ink, #222);
+              color: var(--c-text-main, #4A342A);
               outline: none;
               box-sizing: border-box;
+              font-family: var(--font-retro);
             }
+
             #settings-api .api-input:focus,
             #settings-api .api-select:focus {
-              border-color: rgba(59, 130, 246, 0.6);
-              box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+              border-color: var(--c-border, #7D5A44);
+              box-shadow: 0 0 0 3px rgba(125, 90, 68, 0.12);
             }
 
             #settings-api .api-range {
               width: 100%;
-              accent-color: #0a84ff;
+              accent-color: var(--c-text-main, #4A342A);
             }
 
             #settings-api .api-row-between {
@@ -428,9 +548,9 @@ export function renderApiSection({ current }) {
               align-items: center;
               justify-content: space-between;
               gap: 12px;
+              margin-bottom: 10px;
             }
 
-            /* iPhone 风格开关 */
             #settings-api .ios-switch {
               position: relative;
               display: inline-block;
@@ -438,19 +558,22 @@ export function renderApiSection({ current }) {
               height: 30px;
               flex: 0 0 auto;
             }
+
             #settings-api .ios-switch__input {
               opacity: 0;
               width: 0;
               height: 0;
             }
+
             #settings-api .ios-switch__slider {
               position: absolute;
               inset: 0;
-              background: #d1d1d6;
+              background: rgba(125, 125, 130, 0.38);
               border-radius: 999px;
               transition: all 0.2s ease;
               box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
             }
+
             #settings-api .ios-switch__slider::before {
               content: "";
               position: absolute;
@@ -463,9 +586,11 @@ export function renderApiSection({ current }) {
               transition: transform 0.2s ease;
               box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
             }
+
             #settings-api .ios-switch__input:checked + .ios-switch__slider {
-              background: #34c759;
+              background: var(--c-text-main, #1a1a1a);
             }
+
             #settings-api .ios-switch__input:checked + .ios-switch__slider::before {
               transform: translateX(22px);
             }
@@ -474,106 +599,163 @@ export function renderApiSection({ current }) {
               display: grid;
               gap: 8px;
             }
+
+            #settings-api .api-actions--two-column {
+              grid-template-columns: 1fr 1fr;
+            }
+
+            #settings-api .api-actions__placeholder {
+              display: block;
+            }
+
             #settings-api .api-btn {
               display: inline-flex;
               align-items: center;
               justify-content: center;
               gap: 6px;
-              min-height: 36px;
+              min-height: 38px;
               border-radius: 12px;
-              border: 0;
-              background: #0a84ff;
-              color: #fff;
+              border: 1px solid transparent;
+              background: var(--c-text-main, #4A342A);
+              color: var(--c-white-rice, #F5F1EA);
               font-size: 12px;
-              font-weight: 600;
+              font-weight: 700;
               cursor: pointer;
+              font-family: var(--font-retro);
             }
+
             #settings-api .api-btn--ghost {
-              background: rgba(10, 132, 255, 0.1);
-              color: #0a84ff;
+              background: rgba(215, 201, 184, 0.32);
+              color: var(--c-text-main, #4A342A);
+              border-color: rgba(125, 90, 68, 0.12);
             }
+
+            #settings-api .api-btn--danger {
+              background: rgba(192, 57, 43, 0.12);
+              color: #9f2c21;
+              border-color: rgba(192, 57, 43, 0.12);
+            }
+
+            #settings-api .api-btn--compact {
+              min-width: 108px;
+              padding: 0 12px;
+            }
+
+            #settings-api .api-btn--small {
+              min-height: 34px;
+              padding: 0 12px;
+            }
+
             #settings-api .api-btn[disabled] {
               opacity: 0.55;
               cursor: not-allowed;
             }
+
             #settings-api .api-btn__icon {
               line-height: 0;
               display: inline-flex;
-            }
-
-            #settings-api .api-provider-card {
-              padding: 0;
-              overflow: hidden;
-            }
-            #settings-api .api-provider-card__header {
-              width: 100%;
-              border: 0;
-              background: transparent;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 8px;
-              padding: 12px;
-              cursor: pointer;
-            }
-            #settings-api .api-provider-card__title {
-              display: inline-flex;
-              align-items: center;
-              gap: 8px;
-              font-size: 13px;
-              font-weight: 700;
-              color: var(--c-ink, #2f2f2f);
-            }
-            #settings-api .api-provider-card__icon {
-              color: #111;
-              line-height: 0;
-            }
-            #settings-api .api-provider-card__chevron {
-              color: rgba(0, 0, 0, 0.45);
-              line-height: 0;
-              transition: transform 0.2s ease;
-            }
-            #settings-api .api-provider-card.is-collapsed .api-provider-card__chevron {
-              transform: rotate(-90deg);
-            }
-            #settings-api .api-provider-card__content {
-              border-top: 1px solid rgba(0, 0, 0, 0.06);
-              padding: 12px;
-              display: grid;
-              gap: 10px;
-            }
-            #settings-api .api-provider-card.is-collapsed .api-provider-card__content {
-              display: none;
             }
 
             #settings-api .api-test-result {
               display: flex;
               align-items: flex-start;
               gap: 6px;
-              border-radius: 10px;
+              border-radius: 12px;
               font-size: 12px;
-              line-height: 1.4;
-              padding: 8px 10px;
-              background: rgba(0, 0, 0, 0.04);
-              color: var(--c-muted, #666);
-              min-height: 34px;
+              line-height: 1.5;
+              padding: 9px 10px;
+              background: rgba(215, 201, 184, 0.18);
+              color: rgba(74, 52, 42, 0.84);
+              min-height: 38px;
+              margin-top: 10px;
             }
+
             #settings-api .api-test-result__icon {
               line-height: 0;
               margin-top: 1px;
               display: inline-flex;
             }
+
             #settings-api .api-test-result.is-success {
-              background: rgba(52, 199, 89, 0.14);
-              color: #1e8f43;
+              background: rgba(74, 52, 42, 0.1);
+              color: var(--c-text-main, #4A342A);
             }
+
             #settings-api .api-test-result.is-error {
-              background: rgba(255, 59, 48, 0.14);
-              color: #c4372d;
+              background: rgba(192, 57, 43, 0.1);
+              color: #9f2c21;
             }
+
             #settings-api .api-test-result.is-loading {
-              background: rgba(10, 132, 255, 0.12);
-              color: #0a84ff;
+              background: rgba(125, 90, 68, 0.12);
+              color: var(--c-text-main, #4A342A);
+            }
+
+            #settings-api .api-empty-state {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              min-height: 42px;
+              padding: 10px 12px;
+              border-radius: 12px;
+              background: rgba(215, 201, 184, 0.16);
+              color: rgba(74, 52, 42, 0.76);
+              font-size: 12px;
+            }
+
+            #settings-api .api-saved-list {
+              display: grid;
+              gap: 10px;
+            }
+
+            #settings-api .api-saved-item {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              padding: 12px;
+              border-radius: 14px;
+              background: rgba(215, 201, 184, 0.14);
+              border: 1px solid rgba(125, 90, 68, 0.12);
+            }
+
+            #settings-api .api-saved-item__main {
+              min-width: 0;
+              display: grid;
+              gap: 6px;
+            }
+
+            #settings-api .api-saved-item__title {
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              color: var(--c-text-main, #4A342A);
+              font-size: 13px;
+              font-weight: 700;
+            }
+
+            #settings-api .api-saved-item__meta {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 6px;
+              color: rgba(74, 52, 42, 0.72);
+              font-size: 11px;
+            }
+
+            #settings-api .api-saved-item__meta span {
+              display: inline-flex;
+              align-items: center;
+              min-height: 22px;
+              padding: 0 8px;
+              border-radius: 999px;
+              background: rgba(255, 255, 255, 0.46);
+            }
+
+            #settings-api .api-saved-item__actions {
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              justify-content: flex-end;
             }
 
             #settings-api .api-footer-actions {
@@ -582,59 +764,54 @@ export function renderApiSection({ current }) {
               gap: 8px;
             }
 
-            @media (min-width: 520px) {
-              #settings-api .api-profile-grid {
-                grid-template-columns: 1fr 1fr;
+            @media (max-width: 420px) {
+              #settings-api .api-inline-actions {
+                grid-template-columns: 1fr;
+              }
+
+              #settings-api .api-actions--two-column {
+                grid-template-columns: 1fr;
+              }
+
+              #settings-api .api-saved-item {
+                flex-direction: column;
+                align-items: stretch;
+              }
+
+              #settings-api .api-saved-item__actions {
+                justify-content: stretch;
+              }
+
+              #settings-api .api-saved-item__actions .api-btn {
+                width: 100%;
               }
             }
           </style>
 
-          <!-- 模块A：顶部说明 -->
-          <section class="ui-card">
-            <div class="api-intro">
-              <div class="api-intro__icon">${ICONS.api}</div>
-              <div>
-                <h3 class="api-intro__title">API 配置模块（主/副 API + 四平台）</h3>
-                <p class="api-intro__desc">
-                  已移除占位接口（生图 API / MiniMax TTS）。本页支持 OpenAI、Gemini、Claude、DeepSeek 官方接口配置，支持本地保存与实时测试。
-                </p>
-              </div>
-            </div>
-          </section>
+          <!-- 模块标注：主API设置 -->
+          ${renderProfileSection('primary', '主API设置', ICONS.main, api.primary, { isPrimary: true })}
 
-          <!-- 模块B：主API / 副API 板块 -->
-          <section class="ui-card">
-            <h3 class="api-section-title">${ICONS.main}<span>主 API 与副 API</span></h3>
-            <div class="api-profile-grid">
-              <div class="api-field-group">
-                <label class="api-label" for="api-primary-provider">主 API 服务商（全局默认首选）</label>
-                <select id="api-primary-provider" class="api-select">
-                  ${providerOptions.map((item) => `<option value="${item.id}" ${item.selectedPrimary}>${item.label}</option>`).join('')}
-                </select>
-              </div>
-              <div class="api-field-group">
-                <label class="api-label" for="api-secondary-provider">副 API 服务商（独立备用）</label>
-                <select id="api-secondary-provider" class="api-select">
-                  ${providerOptions.map((item) => `<option value="${item.id}" ${item.selectedSecondary}>${item.label}</option>`).join('')}
-                </select>
-              </div>
-            </div>
+          <!-- 模块标注：副API设置 -->
+          ${renderProfileSection('secondary', '副API设置', ICONS.secondary, api.secondary)}
 
-            <div class="api-row-between" style="margin-top: 10px;">
-              <span class="api-label" style="display:inline-flex;align-items:center;gap:6px;">
+          <!-- 模块标注：全局模型参数 -->
+          <section class="ui-card api-section-card">
+            <div class="api-section-head">
+              <h3 class="api-section-title">
                 ${ICONS.global}
-                <span>默认全局响应通道使用主 API</span>
-              </span>
+                <span class="api-module-mark">模块标注</span>
+                <span>全局模型参数</span>
+              </h3>
               <label class="ios-switch">
                 <input id="api-default-primary" class="ios-switch__input" type="checkbox" ${api.activeProfile === 'primary' ? 'checked' : ''}>
                 <span class="ios-switch__slider"></span>
               </label>
             </div>
-          </section>
 
-          <!-- 模块C：全局模型参数 -->
-          <section class="ui-card">
-            <h3 class="api-section-title">${ICONS.global}<span>全局模型参数</span></h3>
+            <div class="api-row-between" style="margin-top: -4px;">
+              <span class="api-label">默认响应通道使用主 API</span>
+              <span class="api-inline-value">${api.activeProfile === 'primary' ? '主API' : '副API'}</span>
+            </div>
 
             <div class="api-field-group">
               <div class="api-label-row">
@@ -652,46 +829,42 @@ export function renderApiSection({ current }) {
               >
             </div>
 
-            <div class="api-field-group">
+            <div class="api-field-group" style="margin-bottom:0;">
               <label class="api-label" for="api-global-max-tokens">统一最大生成长度（maxTokens）</label>
               <input id="api-global-max-tokens" class="api-input" type="number" min="1" max="32768" value="${api.global.maxTokens}">
             </div>
+          </section>
 
-            <div class="api-row-between">
-              <span class="api-label">启用统一温度参数</span>
-              <label class="ios-switch">
-                <input id="api-global-use-temp" class="ios-switch__input" type="checkbox" ${api.global.useGlobalTemperature ? 'checked' : ''}>
-                <span class="ios-switch__slider"></span>
-              </label>
+          <!-- 模块标注：已保存的API配置 -->
+          <section class="ui-card api-section-card">
+            <div class="api-section-head">
+              <h3 class="api-section-title">
+                ${ICONS.storage}
+                <span class="api-module-mark">模块标注</span>
+                <span>已保存的API配置</span>
+              </h3>
             </div>
-
-            <div class="api-row-between">
-              <span class="api-label">启用统一 maxTokens 参数</span>
-              <label class="ios-switch">
-                <input id="api-global-use-max-tokens" class="ios-switch__input" type="checkbox" ${api.global.useGlobalMaxTokens ? 'checked' : ''}>
-                <span class="ios-switch__slider"></span>
-              </label>
+            <div id="api-saved-primary-configs">
+              ${renderSavedPrimaryConfigs(api.savedPrimaryConfigs)}
             </div>
           </section>
 
-          <!-- 模块D：四个服务商可折叠配置 -->
-          ${Object.keys(PROVIDER_META)
-            .map((providerId) => {
-              const config = api.providers[providerId];
-              const expanded = expandedProviders.has(providerId);
-              return renderProviderCard(providerId, config, expanded);
-            })
-            .join('')}
-
-          <!-- 模块E：全局保存操作 -->
-          <section class="ui-card">
+          <!-- 模块标注：保存操作 -->
+          <section class="ui-card api-section-card">
+            <div class="api-section-head">
+              <h3 class="api-section-title">
+                ${ICONS.save}
+                <span class="api-module-mark">模块标注</span>
+                <span>保存操作</span>
+              </h3>
+            </div>
             <div class="api-footer-actions">
               <button class="ui-button api-btn" id="save-api-all" type="button">
                 <span class="api-btn__icon">${ICONS.save}</span>
                 <span>保存全部 API 设置</span>
               </button>
               <p class="ui-muted" style="margin:0;font-size:12px;">
-                测试请求将从前端直接调用官方 API。若出现 CORS / 鉴权限制，会在测试结果中显示错误详情。
+                模型拉取与测试请求将从前端直接调用所选 API。若出现 CORS / 鉴权限制，会在模块结果中显示错误详情。
               </p>
             </div>
           </section>
@@ -700,75 +873,61 @@ export function renderApiSection({ current }) {
   `;
 }
 
-function getProviderConfigFromForm(container, providerId) {
-  const meta = PROVIDER_META[providerId];
-  const key = container.querySelector(`#api-${providerId}-key`)?.value?.trim() || '';
-  const baseUrlInput = container.querySelector(`#api-${providerId}-url`)?.value?.trim() || '';
-  const model = container.querySelector(`#api-${providerId}-model`)?.value?.trim() || meta.models[0];
-  const temp = container.querySelector(`#api-${providerId}-temp`)?.value;
-  const maxTokens = container.querySelector(`#api-${providerId}-max-tokens`)?.value;
-  const stream = !!container.querySelector(`#api-${providerId}-stream`)?.checked;
+function getProfileConfigFromForm(container, profileKey, fallbackProfile) {
+  const provider = normalizeProviderId(
+    container.querySelector(`#api-${profileKey}-provider`)?.value,
+    fallbackProfile?.provider || 'openai'
+  );
+  const baseUrl = container.querySelector(`#api-${profileKey}-url`)?.value?.trim() || '';
+  const apiKey = container.querySelector(`#api-${profileKey}-key`)?.value?.trim() || '';
+  const model = container.querySelector(`#api-${profileKey}-model`)?.value?.trim() || '';
+  const availableModels = Array.from(
+    container.querySelectorAll(`#api-${profileKey}-model option`)
+  ).map((option) => option.value);
 
-  return {
-    apiKey: key,
-    baseUrl: baseUrlInput || meta.defaultBaseUrl,
-    model,
-    temperature: clampNumber(temp, 0, 2, 0.7),
-    maxTokens: clampInt(maxTokens, 1, 32768, 2048),
-    stream
-  };
+  return normalizeProfileConfig(
+    {
+      provider,
+      apiKey,
+      baseUrl: baseUrl || PROVIDER_META[provider].defaultBaseUrl,
+      model: model || PROVIDER_META[provider].models[0],
+      availableModels,
+      stream: !!container.querySelector(`#api-${profileKey}-stream`)?.checked
+    },
+    provider
+  );
 }
 
 function collectApiStateFromForm(container, fallbackApi) {
   const normalizedFallback = normalizeApiSettings(fallbackApi);
-  const providerIds = Object.keys(PROVIDER_META);
-
-  const providers = {};
-  providerIds.forEach((id) => {
-    providers[id] = getProviderConfigFromForm(container, id);
-  });
-
-  const primaryProvider = normalizeProviderId(
-    container.querySelector('#api-primary-provider')?.value,
-    normalizedFallback.primary.provider
-  );
-
-  const secondaryProvider = normalizeProviderId(
-    container.querySelector('#api-secondary-provider')?.value,
-    normalizedFallback.secondary.provider
-  );
-
-  const globalTemperature = clampNumber(
-    container.querySelector('#api-global-temperature')?.value,
-    0,
-    2,
-    normalizedFallback.global.temperature
-  );
-
-  const globalMaxTokens = clampInt(
-    container.querySelector('#api-global-max-tokens')?.value,
-    1,
-    32768,
-    normalizedFallback.global.maxTokens
-  );
 
   return {
-    version: 2,
+    version: 3,
     activeProfile: container.querySelector('#api-default-primary')?.checked ? 'primary' : 'secondary',
-    primary: { provider: primaryProvider },
-    secondary: { provider: secondaryProvider },
+    primary: getProfileConfigFromForm(container, 'primary', normalizedFallback.primary),
+    secondary: getProfileConfigFromForm(container, 'secondary', normalizedFallback.secondary),
     global: {
-      temperature: globalTemperature,
-      maxTokens: globalMaxTokens,
-      useGlobalTemperature: !!container.querySelector('#api-global-use-temp')?.checked,
-      useGlobalMaxTokens: !!container.querySelector('#api-global-use-max-tokens')?.checked
+      temperature: clampNumber(
+        container.querySelector('#api-global-temperature')?.value,
+        0,
+        2,
+        normalizedFallback.global.temperature
+      ),
+      maxTokens: clampInt(
+        container.querySelector('#api-global-max-tokens')?.value,
+        1,
+        32768,
+        normalizedFallback.global.maxTokens
+      ),
+      useGlobalTemperature: true,
+      useGlobalMaxTokens: true
     },
-    providers
+    savedPrimaryConfigs: normalizeSavedPrimaryConfigs(normalizedFallback.savedPrimaryConfigs)
   };
 }
 
-function setTestResult(container, providerId, status, text) {
-  const resultEl = container.querySelector(`#api-${providerId}-test-result`);
+function setResultByProfile(container, profileKey, status, text) {
+  const resultEl = container.querySelector(`#api-${profileKey}-result`);
   if (!resultEl) return;
 
   resultEl.classList.remove('is-success', 'is-error', 'is-loading');
@@ -876,50 +1035,109 @@ async function requestClaude(baseUrl, apiKey, model, temperature, maxTokens) {
   return text || '请求成功（无文本内容）';
 }
 
-async function testProviderRequest(providerId, config, globalConfig, testType) {
-  const effectiveTemperature = globalConfig.useGlobalTemperature
-    ? globalConfig.temperature
-    : config.temperature;
+async function fetchOpenAiLikeModels(baseUrl, apiKey) {
+  const response = await fetch(`${trimSlash(baseUrl)}/models`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+  }
 
-  const effectiveMaxTokens =
-    testType === 'connection'
-      ? 16
-      : (globalConfig.useGlobalMaxTokens ? globalConfig.maxTokens : config.maxTokens);
+  return uniqueStrings((payload?.data || []).map((item) => item?.id)).sort();
+}
 
-  if (!config.apiKey) {
+async function fetchGeminiModels(baseUrl, apiKey) {
+  const response = await fetch(`${trimSlash(baseUrl)}/models?key=${encodeURIComponent(apiKey)}`);
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+  }
+
+  return uniqueStrings(
+    (payload?.models || []).map((item) => String(item?.name || '').replace(/^models\//, ''))
+  ).sort();
+}
+
+async function fetchClaudeModels(baseUrl, apiKey) {
+  const response = await fetch(`${trimSlash(baseUrl)}/models`, {
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    }
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+  }
+
+  return uniqueStrings([
+    ...(payload?.data || []).map((item) => item?.id),
+    ...(payload?.models || []).map((item) => item?.id)
+  ]).sort();
+}
+
+async function fetchModelsByProvider(providerId, baseUrl, apiKey) {
+  if (!apiKey) {
+    throw new Error('API Key 不能为空');
+  }
+
+  switch (providerId) {
+    case 'openai':
+      return fetchOpenAiLikeModels(baseUrl || PROVIDER_META.openai.defaultBaseUrl, apiKey);
+    case 'deepseek':
+      return fetchOpenAiLikeModels(baseUrl || PROVIDER_META.deepseek.defaultBaseUrl, apiKey);
+    case 'gemini':
+      return fetchGeminiModels(baseUrl || PROVIDER_META.gemini.defaultBaseUrl, apiKey);
+    case 'claude':
+      return fetchClaudeModels(baseUrl || PROVIDER_META.claude.defaultBaseUrl, apiKey);
+    default:
+      throw new Error(`不支持的服务商: ${providerId}`);
+  }
+}
+
+async function testProviderRequest(profileConfig, globalConfig, testType) {
+  const providerId = normalizeProviderId(profileConfig.provider, 'openai');
+  const effectiveTemperature = globalConfig.temperature;
+  const effectiveMaxTokens = testType === 'connection' ? 16 : globalConfig.maxTokens;
+
+  if (!profileConfig.apiKey) {
     throw new Error('API Key 不能为空');
   }
 
   switch (providerId) {
     case 'openai':
       return requestOpenAiLike(
-        config.baseUrl || PROVIDER_META.openai.defaultBaseUrl,
-        config.apiKey,
-        config.model,
+        profileConfig.baseUrl || PROVIDER_META.openai.defaultBaseUrl,
+        profileConfig.apiKey,
+        profileConfig.model,
         effectiveTemperature,
         effectiveMaxTokens
       );
     case 'deepseek':
       return requestOpenAiLike(
-        config.baseUrl || PROVIDER_META.deepseek.defaultBaseUrl,
-        config.apiKey,
-        config.model,
+        profileConfig.baseUrl || PROVIDER_META.deepseek.defaultBaseUrl,
+        profileConfig.apiKey,
+        profileConfig.model,
         effectiveTemperature,
         effectiveMaxTokens
       );
     case 'gemini':
       return requestGemini(
-        config.baseUrl || PROVIDER_META.gemini.defaultBaseUrl,
-        config.apiKey,
-        config.model,
+        profileConfig.baseUrl || PROVIDER_META.gemini.defaultBaseUrl,
+        profileConfig.apiKey,
+        profileConfig.model,
         effectiveTemperature,
         effectiveMaxTokens
       );
     case 'claude':
       return requestClaude(
-        config.baseUrl || PROVIDER_META.claude.defaultBaseUrl,
-        config.apiKey,
-        config.model,
+        profileConfig.baseUrl || PROVIDER_META.claude.defaultBaseUrl,
+        profileConfig.apiKey,
+        profileConfig.model,
         effectiveTemperature,
         effectiveMaxTokens
       );
@@ -928,9 +1146,77 @@ async function testProviderRequest(providerId, config, globalConfig, testType) {
   }
 }
 
+function setModelSelectOptions(container, profileKey, providerId, models, selectedModel) {
+  const select = container.querySelector(`#api-${profileKey}-model`);
+  if (!select) return;
+
+  const merged = mergeModelOptions(providerId, models, selectedModel);
+  const nextSelected = merged.includes(selectedModel) ? selectedModel : merged[0];
+  select.innerHTML = merged
+    .map((model) => {
+      const selectedAttr = model === nextSelected ? 'selected' : '';
+      const customSuffix = PROVIDER_META[providerId].models.includes(model) ? '' : '（自定义）';
+      return `<option value="${escapeHtml(model)}" ${selectedAttr}>${escapeHtml(model)}${customSuffix}</option>`;
+    })
+    .join('');
+}
+
+function fillProfileForm(container, profileKey, profileConfig) {
+  const normalized = normalizeProfileConfig(profileConfig, profileConfig?.provider || 'openai');
+  const providerSelect = container.querySelector(`#api-${profileKey}-provider`);
+  const urlInput = container.querySelector(`#api-${profileKey}-url`);
+  const keyInput = container.querySelector(`#api-${profileKey}-key`);
+  const streamInput = container.querySelector(`#api-${profileKey}-stream`);
+  const badge = container.querySelector(`[data-profile-section="${profileKey}"] .api-provider-badge`);
+
+  if (providerSelect) providerSelect.value = normalized.provider;
+  if (urlInput) {
+    urlInput.value = normalized.baseUrl;
+    urlInput.placeholder = PROVIDER_META[normalized.provider].defaultBaseUrl;
+    urlInput.dataset.provider = normalized.provider;
+  }
+  if (keyInput) keyInput.value = normalized.apiKey;
+  if (streamInput) streamInput.checked = normalized.stream;
+  setModelSelectOptions(
+    container,
+    profileKey,
+    normalized.provider,
+    normalized.availableModels,
+    normalized.model
+  );
+
+  if (badge) {
+    badge.innerHTML = `
+      <span class="api-provider-badge__icon">${renderProviderIcon(normalized.provider)}</span>
+      <span>${escapeHtml(PROVIDER_META[normalized.provider].shortLabel)}</span>
+    `;
+  }
+}
+
+function renderSavedPrimaryConfigsInto(container, apiState) {
+  const host = container.querySelector('#api-saved-primary-configs');
+  if (!host) return;
+  host.innerHTML = renderSavedPrimaryConfigs(apiState.savedPrimaryConfigs || []);
+}
+
+function buildSavedPrimaryPreset(profileConfig, existingCount) {
+  const normalized = normalizeProfileConfig(profileConfig, profileConfig?.provider || 'openai');
+  const providerMeta = PROVIDER_META[normalized.provider];
+  return {
+    id: `saved-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: `${providerMeta.shortLabel} · ${normalized.model || providerMeta.models[0]} · ${existingCount + 1}`,
+    provider: normalized.provider,
+    apiKey: normalized.apiKey,
+    baseUrl: normalized.baseUrl,
+    model: normalized.model,
+    availableModels: normalized.availableModels,
+    stream: normalized.stream
+  };
+}
+
 export function bindApiEvents(container, { settings }) {
-  // 读当前 settings，优先使用 settings 里的配置；若缺失则回退 localStorage
   let currentApiCache = null;
+
   settings
     .getAll()
     .then((all) => {
@@ -940,9 +1226,6 @@ export function bindApiEvents(container, { settings }) {
       currentApiCache = normalizeApiSettings({});
     });
 
-  const providerIds = Object.keys(PROVIDER_META);
-
-  // 温度滑块显示值同步
   const updateRangeValue = (inputSelector, outputSelector) => {
     const input = container.querySelector(inputSelector);
     const output = container.querySelector(outputSelector);
@@ -955,21 +1238,7 @@ export function bindApiEvents(container, { settings }) {
   };
 
   updateRangeValue('#api-global-temperature', '#api-global-temperature-value');
-  providerIds.forEach((id) => {
-    updateRangeValue(`#api-${id}-temp`, `#api-${id}-temp-value`);
-  });
 
-  // 服务商折叠展开
-  container.querySelectorAll('[data-action="toggle-provider"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const providerId = btn.getAttribute('data-provider');
-      const card = container.querySelector(`[data-provider-card="${providerId}"]`);
-      if (!card) return;
-      card.classList.toggle('is-collapsed');
-    });
-  });
-
-  // 保存（全量）
   const saveAllApiSettings = async (saveNote = 'API 设置已保存') => {
     const fallback = currentApiCache || normalizeApiSettings({});
     const nextApi = collectApiStateFromForm(container, fallback);
@@ -982,74 +1251,173 @@ export function bindApiEvents(container, { settings }) {
     return nextApi;
   };
 
-  // 保存全部按钮
-  container.querySelector('#save-api-all')?.addEventListener('click', async () => {
-    try {
-      await saveAllApiSettings('API 全量设置已保存');
-      providerIds.forEach((id) => {
-        setTestResult(container, id, 'success', '配置已保存');
+  ['primary', 'secondary'].forEach((profileKey) => {
+    const providerSelect = container.querySelector(`#api-${profileKey}-provider`);
+    const urlInput = container.querySelector(`#api-${profileKey}-url`);
+
+    if (providerSelect) {
+      providerSelect.addEventListener('change', () => {
+        const nextProvider = normalizeProviderId(providerSelect.value, 'openai');
+        const previousProvider = urlInput?.dataset?.provider || nextProvider;
+        const previousDefaultUrl = PROVIDER_META[previousProvider]?.defaultBaseUrl || '';
+        const currentUrl = urlInput?.value?.trim() || '';
+
+        if (urlInput) {
+          if (!currentUrl || currentUrl === previousDefaultUrl) {
+            urlInput.value = PROVIDER_META[nextProvider].defaultBaseUrl;
+          }
+          urlInput.placeholder = PROVIDER_META[nextProvider].defaultBaseUrl;
+          urlInput.dataset.provider = nextProvider;
+        }
+
+        setModelSelectOptions(
+          container,
+          profileKey,
+          nextProvider,
+          PROVIDER_META[nextProvider].models,
+          PROVIDER_META[nextProvider].models[0]
+        );
+        fillProfileForm(
+          container,
+          profileKey,
+          getProfileConfigFromForm(container, profileKey, getDefaultProfileConfig(nextProvider))
+        );
+        setResultByProfile(container, profileKey, 'success', `已切换到 ${PROVIDER_META[nextProvider].shortLabel} 接口`);
       });
-    } catch (error) {
-      Logger.error(`保存 API 设置失败: ${error?.message || '未知错误'}`);
-      providerIds.forEach((id) => {
-        setTestResult(container, id, 'error', `保存失败：${error?.message || '未知错误'}`);
-      });
+    }
+
+    if (urlInput) {
+      urlInput.dataset.provider = providerSelect?.value || 'openai';
     }
   });
 
-  // 每个服务商保存按钮
-  container.querySelectorAll('[data-action="save-provider"]').forEach((btn) => {
+  container.querySelector('#save-api-all')?.addEventListener('click', async () => {
+    try {
+      const nextApi = await saveAllApiSettings('API 全量设置已保存');
+      setResultByProfile(container, 'primary', 'success', '主 API 设置已保存');
+      setResultByProfile(container, 'secondary', 'success', '副 API 设置已保存');
+      renderSavedPrimaryConfigsInto(container, nextApi);
+    } catch (error) {
+      Logger.error(`保存 API 设置失败: ${error?.message || '未知错误'}`);
+      setResultByProfile(container, 'primary', 'error', `保存失败：${error?.message || '未知错误'}`);
+      setResultByProfile(container, 'secondary', 'error', `保存失败：${error?.message || '未知错误'}`);
+    }
+  });
+
+  container.querySelectorAll('[data-action="save-profile"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const providerId = btn.getAttribute('data-provider');
-      if (!providerId) return;
+      const profileKey = btn.getAttribute('data-profile');
+      if (!profileKey) return;
+
       try {
-        await saveAllApiSettings(`${PROVIDER_META[providerId].label} 配置已保存`);
-        setTestResult(container, providerId, 'success', '当前服务商配置已保存');
+        await saveAllApiSettings(`${profileKey === 'primary' ? '主' : '副'} API 配置已保存`);
+        setResultByProfile(
+          container,
+          profileKey,
+          'success',
+          `${profileKey === 'primary' ? '主' : '副'} API 配置已保存`
+        );
       } catch (error) {
-        setTestResult(container, providerId, 'error', `保存失败：${error?.message || '未知错误'}`);
+        setResultByProfile(container, profileKey, 'error', `保存失败：${error?.message || '未知错误'}`);
       }
     });
   });
 
-  // 测试按钮（连接 / 模型）
-  container.querySelectorAll('[data-action="test-provider"]').forEach((btn) => {
+  container.querySelectorAll('[data-action="fetch-models"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const providerId = btn.getAttribute('data-provider');
-      const testType = btn.getAttribute('data-test-type') || 'connection';
-      if (!providerId) return;
+      const profileKey = btn.getAttribute('data-profile');
+      if (!profileKey) return;
 
       const fallback = currentApiCache || normalizeApiSettings({});
       const snapshot = collectApiStateFromForm(container, fallback);
-      const providerConfig = snapshot.providers[providerId];
+      const profileConfig = snapshot[profileKey];
+
+      btn.setAttribute('disabled', 'disabled');
+      setResultByProfile(container, profileKey, 'loading', '正在拉取模型列表...');
+
+      try {
+        const models = await fetchModelsByProvider(
+          profileConfig.provider,
+          profileConfig.baseUrl,
+          profileConfig.apiKey
+        );
+        if (!models.length) {
+          throw new Error('未获取到可用模型');
+        }
+
+        const selectedModel = models.includes(profileConfig.model) ? profileConfig.model : models[0];
+        setModelSelectOptions(
+          container,
+          profileKey,
+          profileConfig.provider,
+          models,
+          selectedModel
+        );
+
+        if (currentApiCache) {
+          currentApiCache[profileKey] = normalizeProfileConfig(
+            {
+              ...currentApiCache[profileKey],
+              ...profileConfig,
+              availableModels: models,
+              model: selectedModel
+            },
+            profileConfig.provider
+          );
+        }
+
+        setResultByProfile(
+          container,
+          profileKey,
+          'success',
+          `模型拉取成功，共 ${models.length} 个`
+        );
+      } catch (error) {
+        setResultByProfile(
+          container,
+          profileKey,
+          'error',
+          `拉取失败：${error?.message || '未知错误'}`
+        );
+      } finally {
+        btn.removeAttribute('disabled');
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="test-profile"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const profileKey = btn.getAttribute('data-profile');
+      const testType = btn.getAttribute('data-test-type') || 'connection';
+      if (!profileKey) return;
+
+      const fallback = currentApiCache || normalizeApiSettings({});
+      const snapshot = collectApiStateFromForm(container, fallback);
+      const profileConfig = snapshot[profileKey];
       const startAt = performance.now();
 
       const buttonGroup = container.querySelectorAll(
-        `[data-action="test-provider"][data-provider="${providerId}"]`
+        `[data-action="test-profile"][data-profile="${profileKey}"]`
       );
       buttonGroup.forEach((b) => b.setAttribute('disabled', 'disabled'));
 
-      setTestResult(
+      setResultByProfile(
         container,
-        providerId,
+        profileKey,
         'loading',
         testType === 'connection' ? '正在测试连接...' : '正在测试模型...'
       );
 
       try {
-        const text = await testProviderRequest(
-          providerId,
-          providerConfig,
-          snapshot.global,
-          testType
-        );
+        const text = await testProviderRequest(profileConfig, snapshot.global, testType);
         const cost = Math.max(1, Math.round(performance.now() - startAt));
         const preview = String(text || '').slice(0, 120);
-        setTestResult(container, providerId, 'success', `成功（${cost}ms）：${preview}`);
+        setResultByProfile(container, profileKey, 'success', `成功（${cost}ms）：${preview}`);
       } catch (error) {
         const cost = Math.max(1, Math.round(performance.now() - startAt));
-        setTestResult(
+        setResultByProfile(
           container,
-          providerId,
+          profileKey,
           'error',
           `失败（${cost}ms）：${error?.message || '未知错误'}`
         );
@@ -1057,5 +1425,83 @@ export function bindApiEvents(container, { settings }) {
         buttonGroup.forEach((b) => b.removeAttribute('disabled'));
       }
     });
+  });
+
+  container.querySelector('[data-action="save-primary-preset"]')?.addEventListener('click', async () => {
+    try {
+      const fallback = currentApiCache || normalizeApiSettings({});
+      const snapshot = collectApiStateFromForm(container, fallback);
+      const nextApi = {
+        ...snapshot,
+        savedPrimaryConfigs: normalizeSavedPrimaryConfigs(snapshot.savedPrimaryConfigs)
+      };
+
+      const duplicateIndex = nextApi.savedPrimaryConfigs.findIndex(
+        (item) =>
+          item.provider === snapshot.primary.provider &&
+          item.baseUrl === snapshot.primary.baseUrl &&
+          item.model === snapshot.primary.model &&
+          item.apiKey === snapshot.primary.apiKey
+      );
+
+      if (duplicateIndex >= 0) {
+        setResultByProfile(container, 'primary', 'success', '当前主 API 配置已存在于已保存列表');
+        return;
+      }
+
+      nextApi.savedPrimaryConfigs = [
+        buildSavedPrimaryPreset(snapshot.primary, nextApi.savedPrimaryConfigs.length),
+        ...nextApi.savedPrimaryConfigs
+      ].slice(0, 20);
+
+      await settings.update({ api: nextApi });
+      writeApiConfigToLocalStorage(nextApi);
+      currentApiCache = nextApi;
+
+      renderSavedPrimaryConfigsInto(container, nextApi);
+      setResultByProfile(container, 'primary', 'success', '已保存到“已保存的API配置”板块');
+    } catch (error) {
+      setResultByProfile(container, 'primary', 'error', `保存失败：${error?.message || '未知错误'}`);
+    }
+  });
+
+  container.addEventListener('click', async (event) => {
+    const target = event.target.closest('[data-action="apply-saved-primary"], [data-action="delete-saved-primary"]');
+    if (!target) return;
+
+    const action = target.getAttribute('data-action');
+    const savedId = target.getAttribute('data-saved-id');
+    if (!savedId) return;
+
+    const fallback = currentApiCache || normalizeApiSettings({});
+    const snapshot = normalizeApiSettings(fallback);
+    const savedItem = snapshot.savedPrimaryConfigs.find((item) => item.id === savedId);
+
+    if (!savedItem) {
+      setResultByProfile(container, 'primary', 'error', '未找到目标已保存配置');
+      return;
+    }
+
+    if (action === 'apply-saved-primary') {
+      fillProfileForm(container, 'primary', savedItem);
+      setResultByProfile(container, 'primary', 'success', `已应用：${savedItem.name}`);
+      return;
+    }
+
+    if (action === 'delete-saved-primary') {
+      try {
+        const nextApi = {
+          ...snapshot,
+          savedPrimaryConfigs: snapshot.savedPrimaryConfigs.filter((item) => item.id !== savedId)
+        };
+        await settings.update({ api: nextApi });
+        writeApiConfigToLocalStorage(nextApi);
+        currentApiCache = nextApi;
+        renderSavedPrimaryConfigsInto(container, nextApi);
+        setResultByProfile(container, 'primary', 'success', `已删除：${savedItem.name}`);
+      } catch (error) {
+        setResultByProfile(container, 'primary', 'error', `删除失败：${error?.message || '未知错误'}`);
+      }
+    }
   });
 }
