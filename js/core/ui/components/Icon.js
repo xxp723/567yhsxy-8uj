@@ -12,12 +12,17 @@ export function createAppIcon(appMeta) {
   wrapper.dataset.appId = appMeta.id;
   wrapper.title = appMeta.name;
 
+  // [模块标注] 应用图标统一渲染结构模块：桌面 / Dock 图标统一输出字形层与自定义图片层，确保自定义图片可完整覆盖图标区域
+  const customImg = localStorage.getItem(`miniphone_app_icon_${appMeta.id}`) || '';
   const button = document.createElement('button');
-  button.className = 'app-icon-btn';
+  button.className = customImg ? 'app-icon-btn has-img' : 'app-icon-btn';
   button.type = 'button';
   button.setAttribute('data-open-app', appMeta.id);
   button.setAttribute('aria-label', `打开${appMeta.name}`);
-  button.innerHTML = appMeta.icon;
+  button.innerHTML = `
+    <span class="app-icon-glyph">${appMeta.icon || ''}</span>
+    <img class="app-custom-img" src="${customImg}" style="${customImg ? '' : 'display:none;'}" alt="${appMeta.name}" />
+  `;
 
   const label = document.createElement('span');
   label.className = 'app-icon-label';

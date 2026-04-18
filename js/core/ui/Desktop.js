@@ -28,49 +28,75 @@ export class Desktop {
     this.eventBus.on('settings:changed', () => {
       this.refreshCustomIconImages();
     });
+
+    // [模块标注] 图标图片外观刷新联动模块：图标设置保存后同步刷新桌面与 Dock 图标图片状态
+    this.eventBus.on('settings:appearance-changed', () => {
+      this.refreshCustomIconImages();
+    });
   }
 
   refreshCustomIconImages() {
     const apps = this.appManager.registry.getAll();
     const appMap = new Map(apps.map((app) => [app.id, app]));
 
-    this.container.querySelectorAll('[data-app-id]').forEach((el) => {
+    // [模块标注] 图标图片节点自修复模块：兼容旧结构图标节点，缺少字形层或图片层时自动补建，确保自定义图标能够完整覆盖
+    const ensureIconLayers = (el, app) => {
+      const btn = el.querySelector('.app-icon-btn');
+      if (!btn || !app) return {};
+
+      let glyph = btn.querySelector('.app-icon-glyph');
+      if (!glyph) {
+        glyph = document.createElement('span');
+        glyph.className = 'app-icon-glyph';
+        btn.prepend(glyph);
+      }
+
+      let img = btn.querySelector('.app-custom-img');
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'app-custom-img';
+        img.alt = app.name || '';
+        img.style.display = 'none';
+        btn.appendChild(img);
+      }
+
+      if (!glyph.innerHTML.trim()) {
+        glyph.innerHTML = app.icon || '';
+      }
+
+      return { btn, glyph, img };
+    };
+
+    const syncIconImageState = (el) => {
       const appId = el.getAttribute('data-app-id');
       const app = appMap.get(appId);
       if (!app) return;
-      const btn = el.querySelector('.app-icon-btn');
-      const img = el.querySelector('.app-custom-img');
-      const glyph = el.querySelector('.app-icon-glyph');
-      if (glyph && !glyph.innerHTML.trim()) glyph.innerHTML = app.icon || '';
+
+      const { btn, glyph, img } = ensureIconLayers(el, app);
+      if (!btn || !img || !glyph) return;
+
       const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
-      if (img && customImg) {
+      const hasCustomImg = !!String(customImg || '').trim();
+
+      if (hasCustomImg) {
         img.src = customImg;
         img.style.display = 'block';
-        btn?.classList.add('has-img');
-      } else if (img) {
+        glyph.style.display = 'none';
+        btn.classList.add('has-img');
+      } else {
         img.src = '';
         img.style.display = 'none';
-        btn?.classList.remove('has-img');
+        glyph.style.display = '';
+        btn.classList.remove('has-img');
       }
+    };
+
+    this.container.querySelectorAll('[data-app-id]').forEach((el) => {
+      syncIconImageState(el);
     });
 
     document.querySelectorAll('#dock-container [data-app-id]').forEach((el) => {
-      const appId = el.getAttribute('data-app-id');
-      const img = el.querySelector('.app-custom-img');
-      const btn = el.querySelector('.app-icon-btn');
-      const glyph = el.querySelector('.app-icon-glyph');
-      const app = appMap.get(appId);
-      if (glyph && app && !glyph.innerHTML.trim()) glyph.innerHTML = app.icon || '';
-      const customImg = localStorage.getItem(`miniphone_app_icon_${appId}`);
-      if (img && customImg) {
-        img.src = customImg;
-        img.style.display = 'block';
-        btn?.classList.add('has-img');
-      } else if (img) {
-        img.src = '';
-        img.style.display = 'none';
-        btn?.classList.remove('has-img');
-      }
+      syncIconImageState(el);
     });
   }
 
