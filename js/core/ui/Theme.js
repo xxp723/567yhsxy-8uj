@@ -27,11 +27,11 @@ export class Theme {
    *   iconBorderWidth?: number,
    *   iconBorderColor?: string,
    *   dockOpacity?: number,
-   *   dockColor?: string,
-   *   dockColorHue?: number,
-   *   fontFamily?: string,
-   *   fontFaceCss?: string
-   * }} appearance
+ *   dockColor?: string,
+ *   dockColorHue?: number,
+ *   fontFamily?: string,
+ *   fontFaceCss?: string
+ * }} appearance
    */
   apply(appearance = {}) {
     const {
