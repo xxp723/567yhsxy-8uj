@@ -338,7 +338,8 @@ function buildWallpaperPreviewStyle(value = '', crop = {}) {
   if (!hasValue) return '';
 
   const normalized = normalizeWallpaperCrop(crop);
-  const backgroundSize = `${Math.max(100, normalized.scale * 100)}% auto`;
+  // [模块标注] 壁纸裁切预览计算模块：统一横纵方向缩放比例，确保“纵向取景”可真实上下移动
+  const backgroundSize = `${Math.max(100, normalized.scale * 100)}% ${Math.max(100, normalized.scale * 100)}%`;
   const backgroundPosition = `${normalized.x}% ${normalized.y}%`;
 
   return `background-image:url('${escapeHtml(value)}');background-size:${backgroundSize};background-position:${backgroundPosition};`;
@@ -356,7 +357,7 @@ function renderWallpaperField({
   const hasValue = !!String(value || '').trim();
 
   return `
-    <!-- [模块标注] 桌面壁纸竖屏预览模块：仅维护桌面壁纸，左侧完整竖屏缩略图同步显示当前裁切结果 -->
+    <!-- [模块标注] 桌面壁纸竖屏预览模块：按简洁卡片布局保留左侧完整竖屏缩略图与右侧精简操作区 -->
     <div class="appearance-wallpaper-card">
       <div class="appearance-wallpaper-card__preview-pane">
         <div class="appearance-wallpaper-card__preview-frame ${hasValue ? 'has-image' : ''}" id="${previewId}" style="${buildWallpaperPreviewStyle(value, crop)}">
@@ -364,17 +365,21 @@ function renderWallpaperField({
         </div>
       </div>
       <div class="appearance-wallpaper-card__body">
-        <div class="appearance-wallpaper-card__head">
-          <div>
-            <h4>桌面壁纸</h4>
-            <p>应用到桌面、状态栏与全屏模式下的主界面背景。仅保留桌面壁纸入口，后续修改只需维护这一处。</p>
+        <div class="appearance-wallpaper-card__toolbar">
+          <div class="appearance-wallpaper-card__title-wrap">
+            <span class="appearance-wallpaper-card__title-icon">${icons.wallpaper}</span>
+            <div class="appearance-wallpaper-card__head">
+              <h4>壁纸设置</h4>
+              <p>桌面壁纸</p>
+            </div>
           </div>
+          <label class="appearance-wallpaper-card__icon-upload" for="${fileId}" aria-label="上传本地图片">${icons.uploadLocal}</label>
         </div>
+
+        <!-- [模块标注] 壁纸 URL 唯一输入模块：仅保留此唯一 URL 输入入口，不再重复增加 URL 操作按钮 -->
         <input id="${inputId}" type="url" value="${escapeHtml(value)}" placeholder="https://example.com/image.jpg" />
-        <!-- [模块标注] 壁纸 URL 唯一输入模块：移除重复的“使用 URL 链接”按钮，仅保留此唯一 URL 输入入口 -->
-        <div class="appearance-wallpaper-card__hint">粘贴图片 URL 或上传本地图片后，可通过“调整裁切”统一修改缩放与取景位置。</div>
+
         <div class="appearance-wallpaper-card__actions">
-          <label class="ui-button" for="${fileId}">${icons.uploadLocal}<span>上传本地图片</span></label>
           <input id="${fileId}" type="file" accept="image/*" style="display:none;" />
           <button class="ui-button" type="button" id="open-wallpaper-crop-modal">${icons.wallpaper}<span>调整裁切</span></button>
           <button class="ui-button danger" type="button" id="${removeId}">${icons.delete}<span>删除</span></button>
@@ -731,7 +736,7 @@ function ensureWallpaperCropModal(container, icons) {
         </button>
       </div>
       <div class="managed-resource-modal__body">
-        <p class="managed-resource-modal__hint">通过缩放与横纵取景，调整桌面壁纸在完整竖屏画框中的显示位置。保存后桌面与顶部状态栏区域会统一使用这组裁切参数。</p>
+        <p class="managed-resource-modal__hint">通过缩放、左右取景与上下取景，调整桌面壁纸在完整竖屏画框中的显示位置。保存后桌面与顶部状态栏区域会统一使用这组裁切参数。</p>
         <div class="appearance-wallpaper-crop-stage">
           <div class="appearance-wallpaper-crop-stage__frame" id="appearance-wallpaper-crop-stage-preview"></div>
         </div>

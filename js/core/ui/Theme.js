@@ -51,7 +51,8 @@ export class Theme {
       y: Number.isFinite(Number(desktopWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(desktopWallpaperCrop.y))) : 50,
       scale: Number.isFinite(Number(desktopWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(desktopWallpaperCrop.scale))) : 1
     };
-    const wallpaperSize = `${Math.max(100, normalizedWallpaperCrop.scale * 100)}% auto`;
+    // [模块标注] 桌面壁纸实际裁切同步模块：桌面真实渲染与设置页预览统一使用双轴缩放，确保纵向取景可真实上下移动
+    const wallpaperSize = `${Math.max(100, normalizedWallpaperCrop.scale * 100)}% ${Math.max(100, normalizedWallpaperCrop.scale * 100)}%`;
     const wallpaperPosition = `${normalizedWallpaperCrop.x}% ${normalizedWallpaperCrop.y}%`;
     const normalizedShadowSize = Math.max(0, Number(iconShadowSize) || 0);
     const normalizedRadius = Math.max(0, Number(iconRadius) || 0);
