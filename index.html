@@ -480,7 +480,8 @@
       const cropX = Number.isFinite(Number(savedWallpaperCrop?.x)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.x))) : 50;
       const cropY = Number.isFinite(Number(savedWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.y))) : 50;
       const cropScale = Number.isFinite(Number(savedWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(savedWallpaperCrop.scale))) : 1;
-      const wallpaperSize = `${Math.max(100, cropScale * 100)}% auto`;
+      // [模块标注] 启动阶段壁纸裁切一致性模块：与设置页/Theme 同步使用双轴缩放，确保重启后全屏顶部区域与桌面取景一致
+      const wallpaperSize = `${Math.max(100, cropScale * 100)}% ${Math.max(100, cropScale * 100)}%`;
       const wallpaperPosition = `${cropX}% ${cropY}%`;
 
       if (savedWallpaper) {
@@ -493,6 +494,7 @@
         screen.style.backgroundImage = `url(${savedWallpaper})`;
         screen.style.backgroundSize = wallpaperSize;
         screen.style.backgroundPosition = wallpaperPosition;
+        screen.style.backgroundRepeat = 'no-repeat';
       }
 
       // 时钟（顶部 & 组件）

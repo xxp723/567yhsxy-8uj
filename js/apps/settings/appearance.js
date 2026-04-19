@@ -366,12 +366,9 @@ function renderWallpaperField({
       </div>
       <div class="appearance-wallpaper-card__body">
         <div class="appearance-wallpaper-card__toolbar">
-          <div class="appearance-wallpaper-card__title-wrap">
-            <span class="appearance-wallpaper-card__title-icon">${icons.wallpaper}</span>
-            <div class="appearance-wallpaper-card__head">
-              <h4>壁纸设置</h4>
-              <p>桌面壁纸</p>
-            </div>
+          <div class="appearance-wallpaper-card__head">
+            <h4>桌面壁纸</h4>
+            <p>上传后可直接调整裁切，桌面与顶部状态栏区域会统一同步。</p>
           </div>
           <label class="appearance-wallpaper-card__icon-upload" for="${fileId}" aria-label="上传本地图片">${icons.uploadLocal}</label>
         </div>
@@ -381,7 +378,7 @@ function renderWallpaperField({
 
         <div class="appearance-wallpaper-card__actions">
           <input id="${fileId}" type="file" accept="image/*" style="display:none;" />
-          <button class="ui-button" type="button" id="open-wallpaper-crop-modal">${icons.wallpaper}<span>调整裁切</span></button>
+          <button class="ui-button" type="button" id="open-wallpaper-crop-modal">${icons.wallpaper}<span>调整</span></button>
           <button class="ui-button danger" type="button" id="${removeId}">${icons.delete}<span>删除</span></button>
         </div>
       </div>
@@ -735,7 +732,7 @@ function ensureWallpaperCropModal(container, icons) {
           ${icons.closeSmall}
         </button>
       </div>
-      <div class="managed-resource-modal__body">
+      <div class="managed-resource-modal__body appearance-wallpaper-crop-modal__body">
         <p class="managed-resource-modal__hint">通过缩放、左右取景与上下取景，调整桌面壁纸在完整竖屏画框中的显示位置。保存后桌面与顶部状态栏区域会统一使用这组裁切参数。</p>
         <div class="appearance-wallpaper-crop-stage">
           <div class="appearance-wallpaper-crop-stage__frame" id="appearance-wallpaper-crop-stage-preview"></div>

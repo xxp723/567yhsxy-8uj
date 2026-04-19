@@ -2185,10 +2185,10 @@ body.fullscreen-mode .app-window {
 /* [模块标注] 壁纸专用资源卡片样式模块：仅作用于壁纸设置页的左右分栏竖屏预览布局 */
 .appearance-wallpaper-card {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 18px;
-  padding: 18px;
-  border-radius: 28px;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+  border-radius: 24px;
   background: linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(247,241,233,0.98) 100%);
   border: 1px solid rgba(125, 90, 68, 0.1);
   box-shadow: 0 4px 18px rgba(74, 52, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.58);
@@ -2211,9 +2211,9 @@ body.fullscreen-mode .app-window {
 /* [模块标注] 壁纸卡片头部精简布局模块：按示例图收敛标题、图标上传入口与层级留白 */
 .appearance-wallpaper-card__toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .appearance-wallpaper-card__title-wrap {
@@ -2225,9 +2225,9 @@ body.fullscreen-mode .app-window {
 
 .appearance-wallpaper-card__title-icon,
 .appearance-wallpaper-card__icon-upload {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2299,8 +2299,8 @@ body.fullscreen-mode .app-window {
 }
 
 .appearance-wallpaper-card__preview-frame {
-  max-width: 132px;
-  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.08);
+  max-width: 108px;
+  box-shadow: 0 10px 24px rgba(74, 52, 42, 0.08);
   background-position: center;
   background-repeat: no-repeat;
 }
@@ -2322,19 +2322,31 @@ body.fullscreen-mode .app-window {
 }
 
 .appearance-wallpaper-card__actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  justify-content: flex-start;
+  align-items: stretch;
 }
 
 .appearance-wallpaper-card__actions .ui-button {
-  min-width: 128px;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 10px;
 }
 
 /* [模块标注] 壁纸裁切弹窗样式模块：统一裁切预览面板、操作滑杆与竖屏画框的暖色主题视觉 */
 .appearance-wallpaper-crop-modal__panel {
   width: min(100%, 420px);
+  max-height: min(88vh, 760px);
+  overflow: hidden;
+}
+
+.appearance-wallpaper-crop-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
 }
 
 .appearance-wallpaper-crop-stage {
@@ -3154,7 +3166,7 @@ body.fullscreen-mode .app-window {
   }
 
   .appearance-wallpaper-card__preview-frame {
-    max-width: min(132px, 40vw);
+    max-width: min(108px, 38vw);
   }
 
   .appearance-inline-actions--icon-dual {
