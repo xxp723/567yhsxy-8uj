@@ -29,6 +29,32 @@ const DEFAULT_DOCK_ADJUSTMENTS = {
   dockColor: '#f5f1ea'
 };
 
+const DEFAULT_FONT_STACK = '"Huiwen-mincho", "STSong", "SimSun", serif';
+
+const BUILTIN_FONT_PRESETS = [
+  {
+    id: 'default',
+    label: '默认字体',
+    family: DEFAULT_FONT_STACK,
+    fontFaceCss: '',
+    description: '未上传新字体时，系统使用默认明朝风字体堆栈。'
+  },
+  {
+    id: 'builtin-huiwen',
+    label: '汇文明朝体',
+    family: '"Huiwen-mincho", "STSong", "SimSun", serif',
+    fontFaceCss: '',
+    description: '内置快速切换字体（系统本地字体优先）。'
+  },
+  {
+    id: 'builtin-lxgw',
+    label: '霞鹜文楷',
+    family: '"LXGW WenKai", "LXGW WenKai GB", "Kaiti SC", "KaiTi", serif',
+    fontFaceCss: '',
+    description: '内置快速切换字体（系统本地字体优先）。'
+  }
+];
+
 const ICON_SHADOW_OPTIONS = [
   { value: 'none', label: '无阴影' },
   { value: 'outer', label: '外投影' },
@@ -136,6 +162,123 @@ function normalizeIconImages(iconImages) {
   return Object.fromEntries(
     Object.entries(iconImages).filter(([, value]) => String(value || '').trim())
   );
+}
+
+function normalizeFontEntries(fontEntries) {
+  if (!Array.isArray(fontEntries)) return [];
+  return fontEntries
+    .map((entry) => ({
+      id: String(entry?.id || '').trim(),
+      name: String(entry?.name || '').trim(),
+      url: String(entry?.url || '').trim(),
+      family: String(entry?.family || '').trim(),
+      source: String(entry?.source || 'url').trim(),
+      format: String(entry?.format || '').trim()
+    }))
+    .filter((entry) => entry.id && entry.url && entry.family);
+}
+
+function inferFontFormatFromName(name = '') {
+  const fileName = String(name || '').toLowerCase();
+  if (fileName.endsWith('.woff2')) return 'woff2';
+  if (fileName.endsWith('.woff')) return 'woff';
+  if (fileName.endsWith('.otf')) return 'opentype';
+  if (fileName.endsWith('.ttf')) return 'truetype';
+  return '';
+}
+
+function buildFontFaceCss(fontEntries = []) {
+  return normalizeFontEntries(fontEntries).map((entry) => {
+    const safeFamily = String(entry.family || '').replace(/"/g, '\\"');
+    const safeUrl = String(entry.url || '').replace(/"/g, '\\"');
+    const formatToken = entry.format ? ` format("${entry.format}")` : '';
+    return `@font-face{font-family:"${safeFamily}";src:url("${safeUrl}")${formatToken};font-display:swap;}`;
+  }).join('\n');
+}
+
+function resolveFontAppearance(selectedFontId, fontEntries = []) {
+  const normalizedSelectedId = String(selectedFontId || 'default').trim() || 'default';
+  const normalizedEntries = normalizeFontEntries(fontEntries);
+
+  const builtin = BUILTIN_FONT_PRESETS.find((item) => item.id === normalizedSelectedId);
+  if (builtin) {
+    return {
+      selectedFontId: builtin.id,
+      fontFamily: builtin.family,
+      fontFaceCss: builtin.fontFaceCss
+    };
+  }
+
+  if (normalizedSelectedId.startsWith('custom:')) {
+    const hitId = normalizedSelectedId.slice('custom:'.length);
+    const hit = normalizedEntries.find((entry) => entry.id === hitId);
+    if (hit) {
+      return {
+        selectedFontId: normalizedSelectedId,
+        fontFamily: `"${hit.family}", ${DEFAULT_FONT_STACK}`,
+        fontFaceCss: buildFontFaceCss(normalizedEntries)
+      };
+    }
+  }
+
+  return {
+    selectedFontId: 'default',
+    fontFamily: DEFAULT_FONT_STACK,
+    fontFaceCss: buildFontFaceCss(normalizedEntries)
+  };
+}
+
+function renderFontPresetOptions(icons, selectedFontId = 'default') {
+  return BUILTIN_FONT_PRESETS.map((preset) => `
+    <button
+      type="button"
+      class="appearance-font-preset ${selectedFontId === preset.id ? 'is-selected' : ''}"
+      data-font-choice="${preset.id}"
+      aria-pressed="${selectedFontId === preset.id ? 'true' : 'false'}"
+    >
+      <span class="appearance-font-preset__state">${selectedFontId === preset.id ? icons.selected : icons.unselected}</span>
+      <span class="appearance-font-preset__meta">
+        <strong>${preset.label}</strong>
+        <small>${preset.description}</small>
+      </span>
+    </button>
+  `).join('');
+}
+
+function renderUploadedFontItems(icons, entries = [], selectedFontId = 'default') {
+  const normalizedEntries = normalizeFontEntries(entries);
+  if (!normalizedEntries.length) {
+    return `<div class="appearance-font-uploaded-empty">暂无上传字体。你可通过“上传本地字体”或 URL 添加字体资源。</div>`;
+  }
+
+  return normalizedEntries.map((entry) => {
+    const choiceId = `custom:${entry.id}`;
+    const isSelected = selectedFontId === choiceId;
+    return `
+      <article class="appearance-font-uploaded-item ${isSelected ? 'is-selected' : ''}" data-uploaded-font-id="${entry.id}">
+        <button
+          type="button"
+          class="appearance-font-uploaded-item__main"
+          data-font-choice="${choiceId}"
+          aria-pressed="${isSelected ? 'true' : 'false'}"
+        >
+          <span class="appearance-font-uploaded-item__state">${isSelected ? icons.selected : icons.unselected}</span>
+          <span class="appearance-font-uploaded-item__meta">
+            <strong>${escapeHtml(entry.name || '未命名字体')}</strong>
+            <small>${entry.source === 'local' ? '本地上传' : 'URL 上传'}</small>
+          </span>
+        </button>
+        <button
+          class="ui-button danger appearance-font-uploaded-item__delete"
+          type="button"
+          data-font-delete="${entry.id}"
+        >
+          ${icons.delete}
+          <span>删除</span>
+        </button>
+      </article>
+    `;
+  }).join('');
 }
 
 function escapeHtml(value) {
@@ -497,6 +640,8 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
   const iconImages = normalizeIconImages(appearance.iconImages);
   const iconAdjustments = getDefaultIconAdjustmentState(appearance);
   const dockAdjustments = getDefaultDockAdjustmentState(appearance);
+  const fontEntries = normalizeFontEntries(appearance.fontEntries);
+  const fontResolved = resolveFontAppearance(appearance.selectedFontId, fontEntries);
 
   return `
       <!-- 外观设置详情页（改为卡片式分类） -->
@@ -515,11 +660,48 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
               <div class="settings-card__icon">${icons.icon}</div>
               <h3 class="settings-card__title">图标设置</h3>
             </div>
+            <div class="settings-card" data-page="appearance-font">
+              <div class="settings-card__icon">${icons.font}</div>
+              <h3 class="settings-card__title">字体设置</h3>
+            </div>
             <div class="settings-card" data-page="appearance-widget">
               <div class="settings-card__icon">${icons.widget}</div>
               <h3 class="settings-card__title">组件设置</h3>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- [模块标注] 字体设置子页面：支持内置字体快速切换、本地上传与 URL 上传字体，统一复用设置应用卡片风格 -->
+      <div id="settings-appearance-font" class="settings-detail">
+        <div class="settings-detail__body">
+          <section class="ui-card">
+            <h3>字体设置</h3>
+            <p class="ui-muted" style="margin-bottom: 10px;">你可以选择默认字体、快速切换内置字体，或上传自定义字体并设为全局字体。未上传新字体时默认使用系统字体。</p>
+
+            <div class="appearance-font-preset-list" id="appearance-font-preset-list">
+              ${renderFontPresetOptions(icons, fontResolved.selectedFontId)}
+            </div>
+
+            <!-- [模块标注] 字体资源上传模块：本地上传按钮与 URL 添加按钮分开，便于后续独立维护 -->
+            <div class="appearance-font-upload-tools">
+              <input id="setting-font-upload-file" type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" style="display:none;" />
+              <button class="ui-button" type="button" id="setting-font-upload-trigger">${icons.uploadLocal}<span>上传本地字体</span></button>
+              <div class="appearance-font-url-row">
+                <input id="setting-font-url-input" type="url" placeholder="https://example.com/font.woff2" />
+                <button class="ui-button" type="button" id="setting-font-url-add">${icons.link}<span>添加 URL 字体</span></button>
+              </div>
+            </div>
+
+            <!-- [模块标注] 上传字体列表模块：删除按钮为逐条删除，不使用一键清空 -->
+            <div class="appearance-font-uploaded-list" id="appearance-font-uploaded-list">
+              ${renderUploadedFontItems(icons, fontEntries, fontResolved.selectedFontId)}
+            </div>
+
+            <div class="appearance-inline-actions appearance-inline-actions--icon-dual">
+              <button class="ui-button primary" id="save-font-settings" type="button">${icons.saveWidget}<span>保存字体设置</span></button>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -968,6 +1150,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   let selectedWidgetIds = new Set();
   let activeIconEditorAppId = '';
   let desktopWallpaperCropDraft = normalizeWallpaperCrop(current.appearance?.desktopWallpaperCrop);
+  let fontEntriesDraft = normalizeFontEntries(current.appearance?.fontEntries);
+  let selectedFontIdDraft = resolveFontAppearance(current.appearance?.selectedFontId, fontEntriesDraft).selectedFontId;
 
   const appMap = new Map((apps || []).map((app) => [app.id, app]));
   const iconEditorModal = ensureIconResourceModal(container, icons);
@@ -1332,6 +1516,156 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         localStorage.removeItem(storageKey);
       }
     });
+  };
+
+  // [模块标注] 字体设置状态渲染模块：统一刷新内置字体选项与已上传字体列表，便于后续维护字体卡片结构
+  const rerenderFontPanels = () => {
+    const presetList = container.querySelector('#appearance-font-preset-list');
+    const uploadedList = container.querySelector('#appearance-font-uploaded-list');
+    if (presetList) {
+      presetList.innerHTML = renderFontPresetOptions(icons, selectedFontIdDraft);
+    }
+    if (uploadedList) {
+      uploadedList.innerHTML = renderUploadedFontItems(icons, fontEntriesDraft, selectedFontIdDraft);
+    }
+  };
+
+  const generateFontEntryId = () => `font-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const inferFontNameFromUrl = (urlValue = '') => {
+    try {
+      const pathname = new URL(urlValue).pathname || '';
+      const fileName = decodeURIComponent(pathname.split('/').pop() || '').trim();
+      if (fileName) return fileName;
+    } catch (_) {}
+    return '网络字体';
+  };
+
+  const sanitizeFontFamilyName = (rawName = '') => {
+    const noExt = String(rawName || '').replace(/\.[a-z0-9]+$/i, '').trim();
+    const cleaned = noExt.replace(/[^\u4e00-\u9fa5a-zA-Z0-9 _-]/g, '').trim();
+    return cleaned || `自定义字体${fontEntriesDraft.length + 1}`;
+  };
+
+  const setSelectedFontChoice = (choiceId = 'default') => {
+    const resolved = resolveFontAppearance(choiceId, fontEntriesDraft);
+    selectedFontIdDraft = resolved.selectedFontId;
+    rerenderFontPanels();
+  };
+
+  const addFontEntry = (entry) => {
+    const normalizedEntry = normalizeFontEntries([entry])[0];
+    if (!normalizedEntry) return;
+
+    fontEntriesDraft = [...fontEntriesDraft, normalizedEntry];
+    selectedFontIdDraft = `custom:${normalizedEntry.id}`;
+    rerenderFontPanels();
+  };
+
+  const removeFontEntry = (entryId = '') => {
+    const nextEntries = fontEntriesDraft.filter((entry) => entry.id !== entryId);
+    if (nextEntries.length === fontEntriesDraft.length) return;
+
+    fontEntriesDraft = nextEntries;
+    if (selectedFontIdDraft === `custom:${entryId}`) {
+      selectedFontIdDraft = 'default';
+    }
+
+    selectedFontIdDraft = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft).selectedFontId;
+    rerenderFontPanels();
+  };
+
+  const onAddUrlFont = () => {
+    const urlInput = container.querySelector('#setting-font-url-input');
+    const rawUrl = String(urlInput?.value || '').trim();
+    if (!rawUrl) {
+      Logger.error('请先填写字体 URL');
+      return;
+    }
+
+    let validatedUrl = '';
+    try {
+      const parsedUrl = new URL(rawUrl);
+      if (!/^https?:$/i.test(parsedUrl.protocol)) {
+        Logger.error('仅支持 http / https 协议的字体 URL');
+        return;
+      }
+      validatedUrl = parsedUrl.toString();
+    } catch (_) {
+      Logger.error('字体 URL 格式不正确');
+      return;
+    }
+
+    const name = inferFontNameFromUrl(validatedUrl);
+    const family = sanitizeFontFamilyName(name);
+    addFontEntry({
+      id: generateFontEntryId(),
+      name,
+      url: validatedUrl,
+      family,
+      source: 'url',
+      format: inferFontFormatFromName(name || validatedUrl)
+    });
+
+    if (urlInput) urlInput.value = '';
+    Logger.info(`已添加 URL 字体：${family}`);
+  };
+
+  const onUploadLocalFont = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '').trim();
+      if (!dataUrl) {
+        Logger.error('读取本地字体文件失败');
+        return;
+      }
+
+      const name = String(file.name || '本地字体').trim();
+      const family = sanitizeFontFamilyName(name);
+      addFontEntry({
+        id: generateFontEntryId(),
+        name,
+        url: dataUrl,
+        family,
+        source: 'local',
+        format: inferFontFormatFromName(name)
+      });
+
+      Logger.info(`已上传本地字体：${family}`);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onSaveFontSettings = async () => {
+    const resolvedFont = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft);
+
+    await settings.update({
+      appearance: {
+        ...(current.appearance || {}),
+        fontEntries: normalizeFontEntries(fontEntriesDraft),
+        selectedFontId: resolvedFont.selectedFontId,
+        fontFamily: resolvedFont.fontFamily,
+        fontFaceCss: resolvedFont.fontFaceCss
+      }
+    });
+
+    current.appearance = {
+      ...(current.appearance || {}),
+      fontEntries: normalizeFontEntries(fontEntriesDraft),
+      selectedFontId: resolvedFont.selectedFontId,
+      fontFamily: resolvedFont.fontFamily,
+      fontFaceCss: resolvedFont.fontFaceCss
+    };
+
+    eventBus?.emit('settings:appearance-changed', {
+      fontEntries: normalizeFontEntries(fontEntriesDraft),
+      selectedFontId: resolvedFont.selectedFontId,
+      fontFamily: resolvedFont.fontFamily,
+      fontFaceCss: resolvedFont.fontFaceCss
+    });
+
+    Logger.info('字体设置已保存');
   };
 
   // [模块标注] 界面设置-状态栏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
@@ -1737,6 +2071,38 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       syncShadowStyleOptions();
     });
   });
+
+  rerenderFontPanels();
+
+  container.addEventListener('click', (event) => {
+    const choiceBtn = event.target.closest('[data-font-choice]');
+    if (choiceBtn && container.contains(choiceBtn)) {
+      setSelectedFontChoice(choiceBtn.getAttribute('data-font-choice') || 'default');
+      return;
+    }
+
+    const deleteBtn = event.target.closest('[data-font-delete]');
+    if (deleteBtn && container.contains(deleteBtn)) {
+      const fontId = deleteBtn.getAttribute('data-font-delete');
+      if (fontId) {
+        removeFontEntry(fontId);
+        Logger.info('已删除上传字体');
+      }
+    }
+  });
+
+  container.querySelector('#setting-font-upload-trigger')?.addEventListener('click', () => {
+    container.querySelector('#setting-font-upload-file')?.click();
+  });
+
+  container.querySelector('#setting-font-upload-file')?.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (file) onUploadLocalFont(file);
+    event.target.value = '';
+  });
+
+  container.querySelector('#setting-font-url-add')?.addEventListener('click', onAddUrlFont);
+  container.querySelector('#save-font-settings')?.addEventListener('click', onSaveFontSettings);
 
   container.querySelector('#setting-status-bar')?.addEventListener('change', onToggleStatusBar);
   container.querySelector('#setting-fullscreen')?.addEventListener('change', onToggleFullscreen);

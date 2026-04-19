@@ -30,6 +30,7 @@ const ICONS = {
   wallpaper: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="6" width="36" height="36" rx="3" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M6 34L16 24L24 32L32 22L42 34" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="17" r="4" fill="none" stroke="#333" stroke-width="3"/></svg>`,
   icon: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="6" width="14" height="14" rx="4" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><rect x="28" y="6" width="14" height="14" rx="4" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><rect x="6" y="28" width="14" height="14" rx="4" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><rect x="28" y="28" width="14" height="14" rx="4" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/></svg>`,
   widget: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="8" width="36" height="30" rx="6" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M6 20H42" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M18 20V38" stroke="#333" stroke-width="3" stroke-linecap="round"/><circle cx="14" cy="14" r="2" fill="#FFCB47"/><circle cx="22" cy="14" r="2" fill="#47B881"/></svg>`,
+  font: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M8 10H40" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M16 10V18" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M32 10V18" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M24 18V38" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M16 38H32" stroke="#333" stroke-width="3" stroke-linecap="round"/></svg>`,
   widgetLibrary: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="6" width="16" height="16" rx="4" stroke="#333" stroke-width="3"/><rect x="26" y="6" width="16" height="10" rx="4" stroke="#333" stroke-width="3"/><rect x="26" y="20" width="16" height="22" rx="4" stroke="#333" stroke-width="3"/><rect x="6" y="26" width="16" height="16" rx="4" stroke="#333" stroke-width="3"/></svg>`,
   widgetCustom: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M24 6L27.0902 14.9098L36 18L27.0902 21.0902L24 30L20.9098 21.0902L12 18L20.9098 14.9098L24 6Z" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M10 34H38" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M16 42H32" stroke="#333" stroke-width="3" stroke-linecap="round"/></svg>`,
   import: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18"><path d="M24 6V30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 16L24 6L34 16" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 38H38" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 30V38H34V30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
@@ -192,6 +193,7 @@ export async function mount(container, context) {
       'appearance-widget': '组件设置',
       'appearance-widget-library': '组件库',
       'appearance-widget-custom': '自定义',
+      'appearance-font': '字体设置',
       api: 'API设置',
       data: '数据设置',
       logs: '查看日志'
@@ -206,6 +208,7 @@ export async function mount(container, context) {
       'appearance-widget': 'appearance',
       'appearance-widget-library': 'appearance-widget',
       'appearance-widget-custom': 'appearance-widget',
+      'appearance-font': 'appearance',
       api: 'home',
       data: 'home',
       logs: 'home'

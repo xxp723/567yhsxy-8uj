@@ -28,7 +28,9 @@ export class Theme {
    *   iconBorderColor?: string,
    *   dockOpacity?: number,
    *   dockColor?: string,
-   *   dockColorHue?: number
+   *   dockColorHue?: number,
+   *   fontFamily?: string,
+   *   fontFaceCss?: string
    * }} appearance
    */
   apply(appearance = {}) {
@@ -47,7 +49,9 @@ export class Theme {
       iconBorderColor = '#d7c9b8',
       dockOpacity = 88,
       dockColor = '#d7c9b8',
-      dockColorHue = 38
+      dockColorHue = 38,
+      fontFamily = '',
+      fontFaceCss = ''
     } = appearance;
 
     const resolvedDesktopWallpaper = desktopWallpaper || wallpaper || '';
@@ -129,6 +133,19 @@ export class Theme {
       iconShadow = `${Math.max(4, normalizedShadowSize * 0.4)}px ${Math.max(4, normalizedShadowSize * 0.4)}px ${Math.max(10, normalizedShadowSize)}px rgba(181, 156, 132, 0.28), -${Math.max(4, normalizedShadowSize * 0.3)}px -${Math.max(4, normalizedShadowSize * 0.3)}px ${Math.max(8, normalizedShadowSize * 0.75)}px rgba(255, 255, 255, 0.82)`;
     } else if (iconShadowStyle === 'outer') {
       iconShadow = `0 ${Math.max(4, normalizedShadowSize * 0.35)}px ${Math.max(8, normalizedShadowSize)}px rgba(74, 52, 42, 0.18)`;
+    }
+
+    const defaultFontStack = '"Huiwen-mincho", "STSong", "SimSun", serif';
+    this.root.style.setProperty('--font-retro', String(fontFamily || defaultFontStack).trim() || defaultFontStack);
+
+    let dynamicFontFaceStyle = document.getElementById('miniphone-dynamic-font-face');
+    if (!dynamicFontFaceStyle) {
+      dynamicFontFaceStyle = document.createElement('style');
+      dynamicFontFaceStyle.id = 'miniphone-dynamic-font-face';
+      document.head?.appendChild(dynamicFontFaceStyle);
+    }
+    if (dynamicFontFaceStyle) {
+      dynamicFontFaceStyle.textContent = String(fontFaceCss || '').trim();
     }
 
     this.root.style.setProperty('--theme-color', themeColor);
