@@ -317,35 +317,69 @@ function renderWidgetLibraryItems(icons) {
   `).join('');
 }
 
-function renderManagedImageField({
-  title,
+function getDefaultWallpaperCropState(overrides = {}) {
+  const x = Math.max(0, Math.min(100, Number(overrides.x)));
+  const y = Math.max(0, Math.min(100, Number(overrides.y)));
+  const scale = Math.max(1, Math.min(2.5, Number(overrides.scale)));
+
+  return {
+    x: Number.isFinite(x) ? x : 50,
+    y: Number.isFinite(y) ? y : 50,
+    scale: Number.isFinite(scale) ? scale : 1
+  };
+}
+
+function normalizeWallpaperCrop(crop) {
+  return getDefaultWallpaperCropState(crop || {});
+}
+
+function buildWallpaperPreviewStyle(value = '', crop = {}) {
+  const hasValue = !!String(value || '').trim();
+  if (!hasValue) return '';
+
+  const normalized = normalizeWallpaperCrop(crop);
+  const backgroundSize = `${Math.max(100, normalized.scale * 100)}% auto`;
+  const backgroundPosition = `${normalized.x}% ${normalized.y}%`;
+
+  return `background-image:url('${escapeHtml(value)}');background-size:${backgroundSize};background-position:${backgroundPosition};`;
+}
+
+function renderWallpaperField({
+  icons,
   inputId,
   fileId,
   previewId,
   removeId,
   value = '',
-  hint
+  crop = {}
 }) {
   const hasValue = !!String(value || '').trim();
 
   return `
-    <div class="appearance-resource-card">
-      <div class="appearance-resource-card__head">
-        <div>
-          <h4>${title}</h4>
-          <p>${hint || '支持上传本地图片或粘贴 URL 链接。'}</p>
+    <!-- [模块标注] 桌面壁纸竖屏预览模块：仅维护桌面壁纸，左侧完整竖屏缩略图同步显示当前裁切结果 -->
+    <div class="appearance-wallpaper-card">
+      <div class="appearance-wallpaper-card__preview-pane">
+        <div class="appearance-wallpaper-card__preview-frame ${hasValue ? 'has-image' : ''}" id="${previewId}" style="${buildWallpaperPreviewStyle(value, crop)}">
+          ${hasValue ? '' : '<span>暂无壁纸</span>'}
         </div>
       </div>
-      <div class="appearance-resource-card__preview ${hasValue ? 'has-image' : ''}" id="${previewId}" style="${hasValue ? `background-image:url('${escapeHtml(value)}');` : ''}">
-        ${hasValue ? '' : '<span>暂无图片</span>'}
+      <div class="appearance-wallpaper-card__body">
+        <div class="appearance-wallpaper-card__head">
+          <div>
+            <h4>桌面壁纸</h4>
+            <p>应用到桌面、状态栏与全屏模式下的主界面背景。仅保留桌面壁纸入口，后续修改只需维护这一处。</p>
+          </div>
+        </div>
+        <input id="${inputId}" type="url" value="${escapeHtml(value)}" placeholder="https://example.com/image.jpg" />
+        <!-- [模块标注] 壁纸 URL 唯一输入模块：移除重复的“使用 URL 链接”按钮，仅保留此唯一 URL 输入入口 -->
+        <div class="appearance-wallpaper-card__hint">粘贴图片 URL 或上传本地图片后，可通过“调整裁切”统一修改缩放与取景位置。</div>
+        <div class="appearance-wallpaper-card__actions">
+          <label class="ui-button" for="${fileId}">${icons.uploadLocal}<span>上传本地图片</span></label>
+          <input id="${fileId}" type="file" accept="image/*" style="display:none;" />
+          <button class="ui-button" type="button" id="open-wallpaper-crop-modal">${icons.wallpaper}<span>调整裁切</span></button>
+          <button class="ui-button danger" type="button" id="${removeId}">${icons.delete}<span>删除</span></button>
+        </div>
       </div>
-      <div class="appearance-resource-card__actions">
-        <label class="ui-button" for="${fileId}">上传本地图片</label>
-        <input id="${fileId}" type="file" accept="image/*" style="display:none;" />
-        <button class="ui-button" type="button" data-resource-target="${inputId}">使用 URL 链接</button>
-        <button class="ui-button danger" type="button" id="${removeId}">删除</button>
-      </div>
-      <input id="${inputId}" type="url" value="${escapeHtml(value)}" placeholder="https://example.com/image.jpg" />
     </div>
   `;
 }
@@ -462,28 +496,19 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
       <!-- 壁纸设置子页面 -->
       <div id="settings-appearance-wallpaper" class="settings-detail">
         <div class="settings-detail__body">
-          <!-- [模块标注] 壁纸设置模块：桌面壁纸 / 锁屏壁纸分别独立配置、上传、URL 与删除 -->
+          <!-- [模块标注] 壁纸设置模块：仅保留桌面壁纸入口，支持竖屏预览、URL 输入、本地上传、删除与非原生裁切弹窗 -->
           <section class="ui-card">
             <h3>壁纸设置</h3>
-            <p class="ui-muted" style="margin-bottom: 10px;">桌面壁纸和锁屏壁纸均支持本地上传、URL 链接与删除。全屏模式下状态栏区域也会一并应用对应壁纸。</p>
+            <p class="ui-muted" style="margin-bottom: 10px;">桌面壁纸会统一应用到桌面与全屏状态栏区域。左侧竖屏缩略图会实时显示当前裁切结果。</p>
             <div class="appearance-settings-stack">
-              ${renderManagedImageField({
-                title: '桌面壁纸',
+              ${renderWallpaperField({
+                icons,
                 inputId: 'setting-desktop-wallpaper',
                 fileId: 'setting-desktop-wallpaper-file',
                 previewId: 'setting-desktop-wallpaper-preview',
                 removeId: 'remove-desktop-wallpaper',
                 value: appearance.desktopWallpaper || appearance.wallpaper || '',
-                hint: '应用到桌面、状态栏与全屏模式下的主界面背景。'
-              })}
-              ${renderManagedImageField({
-                title: '锁屏壁纸',
-                inputId: 'setting-lockscreen-wallpaper',
-                fileId: 'setting-lockscreen-wallpaper-file',
-                previewId: 'setting-lockscreen-wallpaper-preview',
-                removeId: 'remove-lockscreen-wallpaper',
-                value: appearance.lockscreenWallpaper || '',
-                hint: '预留给锁屏全屏背景；未设置时自动沿用桌面壁纸。'
+                crop: appearance.desktopWallpaperCrop || {}
               })}
             </div>
           </section>
@@ -676,51 +701,72 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
   `;
 }
 
-function updateManagedImagePreview(container, inputId, previewId) {
+function updateWallpaperPreview(container, inputId, previewId, crop = {}) {
   const input = container.querySelector(`#${inputId}`);
   const preview = container.querySelector(`#${previewId}`);
   if (!input || !preview) return;
   const value = String(input.value || '').trim();
 
   preview.classList.toggle('has-image', !!value);
-  preview.style.backgroundImage = value ? `url("${value}")` : '';
-  preview.innerHTML = value ? '' : '<span>暂无图片</span>';
+  preview.style.cssText = value ? buildWallpaperPreviewStyle(value, crop) : '';
+  preview.innerHTML = value ? '' : '<span>暂无壁纸</span>';
 }
 
-function bindManagedImageField(container, { inputId, fileId, previewId, removeId }) {
-  const input = container.querySelector(`#${inputId}`);
-  const fileInput = container.querySelector(`#${fileId}`);
-  const removeBtn = container.querySelector(`#${removeId}`);
-  const urlBtn = container.querySelector(`[data-resource-target="${inputId}"]`);
+function ensureWallpaperCropModal(container, icons) {
+  let modal = container.querySelector('#appearance-wallpaper-crop-modal');
+  if (modal) return modal;
 
-  updateManagedImagePreview(container, inputId, previewId);
-
-  input?.addEventListener('input', () => {
-    updateManagedImagePreview(container, inputId, previewId);
-  });
-
-  fileInput?.addEventListener('change', () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      input.value = String(reader.result || '');
-      updateManagedImagePreview(container, inputId, previewId);
-      fileInput.value = '';
-    };
-    reader.readAsDataURL(file);
-  });
-
-  urlBtn?.addEventListener('click', () => {
-    input?.focus();
-  });
-
-  removeBtn?.addEventListener('click', () => {
-    if (input) input.value = '';
-    if (fileInput) fileInput.value = '';
-    updateManagedImagePreview(container, inputId, previewId);
-  });
+  modal = document.createElement('div');
+  modal.id = 'appearance-wallpaper-crop-modal';
+  modal.className = 'managed-resource-modal hidden';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.innerHTML = `
+    <!-- [模块标注] 壁纸裁切弹窗模块：复用设置应用内主题弹窗样式，不使用浏览器原生弹窗 -->
+    <div class="managed-resource-modal__mask"></div>
+    <div class="managed-resource-modal__panel appearance-wallpaper-crop-modal__panel" role="dialog" aria-modal="true" aria-labelledby="appearance-wallpaper-crop-title">
+      <div class="managed-resource-modal__header">
+        <span id="appearance-wallpaper-crop-title">调整桌面壁纸裁切</span>
+        <button type="button" class="managed-resource-modal__close" id="appearance-wallpaper-crop-close" aria-label="关闭壁纸裁切弹窗">
+          ${icons.closeSmall}
+        </button>
+      </div>
+      <div class="managed-resource-modal__body">
+        <p class="managed-resource-modal__hint">通过缩放与横纵取景，调整桌面壁纸在完整竖屏画框中的显示位置。保存后桌面与顶部状态栏区域会统一使用这组裁切参数。</p>
+        <div class="appearance-wallpaper-crop-stage">
+          <div class="appearance-wallpaper-crop-stage__frame" id="appearance-wallpaper-crop-stage-preview"></div>
+        </div>
+        <div class="appearance-form-grid">
+          <label class="appearance-form-field appearance-form-field--slider">
+            <span>缩放</span>
+            <div class="appearance-slider-wrap">
+              <input id="appearance-wallpaper-crop-scale" type="range" min="1" max="2.5" step="0.01" value="1">
+              <strong data-range-value="appearance-wallpaper-crop-scale">1</strong>
+            </div>
+          </label>
+          <label class="appearance-form-field appearance-form-field--slider">
+            <span>横向取景</span>
+            <div class="appearance-slider-wrap">
+              <input id="appearance-wallpaper-crop-x" type="range" min="0" max="100" step="1" value="50">
+              <strong data-range-value="appearance-wallpaper-crop-x">50</strong>
+            </div>
+          </label>
+          <label class="appearance-form-field appearance-form-field--slider">
+            <span>纵向取景</span>
+            <div class="appearance-slider-wrap">
+              <input id="appearance-wallpaper-crop-y" type="range" min="0" max="100" step="1" value="50">
+              <strong data-range-value="appearance-wallpaper-crop-y">50</strong>
+            </div>
+          </label>
+        </div>
+        <div class="appearance-inline-actions">
+          <button type="button" class="ui-button" id="appearance-wallpaper-crop-reset">恢复默认</button>
+          <button type="button" class="ui-button primary" id="appearance-wallpaper-crop-apply">${icons.saveWidget}<span>应用裁切</span></button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.appendChild(modal);
+  return modal;
 }
 
 function ensureAppearanceConfirmModal(container, icons) {
@@ -838,9 +884,11 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   let isSelectionMode = false;
   let selectedWidgetIds = new Set();
   let activeIconEditorAppId = '';
+  let desktopWallpaperCropDraft = normalizeWallpaperCrop(current.appearance?.desktopWallpaperCrop);
 
   const appMap = new Map((apps || []).map((app) => [app.id, app]));
   const iconEditorModal = ensureIconResourceModal(container, icons);
+  const wallpaperCropModal = ensureWallpaperCropModal(container, icons);
 
   const getWidgetCards = () => Array.from(container.querySelectorAll('[data-widget-library-id]'));
 
@@ -902,6 +950,64 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         state.innerHTML = selected ? icons.selected : icons.unselected;
       }
     });
+  };
+
+  const syncWallpaperCropControls = (crop) => {
+    const normalized = normalizeWallpaperCrop(crop);
+    ['scale', 'x', 'y'].forEach((key) => {
+      const input = wallpaperCropModal.querySelector(`#appearance-wallpaper-crop-${key}`);
+      if (!input) return;
+      input.value = String(normalized[key]);
+      const min = Number(input.min || 0);
+      const max = Number(input.max || 100);
+      const numericValue = Number(normalized[key] || min);
+      const progress = max <= min ? 0 : ((numericValue - min) / (max - min)) * 100;
+      input.style.setProperty('--range-progress', `${progress}%`);
+      const valueEl = wallpaperCropModal.querySelector(`[data-range-value="appearance-wallpaper-crop-${key}"]`);
+      if (valueEl) valueEl.textContent = String(key === 'scale' ? Number(normalized[key]).toFixed(2) : normalized[key]);
+    });
+  };
+
+  const getWallpaperCropDraftFromModal = () => normalizeWallpaperCrop({
+    scale: wallpaperCropModal.querySelector('#appearance-wallpaper-crop-scale')?.value,
+    x: wallpaperCropModal.querySelector('#appearance-wallpaper-crop-x')?.value,
+    y: wallpaperCropModal.querySelector('#appearance-wallpaper-crop-y')?.value
+  });
+
+  const updateWallpaperCropModalPreview = () => {
+    const preview = wallpaperCropModal.querySelector('#appearance-wallpaper-crop-stage-preview');
+    const input = container.querySelector('#setting-desktop-wallpaper');
+    const value = String(input?.value || '').trim();
+    if (!preview) return;
+
+    const draft = getWallpaperCropDraftFromModal();
+    preview.classList.toggle('has-image', !!value);
+    preview.style.cssText = value ? buildWallpaperPreviewStyle(value, draft) : '';
+    preview.innerHTML = value ? '' : '<span>请先上传或填写壁纸</span>';
+    syncWallpaperCropControls(draft);
+  };
+
+  const openWallpaperCropModal = () => {
+    desktopWallpaperCropDraft = normalizeWallpaperCrop(current.appearance?.desktopWallpaperCrop || desktopWallpaperCropDraft);
+    syncWallpaperCropControls(desktopWallpaperCropDraft);
+
+    wallpaperCropModal.classList.remove('hidden');
+    wallpaperCropModal.setAttribute('aria-hidden', 'false');
+
+    const scaleInput = wallpaperCropModal.querySelector('#appearance-wallpaper-crop-scale');
+    const xInput = wallpaperCropModal.querySelector('#appearance-wallpaper-crop-x');
+    const yInput = wallpaperCropModal.querySelector('#appearance-wallpaper-crop-y');
+
+    if (scaleInput) scaleInput.value = String(desktopWallpaperCropDraft.scale);
+    if (xInput) xInput.value = String(desktopWallpaperCropDraft.x);
+    if (yInput) yInput.value = String(desktopWallpaperCropDraft.y);
+
+    updateWallpaperCropModalPreview();
+  };
+
+  const closeWallpaperCropModal = () => {
+    wallpaperCropModal.classList.add('hidden');
+    wallpaperCropModal.setAttribute('aria-hidden', 'true');
   };
 
   const closeIconEditorModal = () => {
@@ -1170,19 +1276,15 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
 
   const onSaveWallpaperSettings = async () => {
     const desktopWallpaper = String(container.querySelector('#setting-desktop-wallpaper')?.value || '').trim();
-    const lockscreenWallpaper = String(container.querySelector('#setting-lockscreen-wallpaper')?.value || '').trim();
+    const desktopWallpaperCrop = normalizeWallpaperCrop(desktopWallpaperCropDraft);
 
-    // [模块标注] 壁纸兼容存储模块：同步写入静态预览脚本兼容 key，确保全屏与状态栏区域读取到最新桌面 / 锁屏壁纸
+    // [模块标注] 壁纸兼容存储模块：同步写入桌面壁纸与裁切参数，确保全屏与顶部状态栏区域读取同一组背景数据
     if (desktopWallpaper) {
       localStorage.setItem('miniphone_wallpaper', desktopWallpaper);
+      localStorage.setItem('miniphone_wallpaper_crop', JSON.stringify(desktopWallpaperCrop));
     } else {
       localStorage.removeItem('miniphone_wallpaper');
-    }
-
-    if (lockscreenWallpaper) {
-      localStorage.setItem('miniphone_lockscreen_wallpaper', lockscreenWallpaper);
-    } else {
-      localStorage.removeItem('miniphone_lockscreen_wallpaper');
+      localStorage.removeItem('miniphone_wallpaper_crop');
     }
 
     await settings.update({
@@ -1190,7 +1292,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         ...(current.appearance || {}),
         wallpaper: desktopWallpaper,
         desktopWallpaper,
-        lockscreenWallpaper
+        desktopWallpaperCrop
       }
     });
 
@@ -1198,13 +1300,13 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       ...(current.appearance || {}),
       wallpaper: desktopWallpaper,
       desktopWallpaper,
-      lockscreenWallpaper
+      desktopWallpaperCrop
     };
 
     eventBus?.emit('settings:appearance-changed', {
       wallpaper: desktopWallpaper,
       desktopWallpaper,
-      lockscreenWallpaper
+      desktopWallpaperCrop
     });
     Logger.info('壁纸设置已保存');
   };
@@ -1369,17 +1471,59 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     }
   };
 
-  bindManagedImageField(container, {
-    inputId: 'setting-desktop-wallpaper',
-    fileId: 'setting-desktop-wallpaper-file',
-    previewId: 'setting-desktop-wallpaper-preview',
-    removeId: 'remove-desktop-wallpaper'
+  updateWallpaperPreview(container, 'setting-desktop-wallpaper', 'setting-desktop-wallpaper-preview', desktopWallpaperCropDraft);
+
+  const desktopWallpaperInput = container.querySelector('#setting-desktop-wallpaper');
+  const desktopWallpaperFileInput = container.querySelector('#setting-desktop-wallpaper-file');
+  const desktopWallpaperRemoveBtn = container.querySelector('#remove-desktop-wallpaper');
+
+  desktopWallpaperInput?.addEventListener('input', () => {
+    updateWallpaperPreview(container, 'setting-desktop-wallpaper', 'setting-desktop-wallpaper-preview', desktopWallpaperCropDraft);
+    updateWallpaperCropModalPreview();
   });
-  bindManagedImageField(container, {
-    inputId: 'setting-lockscreen-wallpaper',
-    fileId: 'setting-lockscreen-wallpaper-file',
-    previewId: 'setting-lockscreen-wallpaper-preview',
-    removeId: 'remove-lockscreen-wallpaper'
+
+  desktopWallpaperFileInput?.addEventListener('change', () => {
+    const file = desktopWallpaperFileInput.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      desktopWallpaperInput.value = String(reader.result || '');
+      updateWallpaperPreview(container, 'setting-desktop-wallpaper', 'setting-desktop-wallpaper-preview', desktopWallpaperCropDraft);
+      updateWallpaperCropModalPreview();
+      desktopWallpaperFileInput.value = '';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  desktopWallpaperRemoveBtn?.addEventListener('click', () => {
+    if (desktopWallpaperInput) desktopWallpaperInput.value = '';
+    if (desktopWallpaperFileInput) desktopWallpaperFileInput.value = '';
+    desktopWallpaperCropDraft = getDefaultWallpaperCropState();
+    updateWallpaperPreview(container, 'setting-desktop-wallpaper', 'setting-desktop-wallpaper-preview', desktopWallpaperCropDraft);
+    updateWallpaperCropModalPreview();
+  });
+
+  container.querySelector('#open-wallpaper-crop-modal')?.addEventListener('click', openWallpaperCropModal);
+  wallpaperCropModal.querySelector('#appearance-wallpaper-crop-close')?.addEventListener('click', closeWallpaperCropModal);
+  wallpaperCropModal.querySelector('.managed-resource-modal__mask')?.addEventListener('click', closeWallpaperCropModal);
+
+  ['scale', 'x', 'y'].forEach((key) => {
+    wallpaperCropModal.querySelector(`#appearance-wallpaper-crop-${key}`)?.addEventListener('input', () => {
+      updateWallpaperCropModalPreview();
+    });
+  });
+
+  wallpaperCropModal.querySelector('#appearance-wallpaper-crop-reset')?.addEventListener('click', () => {
+    desktopWallpaperCropDraft = getDefaultWallpaperCropState();
+    syncWallpaperCropControls(desktopWallpaperCropDraft);
+    updateWallpaperCropModalPreview();
+  });
+
+  wallpaperCropModal.querySelector('#appearance-wallpaper-crop-apply')?.addEventListener('click', () => {
+    desktopWallpaperCropDraft = getWallpaperCropDraftFromModal();
+    updateWallpaperPreview(container, 'setting-desktop-wallpaper', 'setting-desktop-wallpaper-preview', desktopWallpaperCropDraft);
+    closeWallpaperCropModal();
   });
 
   syncRangeValue('setting-icon-size');

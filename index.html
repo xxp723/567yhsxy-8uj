@@ -467,12 +467,32 @@
       const fullscreenOn = localStorage.getItem('miniphone_fullscreen') === '1';
       if (fullscreenOn) document.body.classList.add('fullscreen-mode');
 
-      // 壁纸（与设置应用对接：localStorage miniphone_wallpaper）
+      // [模块标注] 启动阶段桌面壁纸同步模块：初始化桌面壁纸与裁切参数，避免覆盖设置页中保存的全屏顶区铺满效果
       const screen = $('screen-root');
       const savedWallpaper = localStorage.getItem('miniphone_wallpaper');
+      const savedWallpaperCrop = (() => {
+        try {
+          return JSON.parse(localStorage.getItem('miniphone_wallpaper_crop') || '{}');
+        } catch (_) {
+          return {};
+        }
+      })();
+      const cropX = Number.isFinite(Number(savedWallpaperCrop?.x)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.x))) : 50;
+      const cropY = Number.isFinite(Number(savedWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.y))) : 50;
+      const cropScale = Number.isFinite(Number(savedWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(savedWallpaperCrop.scale))) : 1;
+      const wallpaperSize = `${Math.max(100, cropScale * 100)}% auto`;
+      const wallpaperPosition = `${cropX}% ${cropY}%`;
+
+      if (savedWallpaper) {
+        document.documentElement.style.setProperty('--desktop-wallpaper', `url("${savedWallpaper}")`);
+        document.documentElement.style.setProperty('--desktop-wallpaper-size', wallpaperSize);
+        document.documentElement.style.setProperty('--desktop-wallpaper-position', wallpaperPosition);
+      }
+
       if (screen && savedWallpaper) {
-        screen.style.backgroundImage = `url(${savedWallpaper})`;screen.style.backgroundSize = 'cover';
-        screen.style.backgroundPosition = 'center';
+        screen.style.backgroundImage = `url(${savedWallpaper})`;
+        screen.style.backgroundSize = wallpaperSize;
+        screen.style.backgroundPosition = wallpaperPosition;
       }
 
       // 时钟（顶部 & 组件）

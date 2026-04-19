@@ -16,6 +16,7 @@ export class Theme {
    * @param {{
    *   wallpaper?: string,
    *   desktopWallpaper?: string,
+   *   desktopWallpaperCrop?: { x?: number, y?: number, scale?: number },
    *   lockscreenWallpaper?: string,
    *   themeColor?: string,
    *   iconSize?: number,
@@ -31,6 +32,7 @@ export class Theme {
     const {
       wallpaper = '',
       desktopWallpaper = '',
+      desktopWallpaperCrop = {},
       lockscreenWallpaper = '',
       themeColor = '#4f46e5',
       iconSize = 56,
@@ -44,6 +46,13 @@ export class Theme {
 
     const resolvedDesktopWallpaper = desktopWallpaper || wallpaper || '';
     const resolvedLockscreenWallpaper = lockscreenWallpaper || resolvedDesktopWallpaper || '';
+    const normalizedWallpaperCrop = {
+      x: Number.isFinite(Number(desktopWallpaperCrop?.x)) ? Math.max(0, Math.min(100, Number(desktopWallpaperCrop.x))) : 50,
+      y: Number.isFinite(Number(desktopWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(desktopWallpaperCrop.y))) : 50,
+      scale: Number.isFinite(Number(desktopWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(desktopWallpaperCrop.scale))) : 1
+    };
+    const wallpaperSize = `${Math.max(100, normalizedWallpaperCrop.scale * 100)}% auto`;
+    const wallpaperPosition = `${normalizedWallpaperCrop.x}% ${normalizedWallpaperCrop.y}%`;
     const normalizedShadowSize = Math.max(0, Number(iconShadowSize) || 0);
     const normalizedRadius = Math.max(0, Number(iconRadius) || 0);
     const normalizedBorderWidth = Math.max(0, Number(iconBorderWidth) || 0);
@@ -69,12 +78,17 @@ export class Theme {
     this.root.style.setProperty('--app-icon-border-color', iconBorderColor || '#d7c9b8');
     this.root.style.setProperty('--app-icon-custom-image', iconImage ? `url("${iconImage}")` : 'none');
 
+    // [模块标注] 桌面壁纸裁切参数应用模块：统一输出桌面壁纸的 URL、缩放与取景参数，供桌面与全屏顶区共同使用
     if (resolvedDesktopWallpaper) {
       this.root.style.setProperty('--wallpaper', resolvedDesktopWallpaper);
       this.root.style.setProperty('--desktop-wallpaper', `url("${resolvedDesktopWallpaper}")`);
+      this.root.style.setProperty('--desktop-wallpaper-size', wallpaperSize);
+      this.root.style.setProperty('--desktop-wallpaper-position', wallpaperPosition);
     } else {
       this.root.style.removeProperty('--wallpaper');
       this.root.style.setProperty('--desktop-wallpaper', 'none');
+      this.root.style.setProperty('--desktop-wallpaper-size', 'cover');
+      this.root.style.setProperty('--desktop-wallpaper-position', 'center');
     }
 
     if (resolvedLockscreenWallpaper) {
@@ -83,12 +97,13 @@ export class Theme {
       this.root.style.setProperty('--lockscreen-wallpaper', 'none');
     }
 
+    // [模块标注] 桌面壁纸全屏铺满同步模块：确保 screen 层与全屏顶部状态栏区域共享同一套壁纸裁切参数
     const screen = document.querySelector('.screen');
     if (screen) {
       if (resolvedDesktopWallpaper) {
         screen.style.backgroundImage = `url("${resolvedDesktopWallpaper}")`;
-        screen.style.backgroundSize = 'cover';
-        screen.style.backgroundPosition = 'center';
+        screen.style.backgroundSize = wallpaperSize;
+        screen.style.backgroundPosition = wallpaperPosition;
       } else {
         screen.style.backgroundImage = '';
         screen.style.backgroundSize = '';

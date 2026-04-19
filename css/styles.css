@@ -33,6 +33,8 @@
   --app-icon-border-color: #D7C9B8;
   --app-icon-custom-image: none;
   --desktop-wallpaper: none;
+  --desktop-wallpaper-size: cover;
+  --desktop-wallpaper-position: center;
   --lockscreen-wallpaper: none;
   --ui-switch-off: rgba(125, 125, 130, 0.38);
   --ui-switch-on: #4A342A;
@@ -55,8 +57,8 @@ html, body {
   height: 100%;
   background: var(--c-bg-wallpaper);
   background-image: var(--desktop-wallpaper);
-  background-size: cover;
-  background-position: center;
+  background-size: var(--desktop-wallpaper-size);
+  background-position: var(--desktop-wallpaper-position);
   font-family: var(--font-retro);
   color: var(--c-text-main);
   overflow: hidden;
@@ -89,8 +91,8 @@ body.hide-status-bar #top-status-bar {
   position: relative;
   background-color: var(--c-bg-wallpaper); /* 默认壁纸，后续可被 JS 覆盖 */
   background-image: var(--desktop-wallpaper);
-  background-size: cover;
-  background-position: center;
+  background-size: var(--desktop-wallpaper-size);
+  background-position: var(--desktop-wallpaper-position);
 }
 
 /* =========================
@@ -1804,12 +1806,13 @@ body.is-edit-mode .grid-lines {
 /* =========================
    全屏显示模式
    ========================= */
+/* [模块标注] 全屏壁纸顶区铺满样式模块：全屏状态下顶部状态栏区域与主界面统一使用同一套壁纸裁切参数 */
 body.fullscreen-mode,
 body.fullscreen-mode .phone-frame,
 body.fullscreen-mode .screen {
   background-image: var(--desktop-wallpaper);
-  background-size: cover;
-  background-position: center;
+  background-size: var(--desktop-wallpaper-size);
+  background-position: var(--desktop-wallpaper-position);
 }
 
 body.fullscreen-mode .phone-frame {
@@ -2179,68 +2182,118 @@ body.fullscreen-mode .app-window {
   gap: 14px;
 }
 
-.appearance-resource-card {
+/* [模块标注] 壁纸专用资源卡片样式模块：仅作用于壁纸设置页的左右分栏竖屏预览布局 */
+.appearance-wallpaper-card {
   display: grid;
-  gap: 12px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
   padding: 14px;
-  border-radius: 18px;
+  border-radius: 22px;
   background: linear-gradient(180deg, rgba(255,255,255,0.76) 0%, rgba(244,236,225,0.96) 100%);
   border: 1px solid rgba(125, 90, 68, 0.12);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  align-items: stretch;
 }
 
-.appearance-resource-card__head {
+.appearance-wallpaper-card__preview-pane {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
 }
 
-.appearance-resource-card__head h4 {
+.appearance-wallpaper-card__body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.appearance-wallpaper-card__head h4 {
   margin: 0 0 4px;
   font-size: 14px;
   line-height: 1.3;
 }
 
-.appearance-resource-card__head p {
+.appearance-wallpaper-card__head p {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
   color: #8f7a66;
 }
 
-.appearance-resource-card__preview {
-  min-height: 96px;
-  border-radius: 18px;
-  border: 1px dashed rgba(125, 90, 68, 0.24);
-  background: rgba(255,255,255,0.42);
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background-size: cover;
-  background-position: center;
-  color: #8f7a66;
+.appearance-wallpaper-card__hint {
   font-size: 12px;
+  line-height: 1.6;
+  color: #8f7a66;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(215, 201, 184, 0.14);
 }
 
-.appearance-resource-card__preview.has-image {
+/* [模块标注] 壁纸竖屏缩略预览样式模块：完整模拟手机竖屏比例并实时显示当前裁切结果 */
+.appearance-wallpaper-card__preview-frame,
+.appearance-wallpaper-crop-stage__frame {
+  width: 100%;
+  aspect-ratio: 390 / 844;
+  border-radius: 26px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background-color: rgba(255,255,255,0.52);
+  background-repeat: no-repeat;
+  border: 1px dashed rgba(125, 90, 68, 0.24);
+  color: #8f7a66;
+  font-size: 12px;
+  position: relative;
+}
+
+.appearance-wallpaper-card__preview-frame {
+  max-width: 132px;
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.08);
+}
+
+.appearance-wallpaper-card__preview-frame::after,
+.appearance-wallpaper-crop-stage__frame::after {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(125, 90, 68, 0.14);
+  pointer-events: none;
+}
+
+.appearance-wallpaper-card__preview-frame.has-image,
+.appearance-wallpaper-crop-stage__frame.has-image {
   border-style: solid;
   border-color: rgba(125, 90, 68, 0.16);
 }
 
-.appearance-resource-card--icon .appearance-resource-card__preview {
-  min-height: 84px;
-}
-
-.appearance-resource-card__actions {
+.appearance-wallpaper-card__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
 }
 
-.appearance-resource-card__actions .ui-button {
+.appearance-wallpaper-card__actions .ui-button {
   min-width: 112px;
+}
+
+/* [模块标注] 壁纸裁切弹窗样式模块：统一裁切预览面板、操作滑杆与竖屏画框的暖色主题视觉 */
+.appearance-wallpaper-crop-modal__panel {
+  width: min(100%, 420px);
+}
+
+.appearance-wallpaper-crop-stage {
+  padding: 12px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(244,236,225,0.92) 100%);
+  border: 1px solid rgba(125, 90, 68, 0.12);
+}
+
+.appearance-wallpaper-crop-stage__frame {
+  max-width: 220px;
+  margin: 0 auto;
+  box-shadow: 0 14px 30px rgba(74, 52, 42, 0.08);
 }
 
 /* [模块标注] 图标单独自定义网格模块：图标设置页的逐应用自定义入口，统一复用暖棕奶油色主题 */
@@ -2984,8 +3037,16 @@ body.fullscreen-mode .app-window {
   .custom-widget-actions,
   .short-action-row,
   .appearance-inline-actions,
-  .appearance-resource-card__actions {
+  .appearance-wallpaper-card__actions {
     flex-direction: column;
+  }
+
+  .appearance-wallpaper-card {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-wallpaper-card__preview-frame {
+    max-width: min(132px, 40vw);
   }
 
   .appearance-inline-actions--icon-dual {
@@ -2996,7 +3057,7 @@ body.fullscreen-mode .app-window {
   .short-action-row .ui-button,
   .short-action-row .modal-btn,
   .appearance-inline-actions .ui-button,
-  .appearance-resource-card__actions .ui-button {
+  .appearance-wallpaper-card__actions .ui-button {
     width: 100%;
   }
 
