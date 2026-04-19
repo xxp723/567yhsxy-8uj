@@ -27,11 +27,12 @@ export class Theme {
    *   iconBorderWidth?: number,
    *   iconBorderColor?: string,
    *   dockOpacity?: number,
- *   dockColor?: string,
- *   dockColorHue?: number,
- *   fontFamily?: string,
- *   fontFaceCss?: string
- * }} appearance
+   *   dockColor?: string,
+   *   dockColorHue?: number,
+   *   fontFamily?: string,
+   *   fontFaceCss?: string,
+   *   fontScale?: number
+   * }} appearance
    */
   apply(appearance = {}) {
     const {
@@ -51,7 +52,8 @@ export class Theme {
       dockColor = '#d7c9b8',
       dockColorHue = 38,
       fontFamily = '',
-      fontFaceCss = ''
+      fontFaceCss = '',
+      fontScale = 1
     } = appearance;
 
     const resolvedDesktopWallpaper = desktopWallpaper || wallpaper || '';
@@ -135,8 +137,10 @@ export class Theme {
       iconShadow = `0 ${Math.max(4, normalizedShadowSize * 0.35)}px ${Math.max(8, normalizedShadowSize)}px rgba(74, 52, 42, 0.18)`;
     }
 
-    const defaultFontStack = '"Huiwen-mincho", "STSong", "SimSun", serif';
+    const defaultFontStack = '"STSong", "SimSun", serif';
+    const normalizedFontScale = Math.max(0.85, Math.min(1.3, Number(fontScale) || 1));
     this.root.style.setProperty('--font-retro', String(fontFamily || defaultFontStack).trim() || defaultFontStack);
+    this.root.style.setProperty('--font-scale', String(normalizedFontScale));
 
     let dynamicFontFaceStyle = document.getElementById('miniphone-dynamic-font-face');
     if (!dynamicFontFaceStyle) {

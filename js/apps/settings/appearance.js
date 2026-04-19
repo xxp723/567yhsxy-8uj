@@ -29,31 +29,10 @@ const DEFAULT_DOCK_ADJUSTMENTS = {
   dockColor: '#f5f1ea'
 };
 
-const DEFAULT_FONT_STACK = '"Huiwen-mincho", "STSong", "SimSun", serif';
-
-const BUILTIN_FONT_PRESETS = [
-  {
-    id: 'default',
-    label: '默认字体',
-    family: DEFAULT_FONT_STACK,
-    fontFaceCss: '',
-    description: '未上传新字体时，系统使用默认明朝风字体堆栈。'
-  },
-  {
-    id: 'builtin-huiwen',
-    label: '汇文明朝体',
-    family: '"Huiwen-mincho", "STSong", "SimSun", serif',
-    fontFaceCss: '',
-    description: '内置快速切换字体（系统本地字体优先）。'
-  },
-  {
-    id: 'builtin-lxgw',
-    label: '霞鹜文楷',
-    family: '"LXGW WenKai", "LXGW WenKai GB", "Kaiti SC", "KaiTi", serif',
-    fontFaceCss: '',
-    description: '内置快速切换字体（系统本地字体优先）。'
-  }
-];
+const DEFAULT_FONT_STACK = '"STSong", "SimSun", serif';
+const DEFAULT_FONT_SCALE = 1;
+const FONT_SCALE_MIN = 0.85;
+const FONT_SCALE_MAX = 1.3;
 
 const ICON_SHADOW_OPTIONS = [
   { value: 'none', label: '无阴影' },
@@ -178,6 +157,12 @@ function normalizeFontEntries(fontEntries) {
     .filter((entry) => entry.id && entry.url && entry.family);
 }
 
+function normalizeFontScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_FONT_SCALE;
+  return Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, numeric));
+}
+
 function inferFontFormatFromName(name = '') {
   const fileName = String(name || '').toLowerCase();
   if (fileName.endsWith('.woff2')) return 'woff2';
@@ -200,15 +185,6 @@ function resolveFontAppearance(selectedFontId, fontEntries = []) {
   const normalizedSelectedId = String(selectedFontId || 'default').trim() || 'default';
   const normalizedEntries = normalizeFontEntries(fontEntries);
 
-  const builtin = BUILTIN_FONT_PRESETS.find((item) => item.id === normalizedSelectedId);
-  if (builtin) {
-    return {
-      selectedFontId: builtin.id,
-      fontFamily: builtin.family,
-      fontFaceCss: builtin.fontFaceCss
-    };
-  }
-
   if (normalizedSelectedId.startsWith('custom:')) {
     const hitId = normalizedSelectedId.slice('custom:'.length);
     const hit = normalizedEntries.find((entry) => entry.id === hitId);
@@ -228,21 +204,31 @@ function resolveFontAppearance(selectedFontId, fontEntries = []) {
   };
 }
 
-function renderFontPresetOptions(icons, selectedFontId = 'default') {
-  return BUILTIN_FONT_PRESETS.map((preset) => `
-    <button
-      type="button"
-      class="appearance-font-preset ${selectedFontId === preset.id ? 'is-selected' : ''}"
-      data-font-choice="${preset.id}"
-      aria-pressed="${selectedFontId === preset.id ? 'true' : 'false'}"
-    >
-      <span class="appearance-font-preset__state">${selectedFontId === preset.id ? icons.selected : icons.unselected}</span>
-      <span class="appearance-font-preset__meta">
-        <strong>${preset.label}</strong>
-        <small>${preset.description}</small>
-      </span>
-    </button>
-  `).join('');
+function renderFontPresetOptions(icons, entries = [], selectedFontId = 'default') {
+  const urlEntries = normalizeFontEntries(entries).filter((entry) => entry.source === 'url');
+
+  if (!urlEntries.length) {
+    return `<div class="appearance-font-uploaded-empty">暂无 URL 字体预设。点击“新增 URL 字体预设”后可快速切换。</div>`;
+  }
+
+  return urlEntries.map((entry) => {
+    const choiceId = `custom:${entry.id}`;
+    const isSelected = selectedFontId === choiceId;
+    return `
+      <button
+        type="button"
+        class="appearance-font-preset ${isSelected ? 'is-selected' : ''}"
+        data-font-choice="${choiceId}"
+        aria-pressed="${isSelected ? 'true' : 'false'}"
+      >
+        <span class="appearance-font-preset__state">${isSelected ? icons.selected : icons.unselected}</span>
+        <span class="appearance-font-preset__meta">
+          <strong>${escapeHtml(entry.name || '未命名预设')}</strong>
+          <small>URL 字体预设 · 快速切换</small>
+        </span>
+      </button>
+    `;
+  }).join('');
 }
 
 function renderUploadedFontItems(icons, entries = [], selectedFontId = 'default') {
@@ -672,26 +658,32 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
         </div>
       </div>
 
-      <!-- [模块标注] 字体设置子页面：支持内置字体快速切换、本地上传与 URL 上传字体，统一复用设置应用卡片风格 -->
+      <!-- [模块标注] 字体设置子页面：移除内置字体预设，仅保留 URL 预设快速切换、字体大小滑动条与统一动作按钮 -->
       <div id="settings-appearance-font" class="settings-detail">
         <div class="settings-detail__body">
           <section class="ui-card">
             <h3>字体设置</h3>
-            <p class="ui-muted" style="margin-bottom: 10px;">你可以选择默认字体、快速切换内置字体，或上传自定义字体并设为全局字体。未上传新字体时默认使用系统字体。</p>
+            <p class="ui-muted" style="margin-bottom: 10px;">支持上传本地字体，并将 URL 字体链接命名保存为预设，方便快速切换。</p>
 
             <div class="appearance-font-preset-list" id="appearance-font-preset-list">
-              ${renderFontPresetOptions(icons, fontResolved.selectedFontId)}
+              ${renderFontPresetOptions(icons, fontEntries, fontResolved.selectedFontId)}
             </div>
 
-            <!-- [模块标注] 字体资源上传模块：本地上传按钮与 URL 添加按钮分开，便于后续独立维护 -->
+            <!-- [模块标注] 字体资源上传模块：保留本地上传，并通过主题弹窗新增 URL 字体预设 -->
             <div class="appearance-font-upload-tools">
               <input id="setting-font-upload-file" type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" style="display:none;" />
               <button class="ui-button" type="button" id="setting-font-upload-trigger">${icons.uploadLocal}<span>上传本地字体</span></button>
-              <div class="appearance-font-url-row">
-                <input id="setting-font-url-input" type="url" placeholder="https://example.com/font.woff2" />
-                <button class="ui-button" type="button" id="setting-font-url-add">${icons.link}<span>添加 URL 字体</span></button>
-              </div>
+              <button class="ui-button" type="button" id="setting-font-url-open-modal">${icons.link}<span>新增 URL 字体预设</span></button>
             </div>
+
+            ${renderSliderField({
+              id: 'setting-font-scale',
+              label: '字体大小',
+              value: Math.round(normalizeFontScale(appearance.fontScale) * 100),
+              min: 85,
+              max: 130,
+              step: 1
+            })}
 
             <!-- [模块标注] 上传字体列表模块：删除按钮为逐条删除，不使用一键清空 -->
             <div class="appearance-font-uploaded-list" id="appearance-font-uploaded-list">
@@ -699,7 +691,8 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
             </div>
 
             <div class="appearance-inline-actions appearance-inline-actions--icon-dual">
-              <button class="ui-button primary" id="save-font-settings" type="button">${icons.saveWidget}<span>保存字体设置</span></button>
+              <button class="ui-button" id="reset-font-settings" type="button">${icons.closeSmall}<span>恢复默认</span></button>
+              <button class="ui-button primary" id="save-font-settings" type="button">${icons.saveWidget}<span>保存设置</span></button>
             </div>
           </section>
         </div>
@@ -1145,6 +1138,43 @@ function ensureIconResourceModal(container, icons) {
   return modal;
 }
 
+function ensureFontUrlPresetModal(container, icons) {
+  let modal = container.querySelector('#appearance-font-url-modal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'appearance-font-url-modal';
+  modal.className = 'managed-resource-modal hidden';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.innerHTML = `
+    <!-- [模块标注] 字体 URL 预设弹窗模块：复用设置应用主题弹窗，不使用原生浏览器弹窗 -->
+    <div class="managed-resource-modal__mask"></div>
+    <div class="managed-resource-modal__panel" role="dialog" aria-modal="true" aria-labelledby="appearance-font-url-title">
+      <div class="managed-resource-modal__header">
+        <span id="appearance-font-url-title">新增 URL 字体预设</span>
+        <button type="button" class="managed-resource-modal__close" id="appearance-font-url-close" aria-label="关闭字体 URL 弹窗">
+          ${icons.closeSmall}
+        </button>
+      </div>
+      <div class="managed-resource-modal__body">
+        <div class="modal-field">
+          <label for="appearance-font-url-name">预设名称</label>
+          <input id="appearance-font-url-name" type="text" placeholder="例如：思源宋体" />
+        </div>
+        <div class="modal-field">
+          <label for="appearance-font-url-input">字体 URL</label>
+          <input id="appearance-font-url-input" type="url" placeholder="https://example.com/font.woff2" />
+        </div>
+        <div class="appearance-inline-actions appearance-inline-actions--icon-editor-submit">
+          <button class="ui-button primary" type="button" id="appearance-font-url-save">${icons.saveWidget}<span>保存为预设</span></button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.appendChild(modal);
+  return modal;
+}
+
 export function bindAppearanceEvents(container, { settings, eventBus, current, icons, apps = [] }) {
   let isSelectionMode = false;
   let selectedWidgetIds = new Set();
@@ -1152,10 +1182,12 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   let desktopWallpaperCropDraft = normalizeWallpaperCrop(current.appearance?.desktopWallpaperCrop);
   let fontEntriesDraft = normalizeFontEntries(current.appearance?.fontEntries);
   let selectedFontIdDraft = resolveFontAppearance(current.appearance?.selectedFontId, fontEntriesDraft).selectedFontId;
+  let fontScaleDraft = normalizeFontScale(current.appearance?.fontScale);
 
   const appMap = new Map((apps || []).map((app) => [app.id, app]));
   const iconEditorModal = ensureIconResourceModal(container, icons);
   const wallpaperCropModal = ensureWallpaperCropModal(container, icons);
+  const fontUrlPresetModal = ensureFontUrlPresetModal(container, icons);
 
   const getWidgetCards = () => Array.from(container.querySelectorAll('[data-widget-library-id]'));
 
@@ -1522,11 +1554,22 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   const rerenderFontPanels = () => {
     const presetList = container.querySelector('#appearance-font-preset-list');
     const uploadedList = container.querySelector('#appearance-font-uploaded-list');
+    const fontScaleInput = container.querySelector('#setting-font-scale');
     if (presetList) {
-      presetList.innerHTML = renderFontPresetOptions(icons, selectedFontIdDraft);
+      presetList.innerHTML = renderFontPresetOptions(icons, fontEntriesDraft, selectedFontIdDraft);
     }
     if (uploadedList) {
       uploadedList.innerHTML = renderUploadedFontItems(icons, fontEntriesDraft, selectedFontIdDraft);
+    }
+    if (fontScaleInput) {
+      const percentValue = Math.round(normalizeFontScale(fontScaleDraft) * 100);
+      fontScaleInput.value = String(percentValue);
+      const min = Number(fontScaleInput.min || 85);
+      const max = Number(fontScaleInput.max || 130);
+      const progress = max <= min ? 0 : ((percentValue - min) / (max - min)) * 100;
+      fontScaleInput.style.setProperty('--range-progress', `${progress}%`);
+      const valueEl = container.querySelector('[data-range-value="setting-font-scale"]');
+      if (valueEl) valueEl.textContent = String(percentValue);
     }
   };
 
@@ -1575,9 +1618,27 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     rerenderFontPanels();
   };
 
-  const onAddUrlFont = () => {
-    const urlInput = container.querySelector('#setting-font-url-input');
+  const openFontUrlPresetModal = () => {
+    const nameInput = fontUrlPresetModal.querySelector('#appearance-font-url-name');
+    const urlInput = fontUrlPresetModal.querySelector('#appearance-font-url-input');
+    if (nameInput) nameInput.value = '';
+    if (urlInput) urlInput.value = '';
+    fontUrlPresetModal.classList.remove('hidden');
+    fontUrlPresetModal.setAttribute('aria-hidden', 'false');
+  };
+
+  const closeFontUrlPresetModal = () => {
+    fontUrlPresetModal.classList.add('hidden');
+    fontUrlPresetModal.setAttribute('aria-hidden', 'true');
+  };
+
+  const onSaveUrlPresetFromModal = () => {
+    const nameInput = fontUrlPresetModal.querySelector('#appearance-font-url-name');
+    const urlInput = fontUrlPresetModal.querySelector('#appearance-font-url-input');
+
+    const rawName = String(nameInput?.value || '').trim();
     const rawUrl = String(urlInput?.value || '').trim();
+
     if (!rawUrl) {
       Logger.error('请先填写字体 URL');
       return;
@@ -1596,7 +1657,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       return;
     }
 
-    const name = inferFontNameFromUrl(validatedUrl);
+    const fallbackName = inferFontNameFromUrl(validatedUrl);
+    const name = rawName || fallbackName;
     const family = sanitizeFontFamilyName(name);
     addFontEntry({
       id: generateFontEntryId(),
@@ -1607,8 +1669,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       format: inferFontFormatFromName(name || validatedUrl)
     });
 
-    if (urlInput) urlInput.value = '';
-    Logger.info(`已添加 URL 字体：${family}`);
+    closeFontUrlPresetModal();
+    Logger.info(`已保存 URL 字体预设：${family}`);
   };
 
   const onUploadLocalFont = (file) => {
@@ -1639,6 +1701,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
 
   const onSaveFontSettings = async () => {
     const resolvedFont = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft);
+    const nextFontScale = normalizeFontScale(fontScaleDraft);
 
     await settings.update({
       appearance: {
@@ -1646,7 +1709,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         fontEntries: normalizeFontEntries(fontEntriesDraft),
         selectedFontId: resolvedFont.selectedFontId,
         fontFamily: resolvedFont.fontFamily,
-        fontFaceCss: resolvedFont.fontFaceCss
+        fontFaceCss: resolvedFont.fontFaceCss,
+        fontScale: nextFontScale
       }
     });
 
@@ -1655,17 +1719,57 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss
+      fontFaceCss: resolvedFont.fontFaceCss,
+      fontScale: nextFontScale
     };
 
     eventBus?.emit('settings:appearance-changed', {
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss
+      fontFaceCss: resolvedFont.fontFaceCss,
+      fontScale: nextFontScale
     });
 
     Logger.info('字体设置已保存');
+  };
+
+  const onResetFontSettings = async () => {
+    selectedFontIdDraft = 'default';
+    fontScaleDraft = DEFAULT_FONT_SCALE;
+    rerenderFontPanels();
+
+    const resolvedFont = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft);
+
+    await settings.update({
+      appearance: {
+        ...(current.appearance || {}),
+        fontEntries: normalizeFontEntries(fontEntriesDraft),
+        selectedFontId: resolvedFont.selectedFontId,
+        fontFamily: resolvedFont.fontFamily,
+        fontFaceCss: resolvedFont.fontFaceCss,
+        fontScale: fontScaleDraft
+      }
+    });
+
+    current.appearance = {
+      ...(current.appearance || {}),
+      fontEntries: normalizeFontEntries(fontEntriesDraft),
+      selectedFontId: resolvedFont.selectedFontId,
+      fontFamily: resolvedFont.fontFamily,
+      fontFaceCss: resolvedFont.fontFaceCss,
+      fontScale: fontScaleDraft
+    };
+
+    eventBus?.emit('settings:appearance-changed', {
+      fontEntries: normalizeFontEntries(fontEntriesDraft),
+      selectedFontId: resolvedFont.selectedFontId,
+      fontFamily: resolvedFont.fontFamily,
+      fontFaceCss: resolvedFont.fontFaceCss,
+      fontScale: fontScaleDraft
+    });
+
+    Logger.info('已恢复默认字体设置');
   };
 
   // [模块标注] 界面设置-状态栏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
@@ -2005,6 +2109,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   });
 
   syncRangeValue('setting-dock-opacity');
+  syncRangeValue('setting-font-scale');
   syncRangeValue('setting-icon-size');
   syncRangeValue('setting-icon-radius');
   syncRangeValue('setting-icon-shadow-size');
@@ -2101,7 +2206,14 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     event.target.value = '';
   });
 
-  container.querySelector('#setting-font-url-add')?.addEventListener('click', onAddUrlFont);
+  container.querySelector('#setting-font-url-open-modal')?.addEventListener('click', openFontUrlPresetModal);
+  fontUrlPresetModal.querySelector('#appearance-font-url-close')?.addEventListener('click', closeFontUrlPresetModal);
+  fontUrlPresetModal.querySelector('.managed-resource-modal__mask')?.addEventListener('click', closeFontUrlPresetModal);
+  fontUrlPresetModal.querySelector('#appearance-font-url-save')?.addEventListener('click', onSaveUrlPresetFromModal);
+  container.querySelector('#setting-font-scale')?.addEventListener('input', (event) => {
+    fontScaleDraft = normalizeFontScale(Number(event.target?.value || 100) / 100);
+  });
+  container.querySelector('#reset-font-settings')?.addEventListener('click', onResetFontSettings);
   container.querySelector('#save-font-settings')?.addEventListener('click', onSaveFontSettings);
 
   container.querySelector('#setting-status-bar')?.addEventListener('change', onToggleStatusBar);

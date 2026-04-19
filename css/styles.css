@@ -4,12 +4,6 @@
  *       使用奶咖色、米黄色、米白色、浅灰色系。
  */
 
-@font-face {
-  font-family: "Huiwen-mincho";
-  /* 假设本地或系统有该字体，或者回退到常见宋体/明朝体 */
-  src: local("汇文明朝体"), local("Huiwen-mincho"), local("STSong"), local("SimSun");
-}
-
 /* [模块标注] 字体设置卡片样式模块：仅作用于外观-字体设置页面，不影响其它设置子页 */
 .appearance-font-preset-list {
   display: grid;
@@ -167,7 +161,8 @@
   --c-text-main: #4A342A;    /* Espresso 浓缩咖啡字体 */
   --c-border: #7D5A44;       /* Cocoa 可可色边框 */
   
-  --font-retro: "Huiwen-mincho", "STSong", "SimSun", serif;
+  --font-retro: "STSong", "SimSun", serif;
+  --font-scale: 1;
 
   --status-bar-height: 28px;
   --dock-height: 90px;
@@ -208,6 +203,7 @@ html, body {
   background-size: var(--desktop-wallpaper-size);
   background-position: var(--desktop-wallpaper-position);
   font-family: var(--font-retro);
+  font-size: calc(16px * var(--font-scale, 1));
   color: var(--c-text-main);
   overflow: hidden;
   user-select: none;
