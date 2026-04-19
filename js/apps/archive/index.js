@@ -366,6 +366,8 @@ export async function mount(container, context) {
   const appWindow = container.closest('.app-window');
   const header = appWindow?.querySelector('.app-window__header') || null;
   const actionsEl = header?.querySelector('.app-window__actions') || null;
+  const closeBtn = header?.querySelector('.app-window__close') || null;
+  const titleEl = header?.querySelector('.app-window__title') || null;
 
   container.innerHTML = `
     <div class="archive-v2">
@@ -785,6 +787,22 @@ export async function mount(container, context) {
 
   const createHeaderControls = () => {
     if (!header) return;
+
+    // [模块标注] 档案应用标题栏返回桌面模块：
+    // 1) 隐藏原“门形状”关闭按钮，避免与新增按钮重叠
+    // 2) 将返回桌面入口改为点击标题文字区域
+    if (closeBtn) {
+      closeBtn.style.display = 'none';
+      closeBtn.setAttribute('aria-hidden', 'true');
+    }
+
+    if (titleEl) {
+      titleEl.style.pointerEvents = 'auto';
+      titleEl.style.cursor = 'pointer';
+      titleEl.setAttribute('title', '点击返回桌面');
+      titleEl.setAttribute('aria-label', '点击返回桌面');
+      titleEl.addEventListener('click', onTitleBackHome);
+    }
 
     if (actionsEl) {
       actionsEl.style.display = 'none';
@@ -1455,6 +1473,11 @@ export async function mount(container, context) {
     }
   };
 
+  // [模块标注] 标题点击返回桌面行为模块：仅作用于档案应用窗口标题
+  const onTitleBackHome = () => {
+    context.eventBus?.emit('app:close', { appId: context.appId });
+  };
+
   createHeaderControls();
   rerender();
 
@@ -1478,6 +1501,19 @@ export async function mount(container, context) {
       const right = header?.querySelector('.archive-window-right-actions');
       left?.remove();
       right?.remove();
+
+      if (titleEl) {
+        titleEl.removeEventListener('click', onTitleBackHome);
+        titleEl.style.pointerEvents = '';
+        titleEl.style.cursor = '';
+        titleEl.removeAttribute('title');
+        titleEl.removeAttribute('aria-label');
+      }
+
+      if (closeBtn) {
+        closeBtn.style.display = '';
+        closeBtn.removeAttribute('aria-hidden');
+      }
 
       if (actionsEl) {
         actionsEl.style.display = '';

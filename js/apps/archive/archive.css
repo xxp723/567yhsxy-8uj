@@ -78,10 +78,12 @@
 }
 
 /* 顶部标题栏左右动作区（仅档案应用） */
+/* [模块标注] 档案应用标题栏动作按钮垂直对齐模块：
+   将“添加/导入/导出”按钮与标题文本基线视觉对齐（修正偏高问题） */
 .app-window__header .archive-window-left-actions,
 .app-window__header .archive-window-right-actions {
   position: absolute;
-  top: 50%;
+  top: calc(50% + 6px);
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
@@ -341,12 +343,28 @@
 }
 
 /* 弹窗定制 */
+/* [模块标注] 档案应用弹窗尺寸与滚动模块：
+   1) 缩小弹窗占比，视觉更轻量
+   2) 内容区可纵向滚动，且滚动条不可见（保留滚动能力） */
 .archive-modal-panel {
-  max-width: min(92vw, 360px);
+  max-width: min(88vw, 332px);
+  max-height: min(74vh, 560px);
+  overflow: hidden;
 }
 
 .archive-modal-body {
   gap: 12px;
+  max-height: calc(min(74vh, 560px) - 84px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.archive-modal-body::-webkit-scrollbar {
+  display: none;
 }
 
 .archive-modal-hint {
@@ -588,10 +606,16 @@
 
 @media (max-width: 380px) {
   .archive-grid-fields,
-  .archive-form-row--two,
   .archive-avatar-editor__actions,
   .archive-avatar-editor__url {
     grid-template-columns: 1fr;
+  }
+
+  /* [模块标注] 用户面具/角色档案双列字段布局模块：
+     小屏下仍保持“姓名-性别 / 年龄-身份 / 签名-联系方式”两列排布 */
+  .archive-form-row--two {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
 
   .archive-card-actions {
