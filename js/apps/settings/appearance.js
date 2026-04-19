@@ -24,6 +24,11 @@ const DEFAULT_ICON_ADJUSTMENTS = {
   iconBorderColor: '#d7c9b8'
 };
 
+const DEFAULT_DOCK_ADJUSTMENTS = {
+  dockOpacity: 88,
+  dockColorHue: 38
+};
+
 const ICON_SHADOW_OPTIONS = [
   { value: 'none', label: '无阴影' },
   { value: 'outer', label: '外投影' },
@@ -71,6 +76,16 @@ function getDefaultIconAdjustmentState(overrides = {}) {
   return {
     ...DEFAULT_ICON_ADJUSTMENTS,
     ...overrides
+  };
+}
+
+function getDefaultDockAdjustmentState(overrides = {}) {
+  const dockOpacity = Math.max(0, Math.min(100, Number(overrides.dockOpacity)));
+  const dockColorHue = Math.max(0, Math.min(360, Number(overrides.dockColorHue)));
+
+  return {
+    dockOpacity: Number.isFinite(dockOpacity) ? dockOpacity : DEFAULT_DOCK_ADJUSTMENTS.dockOpacity,
+    dockColorHue: Number.isFinite(dockColorHue) ? dockColorHue : DEFAULT_DOCK_ADJUSTMENTS.dockColorHue
   };
 }
 
@@ -439,6 +454,7 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
   const appearance = current.appearance || {};
   const iconImages = normalizeIconImages(appearance.iconImages);
   const iconAdjustments = getDefaultIconAdjustmentState(appearance);
+  const dockAdjustments = getDefaultDockAdjustmentState(appearance);
 
   return `
       <!-- 外观设置详情页（改为卡片式分类） -->
@@ -490,6 +506,27 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
                 <span class="toggle-slider"></span>
               </label>
             </label>
+          </section>
+          <section class="ui-card">
+            <!-- [模块标注] 界面设置-Dock外观滑杆模块：仅在界面设置内控制 Dock 栏（不含 Dock 内应用）背景透明度与颜色 -->
+            <h3>DOCK 栏外观</h3>
+            <p class="ui-muted" style="margin-bottom: 10px;">通过滑动条调整底部 DOCK 栏背景透明度与颜色，不影响 DOCK 栏内应用图标。</p>
+            <div class="appearance-form-grid">
+              ${renderSliderField({
+                id: 'setting-dock-opacity',
+                label: 'DOCK 透明度',
+                value: dockAdjustments.dockOpacity,
+                min: 0,
+                max: 100
+              })}
+              ${renderSliderField({
+                id: 'setting-dock-color-hue',
+                label: 'DOCK 颜色',
+                value: dockAdjustments.dockColorHue,
+                min: 0,
+                max: 360
+              })}
+            </div>
           </section>
           <button class="ui-button primary" id="save-ui-settings" style="width: 100%; margin-top: 10px;">保存界面设置</button>
         </div>
@@ -1256,6 +1293,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   const onSaveUiSettings = async () => {
     const statusBarChecked = container.querySelector('#setting-status-bar')?.checked;
     const fullscreenChecked = container.querySelector('#setting-fullscreen')?.checked;
+    const dockOpacity = Number(container.querySelector('#setting-dock-opacity')?.value ?? DEFAULT_DOCK_ADJUSTMENTS.dockOpacity);
+    const dockColorHue = Number(container.querySelector('#setting-dock-color-hue')?.value ?? DEFAULT_DOCK_ADJUSTMENTS.dockColorHue);
 
     if (statusBarChecked) {
       localStorage.removeItem('miniphone_status_bar_hidden');
@@ -1273,6 +1312,21 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       document.body.classList.remove('fullscreen-mode');
     }
 
+    const nextDockAdjustments = getDefaultDockAdjustmentState({ dockOpacity, dockColorHue });
+
+    await settings.update({
+      appearance: {
+        ...(current.appearance || {}),
+        ...nextDockAdjustments
+      }
+    });
+
+    current.appearance = {
+      ...(current.appearance || {}),
+      ...nextDockAdjustments
+    };
+
+    eventBus?.emit('settings:appearance-changed', { ...nextDockAdjustments });
     Logger.info('界面设置已保存');
   };
 
@@ -1528,6 +1582,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     closeWallpaperCropModal();
   });
 
+  syncRangeValue('setting-dock-opacity');
+  syncRangeValue('setting-dock-color-hue');
   syncRangeValue('setting-icon-size');
   syncRangeValue('setting-icon-radius');
   syncRangeValue('setting-icon-shadow-size');

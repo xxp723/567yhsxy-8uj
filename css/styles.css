@@ -36,6 +36,9 @@
   --desktop-wallpaper-size: cover;
   --desktop-wallpaper-position: center;
   --lockscreen-wallpaper: none;
+  --dock-opacity: 0.88;
+  --dock-color: hsl(38 32% 88%);
+  --dock-bg: hsl(38 32% 88% / 0.88);
   --ui-switch-off: rgba(125, 125, 130, 0.38);
   --ui-switch-on: #4A342A;
   --ui-switch-thumb: #fff;
@@ -288,13 +291,14 @@ body.has-global-icon-image .app-icon-btn:not(.has-img) .app-custom-img {
 /* =========================
    底部 Dock 栏 (Flat 2.0)
    ========================= */
+/* [模块标注] Dock容器背景外观样式模块：仅控制 Dock 容器背景颜色与透明度，不影响 Dock 内应用图标 */
 .dock-container {
   position: absolute;
   bottom: 15px;
   left: 15px;
   right: 15px;
   height: 80px;
-  background: var(--c-white-rice);
+  background: var(--dock-bg, hsl(38 32% 88% / 0.88));
   border: none;
   border-radius: 28px;
   display: flex;

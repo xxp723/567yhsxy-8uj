@@ -25,7 +25,9 @@ export class Theme {
    *   iconShadowStyle?: string,
    *   iconShadowSize?: number,
    *   iconBorderWidth?: number,
-   *   iconBorderColor?: string
+   *   iconBorderColor?: string,
+   *   dockOpacity?: number,
+   *   dockColorHue?: number
    * }} appearance
    */
   apply(appearance = {}) {
@@ -41,7 +43,9 @@ export class Theme {
       iconShadowStyle = 'none',
       iconShadowSize = 18,
       iconBorderWidth = 0,
-      iconBorderColor = '#d7c9b8'
+      iconBorderColor = '#d7c9b8',
+      dockOpacity = 88,
+      dockColorHue = 38
     } = appearance;
 
     const resolvedDesktopWallpaper = desktopWallpaper || wallpaper || '';
@@ -57,6 +61,8 @@ export class Theme {
     const normalizedShadowSize = Math.max(0, Number(iconShadowSize) || 0);
     const normalizedRadius = Math.max(0, Number(iconRadius) || 0);
     const normalizedBorderWidth = Math.max(0, Number(iconBorderWidth) || 0);
+    const normalizedDockOpacity = Math.max(0, Math.min(100, Number(dockOpacity) || 0));
+    const normalizedDockColorHue = Math.max(0, Math.min(360, Number(dockColorHue) || 0));
 
     let iconShadow = 'none';
     if (iconShadowStyle === 'inner') {
@@ -78,6 +84,11 @@ export class Theme {
     this.root.style.setProperty('--app-icon-border-width', `${normalizedBorderWidth}px`);
     this.root.style.setProperty('--app-icon-border-color', iconBorderColor || '#d7c9b8');
     this.root.style.setProperty('--app-icon-custom-image', iconImage ? `url("${iconImage}")` : 'none');
+    // [模块标注] Dock背景外观主题变量模块：仅输出 Dock 容器背景颜色与透明度变量，不影响 Dock 内应用图标
+    const dockAlpha = normalizedDockOpacity / 100;
+    this.root.style.setProperty('--dock-opacity', String(dockAlpha));
+    this.root.style.setProperty('--dock-color', `hsl(${normalizedDockColorHue} 32% 88%)`);
+    this.root.style.setProperty('--dock-bg', `hsl(${normalizedDockColorHue} 32% 88% / ${dockAlpha})`);
 
     // [模块标注] 桌面壁纸裁切参数应用模块：统一输出桌面壁纸的 URL、缩放与取景参数，供桌面与全屏顶区共同使用
     if (resolvedDesktopWallpaper) {
