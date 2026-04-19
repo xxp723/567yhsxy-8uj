@@ -18,6 +18,7 @@ const DEFAULT_CUSTOM_WIDGET_TEMPLATE = `{
 const DEFAULT_ICON_ADJUSTMENTS = {
   iconSize: 56,
   iconRadius: 18,
+  iconLabelSize: 13,
   iconShadowStyle: 'none',
   iconShadowSize: 18,
   iconBorderWidth: 0,
@@ -30,9 +31,6 @@ const DEFAULT_DOCK_ADJUSTMENTS = {
 };
 
 const DEFAULT_FONT_STACK = '"STSong", "SimSun", serif';
-const DEFAULT_FONT_SCALE = 1;
-const FONT_SCALE_MIN = 0.85;
-const FONT_SCALE_MAX = 1.3;
 
 const ICON_SHADOW_OPTIONS = [
   { value: 'none', label: '无阴影' },
@@ -155,12 +153,6 @@ function normalizeFontEntries(fontEntries) {
       format: String(entry?.format || '').trim()
     }))
     .filter((entry) => entry.id && entry.url && entry.family);
-}
-
-function normalizeFontScale(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return DEFAULT_FONT_SCALE;
-  return Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, numeric));
 }
 
 function inferFontFormatFromName(name = '') {
@@ -676,15 +668,6 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
               <button class="ui-button" type="button" id="setting-font-url-open-modal">${icons.link}<span>新增 URL 字体预设</span></button>
             </div>
 
-            ${renderSliderField({
-              id: 'setting-font-scale',
-              label: '字体大小',
-              value: Math.round(normalizeFontScale(appearance.fontScale) * 100),
-              min: 85,
-              max: 130,
-              step: 1
-            })}
-
             <!-- [模块标注] 上传字体列表模块：删除按钮为逐条删除，不使用一键清空 -->
             <div class="appearance-font-uploaded-list" id="appearance-font-uploaded-list">
               ${renderUploadedFontItems(icons, fontEntries, fontResolved.selectedFontId)}
@@ -822,6 +805,13 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
                 value: iconAdjustments.iconSize,
                 min: 40,
                 max: 96
+              })}
+              ${renderSliderField({
+                id: 'setting-icon-label-size',
+                label: '应用名称大小',
+                value: iconAdjustments.iconLabelSize,
+                min: 10,
+                max: 20
               })}
               ${renderSliderField({
                 id: 'setting-icon-border-width',
@@ -1182,7 +1172,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   let desktopWallpaperCropDraft = normalizeWallpaperCrop(current.appearance?.desktopWallpaperCrop);
   let fontEntriesDraft = normalizeFontEntries(current.appearance?.fontEntries);
   let selectedFontIdDraft = resolveFontAppearance(current.appearance?.selectedFontId, fontEntriesDraft).selectedFontId;
-  let fontScaleDraft = normalizeFontScale(current.appearance?.fontScale);
 
   const appMap = new Map((apps || []).map((app) => [app.id, app]));
   const iconEditorModal = ensureIconResourceModal(container, icons);
@@ -1554,22 +1543,11 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   const rerenderFontPanels = () => {
     const presetList = container.querySelector('#appearance-font-preset-list');
     const uploadedList = container.querySelector('#appearance-font-uploaded-list');
-    const fontScaleInput = container.querySelector('#setting-font-scale');
     if (presetList) {
       presetList.innerHTML = renderFontPresetOptions(icons, fontEntriesDraft, selectedFontIdDraft);
     }
     if (uploadedList) {
       uploadedList.innerHTML = renderUploadedFontItems(icons, fontEntriesDraft, selectedFontIdDraft);
-    }
-    if (fontScaleInput) {
-      const percentValue = Math.round(normalizeFontScale(fontScaleDraft) * 100);
-      fontScaleInput.value = String(percentValue);
-      const min = Number(fontScaleInput.min || 85);
-      const max = Number(fontScaleInput.max || 130);
-      const progress = max <= min ? 0 : ((percentValue - min) / (max - min)) * 100;
-      fontScaleInput.style.setProperty('--range-progress', `${progress}%`);
-      const valueEl = container.querySelector('[data-range-value="setting-font-scale"]');
-      if (valueEl) valueEl.textContent = String(percentValue);
     }
   };
 
@@ -1701,7 +1679,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
 
   const onSaveFontSettings = async () => {
     const resolvedFont = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft);
-    const nextFontScale = normalizeFontScale(fontScaleDraft);
 
     await settings.update({
       appearance: {
@@ -1709,8 +1686,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         fontEntries: normalizeFontEntries(fontEntriesDraft),
         selectedFontId: resolvedFont.selectedFontId,
         fontFamily: resolvedFont.fontFamily,
-        fontFaceCss: resolvedFont.fontFaceCss,
-        fontScale: nextFontScale
+        fontFaceCss: resolvedFont.fontFaceCss
       }
     });
 
@@ -1719,16 +1695,14 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss,
-      fontScale: nextFontScale
+      fontFaceCss: resolvedFont.fontFaceCss
     };
 
     eventBus?.emit('settings:appearance-changed', {
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss,
-      fontScale: nextFontScale
+      fontFaceCss: resolvedFont.fontFaceCss
     });
 
     Logger.info('字体设置已保存');
@@ -1736,7 +1710,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
 
   const onResetFontSettings = async () => {
     selectedFontIdDraft = 'default';
-    fontScaleDraft = DEFAULT_FONT_SCALE;
     rerenderFontPanels();
 
     const resolvedFont = resolveFontAppearance(selectedFontIdDraft, fontEntriesDraft);
@@ -1747,8 +1720,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         fontEntries: normalizeFontEntries(fontEntriesDraft),
         selectedFontId: resolvedFont.selectedFontId,
         fontFamily: resolvedFont.fontFamily,
-        fontFaceCss: resolvedFont.fontFaceCss,
-        fontScale: fontScaleDraft
+        fontFaceCss: resolvedFont.fontFaceCss
       }
     });
 
@@ -1757,16 +1729,14 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss,
-      fontScale: fontScaleDraft
+      fontFaceCss: resolvedFont.fontFaceCss
     };
 
     eventBus?.emit('settings:appearance-changed', {
       fontEntries: normalizeFontEntries(fontEntriesDraft),
       selectedFontId: resolvedFont.selectedFontId,
       fontFamily: resolvedFont.fontFamily,
-      fontFaceCss: resolvedFont.fontFaceCss,
-      fontScale: fontScaleDraft
+      fontFaceCss: resolvedFont.fontFaceCss
     });
 
     Logger.info('已恢复默认字体设置');
@@ -1947,6 +1917,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     const iconRadius = Number(container.querySelector('#setting-icon-radius')?.value || DEFAULT_ICON_ADJUSTMENTS.iconRadius);
     const iconShadowStyle = String(container.querySelector('#setting-icon-shadow-style')?.value || DEFAULT_ICON_ADJUSTMENTS.iconShadowStyle);
     const iconShadowSize = Number(container.querySelector('#setting-icon-shadow-size')?.value || DEFAULT_ICON_ADJUSTMENTS.iconShadowSize);
+    const iconLabelSize = Number(container.querySelector('#setting-icon-label-size')?.value || DEFAULT_ICON_ADJUSTMENTS.iconLabelSize);
     const iconBorderWidth = Number(container.querySelector('#setting-icon-border-width')?.value || DEFAULT_ICON_ADJUSTMENTS.iconBorderWidth);
     const iconBorderColor = String(container.querySelector('#setting-icon-border-color')?.value || DEFAULT_ICON_ADJUSTMENTS.iconBorderColor);
 
@@ -1957,6 +1928,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
         iconRadius,
         iconShadowStyle,
         iconShadowSize,
+        iconLabelSize,
         iconBorderWidth,
         iconBorderColor
       }
@@ -1968,6 +1940,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       iconRadius,
       iconShadowStyle,
       iconShadowSize,
+      iconLabelSize,
       iconBorderWidth,
       iconBorderColor
     };
@@ -1977,6 +1950,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       iconRadius,
       iconShadowStyle,
       iconShadowSize,
+      iconLabelSize,
       iconBorderWidth,
       iconBorderColor
     });
@@ -2002,6 +1976,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     setField('setting-icon-size', defaults.iconSize);
     setField('setting-icon-radius', defaults.iconRadius);
     setField('setting-icon-shadow-size', defaults.iconShadowSize);
+    setField('setting-icon-label-size', defaults.iconLabelSize);
     setField('setting-icon-border-width', defaults.iconBorderWidth);
 
     const shadowStyle = container.querySelector('#setting-icon-shadow-style');
@@ -2109,8 +2084,8 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   });
 
   syncRangeValue('setting-dock-opacity');
-  syncRangeValue('setting-font-scale');
   syncRangeValue('setting-icon-size');
+  syncRangeValue('setting-icon-label-size');
   syncRangeValue('setting-icon-radius');
   syncRangeValue('setting-icon-shadow-size');
   syncRangeValue('setting-icon-border-width');
@@ -2210,9 +2185,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   fontUrlPresetModal.querySelector('#appearance-font-url-close')?.addEventListener('click', closeFontUrlPresetModal);
   fontUrlPresetModal.querySelector('.managed-resource-modal__mask')?.addEventListener('click', closeFontUrlPresetModal);
   fontUrlPresetModal.querySelector('#appearance-font-url-save')?.addEventListener('click', onSaveUrlPresetFromModal);
-  container.querySelector('#setting-font-scale')?.addEventListener('input', (event) => {
-    fontScaleDraft = normalizeFontScale(Number(event.target?.value || 100) / 100);
-  });
   container.querySelector('#reset-font-settings')?.addEventListener('click', onResetFontSettings);
   container.querySelector('#save-font-settings')?.addEventListener('click', onSaveFontSettings);
 

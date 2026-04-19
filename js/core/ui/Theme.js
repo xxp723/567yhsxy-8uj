@@ -22,6 +22,7 @@ export class Theme {
    *   iconSize?: number,
    *   iconImage?: string,
    *   iconRadius?: number,
+   *   iconLabelSize?: number,
    *   iconShadowStyle?: string,
    *   iconShadowSize?: number,
    *   iconBorderWidth?: number,
@@ -44,6 +45,7 @@ export class Theme {
       iconSize = 56,
       iconImage = '',
       iconRadius = 18,
+      iconLabelSize = 13,
       iconShadowStyle = 'none',
       iconShadowSize = 18,
       iconBorderWidth = 0,
@@ -68,6 +70,7 @@ export class Theme {
     const wallpaperPosition = `${normalizedWallpaperCrop.x}% ${normalizedWallpaperCrop.y}%`;
     const normalizedShadowSize = Math.max(0, Number(iconShadowSize) || 0);
     const normalizedRadius = Math.max(0, Number(iconRadius) || 0);
+    const normalizedLabelSize = Math.max(10, Math.min(20, Number(iconLabelSize) || 13));
     const normalizedBorderWidth = Math.max(0, Number(iconBorderWidth) || 0);
     const normalizedDockOpacity = Math.max(0, Math.min(100, Number(dockOpacity) || 0));
     const normalizedDockColorHue = Math.max(0, Math.min(360, Number(dockColorHue) || 0));
@@ -155,6 +158,7 @@ export class Theme {
     this.root.style.setProperty('--theme-color', themeColor);
     this.root.style.setProperty('--icon-size', `${iconSize}px`);
     this.root.style.setProperty('--app-icon-radius', `${normalizedRadius}px`);
+    this.root.style.setProperty('--app-icon-label-size', `${normalizedLabelSize}px`);
     this.root.style.setProperty('--app-icon-shadow', iconShadow);
     this.root.style.setProperty('--app-icon-border-width', `${normalizedBorderWidth}px`);
     this.root.style.setProperty('--app-icon-border-color', iconBorderColor || '#d7c9b8');

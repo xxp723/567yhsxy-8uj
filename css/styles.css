@@ -169,6 +169,7 @@
   --icon-size: 58px;
   --app-icon-radius: 18px;
   --app-icon-shadow: none;
+  --app-icon-label-size: 13px;
   --app-icon-border-width: 0px;
   --app-icon-border-color: #D7C9B8;
   --app-icon-custom-image: none;
@@ -422,7 +423,7 @@ body.has-global-icon-image .app-icon-btn:not(.has-img) .app-custom-img {
 
 .app-icon-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--app-icon-label-size, 13px);
   font-weight: bold;
   color: var(--c-text-main);
   text-shadow: none;
@@ -467,7 +468,7 @@ body.has-global-icon-image .app-icon-btn:not(.has-img) .app-custom-img {
 
 
 .dock-container .app-icon-label {
-  font-size: 11px;
+  font-size: calc(var(--app-icon-label-size, 13px) - 2px);
 }
 
 .dock-container .app-icon-glyph {

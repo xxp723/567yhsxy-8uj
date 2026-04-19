@@ -36,6 +36,7 @@ export class Settings {
         iconImage: '',
         iconImages: {},
         iconRadius: 18,
+        iconLabelSize: 13,
         iconShadowStyle: 'none',
         iconShadowSize: 18,
         iconBorderWidth: 0,
