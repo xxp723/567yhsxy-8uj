@@ -38,10 +38,10 @@ function uid(prefix = 'id') {
 function escapeHtml(value) {
   const text = String(value ?? '');
   const htmlEscapeMap = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
+    '&': '&',
+    '<': '<',
+    '>': '>',
+    '"': '"',
     "'": '&#39;'
   };
   return text.replace(/[&<>"']/g, (char) => htmlEscapeMap[char] || char);
@@ -151,9 +151,13 @@ function safeJsonParse(text) {
   }
 }
 
-function safeAtob(value) {
+// [模块标注] 酒馆 PNG 角色卡 UTF-8 Base64 解码模块：
+// 统一把 PNG 文本块内的 base64 内容先转成字节，再按 UTF-8 解码，修复中文/多字节文本乱码导致的 JSON 解析失败
+function safeBase64ToUtf8(value) {
   try {
-    return atob(value);
+    const binary = atob(value);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
   } catch (_) {
     return '';
   }
@@ -166,7 +170,7 @@ function parsePossibleObject(raw) {
   const direct = safeJsonParse(text);
   if (direct && typeof direct === 'object') return direct;
 
-  const decoded = safeAtob(text);
+  const decoded = safeBase64ToUtf8(text);
   if (decoded) {
     const fromDecoded = safeJsonParse(decoded);
     if (fromDecoded && typeof fromDecoded === 'object') return fromDecoded;
@@ -253,13 +257,12 @@ function parsePngTextChunks(arrayBuffer) {
 
       const keyword = readNullTerminated();
       const compressionFlag = dataBytes[cursor] ?? 0;
-      cursor += 1; // compression method position follows
-      cursor += 1; // compression method
-      readNullTerminated(); // language tag
-      readNullTerminated(); // translated keyword
+      cursor += 1;
+      cursor += 1;
+      readNullTerminated();
+      readNullTerminated();
       const payload = dataBytes.slice(cursor);
 
-      // 仅处理未压缩 iTXt，压缩情形留作后续扩展
       if (compressionFlag === 0) {
         const text = decoder.decode(payload);
         chunks.push({ type, keyword, text });
@@ -284,7 +287,7 @@ function extractRoleObjectFromPngChunks(chunks = []) {
     if (maybeObj) candidates.push(maybeObj);
 
     if (keyword.includes('chara')) {
-      const decoded = safeAtob(text);
+      const decoded = safeBase64ToUtf8(text);
       if (decoded) {
         const parsed = safeJsonParse(decoded);
         if (parsed && typeof parsed === 'object') candidates.push(parsed);
@@ -375,6 +378,9 @@ export async function mount(container, context) {
       <nav class="archive-v2__tabbar" id="archive-tabbar" aria-label="档案应用板块切换"></nav>
     </div>
 
+    <!-- [模块标注] 角色档案直接导入模块：点击导入按钮后直接拉起本地文件 -->
+    <input id="archive-character-import-input" type="file" accept=".png,.json,application/json,image/png" style="display:none;">
+
     <div id="archive-toast" class="archive-toast" aria-live="polite"></div>
 
     <div id="archive-modal" class="managed-resource-modal hidden" aria-hidden="true"></div>
@@ -382,6 +388,7 @@ export async function mount(container, context) {
 
   const contentEl = container.querySelector('#archive-content');
   const tabbarEl = container.querySelector('#archive-tabbar');
+  const importInputEl = container.querySelector('#archive-character-import-input');
   const toastEl = container.querySelector('#archive-toast');
   const modalEl = container.querySelector('#archive-modal');
 
@@ -554,6 +561,125 @@ export async function mount(container, context) {
     </div>
   `;
 
+  // [模块标注] 档案摘要列表模块：
+  // 用户面具 / 角色档案 / 配角档案在板块中先只显示头像与姓名，点击条目后再显示下方完整档案详情
+  const renderCompactProfileList = (items, selectedId, actionName, emptyLabel) => `
+    <div class="archive-compact-list">
+      ${items.map((item) => `
+        <button
+          class="archive-compact-card ${selectedId === item.id ? 'is-selected' : ''}"
+          type="button"
+          data-action="${actionName}"
+          data-id="${item.id}"
+        >
+          <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
+            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || emptyLabel)}">` : '<span>头像</span>'}
+          </div>
+          <span class="archive-compact-card__name">${escapeHtml(item.name || '未命名')}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  const buildMaskDetailCard = (item) => {
+    const isActiveMask = item.id === state.data.activeMaskId;
+    const boundRoles = (item.roleBindingIds || [])
+      .map((id) => getCharacterById(id))
+      .filter(Boolean);
+
+    return `
+      <article class="archive-profile-card is-selected" data-card-id="${item.id}">
+        <header class="archive-profile-card__header">
+          <div class="archive-avatar-box ${item.avatar ? 'has-image' : ''}">
+            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '面具头像')}">` : '<span>头像</span>'}
+          </div>
+          <div class="archive-profile-card__meta">
+            <h3>${escapeHtml(item.name || '未命名面具')}</h3>
+            <div class="archive-badges">
+              ${isActiveMask ? '<span class="archive-badge archive-badge--active">当前生效</span>' : ''}
+              <span class="archive-badge">绑定角色 ${boundRoles.length}</span>
+            </div>
+          </div>
+        </header>
+
+        ${buildFieldGridHtml(item)}
+
+        <div class="archive-large-box">
+          <label>用户设定</label>
+          <p>${escapeHtml(item.personalitySetting || '—')}</p>
+        </div>
+
+        <div class="archive-chip-list">
+          ${boundRoles.length
+            ? boundRoles.map((role) => `<span class="archive-chip">${escapeHtml(role.name || '未命名角色')}</span>`).join('')
+            : '<span class="archive-chip archive-chip--muted">尚未绑定角色</span>'}
+        </div>
+
+        <footer class="archive-card-actions">
+          <button class="ui-button" type="button" data-action="select-mask" data-id="${item.id}">${icon.check}<span>选定</span></button>
+          <button class="ui-button" type="button" data-action="edit-mask" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+          <button class="ui-button danger" type="button" data-action="delete-mask" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+        </footer>
+      </article>
+    `;
+  };
+
+  const buildCharacterDetailCard = (item) => `
+    <article class="archive-profile-card is-selected" data-card-id="${item.id}">
+      <header class="archive-profile-card__header">
+        <div class="archive-avatar-box ${item.avatar ? 'has-image' : ''}">
+          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : '<span>头像</span>'}
+        </div>
+        <div class="archive-profile-card__meta">
+          <h3>${escapeHtml(item.name || '未命名角色')}</h3>
+          <div class="archive-badges">
+            <span class="archive-badge archive-badge--active">已选中</span>
+            <span class="archive-badge">联系人字段可供闲谈检索</span>
+          </div>
+        </div>
+      </header>
+
+      ${buildFieldGridHtml(item)}
+
+      <div class="archive-large-box">
+        <label>人物设定</label>
+        <p>${escapeHtml(item.personalitySetting || '—')}</p>
+      </div>
+
+      <footer class="archive-card-actions">
+        <button class="ui-button" type="button" data-action="select-character" data-id="${item.id}">${icon.check}<span>选中</span></button>
+        <button class="ui-button" type="button" data-action="edit-character" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+        <button class="ui-button danger" type="button" data-action="delete-character" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+      </footer>
+    </article>
+  `;
+
+  const buildSupportingDetailCard = (item) => `
+    <article class="archive-support-card is-selected" data-card-id="${item.id}">
+      <div class="archive-support-card__left">
+        <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
+          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '配角头像')}">` : '<span>头像</span>'}
+        </div>
+        <div class="archive-support-meta">
+          <h3>${escapeHtml(item.name || '未命名配角')}</h3>
+        </div>
+      </div>
+      <div class="archive-grid-fields archive-grid-fields--supporting">
+        <div class="archive-mini-box"><label>姓名</label><p>${escapeHtml(item.name || '—')}</p></div>
+        <div class="archive-mini-box"><label>性别</label><p>${escapeHtml(item.gender || '—')}</p></div>
+      </div>
+      <div class="archive-large-box">
+        <label>基本设定</label>
+        <p>${escapeHtml(item.basicSetting || '—')}</p>
+      </div>
+      <footer class="archive-card-actions">
+        <button class="ui-button" type="button" data-action="select-supporting" data-id="${item.id}">${icon.check}<span>选中</span></button>
+        <button class="ui-button" type="button" data-action="edit-supporting" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+        <button class="ui-button danger" type="button" data-action="delete-supporting" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+      </footer>
+    </article>
+  `;
+
   const renderMaskTab = () => {
     const list = state.data.masks;
     if (!list.length) {
@@ -565,48 +691,12 @@ export async function mount(container, context) {
       `;
     }
 
-    return list.map((item) => {
-      const isActiveMask = item.id === state.data.activeMaskId;
-      const boundRoles = (item.roleBindingIds || [])
-        .map((id) => getCharacterById(id))
-        .filter(Boolean);
+    const selected = list.find((item) => item.id === state.selectedMaskId) || list[0];
 
-      return `
-        <article class="archive-profile-card ${state.selectedMaskId === item.id ? 'is-selected' : ''}" data-card-id="${item.id}">
-          <header class="archive-profile-card__header">
-            <div class="archive-avatar-box ${item.avatar ? 'has-image' : ''}">
-              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '面具头像')}">` : '<span>头像</span>'}
-            </div>
-            <div class="archive-profile-card__meta">
-              <h3>${escapeHtml(item.name || '未命名面具')}</h3>
-              <div class="archive-badges">
-                ${isActiveMask ? '<span class="archive-badge archive-badge--active">当前生效</span>' : ''}
-                <span class="archive-badge">绑定角色 ${boundRoles.length}</span>
-              </div>
-            </div>
-          </header>
-
-          ${buildFieldGridHtml(item)}
-
-          <div class="archive-large-box">
-            <label>用户设定</label>
-            <p>${escapeHtml(item.personalitySetting || '—')}</p>
-          </div>
-
-          <div class="archive-chip-list">
-            ${boundRoles.length
-              ? boundRoles.map((role) => `<span class="archive-chip">${escapeHtml(role.name || '未命名角色')}</span>`).join('')
-              : '<span class="archive-chip archive-chip--muted">尚未绑定角色</span>'}
-          </div>
-
-          <footer class="archive-card-actions">
-            <button class="ui-button" type="button" data-action="select-mask" data-id="${item.id}">${icon.check}<span>选定</span></button>
-            <button class="ui-button" type="button" data-action="edit-mask" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-            <button class="ui-button danger" type="button" data-action="delete-mask" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-          </footer>
-        </article>
-      `;
-    }).join('');
+    return `
+      ${renderCompactProfileList(list, selected?.id || '', 'show-mask-detail', '面具头像')}
+      ${selected ? `<section class="archive-detail-section">${buildMaskDetailCard(selected)}</section>` : ''}
+    `;
   };
 
   const renderCharacterTab = () => {
@@ -620,35 +710,12 @@ export async function mount(container, context) {
       `;
     }
 
-    return list.map((item) => `
-      <article class="archive-profile-card ${state.selectedCharacterId === item.id ? 'is-selected' : ''}" data-card-id="${item.id}">
-        <header class="archive-profile-card__header">
-          <div class="archive-avatar-box ${item.avatar ? 'has-image' : ''}">
-            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : '<span>头像</span>'}
-          </div>
-          <div class="archive-profile-card__meta">
-            <h3>${escapeHtml(item.name || '未命名角色')}</h3>
-            <div class="archive-badges">
-              ${state.selectedCharacterId === item.id ? '<span class="archive-badge archive-badge--active">已选中</span>' : ''}
-              <span class="archive-badge">联系人字段可供闲谈检索</span>
-            </div>
-          </div>
-        </header>
+    const selected = list.find((item) => item.id === state.selectedCharacterId) || list[0];
 
-        ${buildFieldGridHtml(item)}
-
-        <div class="archive-large-box">
-          <label>人物设定</label>
-          <p>${escapeHtml(item.personalitySetting || '—')}</p>
-        </div>
-
-        <footer class="archive-card-actions">
-          <button class="ui-button" type="button" data-action="select-character" data-id="${item.id}">${icon.check}<span>选中</span></button>
-          <button class="ui-button" type="button" data-action="edit-character" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-          <button class="ui-button danger" type="button" data-action="delete-character" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-        </footer>
-      </article>
-    `).join('');
+    return `
+      ${renderCompactProfileList(list, selected?.id || '', 'show-character-detail', '角色头像')}
+      ${selected ? `<section class="archive-detail-section">${buildCharacterDetailCard(selected)}</section>` : ''}
+    `;
   };
 
   const renderSupportingTab = () => {
@@ -662,28 +729,12 @@ export async function mount(container, context) {
       `;
     }
 
-    return list.map((item) => `
-      <article class="archive-support-card ${state.selectedSupportingId === item.id ? 'is-selected' : ''}">
-        <div class="archive-support-card__left">
-          <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
-            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '配角头像')}">` : '<span>头像</span>'}
-          </div>
-          <div class="archive-support-meta">
-            <h3>${escapeHtml(item.name || '未命名配角')}</h3>
-            <p>性别：${escapeHtml(item.gender || '—')}</p>
-          </div>
-        </div>
-        <div class="archive-large-box">
-          <label>基本设定</label>
-          <p>${escapeHtml(item.basicSetting || '—')}</p>
-        </div>
-        <footer class="archive-card-actions">
-          <button class="ui-button" type="button" data-action="select-supporting" data-id="${item.id}">${icon.check}<span>选中</span></button>
-          <button class="ui-button" type="button" data-action="edit-supporting" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-          <button class="ui-button danger" type="button" data-action="delete-supporting" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-        </footer>
-      </article>
-    `).join('');
+    const selected = list.find((item) => item.id === state.selectedSupportingId) || list[0];
+
+    return `
+      ${renderCompactProfileList(list, selected?.id || '', 'show-supporting-detail', '配角头像')}
+      ${selected ? `<section class="archive-detail-section">${buildSupportingDetailCard(selected)}</section>` : ''}
+    `;
   };
 
   const renderRelationTab = () => {
@@ -835,7 +886,7 @@ export async function mount(container, context) {
 
     const onImport = () => {
       if (state.activeTab !== 'character') return;
-      openCharacterImportModal();
+      importInputEl?.click();
     };
 
     const onExport = () => {
@@ -963,7 +1014,8 @@ export async function mount(container, context) {
         return `
           <label class="archive-check-item">
             <input type="checkbox" data-role="role-binding" value="${role.id}" ${checked ? 'checked' : ''}>
-            <span>${escapeHtml(role.name || '未命名角色')}</span>
+            <span class="archive-check-item__control" aria-hidden="true">${icon.check}</span>
+            <span class="archive-check-item__text">${escapeHtml(role.name || '未命名角色')}</span>
           </label>
         `;
       }).join('')
@@ -1075,7 +1127,6 @@ export async function mount(container, context) {
             state.selectedCharacterId = profile.id;
           }
 
-          // 同步清理面具绑定中的失效角色
           state.data.masks = state.data.masks.map((mask) => ({
             ...mask,
             roleBindingIds: (mask.roleBindingIds || []).filter((id) => state.data.characters.some((c) => c.id === id))
@@ -1272,7 +1323,6 @@ export async function mount(container, context) {
       if (roleObj) {
         addCharacterFromImportedObject(roleObj, avatarDataUrl);
       } else {
-        // PNG 解析失败时保底给出提示并允许用户手动补全
         const fallback = normalizeProfile({
           id: uid('char'),
           name: file.name.replace(/\.png$/i, ''),
@@ -1291,34 +1341,11 @@ export async function mount(container, context) {
     notify('仅支持 .png 和 .json 文件', 'error');
   };
 
-  const openCharacterImportModal = () => {
-    openModal({
-      title: '导入角色档案',
-      showFooter: false,
-      content: `
-        <div class="archive-form-grid">
-          <p class="archive-modal-hint">支持导入 .png（酒馆角色卡）与 .json。导入后会自动创建角色卡片。</p>
-          <input data-role="import-file" type="file" accept=".png,.json,application/json,image/png" style="display:none;">
-          <div class="archive-modal-actions archive-modal-actions--single">
-            <button class="ui-button primary" type="button" data-action="pick-import-file">${icon.import}<span>选择文件</span></button>
-            <button class="ui-button" type="button" data-action="modal-close">${icon.close}<span>关闭</span></button>
-          </div>
-        </div>
-      `,
-      onOpen: (modalScope, close) => {
-        const pickerBtn = modalScope.querySelector('[data-action="pick-import-file"]');
-        const fileInput = modalScope.querySelector('[data-role="import-file"]');
-
-        pickerBtn?.addEventListener('click', () => fileInput?.click());
-
-        fileInput?.addEventListener('change', async (event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          await handleImportFile(file);
-          close();
-        });
-      }
-    });
+  const handleImportInputChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleImportFile(file);
+    event.target.value = '';
   };
 
   const exportSelectedCharacter = () => {
@@ -1361,6 +1388,12 @@ export async function mount(container, context) {
       return;
     }
 
+    if (action === 'show-mask-detail') {
+      state.selectedMaskId = id;
+      rerender();
+      return;
+    }
+
     if (action === 'select-mask') {
       state.selectedMaskId = id;
       state.data.activeMaskId = id;
@@ -1391,6 +1424,12 @@ export async function mount(container, context) {
       return;
     }
 
+    if (action === 'show-character-detail') {
+      state.selectedCharacterId = id;
+      rerender();
+      return;
+    }
+
     if (action === 'select-character') {
       state.selectedCharacterId = id;
       rerender();
@@ -1418,6 +1457,12 @@ export async function mount(container, context) {
         notify('角色已删除', 'success');
         rerender();
       }, true);
+      return;
+    }
+
+    if (action === 'show-supporting-detail') {
+      state.selectedSupportingId = id;
+      rerender();
       return;
     }
 
@@ -1482,10 +1527,12 @@ export async function mount(container, context) {
   rerender();
 
   container.addEventListener('click', onContainerClick);
+  importInputEl?.addEventListener('change', handleImportInputChange);
 
   return {
     destroy() {
       container.removeEventListener('click', onContainerClick);
+      importInputEl?.removeEventListener('change', handleImportInputChange);
       closeModal();
 
       if (toastTimer) clearTimeout(toastTimer);
