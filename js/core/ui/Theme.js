@@ -27,6 +27,7 @@ export class Theme {
    *   iconBorderWidth?: number,
    *   iconBorderColor?: string,
    *   dockOpacity?: number,
+   *   dockColor?: string,
    *   dockColorHue?: number
    * }} appearance
    */
@@ -45,6 +46,7 @@ export class Theme {
       iconBorderWidth = 0,
       iconBorderColor = '#d7c9b8',
       dockOpacity = 88,
+      dockColor = '#d7c9b8',
       dockColorHue = 38
     } = appearance;
 
@@ -63,6 +65,58 @@ export class Theme {
     const normalizedBorderWidth = Math.max(0, Number(iconBorderWidth) || 0);
     const normalizedDockOpacity = Math.max(0, Math.min(100, Number(dockOpacity) || 0));
     const normalizedDockColorHue = Math.max(0, Math.min(360, Number(dockColorHue) || 0));
+
+    const convertDockHueToHex = (hueValue) => {
+      const hue = Math.max(0, Math.min(360, Number(hueValue)));
+      if (!Number.isFinite(hue)) return '#d7c9b8';
+
+      const saturation = 0.32;
+      const lightness = 0.88;
+      const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+      const hPrime = hue / 60;
+      const x = chroma * (1 - Math.abs((hPrime % 2) - 1));
+
+      let r1 = 0;
+      let g1 = 0;
+      let b1 = 0;
+
+      if (hPrime >= 0 && hPrime < 1) {
+        r1 = chroma; g1 = x; b1 = 0;
+      } else if (hPrime >= 1 && hPrime < 2) {
+        r1 = x; g1 = chroma; b1 = 0;
+      } else if (hPrime >= 2 && hPrime < 3) {
+        r1 = 0; g1 = chroma; b1 = x;
+      } else if (hPrime >= 3 && hPrime < 4) {
+        r1 = 0; g1 = x; b1 = chroma;
+      } else if (hPrime >= 4 && hPrime < 5) {
+        r1 = x; g1 = 0; b1 = chroma;
+      } else {
+        r1 = chroma; g1 = 0; b1 = x;
+      }
+
+      const match = lightness - chroma / 2;
+      const toHex = (value) => Math.round((value + match) * 255).toString(16).padStart(2, '0');
+      return `#${toHex(r1)}${toHex(g1)}${toHex(b1)}`;
+    };
+
+    const normalizeDockColor = (value, fallback) => {
+      const raw = String(value || '').trim();
+      return /^#([0-9a-fA-F]{6})$/.test(raw) ? raw.toLowerCase() : fallback;
+    };
+
+    const resolvedDockColor = normalizeDockColor(
+      dockColor,
+      convertDockHueToHex(normalizedDockColorHue)
+    );
+
+    const hexToRgba = (hex, alpha) => {
+      const normalized = String(hex || '').trim().replace('#', '');
+      if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(215, 201, 184, ${alpha})`;
+      const r = parseInt(normalized.slice(0, 2), 16);
+      const g = parseInt(normalized.slice(2, 4), 16);
+      const b = parseInt(normalized.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
 
     let iconShadow = 'none';
     if (iconShadowStyle === 'inner') {
@@ -87,8 +141,8 @@ export class Theme {
     // [模块标注] Dock背景外观主题变量模块：仅输出 Dock 容器背景颜色与透明度变量，不影响 Dock 内应用图标
     const dockAlpha = normalizedDockOpacity / 100;
     this.root.style.setProperty('--dock-opacity', String(dockAlpha));
-    this.root.style.setProperty('--dock-color', `hsl(${normalizedDockColorHue} 32% 88%)`);
-    this.root.style.setProperty('--dock-bg', `hsl(${normalizedDockColorHue} 32% 88% / ${dockAlpha})`);
+    this.root.style.setProperty('--dock-color', resolvedDockColor);
+    this.root.style.setProperty('--dock-bg', hexToRgba(resolvedDockColor, dockAlpha));
 
     // [模块标注] 桌面壁纸裁切参数应用模块：统一输出桌面壁纸的 URL、缩放与取景参数，供桌面与全屏顶区共同使用
     if (resolvedDesktopWallpaper) {

@@ -26,7 +26,7 @@ const DEFAULT_ICON_ADJUSTMENTS = {
 
 const DEFAULT_DOCK_ADJUSTMENTS = {
   dockOpacity: 88,
-  dockColorHue: 38
+  dockColor: '#d7c9b8'
 };
 
 const ICON_SHADOW_OPTIONS = [
@@ -79,13 +79,55 @@ function getDefaultIconAdjustmentState(overrides = {}) {
   };
 }
 
+function convertDockHueToHex(hueValue) {
+  const hue = Math.max(0, Math.min(360, Number(hueValue)));
+  if (!Number.isFinite(hue)) return DEFAULT_DOCK_ADJUSTMENTS.dockColor;
+
+  const saturation = 0.32;
+  const lightness = 0.88;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const hPrime = hue / 60;
+  const x = chroma * (1 - Math.abs((hPrime % 2) - 1));
+
+  let r1 = 0;
+  let g1 = 0;
+  let b1 = 0;
+
+  if (hPrime >= 0 && hPrime < 1) {
+    r1 = chroma; g1 = x; b1 = 0;
+  } else if (hPrime >= 1 && hPrime < 2) {
+    r1 = x; g1 = chroma; b1 = 0;
+  } else if (hPrime >= 2 && hPrime < 3) {
+    r1 = 0; g1 = chroma; b1 = x;
+  } else if (hPrime >= 3 && hPrime < 4) {
+    r1 = 0; g1 = x; b1 = chroma;
+  } else if (hPrime >= 4 && hPrime < 5) {
+    r1 = x; g1 = 0; b1 = chroma;
+  } else {
+    r1 = chroma; g1 = 0; b1 = x;
+  }
+
+  const match = lightness - chroma / 2;
+  const toHex = (value) => Math.round((value + match) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r1)}${toHex(g1)}${toHex(b1)}`;
+}
+
+function normalizeDockColor(value, fallback = DEFAULT_DOCK_ADJUSTMENTS.dockColor) {
+  const raw = String(value || '').trim();
+  return /^#([0-9a-fA-F]{6})$/.test(raw) ? raw.toLowerCase() : fallback;
+}
+
 function getDefaultDockAdjustmentState(overrides = {}) {
   const dockOpacity = Math.max(0, Math.min(100, Number(overrides.dockOpacity)));
-  const dockColorHue = Math.max(0, Math.min(360, Number(overrides.dockColorHue)));
+  const legacyDockHue = Math.max(0, Math.min(360, Number(overrides.dockColorHue)));
+
+  const fallbackColor = Number.isFinite(legacyDockHue)
+    ? convertDockHueToHex(legacyDockHue)
+    : DEFAULT_DOCK_ADJUSTMENTS.dockColor;
 
   return {
     dockOpacity: Number.isFinite(dockOpacity) ? dockOpacity : DEFAULT_DOCK_ADJUSTMENTS.dockOpacity,
-    dockColorHue: Number.isFinite(dockColorHue) ? dockColorHue : DEFAULT_DOCK_ADJUSTMENTS.dockColorHue
+    dockColor: normalizeDockColor(overrides.dockColor, fallbackColor)
   };
 }
 
@@ -508,9 +550,9 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
             </label>
           </section>
           <section class="ui-card">
-            <!-- [模块标注] 界面设置-Dock外观滑杆模块：仅在界面设置内控制 Dock 栏（不含 Dock 内应用）背景透明度与颜色 -->
+            <!-- [模块标注] 界面设置-Dock外观设置模块：仅在界面设置内控制 Dock 栏（不含 Dock 内应用）背景透明度与颜色 -->
             <h3>DOCK 栏外观</h3>
-            <p class="ui-muted" style="margin-bottom: 10px;">通过滑动条调整底部 DOCK 栏背景透明度与颜色，不影响 DOCK 栏内应用图标。</p>
+            <p class="ui-muted" style="margin-bottom: 10px;">通过滑动条与颜色窗口调整底部 DOCK 栏背景外观，不影响 DOCK 栏内应用图标。</p>
             <div class="appearance-form-grid">
               ${renderSliderField({
                 id: 'setting-dock-opacity',
@@ -519,16 +561,18 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
                 min: 0,
                 max: 100
               })}
-              ${renderSliderField({
-                id: 'setting-dock-color-hue',
-                label: 'DOCK 颜色',
-                value: dockAdjustments.dockColorHue,
-                min: 0,
-                max: 360
-              })}
+              <!-- [模块标注] 界面设置-Dock颜色可视选择模块：Dock 颜色改为与图标边框颜色一致的可视颜色窗口 -->
+              <label class="appearance-form-field">
+                <span>DOCK 颜色</span>
+                <input id="setting-dock-color" type="color" value="${dockAdjustments.dockColor}">
+              </label>
+            </div>
+            <!-- [模块标注] 界面设置-Dock按钮布局模块：照搬图标设置双按钮布局，仅用于 Dock 外观的恢复默认与保存 -->
+            <div class="appearance-inline-actions appearance-inline-actions--icon-dual">
+              <button class="ui-button" id="reset-dock-settings" type="button">${icons.closeSmall}<span>恢复默认</span></button>
+              <button class="ui-button primary" id="save-dock-settings">${icons.saveWidget}<span>保存设置</span></button>
             </div>
           </section>
-          <button class="ui-button primary" id="save-ui-settings" style="width: 100%; margin-top: 10px;">保存界面设置</button>
         </div>
       </div>
 
@@ -1290,12 +1334,9 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     });
   };
 
-  const onSaveUiSettings = async () => {
+  // [模块标注] 界面设置-状态栏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
+  const onToggleStatusBar = () => {
     const statusBarChecked = container.querySelector('#setting-status-bar')?.checked;
-    const fullscreenChecked = container.querySelector('#setting-fullscreen')?.checked;
-    const dockOpacity = Number(container.querySelector('#setting-dock-opacity')?.value ?? DEFAULT_DOCK_ADJUSTMENTS.dockOpacity);
-    const dockColorHue = Number(container.querySelector('#setting-dock-color-hue')?.value ?? DEFAULT_DOCK_ADJUSTMENTS.dockColorHue);
-
     if (statusBarChecked) {
       localStorage.removeItem('miniphone_status_bar_hidden');
       document.body.classList.remove('hide-status-bar');
@@ -1303,7 +1344,11 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       localStorage.setItem('miniphone_status_bar_hidden', '1');
       document.body.classList.add('hide-status-bar');
     }
+  };
 
+  // [模块标注] 界面设置-全屏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
+  const onToggleFullscreen = () => {
+    const fullscreenChecked = container.querySelector('#setting-fullscreen')?.checked;
     if (fullscreenChecked) {
       localStorage.setItem('miniphone_fullscreen', '1');
       document.body.classList.add('fullscreen-mode');
@@ -1311,8 +1356,15 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
       localStorage.removeItem('miniphone_fullscreen');
       document.body.classList.remove('fullscreen-mode');
     }
+  };
 
-    const nextDockAdjustments = getDefaultDockAdjustmentState({ dockOpacity, dockColorHue });
+  const onSaveDockSettings = async () => {
+    const dockOpacity = Number(container.querySelector('#setting-dock-opacity')?.value ?? DEFAULT_DOCK_ADJUSTMENTS.dockOpacity);
+    const dockColor = normalizeDockColor(
+      container.querySelector('#setting-dock-color')?.value,
+      DEFAULT_DOCK_ADJUSTMENTS.dockColor
+    );
+    const nextDockAdjustments = getDefaultDockAdjustmentState({ dockOpacity, dockColor });
 
     await settings.update({
       appearance: {
@@ -1327,7 +1379,43 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     };
 
     eventBus?.emit('settings:appearance-changed', { ...nextDockAdjustments });
-    Logger.info('界面设置已保存');
+    Logger.info('DOCK 栏外观已保存');
+  };
+
+  const onResetDockSettings = async () => {
+    const defaults = getDefaultDockAdjustmentState(DEFAULT_DOCK_ADJUSTMENTS);
+    const dockOpacityInput = container.querySelector('#setting-dock-opacity');
+    const dockColorInput = container.querySelector('#setting-dock-color');
+
+    if (dockOpacityInput) {
+      dockOpacityInput.value = String(defaults.dockOpacity);
+      const min = Number(dockOpacityInput.min || 0);
+      const max = Number(dockOpacityInput.max || 100);
+      const value = Number(defaults.dockOpacity);
+      const progress = max <= min ? 0 : ((value - min) / (max - min)) * 100;
+      dockOpacityInput.style.setProperty('--range-progress', `${progress}%`);
+      const valueEl = container.querySelector('[data-range-value="setting-dock-opacity"]');
+      if (valueEl) valueEl.textContent = String(defaults.dockOpacity);
+    }
+
+    if (dockColorInput) {
+      dockColorInput.value = defaults.dockColor;
+    }
+
+    await settings.update({
+      appearance: {
+        ...(current.appearance || {}),
+        ...defaults
+      }
+    });
+
+    current.appearance = {
+      ...(current.appearance || {}),
+      ...defaults
+    };
+
+    eventBus?.emit('settings:appearance-changed', { ...defaults });
+    Logger.info('DOCK 栏外观已恢复默认');
   };
 
   const onSaveWallpaperSettings = async () => {
@@ -1583,7 +1671,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   });
 
   syncRangeValue('setting-dock-opacity');
-  syncRangeValue('setting-dock-color-hue');
   syncRangeValue('setting-icon-size');
   syncRangeValue('setting-icon-radius');
   syncRangeValue('setting-icon-shadow-size');
@@ -1651,7 +1738,10 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     });
   });
 
-  container.querySelector('#save-ui-settings')?.addEventListener('click', onSaveUiSettings);
+  container.querySelector('#setting-status-bar')?.addEventListener('change', onToggleStatusBar);
+  container.querySelector('#setting-fullscreen')?.addEventListener('change', onToggleFullscreen);
+  container.querySelector('#save-dock-settings')?.addEventListener('click', onSaveDockSettings);
+  container.querySelector('#reset-dock-settings')?.addEventListener('click', onResetDockSettings);
   container.querySelector('#save-wallpaper-settings')?.addEventListener('click', onSaveWallpaperSettings);
   container.querySelector('#save-custom-icon-settings')?.addEventListener('click', onSaveCustomIconSettings);
   container.querySelector('#reset-custom-icon-settings')?.addEventListener('click', onResetCustomIconSettings);
