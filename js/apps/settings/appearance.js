@@ -26,7 +26,7 @@ const DEFAULT_ICON_ADJUSTMENTS = {
 
 const DEFAULT_DOCK_ADJUSTMENTS = {
   dockOpacity: 88,
-  dockColor: '#d7c9b8'
+  dockColor: '#f5f1ea'
 };
 
 const ICON_SHADOW_OPTIONS = [
