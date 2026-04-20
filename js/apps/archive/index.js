@@ -366,7 +366,8 @@ export async function mount(container, context) {
     selectedSupportingId: '',
     selectedRelationId: '',
     headerRefs: null,
-    characterImageRatioMap: {}
+    characterImageRatioMap: {},
+    isCharacterDetailOpen: false
   };
 
   state.activeTab = TAB_META[state.data.selectedTab] ? state.data.selectedTab : 'mask';
@@ -710,28 +711,32 @@ export async function mount(container, context) {
     </article>
   `;
 
-  // [模块标注] 角色档案主界面卡片列表模块：
-  // 仅作用于角色档案 tab；
-  // 保留可横向切换的人物摘要卡，点击后直接刷新下方档案详情，不再进入信封/抽纸动画。
+  // [模块标注] 角色档案双列错落卡片列表模块：
+  // 改为两列纵向滚动，不横向滑动；角色姓名居中，移除身份待补充文字。
   const renderCharacterProfileList = (items, activeId) => `
-    <div class="archive-character-strip" aria-label="角色档案列表">
+    <div class="archive-character-grid" aria-label="角色档案列表">
       ${items.map((item, index) => {
         const shapeClass = resolveProfileCardShapeClass(item);
-        const staggerClass = index % 3 === 0 ? 'is-tall' : index % 3 === 1 ? 'is-medium' : 'is-compact';
+        const staggerClass = index % 4 === 0
+          ? 'is-tall'
+          : index % 4 === 1
+            ? 'is-offset'
+            : index % 4 === 2
+              ? 'is-compact'
+              : 'is-medium';
         return `
           <button
-            class="archive-character-strip-card ${shapeClass} ${staggerClass} ${activeId === item.id ? 'is-active' : ''}"
+            class="archive-character-grid-card ${shapeClass} ${staggerClass} ${activeId === item.id ? 'is-active' : ''}"
             type="button"
             data-action="show-character-detail"
             data-id="${item.id}"
             aria-label="查看${escapeHtml(item.name || '未命名角色')}档案"
           >
-            <div class="archive-character-strip-card__media ${item.avatar ? 'has-image' : ''}">
+            <div class="archive-character-grid-card__media ${item.avatar ? 'has-image' : ''}">
               ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
             </div>
-            <div class="archive-character-strip-card__meta">
+            <div class="archive-character-grid-card__meta">
               <strong>${escapeHtml(item.name || '未命名')}</strong>
-              <span>${escapeHtml(item.identity || '身份待补充')}</span>
             </div>
           </button>
         `;
@@ -739,18 +744,23 @@ export async function mount(container, context) {
     </div>
   `;
 
-  // [模块标注] 角色档案复古纸质详情模块：
-  // 参考用户提供的旧式登记表/卷宗纸样式；
-  // 字段仍复用当前角色数据结构，只重做展示层，方便后续继续改字段。
+  // [模块标注] 角色档案详情关闭返回模块：
+  // 点击右上角关闭按钮，仅关闭角色详情并返回角色卡片列表。
+  // [模块标注] 角色档案头像右侧信息模块：
+  // 姓名、性别、年龄、身份放到头像右侧排列，便于后续继续微调。
+  // [模块标注] 角色档案人物设定固定容器模块：
+  // 人物设定区域固定高度、可多行显示并内部滚动，避免遮挡底部 TAB 栏。
   const buildCharacterArchivePaper = (item) => `
     <article class="archive-character-paper" data-card-id="${item.id}">
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
           <p class="archive-character-paper__eyebrow">Internal Character Archives · Miniphone</p>
-          <h3>${escapeHtml(item.name || '未命名角色')}</h3>
           <p class="archive-character-paper__subtitle">角色档案登记表 / Character Registry</p>
         </div>
         <div class="archive-character-paper__actions" aria-label="角色档案操作">
+          <button class="archive-character-paper__icon-btn" type="button" data-action="close-character-detail" aria-label="关闭档案详情">
+            ${icon.close}
+          </button>
           <button class="archive-character-paper__icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
             ${icon.edit}
           </button>
@@ -765,42 +775,44 @@ export async function mount(container, context) {
           ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
         </div>
 
-        <div class="archive-character-paper__summary">
-          <div class="archive-character-paper__summary-grid">
-            <div class="archive-character-paper__field">
-              <label>姓名 / Name</label>
-              <p>${escapeHtml(item.name || '—')}</p>
-            </div>
-            <div class="archive-character-paper__field">
-              <label>性别 / Gender</label>
+        <div class="archive-character-paper__info">
+          <div class="archive-character-paper__name-block">
+            <h3>${escapeHtml(item.name || '未命名角色')}</h3>
+          </div>
+          <div class="archive-character-paper__base-fields">
+            <div class="archive-character-paper__base-field">
+              <label>性别</label>
               <p>${escapeHtml(item.gender || '—')}</p>
             </div>
-            <div class="archive-character-paper__field">
-              <label>年龄 / Age</label>
+            <div class="archive-character-paper__base-field">
+              <label>年龄</label>
               <p>${escapeHtml(item.age || '—')}</p>
             </div>
-            <div class="archive-character-paper__field">
-              <label>身份 / Identity</label>
+            <div class="archive-character-paper__base-field archive-character-paper__base-field--full">
+              <label>身份</label>
               <p>${escapeHtml(item.identity || '—')}</p>
-            </div>
-            <div class="archive-character-paper__field archive-character-paper__field--full">
-              <label>一句话签名 / Signature</label>
-              <p>${escapeHtml(item.signature || '—')}</p>
-            </div>
-            <div class="archive-character-paper__field archive-character-paper__field--full">
-              <label>联系方式 / Contact</label>
-              <p>${escapeHtml(item.contact || '—')}</p>
             </div>
           </div>
         </div>
       </section>
 
+      <section class="archive-character-paper__meta-strip">
+        <div class="archive-character-paper__meta-box">
+          <label>一句话签名</label>
+          <p>${escapeHtml(item.signature || '—')}</p>
+        </div>
+        <div class="archive-character-paper__meta-box">
+          <label>联系方式</label>
+          <p>${escapeHtml(item.contact || '—')}</p>
+        </div>
+      </section>
+
       <section class="archive-character-paper__section">
         <div class="archive-character-paper__section-title">
-          <span>人物设定 / Experience & Profile</span>
+          <span>人物设定</span>
           <i>${icon.seal}</i>
         </div>
-        <div class="archive-character-paper__content">
+        <div class="archive-character-paper__content archive-character-paper__content--fixed">
           <p>${escapeHtml(item.personalitySetting || '—')}</p>
         </div>
       </section>
@@ -865,14 +877,19 @@ export async function mount(container, context) {
 
     const selected = list.find((item) => item.id === state.selectedCharacterId) || list[0];
 
+    if (!state.isCharacterDetailOpen || !selected) {
+      return `
+        <section class="archive-character-panel">
+          ${renderCharacterProfileList(list, selected?.id || '')}
+        </section>
+      `;
+    }
+
     return `
       <section class="archive-character-panel">
-        ${renderCharacterProfileList(list, selected?.id || '')}
-        ${selected ? `
-          <section class="archive-character-detail-section">
-            ${buildCharacterArchivePaper(selected)}
-          </section>
-        ` : ''}
+        <section class="archive-character-detail-section">
+          ${buildCharacterArchivePaper(selected)}
+        </section>
       </section>
     `;
   };
@@ -1285,6 +1302,7 @@ export async function mount(container, context) {
           } else {
             state.data.characters.push(profile);
             state.selectedCharacterId = profile.id;
+            state.isCharacterDetailOpen = false;
           }
 
           state.data.masks = state.data.masks.map((mask) => ({
@@ -1544,6 +1562,9 @@ export async function mount(container, context) {
       const nextTab = actionEl.getAttribute('data-tab');
       if (TAB_META[nextTab]) {
         state.activeTab = nextTab;
+        if (nextTab !== 'character') {
+          state.isCharacterDetailOpen = false;
+        }
         rerender();
       }
       return;
@@ -1587,6 +1608,13 @@ export async function mount(container, context) {
 
     if (action === 'show-character-detail') {
       state.selectedCharacterId = id;
+      state.isCharacterDetailOpen = true;
+      rerender();
+      return;
+    }
+
+    if (action === 'close-character-detail') {
+      state.isCharacterDetailOpen = false;
       rerender();
       return;
     }
@@ -1611,6 +1639,8 @@ export async function mount(container, context) {
       // 展开态与列表态统一复用应用内确认弹窗，避免误删，不使用浏览器原生弹窗。
       openConfirmModal(`确定删除角色“${target.name || '未命名角色'}”吗？`, () => {
         state.data.characters = state.data.characters.filter((item) => item.id !== id);
+        state.selectedCharacterId = state.data.characters[0]?.id || '';
+        state.isCharacterDetailOpen = false;
 
         state.data.masks = state.data.masks.map((mask) => ({
           ...mask,

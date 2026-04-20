@@ -75,40 +75,36 @@
   min-height: 100%;
 }
 
-/* [模块标注] 角色档案顶部切换卡片模块：
-   仅作用于角色档案 tab 顶部人物列表；
-   点击卡片后直接切换下方档案详情，不再进入任何动画场景。 */
+/* [模块标注] 角色档案双列错落卡片模块：
+   仅作用于角色档案 tab 列表；
+   改为一行两张、纵向滚动的错落卡片，不使用横向滑动。 */
 .archive-character-panel {
   display: grid;
   gap: 14px;
+  min-height: 0;
 }
 
-.archive-character-strip {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 2px 2px 8px;
-  scrollbar-width: none;
+.archive-character-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+  align-items: start;
+  padding: 2px 2px 6px;
 }
 
-.archive-character-strip::-webkit-scrollbar {
-  display: none;
-}
-
-.archive-character-strip-card {
+.archive-character-grid-card {
   position: relative;
-  flex: 0 0 auto;
-  width: 126px;
+  width: 100%;
   border: 1px solid rgba(122, 95, 67, 0.16);
   background:
     linear-gradient(180deg, rgba(255, 251, 242, 0.98) 0%, rgba(244, 233, 213, 0.96) 100%);
-  border-radius: 22px;
+  border-radius: 24px;
   padding: 10px;
   color: var(--archive-text);
   display: grid;
-  gap: 8px;
+  gap: 9px;
   align-content: start;
-  text-align: left;
+  text-align: center;
   box-shadow:
     0 12px 26px rgba(71, 46, 24, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.56);
@@ -116,7 +112,7 @@
   overflow: hidden;
 }
 
-.archive-character-strip-card::before {
+.archive-character-grid-card::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -127,29 +123,33 @@
   pointer-events: none;
 }
 
-.archive-character-strip-card.is-active {
+.archive-character-grid-card.is-active {
   border-color: rgba(127, 92, 62, 0.42);
   box-shadow:
     0 16px 32px rgba(71, 46, 24, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
-.archive-character-strip-card:active {
+.archive-character-grid-card:active {
   transform: scale(0.98);
 }
 
-.archive-character-strip-card.is-medium {
-  margin-top: 12px;
+.archive-character-grid-card.is-offset {
+  margin-top: 18px;
 }
 
-.archive-character-strip-card.is-compact {
-  margin-top: 2px;
+.archive-character-grid-card.is-medium {
+  margin-top: 10px;
 }
 
-.archive-character-strip-card__media {
+.archive-character-grid-card.is-compact {
+  margin-top: 4px;
+}
+
+.archive-character-grid-card__media {
   position: relative;
   width: 100%;
-  border-radius: 18px;
+  border-radius: 20px;
   background: rgba(240, 229, 210, 0.84);
   border: 1px solid rgba(122, 95, 67, 0.1);
   overflow: hidden;
@@ -160,57 +160,52 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
 }
 
-.archive-character-strip-card.is-square .archive-character-strip-card__media,
-.archive-character-strip-card.is-medium .archive-character-strip-card__media {
-  aspect-ratio: 1 / 1.04;
+.archive-character-grid-card.is-square .archive-character-grid-card__media,
+.archive-character-grid-card.is-medium .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.02;
 }
 
-.archive-character-strip-card.is-portrait .archive-character-strip-card__media,
-.archive-character-strip-card.is-tall .archive-character-strip-card__media {
-  aspect-ratio: 1 / 1.36;
+.archive-character-grid-card.is-portrait .archive-character-grid-card__media,
+.archive-character-grid-card.is-tall .archive-character-grid-card__media,
+.archive-character-grid-card.is-offset .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.34;
 }
 
-.archive-character-strip-card.is-compact .archive-character-strip-card__media {
-  aspect-ratio: 1 / 0.94;
+.archive-character-grid-card.is-compact .archive-character-grid-card__media {
+  aspect-ratio: 1 / 0.92;
 }
 
-.archive-character-strip-card__media img {
+.archive-character-grid-card__media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.archive-character-strip-card__media svg {
+.archive-character-grid-card__media svg {
   width: 26px;
   height: 26px;
 }
 
-.archive-character-strip-card__meta {
+.archive-character-grid-card__meta {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 2px;
+  justify-items: center;
 }
 
-.archive-character-strip-card__meta strong {
+.archive-character-grid-card__meta strong {
   font-size: 13px;
-  line-height: 1.3;
+  line-height: 1.35;
   font-weight: 700;
   word-break: break-word;
+  text-align: center;
 }
 
-.archive-character-strip-card__meta span {
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--archive-subtext);
-  word-break: break-word;
-}
-
-/* [模块标注] 角色档案旧纸详情页模块：
-   参考旧式卷宗/登记表视觉做法；
-   仅改角色档案详情展示，不影响其它模块卡片。 */
+/* [模块标注] 角色档案详情页模块：
+   保持主题统一；详情页位于内容区内部，不覆盖底部 TAB 栏。 */
 .archive-character-detail-section {
   min-width: 0;
+  padding-bottom: 4px;
 }
 
 .archive-character-paper {
@@ -253,6 +248,7 @@
 
 .archive-character-paper__header,
 .archive-character-paper__hero,
+.archive-character-paper__meta-strip,
 .archive-character-paper__section {
   position: relative;
   z-index: 1;
@@ -278,15 +274,6 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(108, 74, 41, 0.82);
-}
-
-.archive-character-paper__title-block h3 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.06;
-  font-family: 'KaiTi', 'STKaiti', serif;
-  font-weight: 700;
-  color: #39281a;
 }
 
 .archive-character-paper__subtitle {
@@ -334,6 +321,7 @@
 
 .archive-character-paper__photo {
   min-height: 146px;
+  border-radius: 18px;
   border: 1px solid rgba(108, 74, 41, 0.28);
   background: rgba(201, 173, 130, 0.22);
   display: flex;
@@ -357,41 +345,58 @@
   height: 28px;
 }
 
-.archive-character-paper__summary {
+.archive-character-paper__info {
   min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.archive-character-paper__name-block {
   border: 1px solid rgba(108, 74, 41, 0.24);
+  border-radius: 16px;
+  background: rgba(250, 242, 223, 0.72);
+  padding: 12px;
+}
+
+.archive-character-paper__name-block h3 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.08;
+  font-family: 'KaiTi', 'STKaiti', serif;
+  font-weight: 700;
+  color: #39281a;
+  word-break: break-word;
+}
+
+.archive-character-paper__base-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.archive-character-paper__base-field {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(108, 74, 41, 0.18);
+  border-radius: 14px;
   background: rgba(250, 242, 223, 0.62);
 }
 
-.archive-character-paper__summary-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.archive-character-paper__field {
-  min-width: 0;
-  padding: 10px 12px;
-  border-right: 1px solid rgba(108, 74, 41, 0.18);
-  border-bottom: 1px solid rgba(108, 74, 41, 0.18);
-}
-
-.archive-character-paper__field:nth-child(2n) {
-  border-right: 0;
-}
-
-.archive-character-paper__field--full {
+.archive-character-paper__base-field--full {
   grid-column: 1 / -1;
-  border-right: 0;
 }
 
-.archive-character-paper__field label {
+.archive-character-paper__base-field label,
+.archive-character-paper__meta-box label {
   display: block;
   margin-bottom: 6px;
   font-size: 11px;
   color: rgba(108, 74, 41, 0.8);
 }
 
-.archive-character-paper__field p {
+.archive-character-paper__base-field p,
+.archive-character-paper__meta-box p {
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
@@ -400,8 +405,23 @@
   white-space: pre-wrap;
 }
 
+.archive-character-paper__meta-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.archive-character-paper__meta-box {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(108, 74, 41, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 248, 234, 0.56);
+}
+
 .archive-character-paper__section {
   border: 1px solid rgba(108, 74, 41, 0.24);
+  border-radius: 16px;
   background: rgba(250, 242, 223, 0.52);
 }
 
@@ -433,6 +453,17 @@
 
 .archive-character-paper__content {
   padding: 12px;
+}
+
+.archive-character-paper__content--fixed {
+  height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.archive-character-paper__content--fixed::-webkit-scrollbar {
+  display: none;
 }
 
 .archive-character-paper__content p {
@@ -1128,8 +1159,11 @@
     grid-template-columns: 1fr;
   }
 
-  .archive-character-strip-card {
-    width: 112px;
+  .archive-character-grid {
+    gap: 12px 10px;
+  }
+
+  .archive-character-grid-card {
     border-radius: 20px;
     padding: 9px;
   }
@@ -1182,15 +1216,12 @@
     min-height: 138px;
   }
 
-  .archive-character-paper__summary-grid {
+  .archive-character-paper__base-fields,
+  .archive-character-paper__meta-strip {
     grid-template-columns: 1fr;
   }
 
-  .archive-character-paper__field {
-    border-right: 0;
-  }
-
-  .archive-character-paper__title-block h3 {
+  .archive-character-paper__name-block h3 {
     font-size: 24px;
   }
 }
