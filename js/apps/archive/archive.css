@@ -75,6 +75,114 @@
   min-height: 100%;
 }
 
+/* [模块标注] 角色档案主界面双列错落卡片样式模块：
+   仅作用于角色档案主界面卡片墙；
+   参考双列信息面板布局，保持复古主题下的留白、圆角与错落节奏。 */
+.archive-character-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 14px;
+  align-items: start;
+}
+
+.archive-character-grid-card {
+  position: relative;
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 242, 0.98) 0%, rgba(244, 233, 213, 0.96) 100%);
+  border-radius: 26px;
+  padding: 12px 12px 14px;
+  color: var(--archive-text);
+  display: grid;
+  gap: 10px;
+  box-shadow:
+    0 14px 30px rgba(71, 46, 24, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  text-align: center;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  overflow: hidden;
+}
+
+.archive-character-grid-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 78% 14%, rgba(255, 248, 233, 0.78), transparent 28%),
+    radial-gradient(circle at 18% 18%, rgba(191, 148, 87, 0.06), transparent 24%);
+  pointer-events: none;
+}
+
+.archive-character-grid-card.is-active {
+  border-color: rgba(127, 92, 62, 0.34);
+  box-shadow:
+    0 18px 34px rgba(71, 46, 24, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.archive-character-grid-card:active {
+  transform: scale(0.985);
+}
+
+.archive-character-grid-card.is-medium {
+  margin-top: 14px;
+}
+
+.archive-character-grid-card.is-compact {
+  margin-top: -4px;
+}
+
+.archive-character-grid-card__media {
+  position: relative;
+  width: 100%;
+  border-radius: 22px;
+  background: rgba(240, 229, 210, 0.84);
+  border: 1px solid rgba(122, 95, 67, 0.1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(98, 72, 45, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.archive-character-grid-card.is-square .archive-character-grid-card__media,
+.archive-character-grid-card.is-medium .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.08;
+}
+
+.archive-character-grid-card.is-portrait .archive-character-grid-card__media,
+.archive-character-grid-card.is-tall .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.34;
+}
+
+.archive-character-grid-card.is-compact .archive-character-grid-card__media {
+  aspect-ratio: 1 / 0.9;
+}
+
+.archive-character-grid-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.archive-character-grid-card__media svg {
+  width: 28px;
+  height: 28px;
+}
+
+.archive-character-grid-card__name {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--archive-text);
+  word-break: break-word;
+}
+
 @keyframes archiveFadeIn {
   from {
     opacity: 0;
@@ -737,6 +845,14 @@
   isolation: isolate;
 }
 
+.archive-scene[data-scene-stage='idle'] {
+  grid-template-rows: auto;
+}
+
+.archive-scene__hint.is-hidden {
+  display: none;
+}
+
 .archive-scene__backdrop {
   position: absolute;
   inset: 54px -12px -24px;
@@ -797,7 +913,11 @@
   cursor: default;
   transform-origin: center center;
   transform-style: preserve-3d;
-  transition: transform 0.56s cubic-bezier(0.2, 0.78, 0.2, 1), opacity 0.44s ease, filter 0.44s ease;
+  transition:
+    transform 0.72s cubic-bezier(0.22, 0.78, 0.2, 1),
+    opacity 0.38s ease,
+    filter 0.42s ease;
+  will-change: transform, opacity, filter;
 }
 
 .archive-envelope.is-clickable {
@@ -823,8 +943,9 @@
   height: 100%;
   border-radius: 18px 18px 20px 20px;
   background:
-    linear-gradient(135deg, rgba(255, 245, 220, 0.18), transparent 34%),
-    radial-gradient(circle at 78% 28%, rgba(108, 73, 41, 0.14), transparent 38%),
+    linear-gradient(135deg, rgba(255, 247, 224, 0.28), transparent 32%),
+    radial-gradient(circle at 78% 28%, rgba(108, 73, 41, 0.16), transparent 38%),
+    linear-gradient(180deg, rgba(156, 112, 64, 0.14), rgba(86, 59, 33, 0.04)),
     var(--archive-envelope-bg);
   border: 1px solid rgba(108, 74, 41, 0.48);
   box-shadow:
@@ -844,16 +965,18 @@
 .archive-envelope__body::before {
   inset: 8px;
   border-radius: 15px;
-  border: 1px solid rgba(255, 243, 215, 0.14);
-  opacity: 0.55;
+  border: 1px solid rgba(255, 243, 215, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(129, 88, 47, 0.08);
+  opacity: 0.62;
 }
 
 .archive-envelope__body::after {
   inset: 0;
   border-radius: inherit;
   background:
+    linear-gradient(180deg, transparent 0%, rgba(96, 66, 37, 0.06) 100%),
     radial-gradient(circle at 2px 2px, rgba(86, 60, 34, 0.05) 1px, transparent 0);
-  background-size: 10px 10px;
+  background-size: auto, 10px 10px;
   mix-blend-mode: multiply;
   opacity: 0.48;
 }
@@ -882,15 +1005,16 @@
   transform-origin: center top;
   transform-style: preserve-3d;
   background:
-    linear-gradient(180deg, rgba(231, 206, 164, 0.98), rgba(194, 151, 99, 0.95));
+    linear-gradient(180deg, rgba(237, 214, 173, 0.98), rgba(193, 147, 93, 0.96));
   clip-path: polygon(0 0, 100% 0, 100% 34%, 50% 100%, 0 34%);
   border: 1px solid rgba(108, 74, 41, 0.46);
   border-bottom: 0;
   border-radius: 18px 18px 0 0;
   box-shadow:
-    inset 0 1px 0 rgba(255, 244, 223, 0.55),
+    inset 0 1px 0 rgba(255, 244, 223, 0.58),
+    inset 0 -10px 16px rgba(134, 94, 49, 0.1),
     0 10px 18px rgba(88, 59, 33, 0.14);
-  transition: transform 0.72s cubic-bezier(0.23, 0.82, 0.27, 1), box-shadow 0.42s ease;
+  transition: transform 0.66s cubic-bezier(0.2, 0.82, 0.22, 1), box-shadow 0.38s ease;
   z-index: 4;
 }
 
@@ -920,7 +1044,7 @@
   inset: 0;
   z-index: 5;
   pointer-events: none;
-  transition: opacity 0.36s ease, transform 0.5s ease;
+  transition: opacity 0.3s ease, transform 0.4s ease;
 }
 
 .archive-envelope__rope-line {
@@ -950,27 +1074,29 @@
   position: absolute;
   left: 50%;
   top: 43%;
-  width: 56px;
-  height: 56px;
-  margin-left: -28px;
-  margin-top: -28px;
+  width: 58px;
+  height: 58px;
+  margin-left: -29px;
+  margin-top: -29px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #f6e6d9;
   background:
-    radial-gradient(circle at 34% 30%, rgba(255, 228, 213, 0.4), transparent 34%),
-    linear-gradient(180deg, #a63f38 0%, #7f2828 100%);
+    radial-gradient(circle at 34% 30%, rgba(255, 228, 213, 0.42), transparent 34%),
+    radial-gradient(circle at 58% 64%, rgba(86, 14, 12, 0.16), transparent 36%),
+    linear-gradient(180deg, #a94239 0%, #7c231f 100%);
   box-shadow:
-    inset 0 2px 5px rgba(255, 255, 255, 0.22),
+    inset 0 2px 5px rgba(255, 255, 255, 0.24),
+    inset 0 -4px 10px rgba(80, 15, 13, 0.28),
     0 8px 18px rgba(114, 34, 31, 0.28);
-  transition: transform 0.56s ease, opacity 0.42s ease, filter 0.42s ease;
+  transition: transform 0.42s ease, opacity 0.32s ease, filter 0.32s ease;
 }
 
 .archive-envelope__seal svg {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
 }
 
 /* 手写标签 */
@@ -1040,7 +1166,7 @@
   bottom: 10px;
   width: 82%;
   height: 82%;
-  transform: translateX(-50%) translateY(72%) scale(0.94);
+  transform: translateX(-50%) translateY(76%) scale(0.965);
   transform-origin: center bottom;
   border-radius: 14px;
   background: var(--archive-paper-bg);
@@ -1051,11 +1177,13 @@
   overflow: hidden;
   opacity: 0;
   transition:
-    transform 0.8s cubic-bezier(0.21, 0.78, 0.24, 1),
-    opacity 0.45s ease,
-    width 0.72s ease,
-    border-radius 0.62s ease,
-    box-shadow 0.62s ease;
+    transform 0.64s cubic-bezier(0.2, 0.78, 0.24, 1),
+    opacity 0.3s ease,
+    width 0.54s ease,
+    height 0.54s ease,
+    border-radius 0.5s ease,
+    box-shadow 0.5s ease;
+  will-change: transform, opacity, width, height;
   z-index: 1;
 }
 
@@ -1119,6 +1247,7 @@
   display: grid;
   gap: 12px;
   color: #433123;
+  padding-top: 40px;
 }
 
 .archive-scene-paper-card::before {
@@ -1217,6 +1346,48 @@
   padding-top: 2px;
 }
 
+/* [模块标注] 角色档案打开态图标按钮样式模块：
+   仅作用于档案袋打开后的纸张顶部区域。 */
+.archive-paper-icon-toolbar {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 8px;
+  z-index: 4;
+}
+
+.archive-paper-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 249, 239, 0.92);
+  color: var(--archive-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 6px 14px rgba(72, 46, 24, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.archive-paper-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.archive-paper-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.archive-paper-icon-btn.is-danger {
+  color: var(--archive-danger);
+}
+
 /* 动画阶段切换 */
 /* 第 2 阶段：点击后放大、遮罩出现 */
 .archive-scene.is-stage-focus .archive-scene__backdrop,
@@ -1252,29 +1423,29 @@
 .archive-scene.is-stage-opening .archive-envelope__flap,
 .archive-scene.is-stage-extracting .archive-envelope__flap,
 .archive-scene.is-stage-opened .archive-envelope__flap {
-  transform: perspective(1200px) rotateX(-165deg) translateY(-8px);
+  transform: perspective(1200px) rotateX(-172deg) translateY(-6px);
   box-shadow: 0 18px 30px rgba(88, 59, 33, 0.12);
 }
 
 .archive-scene.is-stage-opening .archive-envelope__rope,
 .archive-scene.is-stage-extracting .archive-envelope__rope,
 .archive-scene.is-stage-opened .archive-envelope__rope {
-  transform: translateY(-10px) scale(0.96);
-  opacity: 0.12;
+  transform: translateY(-8px) scale(0.95);
+  opacity: 0.08;
 }
 
 .archive-scene.is-stage-opening .archive-envelope__seal,
 .archive-scene.is-stage-extracting .archive-envelope__seal,
 .archive-scene.is-stage-opened .archive-envelope__seal {
-  transform: rotate(-18deg) scale(0.86);
-  filter: blur(0.2px);
+  transform: rotate(-12deg) scale(0.78);
+  filter: blur(0.12px);
 }
 
 /* 第 4 阶段：纸张从下向上抽出 */
 .archive-scene.is-stage-extracting .archive-envelope__paper,
 .archive-scene.is-stage-opened .archive-envelope__paper {
   opacity: 1;
-  transform: translateX(-50%) translateY(6%) scale(1);
+  transform: translateX(-50%) translateY(2%) scale(1);
 }
 
 /* 最终：袋体半隐，纸张前景舒展摊平 */
@@ -1296,7 +1467,7 @@
 .archive-scene.is-stage-opened .archive-envelope__paper {
   width: 92%;
   height: 88%;
-  transform: translateX(-50%) translateY(-2%) scale(1);
+  transform: translateX(-50%) translateY(-1%) scale(1);
   border-radius: 16px;
   box-shadow:
     inset 0 1px 0 rgba(255, 253, 245, 0.74),
@@ -1349,6 +1520,15 @@
   .archive-avatar-editor__actions,
   .archive-avatar-editor__url {
     grid-template-columns: 1fr;
+  }
+
+  .archive-character-grid {
+    gap: 12px;
+  }
+
+  .archive-character-grid-card {
+    border-radius: 22px;
+    padding: 10px 10px 12px;
   }
 
   /* [模块标注] 用户面具/角色档案双列字段布局模块：
