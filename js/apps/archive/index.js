@@ -366,8 +366,6 @@ export async function mount(container, context) {
     selectedSupportingId: '',
     selectedRelationId: '',
     headerRefs: null,
-    characterSceneStage: 'idle',
-    characterSceneTimerIds: [],
     characterImageRatioMap: {}
   };
 
@@ -401,19 +399,6 @@ export async function mount(container, context) {
 
   let modalCleanup = () => {};
   let toastTimer = null;
-
-  const clearCharacterSceneTimers = () => {
-    state.characterSceneTimerIds.forEach((timerId) => clearTimeout(timerId));
-    state.characterSceneTimerIds = [];
-  };
-
-  const queueCharacterSceneStep = (stage, delay) => {
-    const timerId = window.setTimeout(() => {
-      state.characterSceneStage = stage;
-      renderContent();
-    }, delay);
-    state.characterSceneTimerIds.push(timerId);
-  };
 
   // [模块标注] 主界面图片比例识别模块：
   // 仅用于“用户面具 / 角色档案”主界面列表卡片展示比例判断；
@@ -725,147 +710,102 @@ export async function mount(container, context) {
     </article>
   `;
 
-  // [模块标注] 角色档案单页动效内容模块：
-  // 保持字段内容与角色编辑窗口一致，方便后续继续修改字段结构；
-  // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
-  const buildCharacterArchivePaper = (item) => `
-    <!-- [模块标注] 角色档案打开态纸张内部布局模块：
-         将按钮区与正文区拆分为两个独立层；
-         顶部为按钮区，底部为正文滚动区，避免按钮掉到底部、正文溢出纸张边框。 -->
-    <div class="archive-scene-paper-layout">
-      <!-- [模块标注] 角色档案打开态图标工具栏模块：
-           固定挂载在米白色纸张内部顶部层；
-           按“编辑 / 删除 / 关闭”顺序横向排列。 -->
-      <div class="archive-paper-icon-toolbar" aria-label="角色档案操作">
-        <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
-          ${icon.edit}
-        </button>
-        <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
-          ${icon.remove}
-        </button>
-        <button class="archive-paper-icon-btn" type="button" data-action="close-character-scene" data-id="${item.id}" aria-label="关闭角色档案">
-          ${icon.close}
-        </button>
-      </div>
-
-      <div class="archive-scene-paper-layout__body">
-        <article class="archive-scene-paper-card">
-          <header class="archive-scene-paper-card__header">
-            <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
-              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
-            </div>
-            <div class="archive-scene-paper-card__meta">
-              <p class="archive-scene-paper-card__kicker">民国档案室 / 人物卷宗</p>
-              <h3>${escapeHtml(item.name || '未命名角色')}</h3>
-              <div class="archive-badges archive-badges--paper">
-                <span class="archive-badge archive-badge--active">角色档案</span>
-                <span class="archive-badge">已载入卷宗</span>
-              </div>
-            </div>
-          </header>
-
-          <div class="archive-scene-paper-card__section">
-            <span class="archive-scene-paper-card__seal">${icon.seal}</span>
-            ${buildFieldGridHtml(item)}
-          </div>
-
-          <div class="archive-large-box archive-large-box--paper">
-            <label>人物设定</label>
-            <p>${escapeHtml(item.personalitySetting || '—')}</p>
-          </div>
-        </article>
-      </div>
-    </div>
-  `;
-
-  // [模块标注] 角色档案主界面单页动效模块：
-  // 严格对应需求中的 1~10 步：
-  // 1) 初始封闭档案袋 + 浮动
-  // 2) 点击后放大并出现遮罩
-  // 3) 上盖 3D 翻开，火漆/绳结解封
-  // 4) 档案纸自下向上抽出并摊平，最终前景展示详细档案内容
-  // [模块标注] 角色档案主界面双列错落卡片模块：
-  // 仅用于角色档案主界面，参考双列高低错落信息卡布局；
-  // 点击卡片后才进入档案袋展示流程。
-  const renderCharacterMasonryList = (items, activeId) => `
-    <div class="archive-character-grid">
+  // [模块标注] 角色档案主界面卡片列表模块：
+  // 仅作用于角色档案 tab；
+  // 保留可横向切换的人物摘要卡，点击后直接刷新下方档案详情，不再进入信封/抽纸动画。
+  const renderCharacterProfileList = (items, activeId) => `
+    <div class="archive-character-strip" aria-label="角色档案列表">
       ${items.map((item, index) => {
         const shapeClass = resolveProfileCardShapeClass(item);
         const staggerClass = index % 3 === 0 ? 'is-tall' : index % 3 === 1 ? 'is-medium' : 'is-compact';
         return `
           <button
-            class="archive-character-grid-card ${shapeClass} ${staggerClass} ${activeId === item.id ? 'is-active' : ''}"
+            class="archive-character-strip-card ${shapeClass} ${staggerClass} ${activeId === item.id ? 'is-active' : ''}"
             type="button"
             data-action="show-character-detail"
             data-id="${item.id}"
-            aria-label="查看${escapeHtml(item.name || '未命名角色')}档案袋"
+            aria-label="查看${escapeHtml(item.name || '未命名角色')}档案"
           >
-            <div class="archive-character-grid-card__media ${item.avatar ? 'has-image' : ''}">
+            <div class="archive-character-strip-card__media ${item.avatar ? 'has-image' : ''}">
               ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
             </div>
-            <span class="archive-character-grid-card__name">${escapeHtml(item.name || '未命名')}</span>
+            <div class="archive-character-strip-card__meta">
+              <strong>${escapeHtml(item.name || '未命名')}</strong>
+              <span>${escapeHtml(item.identity || '身份待补充')}</span>
+            </div>
           </button>
         `;
       }).join('')}
     </div>
   `;
 
-  const buildCharacterScene = (item) => {
-    const stage = state.characterSceneStage || 'idle';
-    const sceneStageClass = `is-stage-${stage}`;
-    const hasScene = stage !== 'idle' && item;
+  // [模块标注] 角色档案复古纸质详情模块：
+  // 参考用户提供的旧式登记表/卷宗纸样式；
+  // 字段仍复用当前角色数据结构，只重做展示层，方便后续继续改字段。
+  const buildCharacterArchivePaper = (item) => `
+    <article class="archive-character-paper" data-card-id="${item.id}">
+      <header class="archive-character-paper__header">
+        <div class="archive-character-paper__title-block">
+          <p class="archive-character-paper__eyebrow">Internal Character Archives · Miniphone</p>
+          <h3>${escapeHtml(item.name || '未命名角色')}</h3>
+          <p class="archive-character-paper__subtitle">角色档案登记表 / Character Registry</p>
+        </div>
+        <div class="archive-character-paper__actions" aria-label="角色档案操作">
+          <button class="archive-character-paper__icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
+            ${icon.edit}
+          </button>
+          <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
+            ${icon.remove}
+          </button>
+        </div>
+      </header>
 
-    return `
-      <section class="archive-scene ${sceneStageClass}" data-scene-stage="${stage}">
-        <div class="archive-scene__backdrop" aria-hidden="true"></div>
-
-        <div class="archive-scene__list">
-          ${renderCharacterMasonryList(state.data.characters, item?.id || '')}
+      <section class="archive-character-paper__hero">
+        <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
+          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
         </div>
 
-        ${hasScene ? `
-          <div class="archive-scene__stage">
-            <button
-              class="archive-envelope"
-              type="button"
-              data-action="open-character-scene"
-              data-id="${item.id}"
-              aria-label="打开角色档案袋"
-            >
-              <div class="archive-envelope__shadow" aria-hidden="true"></div>
-
-              <div class="archive-envelope__body">
-                <div class="archive-envelope__flap" aria-hidden="true">
-                  <span class="archive-envelope__crease archive-envelope__crease--left"></span>
-                  <span class="archive-envelope__crease archive-envelope__crease--right"></span>
-                </div>
-
-                <div class="archive-envelope__rope" aria-hidden="true">
-                  <span class="archive-envelope__rope-line archive-envelope__rope-line--vertical"></span>
-                  <span class="archive-envelope__rope-line archive-envelope__rope-line--horizontal"></span>
-                  <span class="archive-envelope__seal">${icon.seal}</span>
-                </div>
-
-                <div class="archive-envelope__label" aria-hidden="true">
-                  <span class="archive-envelope__label-kicker">Miniphone / Archive</span>
-                  <strong>${escapeHtml(item.name || '未命名角色')}</strong>
-                  <em>秘密档案</em>
-                </div>
-
-                <div class="archive-envelope__paper" aria-hidden="true">
-                  <div class="archive-envelope__paper-fold archive-envelope__paper-fold--left"></div>
-                  <div class="archive-envelope__paper-fold archive-envelope__paper-fold--right"></div>
-                  <div class="archive-envelope__paper-content">
-                    ${buildCharacterArchivePaper(item)}
-                  </div>
-                </div>
-              </div>
-            </button>
+        <div class="archive-character-paper__summary">
+          <div class="archive-character-paper__summary-grid">
+            <div class="archive-character-paper__field">
+              <label>姓名 / Name</label>
+              <p>${escapeHtml(item.name || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field">
+              <label>性别 / Gender</label>
+              <p>${escapeHtml(item.gender || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field">
+              <label>年龄 / Age</label>
+              <p>${escapeHtml(item.age || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field">
+              <label>身份 / Identity</label>
+              <p>${escapeHtml(item.identity || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field archive-character-paper__field--full">
+              <label>一句话签名 / Signature</label>
+              <p>${escapeHtml(item.signature || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field archive-character-paper__field--full">
+              <label>联系方式 / Contact</label>
+              <p>${escapeHtml(item.contact || '—')}</p>
+            </div>
           </div>
-        ` : ''}
+        </div>
       </section>
-    `;
-  };
+
+      <section class="archive-character-paper__section">
+        <div class="archive-character-paper__section-title">
+          <span>人物设定 / Experience & Profile</span>
+          <i>${icon.seal}</i>
+        </div>
+        <div class="archive-character-paper__content">
+          <p>${escapeHtml(item.personalitySetting || '—')}</p>
+        </div>
+      </section>
+    </article>
+  `;
 
   const buildSupportingDetailCard = (item) => `
     <article class="archive-support-card is-selected" data-card-id="${item.id}">
@@ -924,7 +864,17 @@ export async function mount(container, context) {
     }
 
     const selected = list.find((item) => item.id === state.selectedCharacterId) || list[0];
-    return buildCharacterScene(selected);
+
+    return `
+      <section class="archive-character-panel">
+        ${renderCharacterProfileList(list, selected?.id || '')}
+        ${selected ? `
+          <section class="archive-character-detail-section">
+            ${buildCharacterArchivePaper(selected)}
+          </section>
+        ` : ''}
+      </section>
+    `;
   };
 
   const renderSupportingTab = () => {
@@ -1498,7 +1448,6 @@ export async function mount(container, context) {
 
     state.data.characters.push(mapped);
     state.selectedCharacterId = mapped.id;
-    state.characterSceneStage = 'idle';
     rerender();
     notify(`已导入角色：${mapped.name || '未命名角色'}`, 'success');
   };
@@ -1543,7 +1492,6 @@ export async function mount(container, context) {
 
         state.data.characters.push(fallback);
         state.selectedCharacterId = fallback.id;
-        state.characterSceneStage = 'idle';
         rerender();
         notify('PNG 未解析到标准角色定义，已创建基础角色卡，请手动补全字段', 'info');
       }
@@ -1584,28 +1532,6 @@ export async function mount(container, context) {
     notify(`已导出角色：${target.name || '未命名角色'}`, 'success');
   };
 
-  const openCharacterSceneById = (id) => {
-    const nextId = id || state.selectedCharacterId || state.data.characters[0]?.id || '';
-    if (!nextId) return;
-
-    state.selectedCharacterId = nextId;
-    clearCharacterSceneTimers();
-
-    state.characterSceneStage = 'focus';
-    renderContent();
-
-    queueCharacterSceneStep('opening', 240);
-    queueCharacterSceneStep('extracting', 760);
-    queueCharacterSceneStep('opened', 1420);
-  };
-
-  // [模块标注] 角色档案关闭返回模块：
-  // 仅作用于角色档案展开态；关闭后回到角色卡片陈列界面，不改动其它 tab 的行为。
-  const closeCharacterScene = () => {
-    clearCharacterSceneTimers();
-    state.characterSceneStage = 'idle';
-    renderContent();
-  };
 
   const onContainerClick = (event) => {
     const actionEl = event.target.closest('[data-action]');
@@ -1617,8 +1543,6 @@ export async function mount(container, context) {
     if (action === 'switch-tab') {
       const nextTab = actionEl.getAttribute('data-tab');
       if (TAB_META[nextTab]) {
-        clearCharacterSceneTimers();
-        state.characterSceneStage = 'idle';
         state.activeTab = nextTab;
         rerender();
       }
@@ -1662,18 +1586,8 @@ export async function mount(container, context) {
     }
 
     if (action === 'show-character-detail') {
-      openCharacterSceneById(id);
-      return;
-    }
-
-    if (action === 'open-character-scene') {
-      if (state.characterSceneStage === 'opened') return;
-      openCharacterSceneById(id);
-      return;
-    }
-
-    if (action === 'close-character-scene') {
-      closeCharacterScene();
+      state.selectedCharacterId = id;
+      rerender();
       return;
     }
 
@@ -1704,8 +1618,6 @@ export async function mount(container, context) {
         }));
 
         state.data.relations = state.data.relations.filter((relation) => relation.mainRoleId !== id);
-        clearCharacterSceneTimers();
-        state.characterSceneStage = 'idle';
         notify('角色已删除', 'success');
         rerender();
       }, true);
@@ -1783,7 +1695,6 @@ export async function mount(container, context) {
 
   return {
     destroy() {
-      clearCharacterSceneTimers();
       container.removeEventListener('click', onContainerClick);
       importInputEl?.removeEventListener('change', handleImportInputChange);
       closeModal();
