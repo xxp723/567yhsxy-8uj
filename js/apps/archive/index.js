@@ -730,22 +730,18 @@ export async function mount(container, context) {
   // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
   const buildCharacterArchivePaper = (item) => `
     <article class="archive-scene-paper-card">
-      <!-- [模块标注] 角色档案打开态关闭按钮模块：
-           仅作用于角色档案打开后的右上角空白区域；
-           点击后关闭当前展开的角色档案，返回角色卡片陈列视图。 -->
-      <button class="archive-paper-close-btn" type="button" data-action="close-character-scene" data-id="${item.id}" aria-label="关闭角色档案">
-        ${icon.close}
-      </button>
-
       <!-- [模块标注] 角色档案打开态图标工具栏模块：
-           仅作用于角色档案打开后的三角封口底部、正文内容上方；
-           保留“编辑 / 删除”两个图标按钮，方便后续单独修改此操作区。 -->
+           仅作用于角色档案打开后的横线以上区域；
+           按“编辑 / 删除 / 关闭”顺序横向排列，方便后续单独修改此操作区。 -->
       <div class="archive-paper-icon-toolbar" aria-label="角色档案操作">
         <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
           ${icon.edit}
         </button>
         <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
           ${icon.remove}
+        </button>
+        <button class="archive-paper-icon-btn" type="button" data-action="close-character-scene" data-id="${item.id}" aria-label="关闭角色档案">
+          ${icon.close}
         </button>
       </div>
 
@@ -1689,6 +1685,9 @@ export async function mount(container, context) {
     if (action === 'delete-character') {
       const target = state.data.characters.find((item) => item.id === id);
       if (!target) return;
+
+      // [模块标注] 角色档案删除确认弹窗模块：
+      // 展开态与列表态统一复用应用内确认弹窗，避免误删，不使用浏览器原生弹窗。
       openConfirmModal(`确定删除角色“${target.name || '未命名角色'}”吗？`, () => {
         state.data.characters = state.data.characters.filter((item) => item.id !== id);
 
