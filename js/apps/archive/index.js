@@ -729,10 +729,13 @@ export async function mount(container, context) {
   // 保持字段内容与角色编辑窗口一致，方便后续继续修改字段结构；
   // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
   const buildCharacterArchivePaper = (item) => `
-    <article class="archive-scene-paper-card">
+    <!-- [模块标注] 角色档案打开态纸张内部布局模块：
+         将按钮区与正文区拆分为两个独立层；
+         顶部为按钮区，底部为正文滚动区，避免按钮掉到底部、正文溢出纸张边框。 -->
+    <div class="archive-scene-paper-layout">
       <!-- [模块标注] 角色档案打开态图标工具栏模块：
-           仅作用于角色档案打开后的横线以上区域；
-           按“编辑 / 删除 / 关闭”顺序横向排列，方便后续单独修改此操作区。 -->
+           固定挂载在米白色纸张内部顶部层；
+           按“编辑 / 删除 / 关闭”顺序横向排列。 -->
       <div class="archive-paper-icon-toolbar" aria-label="角色档案操作">
         <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
           ${icon.edit}
@@ -745,30 +748,34 @@ export async function mount(container, context) {
         </button>
       </div>
 
-      <header class="archive-scene-paper-card__header">
-        <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
-          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
-        </div>
-        <div class="archive-scene-paper-card__meta">
-          <p class="archive-scene-paper-card__kicker">民国档案室 / 人物卷宗</p>
-          <h3>${escapeHtml(item.name || '未命名角色')}</h3>
-          <div class="archive-badges archive-badges--paper">
-            <span class="archive-badge archive-badge--active">角色档案</span>
-            <span class="archive-badge">已载入卷宗</span>
+      <div class="archive-scene-paper-layout__body">
+        <article class="archive-scene-paper-card">
+          <header class="archive-scene-paper-card__header">
+            <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
+              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
+            </div>
+            <div class="archive-scene-paper-card__meta">
+              <p class="archive-scene-paper-card__kicker">民国档案室 / 人物卷宗</p>
+              <h3>${escapeHtml(item.name || '未命名角色')}</h3>
+              <div class="archive-badges archive-badges--paper">
+                <span class="archive-badge archive-badge--active">角色档案</span>
+                <span class="archive-badge">已载入卷宗</span>
+              </div>
+            </div>
+          </header>
+
+          <div class="archive-scene-paper-card__section">
+            <span class="archive-scene-paper-card__seal">${icon.seal}</span>
+            ${buildFieldGridHtml(item)}
           </div>
-        </div>
-      </header>
 
-      <div class="archive-scene-paper-card__section">
-        <span class="archive-scene-paper-card__seal">${icon.seal}</span>
-        ${buildFieldGridHtml(item)}
+          <div class="archive-large-box archive-large-box--paper">
+            <label>人物设定</label>
+            <p>${escapeHtml(item.personalitySetting || '—')}</p>
+          </div>
+        </article>
       </div>
-
-      <div class="archive-large-box archive-large-box--paper">
-        <label>人物设定</label>
-        <p>${escapeHtml(item.personalitySetting || '—')}</p>
-      </div>
-    </article>
+    </div>
   `;
 
   // [模块标注] 角色档案主界面单页动效模块：
