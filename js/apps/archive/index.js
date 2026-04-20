@@ -730,21 +730,6 @@ export async function mount(container, context) {
   // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
   const buildCharacterArchivePaper = (item) => `
     <article class="archive-scene-paper-card">
-      <!-- [模块标注] 角色档案打开态图标工具栏模块：
-           仅作用于角色档案打开后的纸张顶部区域；
-           将“选中 / 编辑 / 删除”改为图标按钮，并固定在三角封口底部、头像上方。 -->
-      <div class="archive-paper-icon-toolbar" aria-label="角色档案操作">
-        <button class="archive-paper-icon-btn" type="button" data-action="select-character" data-id="${item.id}" aria-label="选中角色">
-          ${icon.check}
-        </button>
-        <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
-          ${icon.edit}
-        </button>
-        <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
-          ${icon.remove}
-        </button>
-      </div>
-
       <header class="archive-scene-paper-card__header">
         <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
           ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
@@ -769,6 +754,23 @@ export async function mount(container, context) {
         <p>${escapeHtml(item.personalitySetting || '—')}</p>
       </div>
     </article>
+  `;
+
+  // [模块标注] 角色档案打开态图标工具栏模块：
+  // 三个图标按钮横向排列在三角封口底部、正文内容上方；
+  // 结构上归属于档案袋展开后的内部区域，不落到档案袋外。
+  const buildCharacterEnvelopeToolbar = (item) => `
+    <div class="archive-envelope__toolbar" aria-label="角色档案操作">
+      <button class="archive-paper-icon-btn" type="button" data-action="select-character" data-id="${item.id}" aria-label="选中角色">
+        ${icon.check}
+      </button>
+      <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
+        ${icon.edit}
+      </button>
+      <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
+        ${icon.remove}
+      </button>
+    </div>
   `;
 
   // [模块标注] 角色档案主界面单页动效模块：
@@ -853,6 +855,7 @@ export async function mount(container, context) {
                   <div class="archive-envelope__paper-fold archive-envelope__paper-fold--left"></div>
                   <div class="archive-envelope__paper-fold archive-envelope__paper-fold--right"></div>
                   <div class="archive-envelope__paper-content">
+                    ${buildCharacterEnvelopeToolbar(item)}
                     ${buildCharacterArchivePaper(item)}
                   </div>
                 </div>
@@ -1591,9 +1594,9 @@ export async function mount(container, context) {
     state.characterSceneStage = 'focus';
     renderContent();
 
-    queueCharacterSceneStep('opening', 180);
-    queueCharacterSceneStep('extracting', 620);
-    queueCharacterSceneStep('opened', 1220);
+    queueCharacterSceneStep('opening', 220);
+    queueCharacterSceneStep('extracting', 760);
+    queueCharacterSceneStep('opened', 1360);
   };
 
   const onContainerClick = (event) => {

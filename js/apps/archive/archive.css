@@ -1163,10 +1163,10 @@
 .archive-envelope__paper {
   position: absolute;
   left: 50%;
-  bottom: 10px;
-  width: 82%;
-  height: 82%;
-  transform: translateX(-50%) translateY(76%) scale(0.965);
+  bottom: 16px;
+  width: 78%;
+  height: 64%;
+  transform: translateX(-50%) translateY(84%) scale(0.975);
   transform-origin: center bottom;
   border-radius: 14px;
   background: var(--archive-paper-bg);
@@ -1177,10 +1177,10 @@
   overflow: hidden;
   opacity: 0;
   transition:
-    transform 0.64s cubic-bezier(0.2, 0.78, 0.24, 1),
-    opacity 0.3s ease,
-    width 0.54s ease,
-    height 0.54s ease,
+    transform 0.72s cubic-bezier(0.2, 0.74, 0.22, 1),
+    opacity 0.34s ease,
+    width 0.58s ease,
+    height 0.58s ease,
     border-radius 0.5s ease,
     box-shadow 0.5s ease;
   will-change: transform, opacity, width, height;
@@ -1233,7 +1233,7 @@
   z-index: 1;
   height: 100%;
   overflow: auto;
-  padding: 18px 16px 16px;
+  padding: 16px 14px 14px;
   scrollbar-width: none;
 }
 
@@ -1247,7 +1247,7 @@
   display: grid;
   gap: 12px;
   color: #433123;
-  padding-top: 40px;
+  padding-top: 56px;
 }
 
 .archive-scene-paper-card::before {
@@ -1348,6 +1348,18 @@
 
 /* [模块标注] 角色档案打开态图标按钮样式模块：
    仅作用于档案袋打开后的纸张顶部区域。 */
+.archive-envelope__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 0 10px;
+  margin: 0 0 2px;
+}
+
 .archive-paper-icon-toolbar {
   position: absolute;
   left: 50%;
@@ -1364,7 +1376,7 @@
   height: 34px;
   border-radius: 999px;
   border: 1px solid rgba(122, 95, 67, 0.18);
-  background: rgba(255, 249, 239, 0.92);
+  background: rgba(255, 249, 239, 0.96);
   color: var(--archive-text);
   display: inline-flex;
   align-items: center;
@@ -1423,29 +1435,29 @@
 .archive-scene.is-stage-opening .archive-envelope__flap,
 .archive-scene.is-stage-extracting .archive-envelope__flap,
 .archive-scene.is-stage-opened .archive-envelope__flap {
-  transform: perspective(1200px) rotateX(-172deg) translateY(-6px);
-  box-shadow: 0 18px 30px rgba(88, 59, 33, 0.12);
+  transform: perspective(1200px) rotateX(-160deg) translateY(-3px);
+  box-shadow: 0 16px 26px rgba(88, 59, 33, 0.12);
 }
 
 .archive-scene.is-stage-opening .archive-envelope__rope,
 .archive-scene.is-stage-extracting .archive-envelope__rope,
 .archive-scene.is-stage-opened .archive-envelope__rope {
-  transform: translateY(-8px) scale(0.95);
-  opacity: 0.08;
+  transform: translateY(-5px) scale(0.965);
+  opacity: 0.12;
 }
 
 .archive-scene.is-stage-opening .archive-envelope__seal,
 .archive-scene.is-stage-extracting .archive-envelope__seal,
 .archive-scene.is-stage-opened .archive-envelope__seal {
-  transform: rotate(-12deg) scale(0.78);
-  filter: blur(0.12px);
+  transform: rotate(-9deg) scale(0.84);
+  filter: blur(0.08px);
 }
 
 /* 第 4 阶段：纸张从下向上抽出 */
 .archive-scene.is-stage-extracting .archive-envelope__paper,
 .archive-scene.is-stage-opened .archive-envelope__paper {
   opacity: 1;
-  transform: translateX(-50%) translateY(2%) scale(1);
+  transform: translateX(-50%) translateY(10%) scale(1);
 }
 
 /* 最终：袋体半隐，纸张前景舒展摊平 */
@@ -1465,9 +1477,9 @@
 }
 
 .archive-scene.is-stage-opened .archive-envelope__paper {
-  width: 92%;
-  height: 88%;
-  transform: translateX(-50%) translateY(-1%) scale(1);
+  width: 82%;
+  height: 70%;
+  transform: translateX(-50%) translateY(8%) scale(1);
   border-radius: 16px;
   box-shadow:
     inset 0 1px 0 rgba(255, 253, 245, 0.74),
@@ -1570,8 +1582,8 @@
   }
 
   .archive-scene.is-stage-opened .archive-envelope__paper {
-    width: 94%;
-    height: 90%;
+    width: 84%;
+    height: 72%;
   }
 
   .archive-scene-paper-card__header {
