@@ -1163,10 +1163,10 @@
 .archive-envelope__paper {
   position: absolute;
   left: 50%;
-  bottom: 16px;
-  width: 78%;
-  height: 64%;
-  transform: translateX(-50%) translateY(84%) scale(0.975);
+  bottom: 18px;
+  width: 76%;
+  height: 58%;
+  transform: translateX(-50%) translateY(88%) scale(0.98);
   transform-origin: center bottom;
   border-radius: 14px;
   background: var(--archive-paper-bg);
@@ -1177,7 +1177,7 @@
   overflow: hidden;
   opacity: 0;
   transition:
-    transform 0.72s cubic-bezier(0.2, 0.74, 0.22, 1),
+    transform 0.78s cubic-bezier(0.22, 0.72, 0.2, 1),
     opacity 0.34s ease,
     width 0.58s ease,
     height 0.58s ease,
@@ -1232,8 +1232,10 @@
   position: relative;
   z-index: 1;
   height: 100%;
-  overflow: auto;
-  padding: 16px 14px 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  padding: 10px 12px 12px;
   scrollbar-width: none;
 }
 
@@ -1242,12 +1244,24 @@
 }
 
 /* 单页档案纸内容 */
+.archive-envelope__paper-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 6px;
+  scrollbar-width: none;
+}
+
+.archive-envelope__paper-body::-webkit-scrollbar {
+  display: none;
+}
+
 .archive-scene-paper-card {
   position: relative;
   display: grid;
   gap: 12px;
   color: #433123;
-  padding-top: 56px;
+  padding-top: 0;
 }
 
 .archive-scene-paper-card::before {
@@ -1349,15 +1363,17 @@
 /* [模块标注] 角色档案打开态图标按钮样式模块：
    仅作用于档案袋打开后的纸张顶部区域。 */
 .archive-envelope__toolbar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 5;
-  display: grid;
-  grid-auto-flow: column;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 42px;
   padding: 2px 0 10px;
-  margin: 0 0 2px;
+  margin: 0;
 }
 
 .archive-paper-icon-toolbar {
@@ -1374,6 +1390,9 @@
 .archive-paper-icon-btn {
   width: 34px;
   height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  flex: 0 0 34px;
   border-radius: 999px;
   border: 1px solid rgba(122, 95, 67, 0.18);
   background: rgba(255, 249, 239, 0.96);
@@ -1457,7 +1476,7 @@
 .archive-scene.is-stage-extracting .archive-envelope__paper,
 .archive-scene.is-stage-opened .archive-envelope__paper {
   opacity: 1;
-  transform: translateX(-50%) translateY(10%) scale(1);
+  transform: translateX(-50%) translateY(14%) scale(1);
 }
 
 /* 最终：袋体半隐，纸张前景舒展摊平 */
@@ -1477,9 +1496,9 @@
 }
 
 .archive-scene.is-stage-opened .archive-envelope__paper {
-  width: 82%;
-  height: 70%;
-  transform: translateX(-50%) translateY(8%) scale(1);
+  width: 78%;
+  height: 62%;
+  transform: translateX(-50%) translateY(12%) scale(1);
   border-radius: 16px;
   box-shadow:
     inset 0 1px 0 rgba(255, 253, 245, 0.74),
@@ -1582,8 +1601,8 @@
   }
 
   .archive-scene.is-stage-opened .archive-envelope__paper {
-    width: 84%;
-    height: 72%;
+    width: 80%;
+    height: 64%;
   }
 
   .archive-scene-paper-card__header {

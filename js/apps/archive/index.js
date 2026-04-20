@@ -11,6 +11,7 @@
 const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
 const ARCHIVE_ACTIVE_MASK_KEY = 'miniphone_archive_active_mask_id';
 const ARCHIVE_STYLE_ID = 'miniphone-archive-style';
+const ARCHIVE_STYLE_VERSION = '20260420-archive-fix-3';
 const RELATION_SELF_ID = '__archive_self__';
 
 const TAB_META = {
@@ -323,13 +324,20 @@ function fileToDataURL(file) {
 }
 
 function ensureArchiveStylesheet() {
+  const versionedHref = `js/apps/archive/archive.css?v=${ARCHIVE_STYLE_VERSION}`;
   let link = document.getElementById(ARCHIVE_STYLE_ID);
-  if (link) return link;
+
+  if (link) {
+    if (link.getAttribute('href') !== versionedHref) {
+      link.setAttribute('href', versionedHref);
+    }
+    return link;
+  }
 
   link = document.createElement('link');
   link.id = ARCHIVE_STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = 'js/apps/archive/archive.css';
+  link.href = versionedHref;
   document.head.appendChild(link);
   return link;
 }
@@ -760,6 +768,8 @@ export async function mount(container, context) {
   // 三个图标按钮横向排列在三角封口底部、正文内容上方；
   // 结构上归属于档案袋展开后的内部区域，不落到档案袋外。
   const buildCharacterEnvelopeToolbar = (item) => `
+    <!-- [模块标注] 角色档案展开页工具栏固定行模块：
+         独立于正文滚动区，固定为一行三按钮，强制横向排列。 -->
     <div class="archive-envelope__toolbar" aria-label="角色档案操作">
       <button class="archive-paper-icon-btn" type="button" data-action="select-character" data-id="${item.id}" aria-label="选中角色">
         ${icon.check}
@@ -856,7 +866,9 @@ export async function mount(container, context) {
                   <div class="archive-envelope__paper-fold archive-envelope__paper-fold--right"></div>
                   <div class="archive-envelope__paper-content">
                     ${buildCharacterEnvelopeToolbar(item)}
-                    ${buildCharacterArchivePaper(item)}
+                    <div class="archive-envelope__paper-body">
+                      ${buildCharacterArchivePaper(item)}
+                    </div>
                   </div>
                 </div>
               </div>
