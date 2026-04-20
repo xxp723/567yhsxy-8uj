@@ -11,7 +11,6 @@
 const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
 const ARCHIVE_ACTIVE_MASK_KEY = 'miniphone_archive_active_mask_id';
 const ARCHIVE_STYLE_ID = 'miniphone-archive-style';
-const ARCHIVE_STYLE_VERSION = '20260420-archive-fix-3';
 const RELATION_SELF_ID = '__archive_self__';
 
 const TAB_META = {
@@ -324,20 +323,13 @@ function fileToDataURL(file) {
 }
 
 function ensureArchiveStylesheet() {
-  const versionedHref = `js/apps/archive/archive.css?v=${ARCHIVE_STYLE_VERSION}`;
   let link = document.getElementById(ARCHIVE_STYLE_ID);
-
-  if (link) {
-    if (link.getAttribute('href') !== versionedHref) {
-      link.setAttribute('href', versionedHref);
-    }
-    return link;
-  }
+  if (link) return link;
 
   link = document.createElement('link');
   link.id = ARCHIVE_STYLE_ID;
   link.rel = 'stylesheet';
-  link.href = versionedHref;
+  link.href = 'js/apps/archive/archive.css';
   document.head.appendChild(link);
   return link;
 }
@@ -738,6 +730,25 @@ export async function mount(container, context) {
   // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
   const buildCharacterArchivePaper = (item) => `
     <article class="archive-scene-paper-card">
+      <!-- [模块标注] 角色档案打开态关闭按钮模块：
+           仅作用于角色档案打开后的右上角空白区域；
+           点击后关闭当前展开的角色档案，返回角色卡片陈列视图。 -->
+      <button class="archive-paper-close-btn" type="button" data-action="close-character-scene" data-id="${item.id}" aria-label="关闭角色档案">
+        ${icon.close}
+      </button>
+
+      <!-- [模块标注] 角色档案打开态图标工具栏模块：
+           仅作用于角色档案打开后的三角封口底部、正文内容上方；
+           保留“编辑 / 删除”两个图标按钮，方便后续单独修改此操作区。 -->
+      <div class="archive-paper-icon-toolbar" aria-label="角色档案操作">
+        <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
+          ${icon.edit}
+        </button>
+        <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
+          ${icon.remove}
+        </button>
+      </div>
+
       <header class="archive-scene-paper-card__header">
         <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
           ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
@@ -762,25 +773,6 @@ export async function mount(container, context) {
         <p>${escapeHtml(item.personalitySetting || '—')}</p>
       </div>
     </article>
-  `;
-
-  // [模块标注] 角色档案打开态图标工具栏模块：
-  // 三个图标按钮横向排列在三角封口底部、正文内容上方；
-  // 结构上归属于档案袋展开后的内部区域，不落到档案袋外。
-  const buildCharacterEnvelopeToolbar = (item) => `
-    <!-- [模块标注] 角色档案展开页工具栏固定行模块：
-         独立于正文滚动区，固定为一行三按钮，强制横向排列。 -->
-    <div class="archive-envelope__toolbar" aria-label="角色档案操作">
-      <button class="archive-paper-icon-btn" type="button" data-action="select-character" data-id="${item.id}" aria-label="选中角色">
-        ${icon.check}
-      </button>
-      <button class="archive-paper-icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
-        ${icon.edit}
-      </button>
-      <button class="archive-paper-icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
-        ${icon.remove}
-      </button>
-    </div>
   `;
 
   // [模块标注] 角色档案主界面单页动效模块：
@@ -825,10 +817,6 @@ export async function mount(container, context) {
         <div class="archive-scene__backdrop" aria-hidden="true"></div>
 
         <div class="archive-scene__list">
-          <div class="archive-scene__hint ${hasScene ? 'is-hidden' : ''}">
-            <span>卷宗陈列</span>
-            <p>点击任意角色卡片，界面上将展开对应角色的秘密档案袋。</p>
-          </div>
           ${renderCharacterMasonryList(state.data.characters, item?.id || '')}
         </div>
 
@@ -865,10 +853,7 @@ export async function mount(container, context) {
                   <div class="archive-envelope__paper-fold archive-envelope__paper-fold--left"></div>
                   <div class="archive-envelope__paper-fold archive-envelope__paper-fold--right"></div>
                   <div class="archive-envelope__paper-content">
-                    ${buildCharacterEnvelopeToolbar(item)}
-                    <div class="archive-envelope__paper-body">
-                      ${buildCharacterArchivePaper(item)}
-                    </div>
+                    ${buildCharacterArchivePaper(item)}
                   </div>
                 </div>
               </div>
@@ -1606,9 +1591,17 @@ export async function mount(container, context) {
     state.characterSceneStage = 'focus';
     renderContent();
 
-    queueCharacterSceneStep('opening', 220);
+    queueCharacterSceneStep('opening', 240);
     queueCharacterSceneStep('extracting', 760);
-    queueCharacterSceneStep('opened', 1360);
+    queueCharacterSceneStep('opened', 1420);
+  };
+
+  // [模块标注] 角色档案关闭返回模块：
+  // 仅作用于角色档案展开态；关闭后回到角色卡片陈列界面，不改动其它 tab 的行为。
+  const closeCharacterScene = () => {
+    clearCharacterSceneTimers();
+    state.characterSceneStage = 'idle';
+    renderContent();
   };
 
   const onContainerClick = (event) => {
@@ -1673,6 +1666,11 @@ export async function mount(container, context) {
     if (action === 'open-character-scene') {
       if (state.characterSceneStage === 'opened') return;
       openCharacterSceneById(id);
+      return;
+    }
+
+    if (action === 'close-character-scene') {
+      closeCharacterScene();
       return;
     }
 
