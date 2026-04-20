@@ -4,6 +4,7 @@
  * 说明:
  *  - 尽量限制在 archive-* 命名空间，避免影响其它应用
  *  - 顶部动作按钮仅作用于档案应用动态插入的按钮容器
+ *  - 本文件额外包含“角色档案主界面单页动效”样式，严格仅作用于档案应用
  */
 
 :root {
@@ -18,6 +19,13 @@
   --archive-danger: #b14842;
   --archive-success: #4d8b66;
   --archive-shadow: 0 10px 24px rgba(66, 43, 22, 0.08);
+  --archive-paper-shadow: 0 24px 58px rgba(62, 39, 18, 0.24);
+  --archive-envelope-shadow: 0 26px 52px rgba(60, 39, 21, 0.28);
+  --archive-scene-mask: rgba(33, 21, 13, 0.52);
+  --archive-paper-bg: linear-gradient(180deg, rgba(252, 245, 228, 0.96) 0%, rgba(240, 228, 202, 0.97) 100%);
+  --archive-envelope-bg: linear-gradient(180deg, #d7bc90 0%, #b98d59 100%);
+  --archive-envelope-edge: #8f653c;
+  --archive-red-seal: #8d312e;
 }
 
 .archive-v2 {
@@ -26,13 +34,30 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #f8f4ed 0%, #f3ece2 100%);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 250, 238, 0.72), transparent 30%),
+    radial-gradient(circle at 82% 20%, rgba(191, 148, 87, 0.08), transparent 28%),
+    linear-gradient(180deg, #f5efdf 0%, #e7d8bc 100%);
   color: var(--archive-text);
   border-radius: 20px;
   overflow: hidden;
 }
 
+.archive-v2::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(118, 90, 54, 0.02), rgba(118, 90, 54, 0.02)),
+    radial-gradient(circle at 1px 1px, rgba(90, 67, 39, 0.05) 1px, transparent 0);
+  background-size: auto, 9px 9px;
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
 .archive-v2__content {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -44,6 +69,10 @@
   display: grid;
   gap: 12px;
   animation: archiveFadeIn 220ms ease;
+}
+
+.archive-tab-panel--character {
+  min-height: 100%;
 }
 
 @keyframes archiveFadeIn {
@@ -58,8 +87,8 @@
 }
 
 .archive-empty-card {
-  background: var(--archive-card);
-  border: 1px solid var(--archive-border);
+  background: rgba(255, 250, 241, 0.88);
+  border: 1px solid rgba(122, 95, 67, 0.16);
   border-radius: 16px;
   padding: 16px;
   box-shadow: var(--archive-shadow);
@@ -103,9 +132,10 @@
   width: 30px !important;
   height: 30px !important;
   border-radius: 10px !important;
-  border: 1px solid var(--archive-border) !important;
-  background: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(122, 95, 67, 0.18) !important;
+  background: rgba(255, 252, 245, 0.8) !important;
   color: var(--archive-text) !important;
+  box-shadow: 0 6px 16px rgba(73, 48, 25, 0.08);
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
@@ -122,8 +152,8 @@
 .archive-profile-card,
 .archive-support-card,
 .archive-relation-item {
-  background: var(--archive-card);
-  border: 1px solid var(--archive-border);
+  background: rgba(255, 251, 244, 0.92);
+  border: 1px solid rgba(122, 95, 67, 0.16);
   border-radius: 16px;
   box-shadow: var(--archive-shadow);
   padding: 12px;
@@ -191,6 +221,10 @@
   flex-wrap: wrap;
 }
 
+.archive-badges--paper {
+  margin-top: 2px;
+}
+
 .archive-badge,
 .archive-chip {
   display: inline-flex;
@@ -198,7 +232,7 @@
   border-radius: 999px;
   padding: 2px 9px;
   font-size: 11px;
-  border: 1px solid var(--archive-border);
+  border: 1px solid rgba(122, 95, 67, 0.16);
   background: #fffaf3;
   color: var(--archive-subtext);
 }
@@ -227,8 +261,8 @@
 
 .archive-mini-box,
 .archive-large-box {
-  background: #fffcf7;
-  border: 1px solid var(--archive-border);
+  background: rgba(255, 251, 244, 0.92);
+  border: 1px solid rgba(122, 95, 67, 0.14);
   border-radius: 12px;
   padding: 9px 10px;
 }
@@ -270,6 +304,78 @@
   height: 14px;
 }
 
+/* [模块标注] 主界面图片比例卡片模块：
+   用于用户面具 / 角色档案主界面列表；
+   竖图显示竖版长卡，正方图显示方卡。 */
+.archive-compact-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.archive-compact-list::-webkit-scrollbar {
+  display: none;
+}
+
+.archive-compact-list--shape-aware {
+  align-items: flex-end;
+  padding-bottom: 6px;
+}
+
+.archive-compact-card {
+  flex: 0 0 auto;
+  min-width: 92px;
+  border: 1px solid rgba(122, 95, 67, 0.16);
+  background: rgba(255, 251, 244, 0.86);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(66, 43, 22, 0.08);
+  padding: 10px;
+  color: inherit;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.archive-compact-card.is-selected {
+  border-color: rgba(127, 92, 62, 0.45);
+  box-shadow: 0 14px 32px rgba(78, 52, 30, 0.16);
+}
+
+.archive-compact-card:active {
+  transform: scale(0.98);
+}
+
+.archive-compact-card.is-square {
+  width: 112px;
+}
+
+.archive-compact-card.is-portrait {
+  width: 98px;
+}
+
+.archive-avatar-box--adaptive {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+}
+
+.archive-compact-card.is-portrait .archive-avatar-box--adaptive {
+  aspect-ratio: 3 / 4.35;
+  border-radius: 18px;
+}
+
+.archive-compact-card__name {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--archive-text);
+  word-break: break-word;
+}
+
 /* 关系区辅助条 */
 .archive-inline-helper {
   display: flex;
@@ -278,8 +384,8 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid var(--archive-border);
-  background: #fff9ef;
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  background: rgba(255, 248, 234, 0.88);
 }
 
 .archive-inline-helper span {
@@ -419,8 +525,8 @@
   width: 100%;
   box-sizing: border-box;
   border-radius: 10px;
-  border: 1px solid var(--archive-border);
-  background: #fffdf9;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
   color: var(--archive-text);
   font-size: 13px;
   padding: 8px 10px;
@@ -488,10 +594,10 @@
   gap: 6px;
   max-height: 120px;
   overflow: auto;
-  border: 1px solid var(--archive-border);
+  border: 1px solid rgba(122, 95, 67, 0.14);
   border-radius: 10px;
   padding: 8px;
-  background: #fffdf9;
+  background: rgba(255, 253, 249, 0.96);
 }
 
 .archive-check-item {
@@ -560,9 +666,9 @@
   align-items: center;
   gap: 8px;
   padding: 10px;
-  border: 1px solid var(--archive-border);
+  border: 1px solid rgba(122, 95, 67, 0.14);
   border-radius: 12px;
-  background: #fffdf9;
+  background: rgba(255, 253, 249, 0.96);
 }
 
 .archive-switch-row > span {
@@ -613,6 +719,599 @@
   transform: translateX(20px);
 }
 
+/* [模块标注] 角色档案主界面单页动效模块：
+   视觉关键词：民国档案室 / 米黄色旧报纸 / 做旧牛皮纸 / 暖棕暗纹 / 复古红印章
+   动画顺序：
+   - idle: 封闭档案袋呼吸浮动
+   - focus: 放大并出现聚焦遮罩
+   - opening: 上盖翻开，火漆/棉绳解封
+   - extracting: 纸张从下方开口抽出
+   - opened: 档案袋半隐退后，档案纸摊平并前景展示 */
+.archive-scene {
+  position: relative;
+  min-height: calc(100vh - 260px);
+  min-height: 520px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  isolation: isolate;
+}
+
+.archive-scene__backdrop {
+  position: absolute;
+  inset: 54px -12px -24px;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(106, 74, 43, 0.16), transparent 28%),
+    linear-gradient(180deg, rgba(57, 38, 24, 0) 0%, rgba(57, 38, 24, 0.1) 100%);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  z-index: 0;
+}
+
+.archive-scene__list,
+.archive-scene__stage {
+  position: relative;
+  z-index: 1;
+}
+
+.archive-scene__hint {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  margin-bottom: 10px;
+  color: var(--archive-subtext);
+}
+
+.archive-scene__hint span {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(109, 78, 49, 0.76);
+}
+
+.archive-scene__hint p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.archive-scene__stage {
+  min-height: 440px;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 4px 0 8px;
+}
+
+/* 第 1 阶段：档案袋初始浮动 */
+.archive-envelope {
+  position: relative;
+  width: min(78vw, 280px);
+  height: min(104vw, 380px);
+  max-width: 280px;
+  max-height: 380px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: default;
+  transform-origin: center center;
+  transform-style: preserve-3d;
+  transition: transform 0.56s cubic-bezier(0.2, 0.78, 0.2, 1), opacity 0.44s ease, filter 0.44s ease;
+}
+
+.archive-envelope.is-clickable {
+  cursor: pointer;
+}
+
+.archive-envelope__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  width: 72%;
+  height: 26px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(61, 40, 21, 0.24) 0%, rgba(61, 40, 21, 0) 72%);
+  filter: blur(3px);
+  opacity: 0.62;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.archive-envelope__body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px 18px 20px 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 245, 220, 0.18), transparent 34%),
+    radial-gradient(circle at 78% 28%, rgba(108, 73, 41, 0.14), transparent 38%),
+    var(--archive-envelope-bg);
+  border: 1px solid rgba(108, 74, 41, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 232, 0.52),
+    inset 0 -18px 38px rgba(123, 83, 44, 0.18),
+    var(--archive-envelope-shadow);
+  overflow: visible;
+}
+
+.archive-envelope__body::before,
+.archive-envelope__body::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.archive-envelope__body::before {
+  inset: 8px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 243, 215, 0.14);
+  opacity: 0.55;
+}
+
+.archive-envelope__body::after {
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 2px 2px, rgba(86, 60, 34, 0.05) 1px, transparent 0);
+  background-size: 10px 10px;
+  mix-blend-mode: multiply;
+  opacity: 0.48;
+}
+
+.archive-envelope.is-clickable .archive-envelope__body {
+  animation: archiveEnvelopeFloat 4s ease-in-out infinite;
+}
+
+@keyframes archiveEnvelopeFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* 档案袋封盖 */
+.archive-envelope__flap {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -1px;
+  height: 42%;
+  transform-origin: center top;
+  transform-style: preserve-3d;
+  background:
+    linear-gradient(180deg, rgba(231, 206, 164, 0.98), rgba(194, 151, 99, 0.95));
+  clip-path: polygon(0 0, 100% 0, 100% 34%, 50% 100%, 0 34%);
+  border: 1px solid rgba(108, 74, 41, 0.46);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 223, 0.55),
+    0 10px 18px rgba(88, 59, 33, 0.14);
+  transition: transform 0.72s cubic-bezier(0.23, 0.82, 0.27, 1), box-shadow 0.42s ease;
+  z-index: 4;
+}
+
+.archive-envelope__crease {
+  position: absolute;
+  top: 34%;
+  width: 42%;
+  height: 1px;
+  background: rgba(128, 91, 51, 0.38);
+}
+
+.archive-envelope__crease--left {
+  left: 8%;
+  transform: rotate(27deg);
+  transform-origin: left center;
+}
+
+.archive-envelope__crease--right {
+  right: 8%;
+  transform: rotate(-27deg);
+  transform-origin: right center;
+}
+
+/* 棉绳与火漆 */
+.archive-envelope__rope {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  transition: opacity 0.36s ease, transform 0.5s ease;
+}
+
+.archive-envelope__rope-line {
+  position: absolute;
+  background: linear-gradient(180deg, #e6dcc9 0%, #bda988 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+.archive-envelope__rope-line--vertical {
+  width: 4px;
+  height: 53%;
+  left: 50%;
+  top: 17%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+}
+
+.archive-envelope__rope-line--horizontal {
+  width: 54%;
+  height: 4px;
+  left: 23%;
+  top: 43%;
+  border-radius: 999px;
+}
+
+.archive-envelope__seal {
+  position: absolute;
+  left: 50%;
+  top: 43%;
+  width: 56px;
+  height: 56px;
+  margin-left: -28px;
+  margin-top: -28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f6e6d9;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 228, 213, 0.4), transparent 34%),
+    linear-gradient(180deg, #a63f38 0%, #7f2828 100%);
+  box-shadow:
+    inset 0 2px 5px rgba(255, 255, 255, 0.22),
+    0 8px 18px rgba(114, 34, 31, 0.28);
+  transition: transform 0.56s ease, opacity 0.42s ease, filter 0.42s ease;
+}
+
+.archive-envelope__seal svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 手写标签 */
+.archive-envelope__label {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 54%;
+  min-height: 86px;
+  transform: translateX(-50%) rotate(-2deg);
+  padding: 14px 12px 12px;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(245, 232, 204, 0.96), rgba(226, 205, 167, 0.94));
+  box-shadow:
+    0 10px 18px rgba(95, 63, 33, 0.15),
+    inset 0 1px 0 rgba(255, 247, 227, 0.54);
+  color: #5d452f;
+  display: grid;
+  gap: 3px;
+  z-index: 2;
+}
+
+.archive-envelope__label::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(92, 66, 37, 0.05) 1px, transparent 0);
+  background-size: 8px 8px;
+  opacity: 0.42;
+}
+
+.archive-envelope__label-kicker {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.archive-envelope__label strong,
+.archive-envelope__label em {
+  position: relative;
+  z-index: 1;
+}
+
+.archive-envelope__label strong {
+  font-size: 18px;
+  font-family: 'KaiTi', 'STKaiti', serif;
+  line-height: 1.18;
+  font-weight: 700;
+}
+
+.archive-envelope__label em {
+  font-size: 12px;
+  font-style: normal;
+  opacity: 0.82;
+}
+
+/* 档案纸：默认隐藏在袋内，后续从下方抽出 */
+.archive-envelope__paper {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  width: 82%;
+  height: 82%;
+  transform: translateX(-50%) translateY(72%) scale(0.94);
+  transform-origin: center bottom;
+  border-radius: 14px;
+  background: var(--archive-paper-bg);
+  border: 1px solid rgba(144, 105, 61, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 253, 245, 0.66),
+    0 12px 28px rgba(68, 45, 23, 0.18);
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    transform 0.8s cubic-bezier(0.21, 0.78, 0.24, 1),
+    opacity 0.45s ease,
+    width 0.72s ease,
+    border-radius 0.62s ease,
+    box-shadow 0.62s ease;
+  z-index: 1;
+}
+
+.archive-envelope__paper::before,
+.archive-envelope__paper::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.archive-envelope__paper::before {
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(142, 100, 54, 0.06), transparent 18%, transparent 82%, rgba(142, 100, 54, 0.07)),
+    radial-gradient(circle at 1px 1px, rgba(92, 66, 37, 0.05) 1px, transparent 0);
+  background-size: auto, 10px 10px;
+  opacity: 0.62;
+}
+
+.archive-envelope__paper::after {
+  inset: 12px;
+  border: 1px solid rgba(121, 77, 43, 0.14);
+  border-radius: 10px;
+  opacity: 0.48;
+}
+
+.archive-envelope__paper-fold {
+  position: absolute;
+  top: 0;
+  width: 18%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(138, 102, 60, 0.04), rgba(138, 102, 60, 0.1), rgba(255, 248, 233, 0.02));
+  z-index: 0;
+  opacity: 0.72;
+}
+
+.archive-envelope__paper-fold--left {
+  left: 16%;
+}
+
+.archive-envelope__paper-fold--right {
+  right: 16%;
+}
+
+.archive-envelope__paper-content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: auto;
+  padding: 18px 16px 16px;
+  scrollbar-width: none;
+}
+
+.archive-envelope__paper-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* 单页档案纸内容 */
+.archive-scene-paper-card {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  color: #433123;
+}
+
+.archive-scene-paper-card::before {
+  content: '';
+  position: absolute;
+  inset: -6px -4px auto auto;
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(137, 49, 46, 0.08), rgba(137, 49, 46, 0));
+  filter: blur(6px);
+}
+
+.archive-scene-paper-card__header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.archive-scene-paper-card__avatar {
+  width: 78px;
+  height: 98px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(134, 95, 54, 0.18);
+  background: rgba(188, 159, 123, 0.18);
+  box-shadow: 0 10px 18px rgba(86, 56, 30, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(98, 72, 45, 0.78);
+}
+
+.archive-scene-paper-card__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.archive-scene-paper-card__avatar svg {
+  width: 24px;
+  height: 24px;
+}
+
+.archive-scene-paper-card__meta {
+  display: grid;
+  gap: 6px;
+}
+
+.archive-scene-paper-card__kicker {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(111, 79, 49, 0.78);
+}
+
+.archive-scene-paper-card__meta h3 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.12;
+  font-family: 'KaiTi', 'STKaiti', serif;
+}
+
+.archive-scene-paper-card__section {
+  position: relative;
+}
+
+.archive-scene-paper-card__seal {
+  position: absolute;
+  right: 4px;
+  top: -6px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(141, 49, 46, 0.1);
+  color: var(--archive-red-seal);
+  border: 1px dashed rgba(141, 49, 46, 0.28);
+  transform: rotate(-12deg);
+}
+
+.archive-scene-paper-card__seal svg {
+  width: 18px;
+  height: 18px;
+}
+
+.archive-large-box--paper {
+  background: rgba(255, 247, 233, 0.78);
+  border-color: rgba(134, 95, 54, 0.16);
+}
+
+.archive-card-actions--paper {
+  padding-top: 2px;
+}
+
+/* 动画阶段切换 */
+/* 第 2 阶段：点击后放大、遮罩出现 */
+.archive-scene.is-stage-focus .archive-scene__backdrop,
+.archive-scene.is-stage-opening .archive-scene__backdrop,
+.archive-scene.is-stage-extracting .archive-scene__backdrop,
+.archive-scene.is-stage-opened .archive-scene__backdrop {
+  opacity: 1;
+  background:
+    linear-gradient(180deg, rgba(30, 20, 13, 0.12), rgba(30, 20, 13, 0.22)),
+    radial-gradient(circle at 50% 36%, rgba(37, 24, 15, 0.06), var(--archive-scene-mask));
+}
+
+.archive-scene.is-stage-focus .archive-envelope,
+.archive-scene.is-stage-opening .archive-envelope,
+.archive-scene.is-stage-extracting .archive-envelope,
+.archive-scene.is-stage-opened .archive-envelope {
+  width: min(82vw, 480px);
+  height: min(112vw, 650px);
+  max-width: 480px;
+  max-height: 650px;
+  filter: saturate(1.03);
+}
+
+.archive-scene.is-stage-focus .archive-envelope__shadow,
+.archive-scene.is-stage-opening .archive-envelope__shadow,
+.archive-scene.is-stage-extracting .archive-envelope__shadow,
+.archive-scene.is-stage-opened .archive-envelope__shadow {
+  opacity: 0.74;
+  transform: translateX(-50%) scale(1.15);
+}
+
+/* 第 3 阶段：翻盖与解封 */
+.archive-scene.is-stage-opening .archive-envelope__flap,
+.archive-scene.is-stage-extracting .archive-envelope__flap,
+.archive-scene.is-stage-opened .archive-envelope__flap {
+  transform: perspective(1200px) rotateX(-165deg) translateY(-8px);
+  box-shadow: 0 18px 30px rgba(88, 59, 33, 0.12);
+}
+
+.archive-scene.is-stage-opening .archive-envelope__rope,
+.archive-scene.is-stage-extracting .archive-envelope__rope,
+.archive-scene.is-stage-opened .archive-envelope__rope {
+  transform: translateY(-10px) scale(0.96);
+  opacity: 0.12;
+}
+
+.archive-scene.is-stage-opening .archive-envelope__seal,
+.archive-scene.is-stage-extracting .archive-envelope__seal,
+.archive-scene.is-stage-opened .archive-envelope__seal {
+  transform: rotate(-18deg) scale(0.86);
+  filter: blur(0.2px);
+}
+
+/* 第 4 阶段：纸张从下向上抽出 */
+.archive-scene.is-stage-extracting .archive-envelope__paper,
+.archive-scene.is-stage-opened .archive-envelope__paper {
+  opacity: 1;
+  transform: translateX(-50%) translateY(6%) scale(1);
+}
+
+/* 最终：袋体半隐，纸张前景舒展摊平 */
+.archive-scene.is-stage-opened .archive-envelope {
+  filter: saturate(0.96);
+}
+
+.archive-scene.is-stage-opened .archive-envelope__body {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 232, 0.42),
+    inset 0 -18px 38px rgba(123, 83, 44, 0.16),
+    0 14px 38px rgba(54, 35, 19, 0.18);
+}
+
+.archive-scene.is-stage-opened .archive-envelope__label {
+  opacity: 0.54;
+}
+
+.archive-scene.is-stage-opened .archive-envelope__paper {
+  width: 92%;
+  height: 88%;
+  transform: translateX(-50%) translateY(-2%) scale(1);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 253, 245, 0.74),
+    var(--archive-paper-shadow);
+  z-index: 6;
+}
+
+.archive-scene.is-stage-opened .archive-envelope__paper-fold--left {
+  opacity: 0.42;
+}
+
+.archive-scene.is-stage-opened .archive-envelope__paper-fold--right {
+  opacity: 0.42;
+}
+
 /* 提示 */
 .archive-toast {
   position: absolute;
@@ -627,7 +1326,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease, transform 0.18s ease;
-  z-index: 6;
+  z-index: 20;
   max-width: calc(100% - 24px);
   text-align: center;
 }
@@ -666,5 +1365,45 @@
   .archive-inline-helper {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .archive-compact-card.is-square {
+    width: 98px;
+  }
+
+  .archive-compact-card.is-portrait {
+    width: 90px;
+  }
+
+  .archive-scene {
+    min-height: 500px;
+    gap: 14px;
+  }
+
+  .archive-envelope,
+  .archive-scene.is-stage-focus .archive-envelope,
+  .archive-scene.is-stage-opening .archive-envelope,
+  .archive-scene.is-stage-extracting .archive-envelope,
+  .archive-scene.is-stage-opened .archive-envelope {
+    width: min(80vw, 300px);
+    height: min(110vw, 420px);
+  }
+
+  .archive-scene.is-stage-opened .archive-envelope__paper {
+    width: 94%;
+    height: 90%;
+  }
+
+  .archive-scene-paper-card__header {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-scene-paper-card__avatar {
+    width: 84px;
+    height: 106px;
+  }
+
+  .archive-scene-paper-card__meta h3 {
+    font-size: 21px;
   }
 }

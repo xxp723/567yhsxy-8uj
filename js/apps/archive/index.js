@@ -119,7 +119,9 @@ function normalizeArchiveData(raw) {
     return normalized;
   });
   const supportingRoles = normalizeArray(safe.supportingRoles).map((item) => normalizeSupportingRole(item));
-  const relations = normalizeArray(safe.relations).map((item) => normalizeRelation(item)).filter((item) => item.supportingRoleId);
+  const relations = normalizeArray(safe.relations)
+    .map((item) => normalizeRelation(item))
+    .filter((item) => item.supportingRoleId);
   const selectedTab = TAB_META[safe.selectedTab] ? safe.selectedTab : 'mask';
   const activeMaskId = masks.some((m) => m.id === safe.activeMaskId) ? safe.activeMaskId : '';
 
@@ -346,7 +348,9 @@ function icons() {
     upload: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 34V10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M16 18l8-8l8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 38h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
     link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l-4 4a7 7 0 0 0 10 10l4-4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M29 19l4-4a7 7 0 0 0-10-10l-4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 30l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
     check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+    close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+    docDetail: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 6h18l6 6v28H12V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M30 6v8h8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 22h12M18 30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+    seal: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3"/><path d="M24 14v20M14 24h20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
   };
 }
 
@@ -361,7 +365,10 @@ export async function mount(container, context) {
     selectedCharacterId: '',
     selectedSupportingId: '',
     selectedRelationId: '',
-    headerRefs: null
+    headerRefs: null,
+    characterSceneStage: 'idle',
+    characterSceneTimerIds: [],
+    characterImageRatioMap: {}
   };
 
   state.activeTab = TAB_META[state.data.selectedTab] ? state.data.selectedTab : 'mask';
@@ -394,6 +401,60 @@ export async function mount(container, context) {
 
   let modalCleanup = () => {};
   let toastTimer = null;
+
+  const clearCharacterSceneTimers = () => {
+    state.characterSceneTimerIds.forEach((timerId) => clearTimeout(timerId));
+    state.characterSceneTimerIds = [];
+  };
+
+  const queueCharacterSceneStep = (stage, delay) => {
+    const timerId = window.setTimeout(() => {
+      state.characterSceneStage = stage;
+      renderContent();
+    }, delay);
+    state.characterSceneTimerIds.push(timerId);
+  };
+
+  // [模块标注] 主界面图片比例识别模块：
+  // 仅用于“用户面具 / 角色档案”主界面列表卡片展示比例判断；
+  // 若图片更接近竖版，则显示竖向长卡；否则按正方形卡片展示。
+  const detectImageShape = (avatar) => {
+    const src = normalizeString(avatar);
+    if (!src) return Promise.resolve('square');
+    if (state.characterImageRatioMap[src]) return Promise.resolve(state.characterImageRatioMap[src]);
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const width = Number(img.naturalWidth || 0);
+        const height = Number(img.naturalHeight || 0);
+        const ratio = width && height ? height / width : 1;
+        const shape = ratio >= 1.2 ? 'portrait' : 'square';
+        state.characterImageRatioMap[src] = shape;
+        resolve(shape);
+      };
+      img.onerror = () => {
+        state.characterImageRatioMap[src] = 'square';
+        resolve('square');
+      };
+      img.src = src;
+    });
+  };
+
+  const syncCharacterImageShapes = async () => {
+    const profileItems = [...state.data.masks, ...state.data.characters];
+    const tasks = profileItems
+      .map((item) => normalizeString(item.avatar))
+      .filter(Boolean)
+      .filter((avatar, index, array) => array.indexOf(avatar) === index)
+      .map((avatar) => detectImageShape(avatar));
+
+    if (!tasks.length) return;
+    await Promise.all(tasks);
+    if (state.activeTab === 'mask' || state.activeTab === 'character') {
+      renderContent();
+    }
+  };
 
   const saveData = () => {
     state.data.selectedTab = state.activeTab;
@@ -561,23 +622,33 @@ export async function mount(container, context) {
     </div>
   `;
 
+  const resolveProfileCardShapeClass = (item) => {
+    const avatar = normalizeString(item?.avatar);
+    const shape = avatar ? (state.characterImageRatioMap[avatar] || 'square') : 'square';
+    return shape === 'portrait' ? 'is-portrait' : 'is-square';
+  };
+
   // [模块标注] 档案摘要列表模块：
-  // 用户面具 / 角色档案 / 配角档案在板块中先只显示头像与姓名，点击条目后再显示下方完整档案详情
-  const renderCompactProfileList = (items, selectedId, actionName, emptyLabel) => `
-    <div class="archive-compact-list">
-      ${items.map((item) => `
-        <button
-          class="archive-compact-card ${selectedId === item.id ? 'is-selected' : ''}"
-          type="button"
-          data-action="${actionName}"
-          data-id="${item.id}"
-        >
-          <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
-            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || emptyLabel)}">` : '<span>头像</span>'}
-          </div>
-          <span class="archive-compact-card__name">${escapeHtml(item.name || '未命名')}</span>
-        </button>
-      `).join('')}
+  // 用户面具 / 角色档案 / 配角档案在板块中显示摘要卡；
+  // 其中用户面具 / 角色档案支持根据上传图片比例自动切换为竖版卡或正方卡。
+  const renderCompactProfileList = (items, selectedId, actionName, emptyLabel, enableShapeMode = false) => `
+    <div class="archive-compact-list ${enableShapeMode ? 'archive-compact-list--shape-aware' : ''}">
+      ${items.map((item) => {
+        const shapeClass = enableShapeMode ? resolveProfileCardShapeClass(item) : '';
+        return `
+          <button
+            class="archive-compact-card ${shapeClass} ${selectedId === item.id ? 'is-selected' : ''}"
+            type="button"
+            data-action="${actionName}"
+            data-id="${item.id}"
+          >
+            <div class="archive-avatar-box archive-avatar-box--small ${enableShapeMode ? 'archive-avatar-box--adaptive' : ''} ${item.avatar ? 'has-image' : ''}">
+              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || emptyLabel)}">` : '<span>头像</span>'}
+            </div>
+            <span class="archive-compact-card__name">${escapeHtml(item.name || '未命名')}</span>
+          </button>
+        `;
+      }).join('')}
     </div>
   `;
 
@@ -654,6 +725,109 @@ export async function mount(container, context) {
     </article>
   `;
 
+  // [模块标注] 角色档案单页动效内容模块：
+  // 保持字段内容与角色编辑窗口一致，方便后续继续修改字段结构；
+  // 展示态使用复古档案纸排版，不影响编辑弹窗逻辑。
+  const buildCharacterArchivePaper = (item) => `
+    <article class="archive-scene-paper-card">
+      <header class="archive-scene-paper-card__header">
+        <div class="archive-scene-paper-card__avatar ${item.avatar ? 'has-image' : ''}">
+          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
+        </div>
+        <div class="archive-scene-paper-card__meta">
+          <p class="archive-scene-paper-card__kicker">民国档案室 / 人物卷宗</p>
+          <h3>${escapeHtml(item.name || '未命名角色')}</h3>
+          <div class="archive-badges archive-badges--paper">
+            <span class="archive-badge archive-badge--active">角色档案</span>
+            <span class="archive-badge">已载入卷宗</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="archive-scene-paper-card__section">
+        <span class="archive-scene-paper-card__seal">${icon.seal}</span>
+        ${buildFieldGridHtml(item)}
+      </div>
+
+      <div class="archive-large-box archive-large-box--paper">
+        <label>人物设定</label>
+        <p>${escapeHtml(item.personalitySetting || '—')}</p>
+      </div>
+
+      <footer class="archive-card-actions archive-card-actions--paper">
+        <button class="ui-button" type="button" data-action="select-character" data-id="${item.id}">${icon.check}<span>选中</span></button>
+        <button class="ui-button" type="button" data-action="edit-character" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+        <button class="ui-button danger" type="button" data-action="delete-character" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+      </footer>
+    </article>
+  `;
+
+  // [模块标注] 角色档案主界面单页动效模块：
+  // 严格对应需求中的 1~10 步：
+  // 1) 初始封闭档案袋 + 浮动
+  // 2) 点击后放大并出现遮罩
+  // 3) 上盖 3D 翻开，火漆/绳结解封
+  // 4) 档案纸自下向上抽出并摊平，最终前景展示详细档案内容
+  const buildCharacterScene = (item) => {
+    const stage = state.characterSceneStage || 'idle';
+    const isOpenable = stage === 'idle';
+    const sceneStageClass = `is-stage-${stage}`;
+
+    return `
+      <section class="archive-scene ${sceneStageClass}" data-scene-stage="${stage}">
+        <div class="archive-scene__backdrop" aria-hidden="true"></div>
+
+        <div class="archive-scene__list">
+          ${renderCompactProfileList(state.data.characters, item.id, 'show-character-detail', '角色头像', true)}
+        </div>
+
+        <div class="archive-scene__stage">
+          <div class="archive-scene__hint">
+            <span>卷宗陈列</span>
+            <p>点击中央档案袋，查看当前角色完整档案。</p>
+          </div>
+
+          <button
+            class="archive-envelope ${isOpenable ? 'is-clickable' : ''}"
+            type="button"
+            data-action="open-character-scene"
+            data-id="${item.id}"
+            aria-label="打开角色档案袋"
+          >
+            <div class="archive-envelope__shadow" aria-hidden="true"></div>
+
+            <div class="archive-envelope__body">
+              <div class="archive-envelope__flap" aria-hidden="true">
+                <span class="archive-envelope__crease archive-envelope__crease--left"></span>
+                <span class="archive-envelope__crease archive-envelope__crease--right"></span>
+              </div>
+
+              <div class="archive-envelope__rope" aria-hidden="true">
+                <span class="archive-envelope__rope-line archive-envelope__rope-line--vertical"></span>
+                <span class="archive-envelope__rope-line archive-envelope__rope-line--horizontal"></span>
+                <span class="archive-envelope__seal">${icon.seal}</span>
+              </div>
+
+              <div class="archive-envelope__label" aria-hidden="true">
+                <span class="archive-envelope__label-kicker">Miniphone / Archive</span>
+                <strong>${escapeHtml(item.name || '未命名角色')}</strong>
+                <em>${escapeHtml(item.identity || '待补身份')}</em>
+              </div>
+
+              <div class="archive-envelope__paper" aria-hidden="true">
+                <div class="archive-envelope__paper-fold archive-envelope__paper-fold--left"></div>
+                <div class="archive-envelope__paper-fold archive-envelope__paper-fold--right"></div>
+                <div class="archive-envelope__paper-content">
+                  ${buildCharacterArchivePaper(item)}
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </section>
+    `;
+  };
+
   const buildSupportingDetailCard = (item) => `
     <article class="archive-support-card is-selected" data-card-id="${item.id}">
       <div class="archive-support-card__left">
@@ -694,7 +868,7 @@ export async function mount(container, context) {
     const selected = list.find((item) => item.id === state.selectedMaskId) || list[0];
 
     return `
-      ${renderCompactProfileList(list, selected?.id || '', 'show-mask-detail', '面具头像')}
+      ${renderCompactProfileList(list, selected?.id || '', 'show-mask-detail', '面具头像', true)}
       ${selected ? `<section class="archive-detail-section">${buildMaskDetailCard(selected)}</section>` : ''}
     `;
   };
@@ -711,11 +885,7 @@ export async function mount(container, context) {
     }
 
     const selected = list.find((item) => item.id === state.selectedCharacterId) || list[0];
-
-    return `
-      ${renderCompactProfileList(list, selected?.id || '', 'show-character-detail', '角色头像')}
-      ${selected ? `<section class="archive-detail-section">${buildCharacterDetailCard(selected)}</section>` : ''}
-    `;
+    return buildCharacterScene(selected);
   };
 
   const renderSupportingTab = () => {
@@ -945,6 +1115,7 @@ export async function mount(container, context) {
     renderContent();
     updateHeaderControls();
     saveData();
+    syncCharacterImageShapes();
   };
 
   const collectAvatarValue = (scopeEl) => normalizeString(scopeEl.querySelector('[data-role="avatar-hidden"]')?.value);
@@ -1288,6 +1459,7 @@ export async function mount(container, context) {
 
     state.data.characters.push(mapped);
     state.selectedCharacterId = mapped.id;
+    state.characterSceneStage = 'idle';
     rerender();
     notify(`已导入角色：${mapped.name || '未命名角色'}`, 'success');
   };
@@ -1332,6 +1504,7 @@ export async function mount(container, context) {
 
         state.data.characters.push(fallback);
         state.selectedCharacterId = fallback.id;
+        state.characterSceneStage = 'idle';
         rerender();
         notify('PNG 未解析到标准角色定义，已创建基础角色卡，请手动补全字段', 'info');
       }
@@ -1382,6 +1555,8 @@ export async function mount(container, context) {
     if (action === 'switch-tab') {
       const nextTab = actionEl.getAttribute('data-tab');
       if (TAB_META[nextTab]) {
+        clearCharacterSceneTimers();
+        state.characterSceneStage = 'idle';
         state.activeTab = nextTab;
         rerender();
       }
@@ -1425,8 +1600,24 @@ export async function mount(container, context) {
     }
 
     if (action === 'show-character-detail') {
+      clearCharacterSceneTimers();
       state.selectedCharacterId = id;
+      state.characterSceneStage = 'idle';
       rerender();
+      return;
+    }
+
+    if (action === 'open-character-scene') {
+      if (state.characterSceneStage !== 'idle') return;
+      state.selectedCharacterId = id || state.selectedCharacterId;
+      clearCharacterSceneTimers();
+
+      state.characterSceneStage = 'focus';
+      renderContent();
+
+      queueCharacterSceneStep('opening', 360);
+      queueCharacterSceneStep('extracting', 980);
+      queueCharacterSceneStep('opened', 1780);
       return;
     }
 
@@ -1454,6 +1645,8 @@ export async function mount(container, context) {
         }));
 
         state.data.relations = state.data.relations.filter((relation) => relation.mainRoleId !== id);
+        clearCharacterSceneTimers();
+        state.characterSceneStage = 'idle';
         notify('角色已删除', 'success');
         rerender();
       }, true);
@@ -1531,6 +1724,7 @@ export async function mount(container, context) {
 
   return {
     destroy() {
+      clearCharacterSceneTimers();
       container.removeEventListener('click', onContainerClick);
       importInputEl?.removeEventListener('change', handleImportInputChange);
       closeModal();
