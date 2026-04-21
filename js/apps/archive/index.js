@@ -10,16 +10,22 @@
 
 const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
 const ARCHIVE_ACTIVE_MASK_KEY = 'miniphone_archive_active_mask_id';
+const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
 const ARCHIVE_STYLE_ID = 'miniphone-archive-style';
 const RELATION_SELF_ID = '__archive_self__';
-/* [修改标注·需求1] 闲谈自动匹配面具：输出“角色ID -> 面具ID”映射给聊天侧读取 */
-const ARCHIVE_CHAT_ROLE_MASK_BINDING_KEY = 'miniphone_archive_chat_role_mask_binding_v1';
 
 const TAB_META = {
   mask: { title: '用户面具' },
   character: { title: '角色档案' },
   supporting: { title: '配角档案' },
   relation: { title: '关系网络' }
+};
+
+const RELATION_ENTITY_TYPES = ['mask', 'character', 'supporting'];
+const RELATION_ENTITY_TAB_META = {
+  mask: { label: '用户', subtitle: '用户' },
+  character: { label: '角色', subtitle: '角色' },
+  supporting: { label: 'NPC', subtitle: 'NPC' }
 };
 
 function createDefaultData() {
@@ -62,7 +68,13 @@ function readArchiveData() {
 
 function writeArchiveData(data) {
   const normalized = normalizeArchiveData(data);
-  localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(normalized));
+  try {
+    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(normalized));
+  } catch (error) {
+    const wrapped = new Error('ARCHIVE_STORAGE_WRITE_FAILED');
+    wrapped.cause = error;
+    throw wrapped;
+  }
   return normalized;
 }
 
@@ -106,26 +118,50 @@ function normalizeSupportingRole(item) {
   };
 }
 
-/* [修改标注·需求2/3] 关系网络数据结构升级：
-   - 支持用户视角与角色视角双认知
-   - 支持关系对象为角色档案/配角档案
-   - 兼容旧字段 mainRoleId/supportingRoleId/description 自动迁移 */
 function normalizeRelation(item) {
-  const legacySupportingId = normalizeString(item?.supportingRoleId);
   const legacyMainRoleId = normalizeString(item?.mainRoleId);
+  const legacySupportingRoleId = normalizeString(item?.supportingRoleId);
+
+  let ownerType = normalizeString(item?.ownerType);
+  let ownerId = normalizeString(item?.ownerId);
+  let targetType = normalizeString(item?.targetType);
+  let targetId = normalizeString(item?.targetId);
+
+  let userPerception = normalizeString(item?.userPerception);
+  let rolePerception = normalizeString(item?.rolePerception);
   const legacyDescription = normalizeString(item?.description);
 
-  const roleId = normalizeString(item?.roleId) || (legacyMainRoleId && legacyMainRoleId !== RELATION_SELF_ID ? legacyMainRoleId : '');
+  // 兼容历史结构：mainRoleId + supportingRoleId + description
+  if ((!ownerType || !ownerId || !targetType || !targetId) && legacySupportingRoleId) {
+    if (legacyMainRoleId && legacyMainRoleId !== RELATION_SELF_ID) {
+      ownerType = 'character';
+      ownerId = legacyMainRoleId;
+      rolePerception = rolePerception || legacyDescription;
+    } else {
+      ownerType = 'mask';
+      ownerId = '';
+      userPerception = userPerception || legacyDescription;
+    }
+
+    targetType = 'supporting';
+    targetId = legacySupportingRoleId;
+  }
+
+  if (!userPerception && !rolePerception && legacyDescription) {
+    userPerception = legacyDescription;
+  }
+
+  if (!RELATION_ENTITY_TYPES.includes(ownerType)) ownerType = 'mask';
+  if (!RELATION_ENTITY_TYPES.includes(targetType)) targetType = 'supporting';
 
   return {
     id: normalizeString(item?.id) || uid('relation'),
-    roleId,
-    userTargetType: normalizeString(item?.userTargetType) === 'character' ? 'character' : 'supporting',
-    userTargetId: normalizeString(item?.userTargetId) || legacySupportingId,
-    userCognition: normalizeString(item?.userCognition) || legacyDescription,
-    roleTargetType: normalizeString(item?.roleTargetType) === 'supporting' ? 'supporting' : 'user',
-    roleTargetId: normalizeString(item?.roleTargetId) || RELATION_SELF_ID,
-    roleCognition: normalizeString(item?.roleCognition)
+    ownerType,
+    ownerId,
+    targetType,
+    targetId,
+    userPerception,
+    rolePerception
   };
 }
 
@@ -138,9 +174,31 @@ function normalizeArchiveData(raw) {
     return normalized;
   });
   const supportingRoles = normalizeArray(safe.supportingRoles).map((item) => normalizeSupportingRole(item));
+  const relationOwnerExists = (item) => {
+    if (item.ownerType === 'mask') return masks.some((mask) => mask.id === item.ownerId);
+    if (item.ownerType === 'character') return characters.some((character) => character.id === item.ownerId);
+    if (item.ownerType === 'supporting') return supportingRoles.some((supporting) => supporting.id === item.ownerId);
+    return false;
+  };
+
+  const relationTargetExists = (item) => {
+    if (item.targetType === 'mask') return masks.some((mask) => mask.id === item.targetId);
+    if (item.targetType === 'character') return characters.some((character) => character.id === item.targetId);
+    if (item.targetType === 'supporting') return supportingRoles.some((supporting) => supporting.id === item.targetId);
+    return false;
+  };
+
+  const fallbackMaskId = masks[0]?.id || '';
   const relations = normalizeArray(safe.relations)
     .map((item) => normalizeRelation(item))
-    .filter((item) => item.roleId && item.userTargetId && (item.roleTargetType === 'user' || item.roleTargetId));
+    .map((item) => {
+      if (item.ownerType === 'mask' && !item.ownerId) {
+        return { ...item, ownerId: fallbackMaskId };
+      }
+      return item;
+    })
+    .filter((item) => item.ownerId && item.targetId)
+    .filter((item) => relationOwnerExists(item) && relationTargetExists(item));
   const selectedTab = TAB_META[safe.selectedTab] ? safe.selectedTab : 'mask';
   const activeMaskId = masks.some((m) => m.id === safe.activeMaskId) ? safe.activeMaskId : '';
 
@@ -348,13 +406,74 @@ function downloadJsonFile(filename, data) {
   URL.revokeObjectURL(url);
 }
 
-function fileToDataURL(file) {
-  return new Promise((resolve, reject) => {
+function compressImageDataUrl(dataUrl, {
+  maxEdge = 640,
+  quality = 0.82
+} = {}) {
+  return new Promise((resolve) => {
+    const source = String(dataUrl || '');
+    if (!source.startsWith('data:image/')) {
+      resolve(source);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const width = Number(img.naturalWidth || 0);
+        const height = Number(img.naturalHeight || 0);
+        if (!width || !height) {
+          resolve(source);
+          return;
+        }
+
+        const longest = Math.max(width, height);
+        const scale = longest > maxEdge ? (maxEdge / longest) : 1;
+        const targetWidth = Math.max(1, Math.round(width * scale));
+        const targetHeight = Math.max(1, Math.round(height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(source);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        let compressed = source;
+        try {
+          compressed = canvas.toDataURL('image/webp', quality);
+        } catch (_) {
+          compressed = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        resolve(compressed.length < source.length ? compressed : source);
+      } catch (_) {
+        resolve(source);
+      }
+    };
+
+    img.onerror = () => resolve(source);
+    img.src = source;
+  });
+}
+
+async function fileToDataURL(file) {
+  const rawDataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('读取文件失败'));
     reader.onload = () => resolve(String(reader.result || ''));
     reader.readAsDataURL(file);
   });
+
+  if (!String(file?.type || '').startsWith('image/')) {
+    return rawDataUrl;
+  }
+
+  return compressImageDataUrl(rawDataUrl);
 }
 
 function ensureArchiveStylesheet() {
@@ -406,6 +525,8 @@ export async function mount(container, context) {
     selectedCharacterId: '',
     selectedSupportingId: '',
     selectedRelationId: '',
+    selectedRelationOwnerKey: '',
+    relationEntityTab: 'mask',
     headerRefs: null,
     characterImageRatioMap: {},
     characterViewMode: 'list',
@@ -486,31 +607,65 @@ export async function mount(container, context) {
     }
   };
 
-  /* [修改标注·需求1] 生成聊天可用绑定映射：
-     chat 侧可按“当前聊天角色ID”读取对应面具ID，自动启用绑定身份 */
-  const syncChatRoleMaskBinding = () => {
-    const roleToMask = {};
-    state.data.masks.forEach((mask) => {
-      const roleIds = Array.isArray(mask.roleBindingIds) ? mask.roleBindingIds : [];
-      roleIds.forEach((roleId) => {
-        if (!roleToMask[roleId]) roleToMask[roleId] = mask.id;
-      });
-    });
-    localStorage.setItem(ARCHIVE_CHAT_ROLE_MASK_BINDING_KEY, JSON.stringify(roleToMask));
-    context.eventBus?.emit('archive:chat-role-mask-binding-updated', roleToMask);
+  const hasArchiveContent = (data) => {
+    const safe = normalizeArchiveData(data);
+    return safe.masks.length > 0
+      || safe.characters.length > 0
+      || safe.supportingRoles.length > 0
+      || safe.relations.length > 0
+      || !!safe.activeMaskId;
   };
 
-  const saveData = () => {
-    state.data.selectedTab = state.activeTab;
-    state.data = writeArchiveData(state.data);
+  /* [修改标注·需求6] 档案持久化兜底：
+     角色卡导入后若头像/base64 较大，localStorage 可能因配额导致刷新后丢失。
+     这里保留 localStorage 兼容，同时增加 IndexedDB(appsData) 作为稳定缓存。 */
+  const loadPersistedArchiveData = async () => {
+    const localData = readArchiveData();
 
-    if (state.data.activeMaskId) {
-      localStorage.setItem(ARCHIVE_ACTIVE_MASK_KEY, state.data.activeMaskId);
+    try {
+      const record = await context.db?.get?.('appsData', ARCHIVE_DB_RECORD_ID);
+      if (record?.value && hasArchiveContent(record.value)) {
+        return normalizeArchiveData(record.value);
+      }
+    } catch (_) {
+      // 忽略 IndexedDB 读取失败，回退到 localStorage
+    }
+
+    return localData;
+  };
+
+  const persistArchiveData = async () => {
+    state.data.selectedTab = state.activeTab;
+    const normalized = normalizeArchiveData(state.data);
+    state.data = normalized;
+
+    try {
+      localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(normalized));
+    } catch (_) {
+      // localStorage 可能因配额不足失败，继续写入 IndexedDB 作为主兜底
+    }
+
+    try {
+      await context.db?.put?.('appsData', {
+        id: ARCHIVE_DB_RECORD_ID,
+        appId: context.appId,
+        key: 'archive-data',
+        value: normalized,
+        updatedAt: Date.now()
+      });
+    } catch (_) {
+      // 忽略 IndexedDB 写入失败，避免阻断 UI
+    }
+
+    if (normalized.activeMaskId) {
+      localStorage.setItem(ARCHIVE_ACTIVE_MASK_KEY, normalized.activeMaskId);
     } else {
       localStorage.removeItem(ARCHIVE_ACTIVE_MASK_KEY);
     }
+  };
 
-    syncChatRoleMaskBinding();
+  const saveData = () => {
+    void persistArchiveData();
   };
 
   const notify = (message, type = 'info') => {
@@ -617,38 +772,81 @@ export async function mount(container, context) {
     }
   };
 
+  const getMaskById = (id) => state.data.masks.find((item) => item.id === id);
   const getCharacterById = (id) => state.data.characters.find((item) => item.id === id);
   const getSupportingById = (id) => state.data.supportingRoles.find((item) => item.id === id);
 
-  /* [修改标注·需求1/2/3] 关系网络角色来源改为“已绑定到用户面具的角色” */
-  const resolveBoundRoleOptions = () => {
-    const roleIds = new Set();
-    state.data.masks.forEach((mask) => {
-      (mask.roleBindingIds || []).forEach((id) => roleIds.add(id));
+  const getEntitiesByType = (type) => {
+    if (type === 'mask') return state.data.masks;
+    if (type === 'character') return state.data.characters;
+    if (type === 'supporting') return state.data.supportingRoles;
+    return [];
+  };
+
+  const getEntityByTypeAndId = (type, id) => {
+    if (type === 'mask') return getMaskById(id);
+    if (type === 'character') return getCharacterById(id);
+    if (type === 'supporting') return getSupportingById(id);
+    return null;
+  };
+
+  const getEntityDisplayName = (type, id) => {
+    const entity = getEntityByTypeAndId(type, id);
+    return entity?.name || '未命名';
+  };
+
+  const getEntityValueLabel = (value) => {
+    const [type, ...rest] = String(value || '').split(':');
+    const id = rest.join(':');
+    return getEntityDisplayName(type, id);
+  };
+
+  const buildRelationOwnerKey = (type, id) => `${type}:${id}`;
+
+  const parseRelationEntityValue = (value) => {
+    const [type, ...rest] = String(value || '').split(':');
+    return {
+      type: RELATION_ENTITY_TYPES.includes(type) ? type : 'mask',
+      id: rest.join(':')
+    };
+  };
+
+  const getRelationEntityOptions = (excludeValue = '') => {
+    return RELATION_ENTITY_TYPES.flatMap((type) => {
+      return getEntitiesByType(type).map((item) => ({
+        value: `${type}:${item.id}`,
+        type,
+        id: item.id,
+        label: item.name || '未命名'
+      }));
+    }).filter((item) => item.value !== excludeValue);
+  };
+
+  /* [修改标注·需求2] 关系网络系统提示词构建器：
+     仅供后续聊天/AI 注入使用，不渲染到用户界面。若角色绑定了用户面具，会将该面具身份一起写入提示词。 */
+  const buildRelationSystemPrompt = (ownerType, ownerId) => {
+    const owner = getEntityByTypeAndId(ownerType, ownerId);
+    if (!owner) return '';
+
+    const ownerName = owner.name || '未命名';
+    const ownerTypeLabel = RELATION_ENTITY_TAB_META[ownerType]?.subtitle || '人物';
+    const boundMasks = ownerType === 'character'
+      ? state.data.masks.filter((mask) => (mask.roleBindingIds || []).includes(ownerId))
+      : [];
+
+    const ownerRelations = state.data.relations.filter((item) => item.ownerType === ownerType && item.ownerId === ownerId);
+    const relationLines = ownerRelations.map((item) => {
+      const targetName = getEntityDisplayName(item.targetType, item.targetId);
+      const targetTypeLabel = RELATION_ENTITY_TAB_META[item.targetType]?.subtitle || '人物';
+      return `- 与${targetTypeLabel}「${targetName}」：${item.userPerception || '未填写'}；对方认知：${item.rolePerception || '未填写'}`;
     });
 
-    return [...roleIds]
-      .map((id) => getCharacterById(id))
-      .filter(Boolean)
-      .map((role) => ({
-        id: role.id,
-        label: role.name || '未命名角色'
-      }));
-  };
-
-  const getRoleDisplayName = (roleId) => {
-    const role = getCharacterById(roleId);
-    return role?.name || '未命名角色';
-  };
-
-  const getRelationTargetName = (targetType, targetId) => {
-    if (targetType === 'character') {
-      const role = getCharacterById(targetId);
-      return role?.name || '未命名角色';
-    }
-    if (targetType === 'user') return '用户';
-    const supporting = getSupportingById(targetId);
-    return supporting?.name || '未命名配角';
+    return [
+      `这是${ownerTypeLabel}「${ownerName}」的人际关系网络资料。`,
+      boundMasks.length ? `该角色当前绑定的用户面具身份：${boundMasks.map((item) => item.name || '未命名面具').join('、')}。` : '',
+      relationLines.length ? '请将以下关系网络作为角色认知与互动上下文的一部分：' : '',
+      ...relationLines
+    ].filter(Boolean).join('\n');
   };
 
   const emitActiveMaskChanged = () => {
@@ -1162,68 +1360,120 @@ export async function mount(container, context) {
     `;
   };
 
-  /* [修改标注·需求2] 关系网络界面重设计：标题右侧 + 新增按钮，并去除旧“新增关系条目”按钮 */
   const renderRelationTab = () => {
-    const list = state.data.relations;
-    const boundRoles = resolveBoundRoleOptions();
+    const ownerCards = getEntitiesByType(state.relationEntityTab)
+      .map((item) => {
+        const relationCount = state.data.relations.filter((relation) => {
+          return relation.ownerType === state.relationEntityTab && relation.ownerId === item.id;
+        }).length;
 
-    const topBar = `
-      <header class="archive-relation-topbar">
-        <h3>关系网络</h3>
-        <button class="archive-relation-add-btn" type="button" data-action="add-relation" aria-label="新增关系网络">
-          ${icon.plus}
-        </button>
-      </header>
-      <section class="archive-relation-prompt">
-        <p>提示词说明：这里记录的是“角色”及其绑定的“用户面具身份”的人际关系网络，用于帮助 AI 完整理解角色与用户之间的关系认知。</p>
-      </section>
-    `;
+        return {
+          key: buildRelationOwnerKey(state.relationEntityTab, item.id),
+          id: item.id,
+          type: state.relationEntityTab,
+          name: item.name || '未命名',
+          avatar: item.avatar || '',
+          relationCount
+        };
+      })
+      .filter((item) => item.relationCount > 0);
 
-    if (!boundRoles.length) {
-      return `
-        ${topBar}
-        <div class="archive-empty-card">
-          <h3>暂无可用绑定角色</h3>
-          <p>请先在用户面具中绑定角色，再创建关系网络。</p>
-        </div>
-      `;
+    if (!ownerCards.some((item) => item.key === state.selectedRelationOwnerKey)) {
+      state.selectedRelationOwnerKey = ownerCards[0]?.key || '';
     }
 
-    if (!list.length) {
-      return `
-        ${topBar}
-        <div class="archive-empty-card">
-          <h3>暂无关系条目</h3>
-          <p>点击右上角“+”添加关系网络条目。</p>
-        </div>
-      `;
-    }
+    const [selectedOwnerType = '', selectedOwnerId = ''] = state.selectedRelationOwnerKey.split(':');
+    const selectedOwner = ownerCards.find((item) => item.key === state.selectedRelationOwnerKey) || null;
+    const selectedRelations = selectedOwner
+      ? state.data.relations.filter((item) => item.ownerType === selectedOwnerType && item.ownerId === selectedOwnerId)
+      : [];
 
     return `
-      ${topBar}
-      <div class="archive-relation-list">
-        ${list.map((item) => `
-          <article class="archive-relation-item ${state.selectedRelationId === item.id ? 'is-selected' : ''}">
-            <div class="archive-relation-item__tags">
-              <span class="archive-chip">角色：${escapeHtml(getRoleDisplayName(item.roleId))}</span>
-              <span class="archive-chip">用户视角目标：${escapeHtml(getRelationTargetName(item.userTargetType, item.userTargetId))}</span>
-              <span class="archive-chip">角色视角目标：${escapeHtml(getRelationTargetName(item.roleTargetType, item.roleTargetId))}</span>
-            </div>
-            <div class="archive-relation-item__block">
-              <label>用户对对方的关系认知</label>
-              <p class="archive-relation-item__desc">${escapeHtml(item.userCognition || '未填写')}</p>
-            </div>
-            <div class="archive-relation-item__block">
-              <label>角色对对方的关系认知</label>
-              <p class="archive-relation-item__desc">${escapeHtml(item.roleCognition || '未填写')}</p>
-            </div>
-            <footer class="archive-card-actions">
-              <button class="ui-button" type="button" data-action="edit-relation" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-              <button class="ui-button danger" type="button" data-action="delete-relation" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-            </footer>
-          </article>
-        `).join('')}
-      </div>
+      <section class="archive-relation-layout">
+        <div class="archive-relation-tabs" aria-label="关系网络分类">
+          ${RELATION_ENTITY_TYPES.map((type) => `
+            <button
+              class="archive-relation-tabs__btn ${state.relationEntityTab === type ? 'is-active' : ''}"
+              type="button"
+              data-action="switch-relation-entity-tab"
+              data-tab="${type}"
+            >
+              ${escapeHtml(RELATION_ENTITY_TAB_META[type].label)}
+            </button>
+          `).join('')}
+        </div>
+
+        ${ownerCards.length ? `
+          <div class="archive-relation-owner-list">
+            ${ownerCards.map((item) => `
+              <button
+                class="archive-relation-owner-card ${state.selectedRelationOwnerKey === item.key ? 'is-selected' : ''}"
+                type="button"
+                data-action="select-relation-owner"
+                data-owner-key="${item.key}"
+              >
+                <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
+                  ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name)}">` : '<span>头像</span>'}
+                </div>
+                <div class="archive-relation-owner-card__meta">
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <span>${escapeHtml(RELATION_ENTITY_TAB_META[item.type].subtitle)} · ${item.relationCount} 条关系</span>
+                </div>
+                <i class="archive-relation-owner-card__arrow">${icon.chevronRight}</i>
+              </button>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="archive-empty-card">
+            <h3>暂无${escapeHtml(RELATION_ENTITY_TAB_META[state.relationEntityTab].label)}关系卡片</h3>
+            <p>点击标题栏右上角 + 新增关系网络后，会按用户 / 角色 / NPC 自动归类显示。</p>
+          </div>
+        `}
+
+        ${selectedOwner ? `
+          <div class="archive-relation-list">
+            ${selectedRelations.map((item) => {
+              const targetName = getEntityDisplayName(item.targetType, item.targetId);
+              const ownerName = getEntityDisplayName(item.ownerType, item.ownerId);
+              const targetTypeLabel = RELATION_ENTITY_TAB_META[item.targetType]?.subtitle || '人物';
+              const systemPrompt = buildRelationSystemPrompt(item.ownerType, item.ownerId);
+
+              return `
+                <article class="archive-relation-item">
+                  <div class="archive-relation-item__head">
+                    <div class="archive-relation-item__title">
+                      <strong>${escapeHtml(targetName)}</strong>
+                      <span>${escapeHtml(targetTypeLabel)}</span>
+                    </div>
+                    <div class="archive-relation-item__tags">
+                      <span class="archive-chip">${escapeHtml(ownerName)}</span>
+                      <span class="archive-chip archive-chip--arrow">→</span>
+                      <span class="archive-chip">${escapeHtml(targetName)}</span>
+                    </div>
+                  </div>
+
+                  <div class="archive-relation-cognition">
+                    <label>${escapeHtml(ownerName)}对${escapeHtml(targetName)}的关系认知</label>
+                    <p>${escapeHtml(item.userPerception || '未填写')}</p>
+                  </div>
+
+                  <div class="archive-relation-cognition">
+                    <label>${escapeHtml(targetName)}对${escapeHtml(ownerName)}的关系认知</label>
+                    <p>${escapeHtml(item.rolePerception || '未填写')}</p>
+                  </div>
+
+                  <footer class="archive-card-actions archive-card-actions--relation">
+                    <button class="ui-button" type="button" data-action="edit-relation" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+                    <button class="ui-button danger" type="button" data-action="delete-relation" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+                  </footer>
+
+                  <div hidden>${escapeHtml(systemPrompt)}</div>
+                </article>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+      </section>
     `;
   };
 
@@ -1342,7 +1592,7 @@ export async function mount(container, context) {
         return;
       }
       if (state.activeTab === 'relation') {
-        return;
+        openRelationEditor();
       }
     };
 
@@ -1368,11 +1618,10 @@ export async function mount(container, context) {
     const { importBtn, exportBtn, addBtn } = state.headerRefs;
 
     const isCharacter = state.activeTab === 'character';
-    const isRelation = state.activeTab === 'relation';
 
     if (importBtn) importBtn.style.display = isCharacter ? '' : 'none';
     if (exportBtn) exportBtn.style.display = isCharacter ? '' : 'none';
-    if (addBtn) addBtn.style.display = isRelation ? 'none' : '';
+    if (addBtn) addBtn.style.display = '';
   };
 
   const rerender = () => {
@@ -1619,7 +1868,11 @@ export async function mount(container, context) {
             state.selectedMaskId = profile.id;
           }
 
-          if (!state.data.masks.some((m) => m.id === state.data.activeMaskId)) {
+          const shouldSetActive = !!modalScope.querySelector('[data-role="set-active-mask"]')?.checked;
+          if (shouldSetActive) {
+            state.data.activeMaskId = profile.id;
+            emitActiveMaskChanged();
+          } else if (!state.data.masks.some((m) => m.id === state.data.activeMaskId)) {
             state.data.activeMaskId = '';
             emitActiveMaskChanged();
           }
@@ -1712,132 +1965,119 @@ export async function mount(container, context) {
     });
   };
 
-  /* [修改标注·需求3] 关系网络编辑窗口改为双视角：
-     - 用户对对方（角色/配角）的关系认知
-     - 角色对对方（用户/配角）的关系认知 */
   const openRelationEditor = (currentItem = null) => {
     const isEdit = !!currentItem;
-    const roleOptions = resolveBoundRoleOptions();
+    const allEntities = getRelationEntityOptions();
 
-    if (!roleOptions.length) {
-      notify('请先在用户面具中绑定角色，再创建关系网络', 'error');
+    if (allEntities.length < 2) {
+      notify('请先准备至少两张用户 / 角色 / 配角档案卡片', 'error');
       return;
     }
 
-    const characterOptionsHtml = state.data.characters.length
-      ? state.data.characters.map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name || '未命名角色')}</option>`).join('')
-      : '<option value="">暂无角色档案</option>';
-
-    const supportingOptionsHtml = state.data.supportingRoles.length
-      ? state.data.supportingRoles.map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name || '未命名配角')}</option>`).join('')
-      : '<option value="">暂无配角档案</option>';
+    const defaultOwnerValue = currentItem
+      ? `${currentItem.ownerType}:${currentItem.ownerId}`
+      : allEntities[0].value;
+    const defaultTargetValue = currentItem
+      ? `${currentItem.targetType}:${currentItem.targetId}`
+      : allEntities.find((item) => item.value !== defaultOwnerValue)?.value || '';
 
     openModal({
       title: `${isEdit ? '编辑' : '新增'}关系条目`,
-      confirmText: '保存',
+      confirmText: isEdit ? '保存修改' : '创建',
       content: `
         <div class="archive-form-grid">
           <label class="archive-form-row">
-            <span>绑定角色</span>
-            <select data-role="relation-roleId">
-              ${roleOptions.map((option) => `
-                <option value="${escapeHtml(option.id)}" ${option.id === (currentItem?.roleId || roleOptions[0]?.id || '') ? 'selected' : ''}>
-                  ${escapeHtml(option.label)}
+            <span>关系主体</span>
+            <select data-role="relation-owner">
+              ${allEntities.map((option) => `
+                <option value="${escapeHtml(option.value)}" ${option.value === defaultOwnerValue ? 'selected' : ''}>
+                  ${escapeHtml(RELATION_ENTITY_TAB_META[option.type].subtitle)} · ${escapeHtml(option.label)}
                 </option>
               `).join('')}
             </select>
           </label>
 
           <label class="archive-form-row">
-            <span>用户对对方（可选择角色/配角）</span>
-            <select data-role="relation-userTargetType">
-              <option value="character" ${(currentItem?.userTargetType || 'character') === 'character' ? 'selected' : ''}>角色</option>
-              <option value="supporting" ${(currentItem?.userTargetType || 'character') === 'supporting' ? 'selected' : ''}>配角</option>
-            </select>
-            <select data-role="relation-userTargetId"></select>
-            <textarea data-role="relation-userCognition" rows="4" placeholder="填写用户对对方的关系认知">${escapeHtml(currentItem?.userCognition || '')}</textarea>
+            <span>关系对象</span>
+            <select data-role="relation-target"></select>
           </label>
 
           <label class="archive-form-row">
-            <span>角色对对方（可选择用户/配角）</span>
-            <select data-role="relation-roleTargetType">
-              <option value="user" ${(currentItem?.roleTargetType || 'user') === 'user' ? 'selected' : ''}>用户</option>
-              <option value="supporting" ${(currentItem?.roleTargetType || 'user') === 'supporting' ? 'selected' : ''}>配角</option>
-            </select>
-            <select data-role="relation-roleTargetId"></select>
-            <textarea data-role="relation-roleCognition" rows="4" placeholder="填写角色对对方的关系认知">${escapeHtml(currentItem?.roleCognition || '')}</textarea>
+            <span data-role="owner-perception-label">关系主体对关系对象的认知</span>
+            <textarea data-role="owner-perception" rows="4" placeholder="请输入关系主体对对方的关系认知">${escapeHtml(currentItem?.userPerception || '')}</textarea>
+          </label>
+
+          <label class="archive-form-row">
+            <span data-role="target-perception-label">关系对象对关系主体的认知</span>
+            <textarea data-role="target-perception" rows="4" placeholder="请输入关系对象对对方的关系认知">${escapeHtml(currentItem?.rolePerception || '')}</textarea>
           </label>
         </div>
       `,
       onOpen: (modalScope) => {
-        const userTargetTypeEl = modalScope.querySelector('[data-role="relation-userTargetType"]');
-        const userTargetIdEl = modalScope.querySelector('[data-role="relation-userTargetId"]');
-        const roleTargetTypeEl = modalScope.querySelector('[data-role="relation-roleTargetType"]');
-        const roleTargetIdEl = modalScope.querySelector('[data-role="relation-roleTargetId"]');
+        const ownerSelect = modalScope.querySelector('[data-role="relation-owner"]');
+        const targetSelect = modalScope.querySelector('[data-role="relation-target"]');
+        const ownerPerceptionLabel = modalScope.querySelector('[data-role="owner-perception-label"]');
+        const targetPerceptionLabel = modalScope.querySelector('[data-role="target-perception-label"]');
 
-        const renderUserTargetIdOptions = () => {
-          if (!userTargetTypeEl || !userTargetIdEl) return;
-          const selectedType = userTargetTypeEl.value === 'supporting' ? 'supporting' : 'character';
-          const optionsHtml = selectedType === 'character' ? characterOptionsHtml : supportingOptionsHtml;
-          userTargetIdEl.innerHTML = optionsHtml;
+        const syncRelationEditor = () => {
+          const ownerValue = normalizeString(ownerSelect?.value);
+          const currentTargetValue = normalizeString(targetSelect?.value);
+          const targetOptions = getRelationEntityOptions(ownerValue);
 
-          const presetId = normalizeString(currentItem?.userTargetId);
-          if (presetId && userTargetIdEl.querySelector(`option[value="${presetId}"]`)) {
-            userTargetIdEl.value = presetId;
-          } else {
-            userTargetIdEl.value = userTargetIdEl.querySelector('option')?.value || '';
-          }
-        };
+          if (targetSelect) {
+            targetSelect.innerHTML = targetOptions.map((option) => `
+              <option value="${escapeHtml(option.value)}" ${option.value === currentTargetValue || (!currentTargetValue && option.value === defaultTargetValue) ? 'selected' : ''}>
+                ${escapeHtml(RELATION_ENTITY_TAB_META[option.type].subtitle)} · ${escapeHtml(option.label)}
+              </option>
+            `).join('');
 
-        const renderRoleTargetIdOptions = () => {
-          if (!roleTargetTypeEl || !roleTargetIdEl) return;
-          const selectedType = roleTargetTypeEl.value === 'supporting' ? 'supporting' : 'user';
-
-          if (selectedType === 'user') {
-            roleTargetIdEl.innerHTML = `<option value="${RELATION_SELF_ID}">用户</option>`;
-            roleTargetIdEl.value = RELATION_SELF_ID;
-            roleTargetIdEl.disabled = true;
-          } else {
-            roleTargetIdEl.disabled = false;
-            roleTargetIdEl.innerHTML = supportingOptionsHtml;
-
-            const presetId = normalizeString(currentItem?.roleTargetId);
-            if (presetId && roleTargetIdEl.querySelector(`option[value="${presetId}"]`)) {
-              roleTargetIdEl.value = presetId;
-            } else {
-              roleTargetIdEl.value = roleTargetIdEl.querySelector('option')?.value || '';
+            if (!targetSelect.value && targetOptions[0]) {
+              targetSelect.value = targetOptions[0].value;
             }
           }
+
+          const ownerName = getEntityValueLabel(ownerSelect?.value);
+          const targetName = getEntityValueLabel(targetSelect?.value);
+
+          if (ownerPerceptionLabel) {
+            ownerPerceptionLabel.textContent = `${ownerName}对${targetName}的关系认知`;
+          }
+
+          if (targetPerceptionLabel) {
+            targetPerceptionLabel.textContent = `${targetName}对${ownerName}的关系认知`;
+          }
         };
 
-        renderUserTargetIdOptions();
-        renderRoleTargetIdOptions();
-
-        userTargetTypeEl?.addEventListener('change', renderUserTargetIdOptions);
-        roleTargetTypeEl?.addEventListener('change', renderRoleTargetIdOptions);
+        ownerSelect?.addEventListener('change', syncRelationEditor);
+        targetSelect?.addEventListener('change', syncRelationEditor);
+        syncRelationEditor();
       },
       onConfirm: (modalScope) => {
+        const owner = parseRelationEntityValue(collectInputValue(modalScope, 'relation-owner'));
+        const target = parseRelationEntityValue(collectInputValue(modalScope, 'relation-target'));
+
+        if (!owner.id || !target.id) {
+          notify('请选择完整的关系主体与关系对象', 'error');
+          return false;
+        }
+
+        if (owner.type === target.type && owner.id === target.id) {
+          notify('关系主体与关系对象不能是同一张卡片', 'error');
+          return false;
+        }
+
         const relation = normalizeRelation({
           id: currentItem?.id || uid('relation'),
-          roleId: collectInputValue(modalScope, 'relation-roleId'),
-          userTargetType: collectInputValue(modalScope, 'relation-userTargetType'),
-          userTargetId: collectInputValue(modalScope, 'relation-userTargetId'),
-          userCognition: collectTextareaValue(modalScope, 'relation-userCognition'),
-          roleTargetType: collectInputValue(modalScope, 'relation-roleTargetType'),
-          roleTargetId: collectInputValue(modalScope, 'relation-roleTargetId') || RELATION_SELF_ID,
-          roleCognition: collectTextareaValue(modalScope, 'relation-roleCognition')
+          ownerType: owner.type,
+          ownerId: owner.id,
+          targetType: target.type,
+          targetId: target.id,
+          userPerception: collectTextareaValue(modalScope, 'owner-perception'),
+          rolePerception: collectTextareaValue(modalScope, 'target-perception')
         });
 
-        if (!relation.roleId) {
-          notify('请选择绑定角色', 'error');
-          return false;
-        }
-        if (!relation.userTargetId) {
-          notify('请选择“用户对对方”目标对象', 'error');
-          return false;
-        }
-        if (relation.roleTargetType === 'supporting' && !relation.roleTargetId) {
-          notify('请选择“角色对对方”目标配角', 'error');
+        if (!relation.userPerception && !relation.rolePerception) {
+          notify('请至少填写一侧的关系认知', 'error');
           return false;
         }
 
@@ -1847,6 +2087,9 @@ export async function mount(container, context) {
           state.data.relations.push(relation);
           state.selectedRelationId = relation.id;
         }
+
+        state.relationEntityTab = relation.ownerType;
+        state.selectedRelationOwnerKey = buildRelationOwnerKey(relation.ownerType, relation.ownerId);
 
         notify(isEdit ? '关系条目已更新' : '关系条目已创建', 'success');
         rerender();
@@ -2010,6 +2253,12 @@ export async function mount(container, context) {
       if (!target) return;
       openConfirmModal(`确定删除面具“${target.name || '未命名面具'}”吗？`, () => {
         state.data.masks = state.data.masks.filter((item) => item.id !== id);
+        state.data.relations = state.data.relations.filter((relation) => {
+          return !(
+            (relation.ownerType === 'mask' && relation.ownerId === id)
+            || (relation.targetType === 'mask' && relation.targetId === id)
+          );
+        });
         if (state.data.activeMaskId === id) {
           state.data.activeMaskId = '';
           emitActiveMaskChanged();
@@ -2059,10 +2308,12 @@ export async function mount(container, context) {
           roleBindingIds: (mask.roleBindingIds || []).filter((roleId) => roleId !== id)
         }));
 
-        state.data.relations = state.data.relations.filter((relation) => (
-          relation.roleId !== id
-          && !(relation.userTargetType === 'character' && relation.userTargetId === id)
-        ));
+        state.data.relations = state.data.relations.filter((relation) => {
+          return !(
+            (relation.ownerType === 'character' && relation.ownerId === id)
+            || (relation.targetType === 'character' && relation.targetId === id)
+          );
+        });
         state.characterViewMode = 'list';
         notify('角色已删除', 'success');
         rerender();
@@ -2108,10 +2359,12 @@ export async function mount(container, context) {
       if (!target) return;
       openConfirmModal(`确定删除配角“${target.name || '未命名配角'}”吗？`, () => {
         state.data.supportingRoles = state.data.supportingRoles.filter((item) => item.id !== id);
-        state.data.relations = state.data.relations.filter((item) => (
-          !(item.userTargetType === 'supporting' && item.userTargetId === id)
-          && !(item.roleTargetType === 'supporting' && item.roleTargetId === id)
-        ));
+        state.data.relations = state.data.relations.filter((relation) => {
+          return !(
+            (relation.ownerType === 'supporting' && relation.ownerId === id)
+            || (relation.targetType === 'supporting' && relation.targetId === id)
+          );
+        });
         notify('配角已删除', 'success');
         rerender();
       }, true);
@@ -2120,6 +2373,22 @@ export async function mount(container, context) {
 
     if (action === 'add-relation') {
       openRelationEditor();
+      return;
+    }
+
+    if (action === 'switch-relation-entity-tab') {
+      const nextTab = actionEl.getAttribute('data-tab');
+      if (RELATION_ENTITY_TYPES.includes(nextTab)) {
+        state.relationEntityTab = nextTab;
+        state.selectedRelationOwnerKey = '';
+        rerender();
+      }
+      return;
+    }
+
+    if (action === 'select-relation-owner') {
+      state.selectedRelationOwnerKey = actionEl.getAttribute('data-owner-key') || '';
+      rerender();
       return;
     }
 
@@ -2243,6 +2512,14 @@ export async function mount(container, context) {
   const onTitleBackHome = () => {
     context.eventBus?.emit('app:close', { appId: context.appId });
   };
+
+  state.data = await loadPersistedArchiveData();
+  state.activeTab = TAB_META[state.data.selectedTab] ? state.data.selectedTab : 'mask';
+
+  const storedActiveMaskId = normalizeString(localStorage.getItem(ARCHIVE_ACTIVE_MASK_KEY));
+  if (storedActiveMaskId && state.data.masks.some((item) => item.id === storedActiveMaskId)) {
+    state.data.activeMaskId = storedActiveMaskId;
+  }
 
   createHeaderControls();
   rerender();

@@ -950,52 +950,104 @@
   white-space: nowrap;
 }
 
-/* [修改标注·需求2] 关系网络顶部栏：标题 + 右侧新增按钮（IconPark +） */
-.archive-relation-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.archive-relation-layout {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.archive-relation-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  background: rgba(255, 248, 234, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 20px rgba(66, 43, 22, 0.08);
+}
+
+.archive-relation-tabs__btn {
+  min-height: 40px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--archive-subtext);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.archive-relation-tabs__btn.is-active {
+  background: rgba(213, 196, 169, 0.92);
+  color: var(--archive-text);
+  box-shadow: inset 0 0 0 1px rgba(122, 95, 67, 0.08);
+}
+
+.archive-relation-owner-list {
+  display: grid;
   gap: 10px;
-  padding: 2px 2px 0;
 }
 
-.archive-relation-topbar h3 {
-  margin: 0;
-  font-size: 16px;
-  color: var(--archive-text);
-}
-
-.archive-relation-add-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid rgba(122, 95, 67, 0.2);
+.archive-relation-owner-card {
+  width: 100%;
+  border: 1px solid rgba(122, 95, 67, 0.16);
   background: rgba(255, 251, 244, 0.92);
+  border-radius: 20px;
+  box-shadow: var(--archive-shadow);
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 12px;
   color: var(--archive-text);
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.archive-relation-owner-card:active {
+  transform: scale(0.985);
+}
+
+.archive-relation-owner-card.is-selected {
+  border-color: rgba(127, 92, 62, 0.38);
+  box-shadow: 0 12px 28px rgba(78, 52, 30, 0.14);
+}
+
+.archive-relation-owner-card__meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.archive-relation-owner-card__meta strong {
+  font-size: 15px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.archive-relation-owner-card__meta span {
+  font-size: 12px;
+  color: var(--archive-subtext);
+}
+
+.archive-relation-owner-card__arrow {
+  width: 18px;
+  height: 18px;
+  color: rgba(123, 104, 85, 0.78);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 14px rgba(72, 46, 24, 0.1);
 }
 
-.archive-relation-add-btn svg {
+.archive-relation-owner-card__arrow svg {
   width: 16px;
   height: 16px;
-}
-
-/* [修改标注·需求2] 关系网络 AI 提示词说明块 */
-.archive-relation-prompt {
-  border: 1px solid rgba(122, 95, 67, 0.14);
-  background: rgba(255, 248, 234, 0.88);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-
-.archive-relation-prompt p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--archive-subtext);
 }
 
 .archive-relation-list {
@@ -1003,20 +1055,52 @@
   gap: 10px;
 }
 
-/* [修改标注·需求3] 关系网络卡片双视角认知区块样式 */
-.archive-relation-item__block {
-  margin-top: 8px;
-  border: 1px solid rgba(122, 95, 67, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.45);
-  padding: 8px 10px;
+.archive-relation-item__head {
+  display: grid;
+  gap: 8px;
 }
 
-.archive-relation-item__block label {
+.archive-relation-item__title {
+  display: grid;
+  gap: 2px;
+}
+
+.archive-relation-item__title strong {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.archive-relation-item__title span {
+  font-size: 12px;
+  color: var(--archive-subtext);
+}
+
+.archive-relation-cognition {
+  margin-top: 10px;
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.84);
+  padding: 10px 11px;
+}
+
+.archive-relation-cognition label {
   display: block;
-  margin: 0 0 4px;
+  margin-bottom: 6px;
   font-size: 11px;
   color: var(--archive-subtext);
+}
+
+.archive-relation-cognition p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--archive-text);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.archive-card-actions--relation {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .archive-relation-item__desc {
@@ -1471,6 +1555,22 @@
   .archive-inline-helper {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .archive-relation-tabs {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .archive-relation-tabs__btn {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .archive-relation-owner-card {
+    grid-template-columns: 48px minmax(0, 1fr) 18px;
+    padding: 12px;
+    gap: 10px;
   }
 
   .archive-compact-card.is-square {
