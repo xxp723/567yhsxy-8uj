@@ -713,11 +713,13 @@ export async function mount(container, context) {
 
   // [模块标注] 角色档案双列错落卡片列表模块：
   // 改为两列错落分布（masonry式）网格，支持上下滚动。移除底部默认展示详情的行为。
+  // [模块标注] 角色档案双列错落卡片列表模块：
+  // 所有偶数列（0-based 奇数 index）卡片向下偏移，形成错落效果
   const renderCharacterProfileList = (items) => `
     <div class="archive-character-grid" aria-label="角色档案列表">
       ${items.map((item, index) => {
         const shapeClass = resolveProfileCardShapeClass(item);
-        const staggerClass = index === 1 ? 'is-staggered-top' : '';
+        const staggerClass = index % 2 === 1 ? 'is-staggered-top' : '';
         return `
           <button
             class="archive-character-grid-card ${shapeClass} ${staggerClass}"
@@ -744,6 +746,20 @@ export async function mount(container, context) {
   // [模块标注] 角色档案人物设定固定容器模块
   const buildCharacterArchivePaper = (item) => `
     <article class="archive-character-paper" data-card-id="${item.id}">
+      <!-- [模块标注] 角色档案右上角关闭按钮 -->
+      <button class="archive-paper-close-btn" type="button" data-action="close-character-detail" aria-label="关闭详情返回列表">
+        ${icon.close}
+      </button>
+
+      <!-- [模块标注] 角色档案纸张装饰角花 -->
+      <i class="archive-paper-corner archive-paper-corner--tl"></i>
+      <i class="archive-paper-corner archive-paper-corner--tr"></i>
+      <i class="archive-paper-corner archive-paper-corner--bl"></i>
+      <i class="archive-paper-corner archive-paper-corner--br"></i>
+
+      <!-- [模块标注] 纸张底部装饰性水印印章 -->
+      <div class="archive-paper-watermark"></div>
+
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
           <p class="archive-character-paper__eyebrow">Internal Character Archives</p>
@@ -757,11 +773,11 @@ export async function mount(container, context) {
           <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-character" data-id="${item.id}" aria-label="删除角色">
             ${icon.remove}
           </button>
-          <button class="archive-character-paper__icon-btn" type="button" data-action="close-character-detail" aria-label="关闭详情返回列表">
-            ${icon.close}
-          </button>
         </div>
       </header>
+
+      <!-- [模块标注] 纸张装饰分割线 -->
+      <hr class="archive-paper-divider">
 
       <section class="archive-character-paper__hero">
         <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
@@ -790,6 +806,9 @@ export async function mount(container, context) {
         </div>
       </section>
 
+      <!-- [模块标注] 纸张装饰分割线 -->
+      <hr class="archive-paper-divider">
+
       <section class="archive-character-paper__extra-info">
         <div class="archive-character-paper__summary-grid">
           <div class="archive-character-paper__field archive-character-paper__field--full">
@@ -802,6 +821,9 @@ export async function mount(container, context) {
           </div>
         </div>
       </section>
+
+      <!-- [模块标注] 纸张装饰分割线 -->
+      <hr class="archive-paper-divider">
 
       <section class="archive-character-paper__section">
         <div class="archive-character-paper__section-title">
