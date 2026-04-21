@@ -75,41 +75,43 @@
   min-height: 100%;
 }
 
-/* [模块标注] 角色档案双列错落卡片模块：
-   仅作用于角色档案 tab 列表；
-   改为一行两张、纵向滚动的错落卡片，不使用横向滑动。 */
+/* [模块标注] 角色档案双列错落卡片列表模块：
+   仅作用于角色档案 tab 顶部人物列表；
+   点击卡片后直接切换下方档案详情。 */
 .archive-character-panel {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
+  display: block;
 }
 
 .archive-character-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 12px;
-  align-items: start;
-  padding: 2px 2px 6px;
+  column-count: 2;
+  column-gap: 12px;
+  padding: 2px 2px 8px;
 }
 
 .archive-character-grid-card {
   position: relative;
   width: 100%;
+  break-inside: avoid;
+  margin-bottom: 12px;
   border: 1px solid rgba(122, 95, 67, 0.16);
   background:
     linear-gradient(180deg, rgba(255, 251, 242, 0.98) 0%, rgba(244, 233, 213, 0.96) 100%);
-  border-radius: 24px;
+  border-radius: 22px;
   padding: 10px;
   color: var(--archive-text);
   display: grid;
-  gap: 9px;
+  gap: 8px;
   align-content: start;
-  text-align: center;
+  text-align: center; /* 居中显示姓名 */
   box-shadow:
     0 12px 26px rgba(71, 46, 24, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.56);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   overflow: hidden;
+}
+
+.archive-character-grid-card.is-staggered-top {
+  margin-top: 24px;
 }
 
 .archive-character-grid-card::before {
@@ -123,33 +125,14 @@
   pointer-events: none;
 }
 
-.archive-character-grid-card.is-active {
-  border-color: rgba(127, 92, 62, 0.42);
-  box-shadow:
-    0 16px 32px rgba(71, 46, 24, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62);
-}
-
 .archive-character-grid-card:active {
   transform: scale(0.98);
-}
-
-.archive-character-grid-card.is-offset {
-  margin-top: 18px;
-}
-
-.archive-character-grid-card.is-medium {
-  margin-top: 10px;
-}
-
-.archive-character-grid-card.is-compact {
-  margin-top: 4px;
 }
 
 .archive-character-grid-card__media {
   position: relative;
   width: 100%;
-  border-radius: 20px;
+  border-radius: 18px;
   background: rgba(240, 229, 210, 0.84);
   border: 1px solid rgba(122, 95, 67, 0.1);
   overflow: hidden;
@@ -160,19 +143,12 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
 }
 
-.archive-character-grid-card.is-square .archive-character-grid-card__media,
-.archive-character-grid-card.is-medium .archive-character-grid-card__media {
-  aspect-ratio: 1 / 1.02;
+.archive-character-grid-card.is-square .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.04;
 }
 
-.archive-character-grid-card.is-portrait .archive-character-grid-card__media,
-.archive-character-grid-card.is-tall .archive-character-grid-card__media,
-.archive-character-grid-card.is-offset .archive-character-grid-card__media {
-  aspect-ratio: 1 / 1.34;
-}
-
-.archive-character-grid-card.is-compact .archive-character-grid-card__media {
-  aspect-ratio: 1 / 0.92;
+.archive-character-grid-card.is-portrait .archive-character-grid-card__media {
+  aspect-ratio: 1 / 1.36;
 }
 
 .archive-character-grid-card__media img {
@@ -190,22 +166,21 @@
   position: relative;
   z-index: 1;
   display: grid;
-  justify-items: center;
+  gap: 2px;
 }
 
 .archive-character-grid-card__meta strong {
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.3;
   font-weight: 700;
   word-break: break-word;
-  text-align: center;
 }
 
-/* [模块标注] 角色档案详情页模块：
-   保持主题统一；详情页位于内容区内部，不覆盖底部 TAB 栏。 */
+/* [模块标注] 角色档案旧纸详情页模块：
+   参考旧式卷宗/登记表视觉做法；
+   仅改角色档案详情展示，不影响其它模块卡片。 */
 .archive-character-detail-section {
   min-width: 0;
-  padding-bottom: 4px;
 }
 
 .archive-character-paper {
@@ -248,7 +223,6 @@
 
 .archive-character-paper__header,
 .archive-character-paper__hero,
-.archive-character-paper__meta-strip,
 .archive-character-paper__section {
   position: relative;
   z-index: 1;
@@ -274,6 +248,15 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(108, 74, 41, 0.82);
+}
+
+.archive-character-paper__title-block h3 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.06;
+  font-family: 'KaiTi', 'STKaiti', serif;
+  font-weight: 700;
+  color: #39281a;
 }
 
 .archive-character-paper__subtitle {
@@ -321,7 +304,6 @@
 
 .archive-character-paper__photo {
   min-height: 146px;
-  border-radius: 18px;
   border: 1px solid rgba(108, 74, 41, 0.28);
   background: rgba(201, 173, 130, 0.22);
   display: flex;
@@ -345,58 +327,80 @@
   height: 28px;
 }
 
-.archive-character-paper__info {
+.archive-character-paper__summary {
   min-width: 0;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-
-.archive-character-paper__name-block {
   border: 1px solid rgba(108, 74, 41, 0.24);
-  border-radius: 16px;
-  background: rgba(250, 242, 223, 0.72);
-  padding: 12px;
+  background: rgba(250, 242, 223, 0.62);
+  border-radius: 8px;
 }
 
-.archive-character-paper__name-block h3 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.08;
-  font-family: 'KaiTi', 'STKaiti', serif;
-  font-weight: 700;
-  color: #39281a;
-  word-break: break-word;
-}
-
-.archive-character-paper__base-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.archive-character-paper__base-field {
+.archive-character-paper__extra-info {
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(108, 74, 41, 0.18);
-  border-radius: 14px;
+  border: 1px solid rgba(108, 74, 41, 0.24);
   background: rgba(250, 242, 223, 0.62);
 }
 
-.archive-character-paper__base-field--full {
-  grid-column: 1 / -1;
+.archive-character-paper__summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 }
 
-.archive-character-paper__base-field label,
-.archive-character-paper__meta-box label {
+/* [模块标注] 角色档案头像右侧基础信息模块 */
+.archive-character-paper__summary-grid--side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+}
+
+.archive-character-paper__summary-grid--side .archive-character-paper__field {
+  border-right: none;
+  border-bottom: 1px dashed rgba(108, 74, 41, 0.15);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.archive-character-paper__summary-grid--side .archive-character-paper__field:last-child {
+  border-bottom: none;
+}
+
+.archive-character-paper__summary-grid--side .archive-character-paper__field label {
+  margin-bottom: 0;
+  width: auto;
+  min-width: 42px;
+  flex-shrink: 0;
+}
+
+.archive-character-paper__summary-grid--side .archive-character-paper__field p {
+  flex: 1;
+}
+
+.archive-character-paper__field {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid rgba(108, 74, 41, 0.18);
+  border-bottom: 1px solid rgba(108, 74, 41, 0.18);
+}
+
+.archive-character-paper__field:nth-child(2n) {
+  border-right: 0;
+}
+
+.archive-character-paper__field--full {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+
+.archive-character-paper__field label {
   display: block;
   margin-bottom: 6px;
   font-size: 11px;
   color: rgba(108, 74, 41, 0.8);
 }
 
-.archive-character-paper__base-field p,
-.archive-character-paper__meta-box p {
+.archive-character-paper__field p {
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
@@ -405,24 +409,10 @@
   white-space: pre-wrap;
 }
 
-.archive-character-paper__meta-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.archive-character-paper__meta-box {
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(108, 74, 41, 0.2);
-  border-radius: 14px;
-  background: rgba(255, 248, 234, 0.56);
-}
-
 .archive-character-paper__section {
   border: 1px solid rgba(108, 74, 41, 0.24);
-  border-radius: 16px;
   background: rgba(250, 242, 223, 0.52);
+  border-radius: 8px;
 }
 
 .archive-character-paper__section-title {
@@ -455,15 +445,24 @@
   padding: 12px;
 }
 
+/* [模块标注] 角色档案人物设定固定容器模块 */
 .archive-character-paper__content--fixed {
-  height: 170px;
+  height: 130px;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 2px 8px rgba(108, 74, 41, 0.05);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .archive-character-paper__content--fixed::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+}
+
+.archive-character-paper__content--fixed::-webkit-scrollbar-thumb {
+  background: rgba(108, 74, 41, 0.2);
+  border-radius: 4px;
 }
 
 .archive-character-paper__content p {
@@ -1160,12 +1159,8 @@
   }
 
   .archive-character-grid {
-    gap: 12px 10px;
-  }
-
-  .archive-character-grid-card {
-    border-radius: 20px;
-    padding: 9px;
+    column-count: 2;
+    column-gap: 10px;
   }
 
   /* [模块标注] 用户面具/角色档案双列字段布局模块：
@@ -1209,19 +1204,28 @@
 
   .archive-character-paper__actions {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .archive-character-paper__photo {
-    width: 108px;
-    min-height: 138px;
+    width: 100px;
+    min-height: 130px;
+    margin: 0 auto;
   }
 
-  .archive-character-paper__base-fields,
-  .archive-character-paper__meta-strip {
+  .archive-character-paper__summary-grid {
     grid-template-columns: 1fr;
   }
 
-  .archive-character-paper__name-block h3 {
+  .archive-character-paper__summary-grid--side .archive-character-paper__field {
+    border-bottom: 1px solid rgba(108, 74, 41, 0.18);
+  }
+
+  .archive-character-paper__field {
+    border-right: 0;
+  }
+
+  .archive-character-paper__title-block h3 {
     font-size: 24px;
   }
 }
