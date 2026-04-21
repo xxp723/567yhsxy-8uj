@@ -1,0 +1,989 @@
+/*
+ * 文件: js/apps/worldbook/worldbook.css
+ * 用途: 世情（WorldBook）应用独立样式
+ * 说明:
+ *  - 命名空间 wb-* 避免影响其它应用
+ *  - 复古牛皮纸风格，直角卡片，与小手机主题统一
+ *  - iPhone 风格开关复用 toggle-switch 模式
+ *  - 隐藏滚动条
+ */
+
+/* ===================== CSS 变量 ===================== */
+:root {
+  --wb-bg: #f5efdf;
+  --wb-card: #fffdf9;
+  --wb-border: rgba(122, 95, 67, 0.14);
+  --wb-text: #453425;
+  --wb-subtext: #7b6855;
+  --wb-primary: #7f5c3e;
+  --wb-primary-soft: #e7d8c8;
+  --wb-danger: #b14842;
+  --wb-success: #4d8b66;
+  --wb-book-cover: #c19a6b;
+  --wb-book-cover-dark: #a07b4e;
+  --wb-book-spine: #7a5d3a;
+  --wb-book-inner: #faf6ee;
+  --wb-shadow: 0 6px 18px rgba(66, 43, 22, 0.10);
+  --wb-modal-mask: rgba(33, 21, 13, 0.52);
+}
+
+/* ===================== 主容器 ===================== */
+.wb-app {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 250, 238, 0.72), transparent 30%),
+    radial-gradient(circle at 82% 20%, rgba(191, 148, 87, 0.08), transparent 28%),
+    linear-gradient(180deg, #f5efdf 0%, #e7d8bc 100%);
+  color: var(--wb-text);
+  overflow: hidden;
+}
+
+.wb-app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(90, 67, 39, 0.05) 1px, transparent 0);
+  background-size: 9px 9px;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+/* ===================== 内容区 ===================== */
+.wb-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 10px 100px;
+  z-index: 1;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wb-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===================== 搜索栏 ===================== */
+.wb-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  margin-bottom: 10px;
+  animation: wbFadeIn 200ms ease;
+}
+
+.wb-search-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 13px;
+  outline: none;
+  padding: 4px 0;
+}
+
+.wb-search-bar input::placeholder {
+  color: var(--wb-subtext);
+  opacity: 0.7;
+}
+
+.wb-search-bar button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--wb-subtext);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.wb-search-bar button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ===================== 书籍网格 ===================== */
+.wb-book-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 2px;
+  animation: wbFadeIn 220ms ease;
+}
+
+/* [模块标注] 书籍合上样式 —— 复古牛皮纸书籍卡片 */
+.wb-book-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border: none;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #d2b48c 0%, #c19a6b 60%, #a88654 100%);
+  color: var(--wb-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px 6px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow:
+    2px 3px 8px rgba(80, 52, 28, 0.18),
+    inset 0 1px 0 rgba(255, 245, 220, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
+}
+
+/* 书脊纹理 —— 左侧深色渐变条 */
+.wb-book-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(90, 62, 32, 0.35), rgba(90, 62, 32, 0.08));
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 细微噪点纹理 */
+.wb-book-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 1px 1px, rgba(90, 67, 39, 0.07) 1px, transparent 0);
+  background-size: 6px 6px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wb-book-card:active {
+  transform: scale(0.97);
+}
+
+/* 搜索高亮 */
+.wb-book-card.is-search-match {
+  box-shadow:
+    0 0 0 2px var(--wb-primary),
+    2px 3px 12px rgba(127, 92, 62, 0.28);
+}
+
+.wb-book-card__name {
+  position: relative;
+  z-index: 2;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #3d2a18;
+  font-family: 'KaiTi', 'STKaiti', serif;
+  word-break: break-word;
+  max-height: 3.8em;
+  overflow: hidden;
+  margin-bottom: auto;
+  padding-top: 6px;
+}
+
+.wb-book-card__switch {
+  position: relative;
+  z-index: 3;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* 书籍开关 —— 小尺寸 iPhone 风格 */
+.wb-book-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.wb-book-toggle input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.wb-book-toggle .wb-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(100, 70, 40, 0.3);
+  transition: background 0.2s ease;
+}
+
+.wb-book-toggle .wb-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(31, 31, 31, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.wb-book-toggle input:checked + .wb-toggle-track {
+  background: var(--wb-primary);
+}
+
+.wb-book-toggle input:checked + .wb-toggle-track::after {
+  transform: translateX(16px);
+}
+
+/* ===================== 底部 Tab 栏 ===================== */
+.wb-tabbar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(20, 14, 9, 0.08);
+  background: #17120d;
+  display: flex;
+  align-items: stretch;
+  box-shadow: 0 8px 24px rgba(25, 16, 10, 0.35);
+  z-index: 50;
+  overflow: visible;
+}
+
+.wb-tab-btn {
+  flex: 1;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 247, 235, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 4px;
+  transition: all 0.18s ease;
+  cursor: pointer;
+  margin: 5px;
+}
+
+.wb-tab-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-tab-btn.is-active {
+  color: #fffdf7;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+/* [模块标注] 底部 Tab 中央凸起弧形 + "+"按钮 */
+.wb-tab-add-wrapper {
+  position: relative;
+  flex: 0 0 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wb-tab-add-bg {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 58px;
+  height: 36px;
+  background: #17120d;
+  border-radius: 50% 50% 0 0;
+  z-index: 0;
+  /* 上方弧形伪元素 */
+}
+
+.wb-tab-add-btn {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 247, 235, 0.25);
+  background: var(--wb-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(127, 92, 62, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  margin-top: -16px;
+}
+
+.wb-tab-add-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.wb-tab-add-btn:active {
+  transform: scale(0.93);
+}
+
+/* ===================== 书籍展开视图 ===================== */
+.wb-book-open {
+  animation: wbFadeIn 220ms ease;
+}
+
+.wb-book-open__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 10px;
+  border-bottom: 1px dashed rgba(122, 95, 67, 0.22);
+  margin-bottom: 10px;
+}
+
+.wb-book-open__back {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 249, 236, 0.92);
+  color: var(--wb-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wb-book-open__back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wb-book-open__title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'KaiTi', 'STKaiti', serif;
+  color: #39281a;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-book-open__add-entry {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 249, 236, 0.92);
+  color: var(--wb-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wb-book-open__add-entry svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 绑定信息 */
+.wb-book-open__binding {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(231, 216, 200, 0.5);
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--wb-subtext);
+}
+
+.wb-book-open__binding button {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(177, 72, 66, 0.3);
+  background: rgba(177, 72, 66, 0.08);
+  color: var(--wb-danger);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ===================== 条目卡片 ===================== */
+.wb-entry-list {
+  display: grid;
+  gap: 8px;
+}
+
+.wb-entry-card {
+  border: 1px solid rgba(122, 95, 67, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 253, 249, 0.95);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(66, 43, 22, 0.06);
+}
+
+.wb-entry-card.is-search-match {
+  border-color: var(--wb-primary);
+  box-shadow: 0 0 0 1px var(--wb-primary), 0 2px 8px rgba(127, 92, 62, 0.15);
+}
+
+.wb-entry-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wb-entry-card__chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--wb-subtext);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.wb-entry-card__chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-entry-card.is-expanded .wb-entry-card__chevron {
+  transform: rotate(90deg);
+}
+
+.wb-entry-card__title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wb-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-entry-card__trigger-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(127, 92, 62, 0.1);
+  color: var(--wb-subtext);
+  flex-shrink: 0;
+}
+
+.wb-entry-card__body {
+  display: none;
+  padding: 0 10px 10px;
+  animation: wbFadeIn 180ms ease;
+}
+
+.wb-entry-card.is-expanded .wb-entry-card__body {
+  display: block;
+}
+
+/* 条目表单字段 */
+.wb-entry-field {
+  margin-bottom: 8px;
+}
+
+.wb-entry-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--wb-subtext);
+  margin-bottom: 4px;
+}
+
+.wb-entry-field input,
+.wb-entry-field textarea,
+.wb-entry-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--wb-text);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.wb-entry-field input:focus,
+.wb-entry-field textarea:focus,
+.wb-entry-field select:focus {
+  border-color: rgba(127, 92, 62, 0.45);
+  box-shadow: 0 0 0 2px rgba(127, 92, 62, 0.12);
+}
+
+.wb-entry-field textarea {
+  resize: vertical;
+  min-height: 68px;
+}
+
+.wb-entry-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* 条目开关行 */
+.wb-entry-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.wb-entry-switch-row span {
+  font-size: 11px;
+  color: var(--wb-subtext);
+}
+
+/* 条目内 iPhone 小开关 */
+.wb-entry-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.wb-entry-toggle input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.wb-entry-toggle .wb-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #d1d5db;
+  transition: background 0.2s ease;
+}
+
+.wb-entry-toggle .wb-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(31, 31, 31, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.wb-entry-toggle input:checked + .wb-toggle-track {
+  background: var(--wb-primary);
+}
+
+.wb-entry-toggle input:checked + .wb-toggle-track::after {
+  transform: translateX(16px);
+}
+
+/* 条目删除按钮 */
+.wb-entry-delete-btn {
+  width: 100%;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid rgba(177, 72, 66, 0.25);
+  background: rgba(177, 72, 66, 0.06);
+  color: var(--wb-danger);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.wb-entry-delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ===================== 空状态 ===================== */
+.wb-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--wb-subtext);
+}
+
+.wb-empty h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--wb-text);
+}
+
+.wb-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ===================== 弹窗 ===================== */
+.wb-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wb-modal.hidden {
+  display: none;
+}
+
+.wb-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--wb-modal-mask);
+  z-index: 0;
+}
+
+.wb-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(90%, 340px);
+  max-height: min(78vh, 520px);
+  border-radius: 14px;
+  border: 1px solid rgba(122, 95, 67, 0.22);
+  background: linear-gradient(180deg, #faf6ee 0%, #f0e8d6 100%);
+  box-shadow: 0 20px 48px rgba(60, 38, 18, 0.28);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: wbFadeIn 200ms ease;
+}
+
+.wb-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(122, 95, 67, 0.14);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-modal__close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 249, 236, 0.92);
+  color: var(--wb-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.wb-modal__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wb-modal__body::-webkit-scrollbar {
+  display: none;
+}
+
+.wb-modal__footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(122, 95, 67, 0.14);
+}
+
+.wb-modal__footer .wb-btn {
+  min-height: 36px;
+}
+
+/* 按钮 */
+.wb-btn {
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--wb-text);
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.wb-btn:active {
+  transform: scale(0.97);
+}
+
+.wb-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-btn--primary {
+  background: var(--wb-primary);
+  color: #fff;
+  border-color: var(--wb-primary);
+}
+
+.wb-btn--danger {
+  background: rgba(177, 72, 66, 0.08);
+  color: var(--wb-danger);
+  border-color: rgba(177, 72, 66, 0.3);
+}
+
+/* 弹窗表单 */
+.wb-form-group {
+  margin-bottom: 10px;
+}
+
+.wb-form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--wb-subtext);
+  margin-bottom: 4px;
+}
+
+.wb-form-group input,
+.wb-form-group textarea,
+.wb-form-group select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--wb-text);
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.wb-form-group input:focus,
+.wb-form-group textarea:focus,
+.wb-form-group select:focus {
+  border-color: rgba(127, 92, 62, 0.45);
+  box-shadow: 0 0 0 3px rgba(127, 92, 62, 0.13);
+}
+
+.wb-form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.wb-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* 弹窗提示文字 */
+.wb-modal-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--wb-subtext);
+  line-height: 1.5;
+}
+
+/* ===================== Toast 提示 ===================== */
+.wb-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(26, 20, 14, 0.92);
+  color: #fff;
+  border-radius: 11px;
+  padding: 7px 14px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 9999;
+  max-width: calc(100% - 24px);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wb-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.wb-toast[data-type='success'] {
+  background: rgba(42, 102, 69, 0.94);
+}
+
+.wb-toast[data-type='error'] {
+  background: rgba(137, 45, 45, 0.96);
+}
+
+/* ===================== 标题栏按钮 ===================== */
+.app-window__header .wb-header-left,
+.app-window__header .wb-header-right {
+  position: absolute;
+  top: calc(50% + 6px);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  z-index: 2;
+}
+
+.app-window__header .wb-header-left {
+  left: 12px;
+  gap: 6px;
+}
+
+.app-window__header .wb-header-right {
+  right: 12px;
+  gap: 6px;
+}
+
+.wb-header-btn {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(122, 95, 67, 0.18) !important;
+  background: rgba(255, 252, 245, 0.8) !important;
+  color: var(--wb-text) !important;
+  box-shadow: 0 4px 12px rgba(73, 48, 25, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.wb-header-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wb-header-btn:active {
+  transform: scale(0.96);
+}
+
+/* ===================== 角色选择列表 ===================== */
+.wb-char-list {
+  display: grid;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(255, 253, 249, 0.96);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wb-char-list::-webkit-scrollbar {
+  display: none;
+}
+
+.wb-char-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--wb-text);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.wb-char-item:hover,
+.wb-char-item:active {
+  background: rgba(231, 216, 200, 0.4);
+}
+
+.wb-char-item.is-selected {
+  border-color: var(--wb-primary);
+  background: rgba(127, 92, 62, 0.08);
+}
+
+/* ===================== 动画 ===================== */
+@keyframes wbFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===================== 响应式 ===================== */
+@media (max-width: 380px) {
+  .wb-book-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .wb-book-card__name {
+    font-size: 11px;
+  }
+
+  .wb-entry-field-row {
+    grid-template-columns: 1fr;
+  }
+}
