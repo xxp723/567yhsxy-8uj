@@ -631,7 +631,7 @@ export async function mount(container, context) {
       <div class="archive-mini-box"><label>性别</label><p>${escapeHtml(item.gender || '—')}</p></div>
       <div class="archive-mini-box"><label>年龄</label><p>${escapeHtml(item.age || '—')}</p></div>
       <div class="archive-mini-box"><label>身份</label><p>${escapeHtml(item.identity || '—')}</p></div>
-      <div class="archive-mini-box"><label>一句话签名</label><p>${escapeHtml(item.signature || '—')}</p></div>
+      <div class="archive-mini-box"><label>个性签名</label><p>${escapeHtml(item.signature || '—')}</p></div>
       <div class="archive-mini-box"><label>联系方式</label><p>${escapeHtml(item.contact || '—')}</p></div>
     </div>
   `;
@@ -696,7 +696,8 @@ export async function mount(container, context) {
 
         <header class="archive-character-paper__header">
           <div class="archive-character-paper__title-block">
-            <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
+            <!-- [修改标注·需求4] 角色名上方改为斜体花体英文"秘密档案" -->
+            <span class="archive-character-paper__en-name">Secret Files</span>
             <h3>${escapeHtml(item.name || '未命名面具')}</h3>
             <div class="archive-badges archive-badges--paper">
               ${isActiveMask ? '<span class="archive-badge archive-badge--active">当前生效</span>' : ''}
@@ -722,19 +723,20 @@ export async function mount(container, context) {
           <div class="archive-character-paper__summary">
             <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
               <div class="archive-character-paper__field">
-                <label>性别 / Gender</label>
+                <!-- [修改标注·需求3] 去除英文标题 -->
+                <label>性别</label>
                 <p>${escapeHtml(item.gender || '—')}</p>
               </div>
               <div class="archive-character-paper__field">
-                <label>年龄 / Age</label>
+                <label>年龄</label>
                 <p>${escapeHtml(item.age || '—')}</p>
               </div>
               <div class="archive-character-paper__field">
-                <label>身份 / Identity</label>
+                <label>身份</label>
                 <p>${escapeHtml(item.identity || '—')}</p>
               </div>
               <div class="archive-character-paper__field">
-                <label>联系方式 / Contact</label>
+                <label>联系方式</label>
                 <p>${escapeHtml(item.contact || '—')}</p>
               </div>
             </div>
@@ -745,7 +747,8 @@ export async function mount(container, context) {
 
         <section class="archive-character-paper__section">
           <div class="archive-character-paper__section-title">
-            <span>一句话签名 / Signature</span>
+            <!-- [修改标注·需求3] 改名为个性签名，去除英文 -->
+            <span>个性签名</span>
           </div>
           <div class="archive-character-paper__content">
             <p>${escapeHtml(item.signature || '—')}</p>
@@ -754,7 +757,8 @@ export async function mount(container, context) {
 
         <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
           <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-            <span>用户设定 / User Profile</span>
+            <!-- [修改标注·需求3] 去除英文标题 -->
+            <span>用户设定</span>
             <i class="archive-setting-chevron">${icon.chevronRight}</i>
           </div>
           <div class="archive-setting-body" style="display:none;">
@@ -863,7 +867,8 @@ export async function mount(container, context) {
       <!-- [修改标注·需求2] 姓名上方添加英文装饰名 + 去除 eyebrow 和 subtitle -->
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
-          <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
+          <!-- [修改标注·需求4] 角色名上方改为斜体花体英文"秘密档案" -->
+          <span class="archive-character-paper__en-name">Secret Files</span>
           <h3>${escapeHtml(item.name || '未命名角色')}</h3>
         </div>
         <div class="archive-character-paper__actions" aria-label="角色档案操作">
@@ -889,20 +894,20 @@ export async function mount(container, context) {
           <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
             <!-- [修改标注·需求1] 已去除姓名栏 -->
             <div class="archive-character-paper__field">
-              <label>性别 / Gender</label>
+              <!-- [修改标注·需求3] 去除英文标题 -->
+              <label>性别</label>
               <p>${escapeHtml(item.gender || '—')}</p>
             </div>
             <div class="archive-character-paper__field">
-              <label>年龄 / Age</label>
+              <label>年龄</label>
               <p>${escapeHtml(item.age || '—')}</p>
             </div>
             <div class="archive-character-paper__field">
-              <label>身份 / Identity</label>
+              <label>身份</label>
               <p>${escapeHtml(item.identity || '—')}</p>
             </div>
-            <!-- [修改标注·需求3] 联系方式移到头像右侧 -->
             <div class="archive-character-paper__field">
-              <label>联系方式 / Contact</label>
+              <label>联系方式</label>
               <p>${escapeHtml(item.contact || '—')}</p>
             </div>
           </div>
@@ -915,7 +920,8 @@ export async function mount(container, context) {
       <!-- [修改标注·需求3] 一句话签名在头像下方 -->
       <section class="archive-character-paper__section">
         <div class="archive-character-paper__section-title">
-          <span>一句话签名 / Signature</span>
+          <!-- [修改标注·需求3] 改名为个性签名，去除英文 -->
+          <span>个性签名</span>
         </div>
         <div class="archive-character-paper__content">
           <p>${escapeHtml(item.signature || '—')}</p>
@@ -925,7 +931,8 @@ export async function mount(container, context) {
       <!-- [修改标注·需求1] 人物设定改为折叠栏样式 + 印章改为展开/收起图标 -->
       <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-          <span>人物设定 / Experience & Profile</span>
+          <!-- [修改标注·需求3] 去除英文标题 -->
+          <span>人物设定</span>
           <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
         <div class="archive-setting-body" style="display:none;">
@@ -938,21 +945,19 @@ export async function mount(container, context) {
       <!-- [修改标注·需求4c] 开场白折叠栏：点击标题展开/收起；多开场白时显示切换按钮 -->
       <section class="archive-character-paper__section archive-greeting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-greeting-toggle" data-action="toggle-greeting" style="cursor:pointer;">
-          <span>开场白 / Greeting ${greetings.length > 0 ? '(' + greetings.length + ')' : ''}</span>
-          <i class="archive-greeting-chevron">${icon.chevronRight}</i>
+          <!-- [修改标注·需求3] 去除英文标题 -->
+          <span>开场白${greetings.length > 0 ? ' (' + greetings.length + ')' : ''}</span>
+          <!-- [修改标注·需求1] 查看全部按钮移到右侧，使用图标代替文字 -->
+          <span style="display:flex;align-items:center;gap:4px;">
+            ${hasMultipleGreetings ? `<button class="archive-character-paper__icon-btn" type="button" data-action="open-greeting-preview" data-id="${item.id}" aria-label="查看全部开场白" style="width:26px;height:26px;" title="查看全部开场白">${icon.message}</button>` : ''}
+            <i class="archive-greeting-chevron">${icon.chevronRight}</i>
+          </span>
         </div>
         <div class="archive-greeting-body" style="display:none;">
           ${greetings.length > 0 ? `
             <div class="archive-character-paper__content archive-character-paper__content--fixed">
               <p>${escapeHtml(firstGreeting)}</p>
             </div>
-            ${hasMultipleGreetings ? `
-              <div class="archive-greeting-actions">
-                <button class="archive-character-paper__icon-btn" type="button" data-action="open-greeting-preview" data-id="${item.id}" aria-label="切换预览开场白">
-                  ${icon.message} <span style="font-size:11px;margin-left:4px;">查看全部 (${greetings.length})</span>
-                </button>
-              </div>
-            ` : ''}
           ` : `
             <div class="archive-character-paper__content">
               <p style="color:var(--archive-subtext);">暂无开场白</p>
@@ -978,7 +983,8 @@ export async function mount(container, context) {
 
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
-          <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
+          <!-- [修改标注·需求4] 角色名上方改为斜体花体英文"秘密档案" -->
+          <span class="archive-character-paper__en-name">Secret Files</span>
           <h3>${escapeHtml(item.name || '未命名配角')}</h3>
         </div>
         <div class="archive-character-paper__actions" aria-label="配角操作">
@@ -1000,11 +1006,12 @@ export async function mount(container, context) {
         <div class="archive-character-paper__summary">
           <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
             <div class="archive-character-paper__field">
-              <label>姓名 / Name</label>
+              <!-- [修改标注·需求3] 去除英文标题 -->
+              <label>姓名</label>
               <p>${escapeHtml(item.name || '—')}</p>
             </div>
             <div class="archive-character-paper__field">
-              <label>性别 / Gender</label>
+              <label>性别</label>
               <p>${escapeHtml(item.gender || '—')}</p>
             </div>
           </div>
@@ -1015,7 +1022,8 @@ export async function mount(container, context) {
 
       <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-          <span>基本设定 / Basic Profile</span>
+          <!-- [修改标注·需求3] 去除英文标题 -->
+          <span>基本设定</span>
           <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
         <div class="archive-setting-body" style="display:none;">
@@ -1435,7 +1443,8 @@ export async function mount(container, context) {
             <label><span>性别</span><input data-role="gender" type="text" value="${escapeHtml(currentItem?.gender || '')}" /></label>
             <label><span>年龄</span><input data-role="age" type="text" value="${escapeHtml(currentItem?.age || '')}" /></label>
             <label><span>身份</span><input data-role="identity" type="text" value="${escapeHtml(currentItem?.identity || '')}" /></label>
-            <label><span>一句话签名</span><input data-role="signature" type="text" value="${escapeHtml(currentItem?.signature || '')}" /></label>
+            <!-- [修改标注·需求3] "一句话签名"改名为"个性签名" -->
+            <label><span>个性签名</span><input data-role="signature" type="text" value="${escapeHtml(currentItem?.signature || '')}" /></label>
             <!-- [修改标注·需求5] 去除编辑框里的"（微信号）"文字 -->
             <label><span>联系方式</span><input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" /></label>
           </div>
@@ -1467,14 +1476,7 @@ export async function mount(container, context) {
               <div class="archive-check-list">${roleOptionsHtml}</div>
             </div>
 
-            <!-- [模块标注] 当前生效身份开关模块：采用 iPhone 风格滑动开关 -->
-            <div class="archive-switch-row">
-              <span>保存后设为当前生效身份</span>
-              <label class="toggle-switch">
-                <input data-role="set-active-mask" type="checkbox" ${state.data.activeMaskId === currentItem?.id ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+            <!-- [修改标注·需求6] 已移除编辑窗口的"保存后设为当前生效身份"开关，仅保留展示页面上的生效开关 -->
           ` : ''}
         </div>
       `,
@@ -2093,7 +2095,8 @@ export async function mount(container, context) {
           <span style="font-size:12px;color:var(--archive-subtext);">第 ${index + 1} / ${greetings.length} 条</span>
           <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-next" ${index >= greetings.length - 1 ? 'disabled style="opacity:0.3;"' : ''} aria-label="下一条">${icon.right}</button>
         </div>
-        <div class="archive-character-paper__content archive-character-paper__content--fixed" style="min-height:100px;">
+        <!-- [修改标注·需求2] 开场白预览窗口高度放大 -->
+        <div class="archive-character-paper__content archive-character-paper__content--fixed" style="min-height:220px;height:auto;max-height:50vh;">
           <p>${escapeHtml(greetings[index])}</p>
         </div>
       `;
