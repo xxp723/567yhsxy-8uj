@@ -72,6 +72,7 @@ function normalizeString(value) {
   return String(value ?? '').trim();
 }
 
+/* [修改标注·需求4] normalizeProfile 新增 greetings 字段（数组），用于存储角色的多条开场白 */
 function normalizeProfile(item, type = 'mask') {
   const roleBindingIds = type === 'mask'
     ? [...new Set(normalizeArray(item?.roleBindingIds).map((id) => normalizeString(id)).filter(Boolean))]
@@ -87,6 +88,8 @@ function normalizeProfile(item, type = 'mask') {
     contact: normalizeString(item?.contact),
     personalitySetting: normalizeString(item?.personalitySetting),
     avatar: normalizeString(item?.avatar),
+    /* [修改标注·需求4] greetings: 开场白数组，每个元素为一条开场白文本 */
+    greetings: normalizeArray(item?.greetings).map((g) => normalizeString(g)).filter(Boolean),
     ...(type === 'mask' ? { roleBindingIds } : {})
   };
 }
@@ -187,13 +190,18 @@ function parsePossibleObject(raw) {
   return null;
 }
 
+/* [修改标注·需求4] mapImportedRole：
+   - first_mes 不再导入到 signature，改为导入到 greetings[0]
+   - 解析 alternate_greetings 数组追加到 greetings
+   - signature 仅从 signature / tagline 字段取值 */
 function mapImportedRole(rawObj) {
   const root = rawObj?.data && typeof rawObj.data === 'object' ? rawObj.data : rawObj || {};
   const name = pickFirst(root, ['name', 'char_name', 'characterName']);
   const gender = pickFirst(root, ['gender', 'sex']);
   const age = pickFirst(root, ['age']);
   const identity = pickFirst(root, ['identity', 'occupation', 'role', 'persona']);
-  const signature = pickFirst(root, ['signature', 'tagline', 'first_mes']);
+  /* [修改标注·需求4] signature 不再从 first_mes 取值 */
+  const signature = pickFirst(root, ['signature', 'tagline']);
   const contact = pickFirst(root, ['contact', 'wechat', 'wx']);
   const avatar = pickFirst(root, ['avatar', 'avatar_url', 'image', 'imageUrl']);
 
@@ -201,6 +209,16 @@ function mapImportedRole(rawObj) {
   if (!personalitySetting && typeof root.description === 'object') {
     personalitySetting = JSON.stringify(root.description, null, 2);
   }
+
+  /* [修改标注·需求4] 解析酒馆角色卡的 first_mes 和 alternate_greetings，导入到 greetings 数组 */
+  const greetings = [];
+  const firstMes = pickFirst(root, ['first_mes']);
+  if (firstMes) greetings.push(firstMes);
+  const altGreetings = normalizeArray(root.alternate_greetings || root.alternateGreetings);
+  altGreetings.forEach((g) => {
+    const text = normalizeString(g);
+    if (text) greetings.push(text);
+  });
 
   return normalizeProfile({
     id: uid('char'),
@@ -211,7 +229,8 @@ function mapImportedRole(rawObj) {
     signature,
     contact,
     personalitySetting,
-    avatar
+    avatar,
+    greetings
   }, 'character');
 }
 
@@ -350,7 +369,13 @@ function icons() {
     check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
     docDetail: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 6h18l6 6v28H12V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M30 6v8h8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 22h12M18 30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-    seal: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l4.6 4.2l6.1-.9l2.4 5.7l5.7 2.4l-.9 6.1L46 28l-4.2 4.6l.9 6.1l-5.7 2.4l-2.4 5.7l-6.1-.9L24 46l-4.6-4.2l-6.1.9l-2.4-5.7l-5.7-2.4l.9-6.1L2 24l4.2-4.6l-.9-6.1l5.7-2.4l2.4-5.7l6.1.9L24 6Z" fill="currentColor"/><circle cx="24" cy="24" r="8" fill="rgba(255,255,255,0.18)"/><path d="M20 27.5c1.6-3.8 6.4-3.8 8 0M19.5 20.5c1 .9 2.1 1.4 3.3 1.4c1.3 0 2.4-.5 3.5-1.4c.9 1 2 1.5 3.2 1.5" stroke="#F7E7D9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    seal: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l4.6 4.2l6.1-.9l2.4 5.7l5.7 2.4l-.9 6.1L46 28l-4.2 4.6l.9 6.1l-5.7 2.4l-2.4 5.7l-6.1-.9L24 46l-4.6-4.2l-6.1.9l-2.4-5.7l-5.7-2.4l.9-6.1L2 24l4.2-4.6l-.9-6.1l5.7-2.4l2.4-5.7l6.1.9L24 6Z" fill="currentColor"/><circle cx="24" cy="24" r="8" fill="rgba(255,255,255,0.18)"/><path d="M20 27.5c1.6-3.8 6.4-3.8 8 0M19.5 20.5c1 .9 2.1 1.4 3.3 1.4c1.3 0 2.4-.5 3.5-1.4c.9 1 2 1.5 3.2 1.5" stroke="#F7E7D9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    /* [修改标注·需求4] 新增图标：折叠箭头、左右切换箭头、消息气泡 —— IconPark */
+    chevronDown: `<svg viewBox="0 0 48 48" fill="none"><path d="M36 18L24 30L12 18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    chevronRight: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    left: `<svg viewBox="0 0 48 48" fill="none"><path d="M31 36L19 24L31 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    right: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    message: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 19.5h20M14 27.5h12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
   };
 }
 
@@ -744,7 +769,16 @@ export async function mount(container, context) {
   // [模块标注] 角色档案详情关闭返回模块
   // [模块标注] 角色档案头像右侧基础信息模块
   // [模块标注] 角色档案人物设定固定容器模块
-  const buildCharacterArchivePaper = (item) => `
+  /* [修改标注·需求1] 去除姓名栏，仅保留顶部放大加粗的 h3 标题
+     [修改标注·需求2] 去除"角色登记档案表"和"Internal Character Archives"字样，编辑/删除按钮保持右侧
+     [修改标注·需求3] 头像左侧，性别/年龄/身份/联系方式在右侧；一句话签名和人物设定在头像下方
+     [修改标注·需求4c] 人物设定下方新增"开场白"可折叠栏 */
+  const buildCharacterArchivePaper = (item) => {
+    const greetings = normalizeArray(item.greetings);
+    const firstGreeting = greetings.length > 0 ? greetings[0] : '';
+    const hasMultipleGreetings = greetings.length > 1;
+
+    return `
     <article class="archive-character-paper" data-card-id="${item.id}">
       <!-- [模块标注] 角色档案右上角关闭按钮 -->
       <button class="archive-paper-close-btn" type="button" data-action="close-character-detail" aria-label="关闭详情返回列表">
@@ -760,11 +794,10 @@ export async function mount(container, context) {
       <!-- [模块标注] 纸张底部装饰性水印印章 -->
       <div class="archive-paper-watermark"></div>
 
+      <!-- [修改标注·需求2] 去除 eyebrow 和 subtitle，仅保留大标题 h3 + 右侧编辑/删除按钮 -->
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
-          <p class="archive-character-paper__eyebrow">Internal Character Archives</p>
           <h3>${escapeHtml(item.name || '未命名角色')}</h3>
-          <p class="archive-character-paper__subtitle">角色档案登记表</p>
         </div>
         <div class="archive-character-paper__actions" aria-label="角色档案操作">
           <button class="archive-character-paper__icon-btn" type="button" data-action="edit-character" data-id="${item.id}" aria-label="编辑角色">
@@ -779,6 +812,7 @@ export async function mount(container, context) {
       <!-- [模块标注] 纸张装饰分割线 -->
       <hr class="archive-paper-divider">
 
+      <!-- [修改标注·需求3] 头像左侧，性别/年龄/身份/联系方式在头像右侧 -->
       <section class="archive-character-paper__hero">
         <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
           ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
@@ -786,10 +820,7 @@ export async function mount(container, context) {
 
         <div class="archive-character-paper__summary">
           <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
-            <div class="archive-character-paper__field">
-              <label>姓名 / Name</label>
-              <p><strong>${escapeHtml(item.name || '—')}</strong></p>
-            </div>
+            <!-- [修改标注·需求1] 已去除姓名栏 -->
             <div class="archive-character-paper__field">
               <label>性别 / Gender</label>
               <p>${escapeHtml(item.gender || '—')}</p>
@@ -802,6 +833,11 @@ export async function mount(container, context) {
               <label>身份 / Identity</label>
               <p>${escapeHtml(item.identity || '—')}</p>
             </div>
+            <!-- [修改标注·需求3] 联系方式移到头像右侧 -->
+            <div class="archive-character-paper__field">
+              <label>联系方式 / Contact</label>
+              <p>${escapeHtml(item.contact || '—')}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -809,22 +845,17 @@ export async function mount(container, context) {
       <!-- [模块标注] 纸张装饰分割线 -->
       <hr class="archive-paper-divider">
 
-      <section class="archive-character-paper__extra-info">
-        <div class="archive-character-paper__summary-grid">
-          <div class="archive-character-paper__field archive-character-paper__field--full">
-            <label>一句话签名 / Signature</label>
-            <p>${escapeHtml(item.signature || '—')}</p>
-          </div>
-          <div class="archive-character-paper__field archive-character-paper__field--full">
-            <label>联系方式 / Contact</label>
-            <p>${escapeHtml(item.contact || '—')}</p>
-          </div>
+      <!-- [修改标注·需求3] 一句话签名在头像下方 -->
+      <section class="archive-character-paper__section">
+        <div class="archive-character-paper__section-title">
+          <span>一句话签名 / Signature</span>
+        </div>
+        <div class="archive-character-paper__content">
+          <p>${escapeHtml(item.signature || '—')}</p>
         </div>
       </section>
 
-      <!-- [模块标注] 纸张装饰分割线 -->
-      <hr class="archive-paper-divider">
-
+      <!-- [修改标注·需求3] 人物设定在一句话签名下方 -->
       <section class="archive-character-paper__section">
         <div class="archive-character-paper__section-title">
           <span>人物设定 / Experience & Profile</span>
@@ -834,8 +865,35 @@ export async function mount(container, context) {
           <p>${escapeHtml(item.personalitySetting || '—')}</p>
         </div>
       </section>
+
+      <!-- [修改标注·需求4c] 开场白折叠栏：点击标题展开/收起；多开场白时显示切换按钮 -->
+      <section class="archive-character-paper__section archive-greeting-section" data-collapsed="true">
+        <div class="archive-character-paper__section-title archive-greeting-toggle" data-action="toggle-greeting" style="cursor:pointer;">
+          <span>开场白 / Greeting ${greetings.length > 0 ? '(' + greetings.length + ')' : ''}</span>
+          <i class="archive-greeting-chevron">${icon.chevronRight}</i>
+        </div>
+        <div class="archive-greeting-body" style="display:none;">
+          ${greetings.length > 0 ? `
+            <div class="archive-character-paper__content archive-character-paper__content--fixed">
+              <p>${escapeHtml(firstGreeting)}</p>
+            </div>
+            ${hasMultipleGreetings ? `
+              <div class="archive-greeting-actions">
+                <button class="archive-character-paper__icon-btn" type="button" data-action="open-greeting-preview" data-id="${item.id}" aria-label="切换预览开场白">
+                  ${icon.message} <span style="font-size:11px;margin-left:4px;">查看全部 (${greetings.length})</span>
+                </button>
+              </div>
+            ` : ''}
+          ` : `
+            <div class="archive-character-paper__content">
+              <p style="color:var(--archive-subtext);">暂无开场白</p>
+            </div>
+          `}
+        </div>
+      </section>
     </article>
   `;
+  };
 
   const buildSupportingDetailCard = (item) => `
     <article class="archive-support-card is-selected" data-card-id="${item.id}">
@@ -1256,6 +1314,21 @@ export async function mount(container, context) {
             <textarea data-role="personalitySetting" rows="5" placeholder="${isMask ? '请输入用户设定' : '请输入人物设定'}">${escapeHtml(currentItem?.personalitySetting || '')}</textarea>
           </label>
 
+          ${!isMask ? `
+          <!-- [修改标注·需求4d] 开场白编辑区域：多行文本框 + 选择/新增/删除按钮 -->
+          <div class="archive-form-row archive-greeting-editor" data-greeting-index="0">
+            <span>开场白</span>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span class="archive-greeting-editor-label" style="font-size:11px;color:var(--archive-subtext);">第 1 / ${Math.max((currentItem?.greetings || []).length, 1)} 条</span>
+              <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-editor-prev" aria-label="上一条开场白" style="width:26px;height:26px;">${icon.left}</button>
+              <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-editor-next" aria-label="下一条开场白" style="width:26px;height:26px;">${icon.right}</button>
+              <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-editor-add" aria-label="新增开场白" style="width:26px;height:26px;">${icon.plus}</button>
+              <button type="button" class="archive-character-paper__icon-btn is-danger" data-action="greeting-editor-delete" aria-label="删除当前开场白" style="width:26px;height:26px;">${icon.remove}</button>
+            </div>
+            <textarea data-role="greeting-text" rows="4" placeholder="请输入开场白内容">${escapeHtml((currentItem?.greetings || [])[0] || '')}</textarea>
+          </div>
+          ` : ''}
+
           ${isMask ? `
             <!-- [模块标注] 面具绑定角色模块：支持多选绑定角色档案 -->
             <div class="archive-form-row">
@@ -1276,8 +1349,72 @@ export async function mount(container, context) {
       `,
       onOpen: (modalScope) => {
         bindAvatarFormEvents(modalScope);
+
+        /* [修改标注·需求4d] 开场白编辑器交互逻辑：切换/新增/删除开场白 */
+        if (!isMask) {
+          const greetingsData = [...(currentItem?.greetings || [])];
+          if (!greetingsData.length) greetingsData.push('');
+          let gIndex = 0;
+
+          const syncGreetingUI = () => {
+            const editor = modalScope.querySelector('.archive-greeting-editor');
+            if (!editor) return;
+            const textarea = editor.querySelector('[data-role="greeting-text"]');
+            const label = editor.querySelector('.archive-greeting-editor-label');
+            if (textarea) textarea.value = greetingsData[gIndex] || '';
+            if (label) label.textContent = `第 ${gIndex + 1} / ${greetingsData.length} 条`;
+            editor.setAttribute('data-greeting-index', String(gIndex));
+          };
+
+          const saveCurrentGreeting = () => {
+            const textarea = modalScope.querySelector('[data-role="greeting-text"]');
+            if (textarea) greetingsData[gIndex] = normalizeString(textarea.value);
+          };
+
+          // Store greetingsData on modalScope for onConfirm to access
+          modalScope.__greetingsData = greetingsData;
+          modalScope.__saveCurrentGreeting = saveCurrentGreeting;
+
+          modalScope.addEventListener('click', (e) => {
+            const act = e.target.closest('[data-action]')?.getAttribute('data-action');
+            if (act === 'greeting-editor-prev' && gIndex > 0) {
+              saveCurrentGreeting();
+              gIndex--;
+              syncGreetingUI();
+            }
+            if (act === 'greeting-editor-next' && gIndex < greetingsData.length - 1) {
+              saveCurrentGreeting();
+              gIndex++;
+              syncGreetingUI();
+            }
+            if (act === 'greeting-editor-add') {
+              saveCurrentGreeting();
+              greetingsData.push('');
+              gIndex = greetingsData.length - 1;
+              syncGreetingUI();
+            }
+            if (act === 'greeting-editor-delete') {
+              if (greetingsData.length <= 1) {
+                greetingsData[0] = '';
+                gIndex = 0;
+                syncGreetingUI();
+                return;
+              }
+              greetingsData.splice(gIndex, 1);
+              if (gIndex >= greetingsData.length) gIndex = greetingsData.length - 1;
+              syncGreetingUI();
+            }
+          });
+        }
       },
       onConfirm: (modalScope) => {
+        /* [修改标注·需求4d] 收集开场白数据 */
+        let greetings = [];
+        if (!isMask && modalScope.__saveCurrentGreeting) {
+          modalScope.__saveCurrentGreeting();
+          greetings = (modalScope.__greetingsData || []).filter((g) => normalizeString(g));
+        }
+
         const profile = normalizeProfile({
           id: currentItem?.id || uid(isMask ? 'mask' : 'char'),
           avatar: collectAvatarValue(modalScope),
@@ -1288,6 +1425,7 @@ export async function mount(container, context) {
           signature: collectInputValue(modalScope, 'signature'),
           contact: collectInputValue(modalScope, 'contact'),
           personalitySetting: collectTextareaValue(modalScope, 'personalitySetting'),
+          greetings: !isMask ? greetings : undefined,
           roleBindingIds: isMask
             ? Array.from(modalScope.querySelectorAll('[data-role="role-binding"]:checked')).map((el) => normalizeString(el.value))
             : undefined
@@ -1727,7 +1865,80 @@ export async function mount(container, context) {
         notify('关系条目已删除', 'success');
         rerender();
       }, true);
+      return;
     }
+
+    /* [修改标注·需求4c] 开场白折叠栏：点击标题展开/收起 */
+    if (action === 'toggle-greeting') {
+      const section = actionEl.closest('.archive-greeting-section');
+      if (!section) return;
+      const body = section.querySelector('.archive-greeting-body');
+      const chevron = section.querySelector('.archive-greeting-chevron');
+      const isCollapsed = section.getAttribute('data-collapsed') === 'true';
+      if (isCollapsed) {
+        section.setAttribute('data-collapsed', 'false');
+        if (body) body.style.display = '';
+        if (chevron) chevron.innerHTML = icon.chevronDown;
+      } else {
+        section.setAttribute('data-collapsed', 'true');
+        if (body) body.style.display = 'none';
+        if (chevron) chevron.innerHTML = icon.chevronRight;
+      }
+      return;
+    }
+
+    /* [修改标注·需求4e] 多开场白预览弹窗：点击查看全部开场白 */
+    if (action === 'open-greeting-preview') {
+      const target = state.data.characters.find((item) => item.id === id);
+      if (!target) return;
+      openGreetingPreviewModal(target);
+      return;
+    }
+  };
+
+  /* [修改标注·需求4e] 多开场白预览弹窗函数 */
+  const openGreetingPreviewModal = (character) => {
+    const greetings = normalizeArray(character.greetings);
+    if (!greetings.length) {
+      notify('该角色暂无开场白', 'info');
+      return;
+    }
+    let currentIndex = 0;
+
+    const renderPreviewContent = (index) => {
+      return `
+        <div class="archive-greeting-preview-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+          <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-prev" ${index <= 0 ? 'disabled style="opacity:0.3;"' : ''} aria-label="上一条">${icon.left}</button>
+          <span style="font-size:12px;color:var(--archive-subtext);">第 ${index + 1} / ${greetings.length} 条</span>
+          <button type="button" class="archive-character-paper__icon-btn" data-action="greeting-next" ${index >= greetings.length - 1 ? 'disabled style="opacity:0.3;"' : ''} aria-label="下一条">${icon.right}</button>
+        </div>
+        <div class="archive-character-paper__content archive-character-paper__content--fixed" style="min-height:100px;">
+          <p>${escapeHtml(greetings[index])}</p>
+        </div>
+      `;
+    };
+
+    openModal({
+      title: `${escapeHtml(character.name || '角色')} - 开场白预览`,
+      showFooter: false,
+      content: `<div id="greeting-preview-container">${renderPreviewContent(0)}</div>`,
+      onOpen: (modalScope) => {
+        const handlePreviewClick = (event) => {
+          const previewAction = event.target.closest('[data-action]')?.getAttribute('data-action');
+          if (previewAction === 'greeting-prev' && currentIndex > 0) {
+            currentIndex--;
+            const container = modalScope.querySelector('#greeting-preview-container');
+            if (container) container.innerHTML = renderPreviewContent(currentIndex);
+          }
+          if (previewAction === 'greeting-next' && currentIndex < greetings.length - 1) {
+            currentIndex++;
+            const container = modalScope.querySelector('#greeting-preview-container');
+            if (container) container.innerHTML = renderPreviewContent(currentIndex);
+          }
+        };
+        modalScope.addEventListener('click', handlePreviewClick);
+      }
+    });
   };
 
   // [模块标注] 标题点击返回桌面行为模块：仅作用于档案应用窗口标题

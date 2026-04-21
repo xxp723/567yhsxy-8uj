@@ -947,7 +947,7 @@
   line-height: 1.45;
 }
 
-/* 底部 tab 栏（仅图标） */
+/* [修改标注·需求6] 底部 tab 栏放在最上层，z-index 确保不被内容遮挡 */
 .archive-v2__tabbar {
   position: absolute;
   left: 10px;
@@ -962,6 +962,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   box-shadow: 0 8px 24px rgba(25, 16, 10, 0.35);
+  z-index: 50;
 }
 
 .archive-tab-btn {
@@ -1288,6 +1289,72 @@
 
 .archive-toast[data-type='error'] {
   background: rgba(137, 45, 45, 0.96);
+}
+
+/* [修改标注·需求4c] 开场白折叠栏样式 */
+.archive-greeting-section {
+  transition: border-color 0.2s ease;
+}
+
+.archive-greeting-toggle {
+  user-select: none;
+}
+
+.archive-greeting-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--archive-subtext);
+  transition: transform 0.2s ease;
+}
+
+.archive-greeting-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.archive-greeting-body {
+  animation: archiveFadeIn 180ms ease;
+}
+
+.archive-greeting-actions {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* [修改标注·需求4d] 开场白编辑器样式 */
+.archive-greeting-editor {
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 253, 249, 0.96);
+}
+
+.archive-greeting-editor > span {
+  display: block;
+  font-size: 12px;
+  color: var(--archive-subtext);
+  margin-bottom: 6px;
+}
+
+.archive-greeting-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--archive-text);
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.archive-greeting-editor textarea:focus {
+  border-color: rgba(127, 92, 62, 0.45);
+  box-shadow: 0 0 0 3px rgba(127, 92, 62, 0.13);
 }
 
 @media (max-width: 380px) {
