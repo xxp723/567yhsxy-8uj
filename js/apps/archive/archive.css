@@ -950,9 +950,73 @@
   white-space: nowrap;
 }
 
+/* [修改标注·需求2] 关系网络顶部栏：标题 + 右侧新增按钮（IconPark +） */
+.archive-relation-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 0;
+}
+
+.archive-relation-topbar h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--archive-text);
+}
+
+.archive-relation-add-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(122, 95, 67, 0.2);
+  background: rgba(255, 251, 244, 0.92);
+  color: var(--archive-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 14px rgba(72, 46, 24, 0.1);
+}
+
+.archive-relation-add-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* [修改标注·需求2] 关系网络 AI 提示词说明块 */
+.archive-relation-prompt {
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  background: rgba(255, 248, 234, 0.88);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.archive-relation-prompt p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--archive-subtext);
+}
+
 .archive-relation-list {
   display: grid;
   gap: 10px;
+}
+
+/* [修改标注·需求3] 关系网络卡片双视角认知区块样式 */
+.archive-relation-item__block {
+  margin-top: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.45);
+  padding: 8px 10px;
+}
+
+.archive-relation-item__block label {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--archive-subtext);
 }
 
 .archive-relation-item__desc {

@@ -12,6 +12,8 @@ const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
 const ARCHIVE_ACTIVE_MASK_KEY = 'miniphone_archive_active_mask_id';
 const ARCHIVE_STYLE_ID = 'miniphone-archive-style';
 const RELATION_SELF_ID = '__archive_self__';
+/* [修改标注·需求1] 闲谈自动匹配面具：输出“角色ID -> 面具ID”映射给聊天侧读取 */
+const ARCHIVE_CHAT_ROLE_MASK_BINDING_KEY = 'miniphone_archive_chat_role_mask_binding_v1';
 
 const TAB_META = {
   mask: { title: '用户面具' },
@@ -104,12 +106,26 @@ function normalizeSupportingRole(item) {
   };
 }
 
+/* [修改标注·需求2/3] 关系网络数据结构升级：
+   - 支持用户视角与角色视角双认知
+   - 支持关系对象为角色档案/配角档案
+   - 兼容旧字段 mainRoleId/supportingRoleId/description 自动迁移 */
 function normalizeRelation(item) {
+  const legacySupportingId = normalizeString(item?.supportingRoleId);
+  const legacyMainRoleId = normalizeString(item?.mainRoleId);
+  const legacyDescription = normalizeString(item?.description);
+
+  const roleId = normalizeString(item?.roleId) || (legacyMainRoleId && legacyMainRoleId !== RELATION_SELF_ID ? legacyMainRoleId : '');
+
   return {
     id: normalizeString(item?.id) || uid('relation'),
-    mainRoleId: normalizeString(item?.mainRoleId) || RELATION_SELF_ID,
-    supportingRoleId: normalizeString(item?.supportingRoleId),
-    description: normalizeString(item?.description)
+    roleId,
+    userTargetType: normalizeString(item?.userTargetType) === 'character' ? 'character' : 'supporting',
+    userTargetId: normalizeString(item?.userTargetId) || legacySupportingId,
+    userCognition: normalizeString(item?.userCognition) || legacyDescription,
+    roleTargetType: normalizeString(item?.roleTargetType) === 'supporting' ? 'supporting' : 'user',
+    roleTargetId: normalizeString(item?.roleTargetId) || RELATION_SELF_ID,
+    roleCognition: normalizeString(item?.roleCognition)
   };
 }
 
@@ -124,7 +140,7 @@ function normalizeArchiveData(raw) {
   const supportingRoles = normalizeArray(safe.supportingRoles).map((item) => normalizeSupportingRole(item));
   const relations = normalizeArray(safe.relations)
     .map((item) => normalizeRelation(item))
-    .filter((item) => item.supportingRoleId);
+    .filter((item) => item.roleId && item.userTargetId && (item.roleTargetType === 'user' || item.roleTargetId));
   const selectedTab = TAB_META[safe.selectedTab] ? safe.selectedTab : 'mask';
   const activeMaskId = masks.some((m) => m.id === safe.activeMaskId) ? safe.activeMaskId : '';
 
@@ -470,6 +486,20 @@ export async function mount(container, context) {
     }
   };
 
+  /* [修改标注·需求1] 生成聊天可用绑定映射：
+     chat 侧可按“当前聊天角色ID”读取对应面具ID，自动启用绑定身份 */
+  const syncChatRoleMaskBinding = () => {
+    const roleToMask = {};
+    state.data.masks.forEach((mask) => {
+      const roleIds = Array.isArray(mask.roleBindingIds) ? mask.roleBindingIds : [];
+      roleIds.forEach((roleId) => {
+        if (!roleToMask[roleId]) roleToMask[roleId] = mask.id;
+      });
+    });
+    localStorage.setItem(ARCHIVE_CHAT_ROLE_MASK_BINDING_KEY, JSON.stringify(roleToMask));
+    context.eventBus?.emit('archive:chat-role-mask-binding-updated', roleToMask);
+  };
+
   const saveData = () => {
     state.data.selectedTab = state.activeTab;
     state.data = writeArchiveData(state.data);
@@ -479,6 +509,8 @@ export async function mount(container, context) {
     } else {
       localStorage.removeItem(ARCHIVE_ACTIVE_MASK_KEY);
     }
+
+    syncChatRoleMaskBinding();
   };
 
   const notify = (message, type = 'info') => {
@@ -588,33 +620,35 @@ export async function mount(container, context) {
   const getCharacterById = (id) => state.data.characters.find((item) => item.id === id);
   const getSupportingById = (id) => state.data.supportingRoles.find((item) => item.id === id);
 
-  const resolveMainRoleOptions = () => {
+  /* [修改标注·需求1/2/3] 关系网络角色来源改为“已绑定到用户面具的角色” */
+  const resolveBoundRoleOptions = () => {
     const roleIds = new Set();
     state.data.masks.forEach((mask) => {
       (mask.roleBindingIds || []).forEach((id) => roleIds.add(id));
     });
 
-    const options = [
-      { id: RELATION_SELF_ID, label: '用户本人' }
-    ];
-
-    [...roleIds].forEach((id) => {
-      const role = getCharacterById(id);
-      if (role) {
-        options.push({
-          id: role.id,
-          label: role.name || '未命名角色'
-        });
-      }
-    });
-
-    return options;
+    return [...roleIds]
+      .map((id) => getCharacterById(id))
+      .filter(Boolean)
+      .map((role) => ({
+        id: role.id,
+        label: role.name || '未命名角色'
+      }));
   };
 
-  const resolveMainRoleName = (mainRoleId) => {
-    if (mainRoleId === RELATION_SELF_ID) return '用户本人';
-    const role = getCharacterById(mainRoleId);
+  const getRoleDisplayName = (roleId) => {
+    const role = getCharacterById(roleId);
     return role?.name || '未命名角色';
+  };
+
+  const getRelationTargetName = (targetType, targetId) => {
+    if (targetType === 'character') {
+      const role = getCharacterById(targetId);
+      return role?.name || '未命名角色';
+    }
+    if (targetType === 'user') return '用户';
+    const supporting = getSupportingById(targetId);
+    return supporting?.name || '未命名配角';
   };
 
   const emitActiveMaskChanged = () => {
@@ -701,7 +735,6 @@ export async function mount(container, context) {
             <h3>${escapeHtml(item.name || '未命名面具')}</h3>
             <div class="archive-badges archive-badges--paper">
               ${isActiveMask ? '<span class="archive-badge archive-badge--active">当前生效</span>' : ''}
-              <span class="archive-badge">绑定角色 ${boundRoles.length}</span>
             </div>
           </div>
           <div class="archive-character-paper__actions" aria-label="面具操作">
@@ -1129,58 +1162,67 @@ export async function mount(container, context) {
     `;
   };
 
+  /* [修改标注·需求2] 关系网络界面重设计：标题右侧 + 新增按钮，并去除旧“新增关系条目”按钮 */
   const renderRelationTab = () => {
     const list = state.data.relations;
-    const mainOptions = resolveMainRoleOptions();
+    const boundRoles = resolveBoundRoleOptions();
 
-    const helper = `
-      <div class="archive-inline-helper">
-        <span>主角来源：用户本人 / 用户面具绑定角色</span>
-        <button class="ui-button" type="button" data-action="add-relation">${icon.plus}<span>新增关系条目</span></button>
-      </div>
+    const topBar = `
+      <header class="archive-relation-topbar">
+        <h3>关系网络</h3>
+        <button class="archive-relation-add-btn" type="button" data-action="add-relation" aria-label="新增关系网络">
+          ${icon.plus}
+        </button>
+      </header>
+      <section class="archive-relation-prompt">
+        <p>提示词说明：这里记录的是“角色”及其绑定的“用户面具身份”的人际关系网络，用于帮助 AI 完整理解角色与用户之间的关系认知。</p>
+      </section>
     `;
 
-    if (!mainOptions.length || state.data.supportingRoles.length === 0) {
+    if (!boundRoles.length) {
       return `
-        ${helper}
+        ${topBar}
         <div class="archive-empty-card">
-          <h3>关系网络待补充</h3>
-          <p>请先准备面具绑定角色（或用户本人）与配角档案，再创建关系条目。</p>
+          <h3>暂无可用绑定角色</h3>
+          <p>请先在用户面具中绑定角色，再创建关系网络。</p>
         </div>
       `;
     }
 
     if (!list.length) {
       return `
-        ${helper}
+        ${topBar}
         <div class="archive-empty-card">
           <h3>暂无关系条目</h3>
-          <p>点击“新增关系条目”开始构建人物关系网络。</p>
+          <p>点击右上角“+”添加关系网络条目。</p>
         </div>
       `;
     }
 
     return `
-      ${helper}
+      ${topBar}
       <div class="archive-relation-list">
-        ${list.map((item) => {
-          const supporting = getSupportingById(item.supportingRoleId);
-          return `
-            <article class="archive-relation-item ${state.selectedRelationId === item.id ? 'is-selected' : ''}">
-              <div class="archive-relation-item__tags">
-                <span class="archive-chip">${escapeHtml(resolveMainRoleName(item.mainRoleId))}</span>
-                <span class="archive-chip archive-chip--arrow">→</span>
-                <span class="archive-chip">${escapeHtml(supporting?.name || '未知配角')}</span>
-              </div>
-              <p class="archive-relation-item__desc">${escapeHtml(item.description || '未填写关系描述')}</p>
-              <footer class="archive-card-actions">
-                <button class="ui-button" type="button" data-action="select-relation" data-id="${item.id}">${icon.check}<span>选中</span></button>
-                <button class="ui-button" type="button" data-action="edit-relation" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-                <button class="ui-button danger" type="button" data-action="delete-relation" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-              </footer>
-            </article>
-          `;
-        }).join('')}
+        ${list.map((item) => `
+          <article class="archive-relation-item ${state.selectedRelationId === item.id ? 'is-selected' : ''}">
+            <div class="archive-relation-item__tags">
+              <span class="archive-chip">角色：${escapeHtml(getRoleDisplayName(item.roleId))}</span>
+              <span class="archive-chip">用户视角目标：${escapeHtml(getRelationTargetName(item.userTargetType, item.userTargetId))}</span>
+              <span class="archive-chip">角色视角目标：${escapeHtml(getRelationTargetName(item.roleTargetType, item.roleTargetId))}</span>
+            </div>
+            <div class="archive-relation-item__block">
+              <label>用户对对方的关系认知</label>
+              <p class="archive-relation-item__desc">${escapeHtml(item.userCognition || '未填写')}</p>
+            </div>
+            <div class="archive-relation-item__block">
+              <label>角色对对方的关系认知</label>
+              <p class="archive-relation-item__desc">${escapeHtml(item.roleCognition || '未填写')}</p>
+            </div>
+            <footer class="archive-card-actions">
+              <button class="ui-button" type="button" data-action="edit-relation" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
+              <button class="ui-button danger" type="button" data-action="delete-relation" data-id="${item.id}">${icon.remove}<span>删除</span></button>
+            </footer>
+          </article>
+        `).join('')}
       </div>
     `;
   };
@@ -1577,11 +1619,7 @@ export async function mount(container, context) {
             state.selectedMaskId = profile.id;
           }
 
-          const shouldSetActive = !!modalScope.querySelector('[data-role="set-active-mask"]')?.checked;
-          if (shouldSetActive) {
-            state.data.activeMaskId = profile.id;
-            emitActiveMaskChanged();
-          } else if (!state.data.masks.some((m) => m.id === state.data.activeMaskId)) {
+          if (!state.data.masks.some((m) => m.id === state.data.activeMaskId)) {
             state.data.activeMaskId = '';
             emitActiveMaskChanged();
           }
@@ -1674,24 +1712,36 @@ export async function mount(container, context) {
     });
   };
 
+  /* [修改标注·需求3] 关系网络编辑窗口改为双视角：
+     - 用户对对方（角色/配角）的关系认知
+     - 角色对对方（用户/配角）的关系认知 */
   const openRelationEditor = (currentItem = null) => {
     const isEdit = !!currentItem;
-    const mainOptions = resolveMainRoleOptions();
-    if (!mainOptions.length || state.data.supportingRoles.length === 0) {
-      notify('请先准备主角来源与配角档案', 'error');
+    const roleOptions = resolveBoundRoleOptions();
+
+    if (!roleOptions.length) {
+      notify('请先在用户面具中绑定角色，再创建关系网络', 'error');
       return;
     }
 
+    const characterOptionsHtml = state.data.characters.length
+      ? state.data.characters.map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name || '未命名角色')}</option>`).join('')
+      : '<option value="">暂无角色档案</option>';
+
+    const supportingOptionsHtml = state.data.supportingRoles.length
+      ? state.data.supportingRoles.map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name || '未命名配角')}</option>`).join('')
+      : '<option value="">暂无配角档案</option>';
+
     openModal({
       title: `${isEdit ? '编辑' : '新增'}关系条目`,
-      confirmText: isEdit ? '保存修改' : '创建',
+      confirmText: '保存',
       content: `
         <div class="archive-form-grid">
           <label class="archive-form-row">
-            <span>主角</span>
-            <select data-role="mainRoleId">
-              ${mainOptions.map((option) => `
-                <option value="${escapeHtml(option.id)}" ${option.id === (currentItem?.mainRoleId || RELATION_SELF_ID) ? 'selected' : ''}>
+            <span>绑定角色</span>
+            <select data-role="relation-roleId">
+              ${roleOptions.map((option) => `
+                <option value="${escapeHtml(option.id)}" ${option.id === (currentItem?.roleId || roleOptions[0]?.id || '') ? 'selected' : ''}>
                   ${escapeHtml(option.label)}
                 </option>
               `).join('')}
@@ -1699,37 +1749,95 @@ export async function mount(container, context) {
           </label>
 
           <label class="archive-form-row">
-            <span>配角</span>
-            <select data-role="supportingRoleId">
-              ${state.data.supportingRoles.map((role) => `
-                <option value="${escapeHtml(role.id)}" ${role.id === currentItem?.supportingRoleId ? 'selected' : ''}>
-                  ${escapeHtml(role.name || '未命名配角')}
-                </option>
-              `).join('')}
+            <span>用户对对方（可选择角色/配角）</span>
+            <select data-role="relation-userTargetType">
+              <option value="character" ${(currentItem?.userTargetType || 'character') === 'character' ? 'selected' : ''}>角色</option>
+              <option value="supporting" ${(currentItem?.userTargetType || 'character') === 'supporting' ? 'selected' : ''}>配角</option>
             </select>
+            <select data-role="relation-userTargetId"></select>
+            <textarea data-role="relation-userCognition" rows="4" placeholder="填写用户对对方的关系认知">${escapeHtml(currentItem?.userCognition || '')}</textarea>
           </label>
 
           <label class="archive-form-row">
-            <span>关系描述</span>
-            <textarea data-role="description" rows="4" placeholder="例如：好友、同事、暗恋对象">${escapeHtml(currentItem?.description || '')}</textarea>
+            <span>角色对对方（可选择用户/配角）</span>
+            <select data-role="relation-roleTargetType">
+              <option value="user" ${(currentItem?.roleTargetType || 'user') === 'user' ? 'selected' : ''}>用户</option>
+              <option value="supporting" ${(currentItem?.roleTargetType || 'user') === 'supporting' ? 'selected' : ''}>配角</option>
+            </select>
+            <select data-role="relation-roleTargetId"></select>
+            <textarea data-role="relation-roleCognition" rows="4" placeholder="填写角色对对方的关系认知">${escapeHtml(currentItem?.roleCognition || '')}</textarea>
           </label>
         </div>
       `,
+      onOpen: (modalScope) => {
+        const userTargetTypeEl = modalScope.querySelector('[data-role="relation-userTargetType"]');
+        const userTargetIdEl = modalScope.querySelector('[data-role="relation-userTargetId"]');
+        const roleTargetTypeEl = modalScope.querySelector('[data-role="relation-roleTargetType"]');
+        const roleTargetIdEl = modalScope.querySelector('[data-role="relation-roleTargetId"]');
+
+        const renderUserTargetIdOptions = () => {
+          if (!userTargetTypeEl || !userTargetIdEl) return;
+          const selectedType = userTargetTypeEl.value === 'supporting' ? 'supporting' : 'character';
+          const optionsHtml = selectedType === 'character' ? characterOptionsHtml : supportingOptionsHtml;
+          userTargetIdEl.innerHTML = optionsHtml;
+
+          const presetId = normalizeString(currentItem?.userTargetId);
+          if (presetId && userTargetIdEl.querySelector(`option[value="${presetId}"]`)) {
+            userTargetIdEl.value = presetId;
+          } else {
+            userTargetIdEl.value = userTargetIdEl.querySelector('option')?.value || '';
+          }
+        };
+
+        const renderRoleTargetIdOptions = () => {
+          if (!roleTargetTypeEl || !roleTargetIdEl) return;
+          const selectedType = roleTargetTypeEl.value === 'supporting' ? 'supporting' : 'user';
+
+          if (selectedType === 'user') {
+            roleTargetIdEl.innerHTML = `<option value="${RELATION_SELF_ID}">用户</option>`;
+            roleTargetIdEl.value = RELATION_SELF_ID;
+            roleTargetIdEl.disabled = true;
+          } else {
+            roleTargetIdEl.disabled = false;
+            roleTargetIdEl.innerHTML = supportingOptionsHtml;
+
+            const presetId = normalizeString(currentItem?.roleTargetId);
+            if (presetId && roleTargetIdEl.querySelector(`option[value="${presetId}"]`)) {
+              roleTargetIdEl.value = presetId;
+            } else {
+              roleTargetIdEl.value = roleTargetIdEl.querySelector('option')?.value || '';
+            }
+          }
+        };
+
+        renderUserTargetIdOptions();
+        renderRoleTargetIdOptions();
+
+        userTargetTypeEl?.addEventListener('change', renderUserTargetIdOptions);
+        roleTargetTypeEl?.addEventListener('change', renderRoleTargetIdOptions);
+      },
       onConfirm: (modalScope) => {
         const relation = normalizeRelation({
           id: currentItem?.id || uid('relation'),
-          mainRoleId: collectInputValue(modalScope, 'mainRoleId') || RELATION_SELF_ID,
-          supportingRoleId: collectInputValue(modalScope, 'supportingRoleId'),
-          description: collectTextareaValue(modalScope, 'description')
+          roleId: collectInputValue(modalScope, 'relation-roleId'),
+          userTargetType: collectInputValue(modalScope, 'relation-userTargetType'),
+          userTargetId: collectInputValue(modalScope, 'relation-userTargetId'),
+          userCognition: collectTextareaValue(modalScope, 'relation-userCognition'),
+          roleTargetType: collectInputValue(modalScope, 'relation-roleTargetType'),
+          roleTargetId: collectInputValue(modalScope, 'relation-roleTargetId') || RELATION_SELF_ID,
+          roleCognition: collectTextareaValue(modalScope, 'relation-roleCognition')
         });
 
-        if (!relation.supportingRoleId) {
-          notify('请选择配角', 'error');
+        if (!relation.roleId) {
+          notify('请选择绑定角色', 'error');
           return false;
         }
-
-        if (!relation.description) {
-          notify('请填写关系描述', 'error');
+        if (!relation.userTargetId) {
+          notify('请选择“用户对对方”目标对象', 'error');
+          return false;
+        }
+        if (relation.roleTargetType === 'supporting' && !relation.roleTargetId) {
+          notify('请选择“角色对对方”目标配角', 'error');
           return false;
         }
 
@@ -1951,7 +2059,10 @@ export async function mount(container, context) {
           roleBindingIds: (mask.roleBindingIds || []).filter((roleId) => roleId !== id)
         }));
 
-        state.data.relations = state.data.relations.filter((relation) => relation.mainRoleId !== id);
+        state.data.relations = state.data.relations.filter((relation) => (
+          relation.roleId !== id
+          && !(relation.userTargetType === 'character' && relation.userTargetId === id)
+        ));
         state.characterViewMode = 'list';
         notify('角色已删除', 'success');
         rerender();
@@ -1997,7 +2108,10 @@ export async function mount(container, context) {
       if (!target) return;
       openConfirmModal(`确定删除配角“${target.name || '未命名配角'}”吗？`, () => {
         state.data.supportingRoles = state.data.supportingRoles.filter((item) => item.id !== id);
-        state.data.relations = state.data.relations.filter((item) => item.supportingRoleId !== id);
+        state.data.relations = state.data.relations.filter((item) => (
+          !(item.userTargetType === 'supporting' && item.userTargetId === id)
+          && !(item.roleTargetType === 'supporting' && item.roleTargetId === id)
+        ));
         notify('配角已删除', 'success');
         rerender();
       }, true);
