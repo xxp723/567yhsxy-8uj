@@ -392,7 +392,10 @@ export async function mount(container, context) {
     selectedRelationId: '',
     headerRefs: null,
     characterImageRatioMap: {},
-    characterViewMode: 'list'
+    characterViewMode: 'list',
+    /* [修改标注·需求6] 用户面具和配角档案也采用列表/详情切换模式 */
+    maskViewMode: 'list',
+    supportingViewMode: 'list'
   };
 
   state.activeTab = TAB_META[state.data.selectedTab] ? state.data.selectedTab : 'mask';
@@ -663,6 +666,8 @@ export async function mount(container, context) {
     </div>
   `;
 
+  /* [修改标注·需求6] 用户面具详情改为与角色档案一致的纸质展开样式
+     [修改标注·需求7] 面具生效开关移到详情页关闭按钮下方，删除"选定"按钮 */
   const buildMaskDetailCard = (item) => {
     const isActiveMask = item.id === state.data.activeMaskId;
     const boundRoles = (item.roleBindingIds || [])
@@ -670,38 +675,100 @@ export async function mount(container, context) {
       .filter(Boolean);
 
     return `
-      <article class="archive-profile-card is-selected" data-card-id="${item.id}">
-        <header class="archive-profile-card__header">
-          <div class="archive-avatar-box ${item.avatar ? 'has-image' : ''}">
-            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '面具头像')}">` : '<span>头像</span>'}
-          </div>
-          <div class="archive-profile-card__meta">
+      <article class="archive-character-paper" data-card-id="${item.id}">
+        <!-- 右上角关闭按钮 -->
+        <button class="archive-paper-close-btn" type="button" data-action="close-mask-detail" aria-label="关闭详情返回列表">
+          ${icon.close}
+        </button>
+
+        <!-- [修改标注·需求7] 面具生效开关在关闭按钮下方 -->
+        <div class="archive-mask-active-toggle" style="position:absolute;top:52px;right:12px;z-index:5;">
+          <label class="toggle-switch" title="${isActiveMask ? '当前已生效' : '点击设为生效身份'}">
+            <input data-role="mask-active-toggle" data-id="${item.id}" type="checkbox" ${isActiveMask ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <i class="archive-paper-corner archive-paper-corner--tl"></i>
+        <i class="archive-paper-corner archive-paper-corner--tr"></i>
+        <i class="archive-paper-corner archive-paper-corner--bl"></i>
+        <i class="archive-paper-corner archive-paper-corner--br"></i>
+
+        <header class="archive-character-paper__header">
+          <div class="archive-character-paper__title-block">
+            <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
             <h3>${escapeHtml(item.name || '未命名面具')}</h3>
-            <div class="archive-badges">
+            <div class="archive-badges archive-badges--paper">
               ${isActiveMask ? '<span class="archive-badge archive-badge--active">当前生效</span>' : ''}
               <span class="archive-badge">绑定角色 ${boundRoles.length}</span>
             </div>
           </div>
+          <div class="archive-character-paper__actions" aria-label="面具操作">
+            <button class="archive-character-paper__icon-btn" type="button" data-action="edit-mask" data-id="${item.id}" aria-label="编辑面具">
+              ${icon.edit}
+            </button>
+            <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-mask" data-id="${item.id}" aria-label="删除面具">
+              ${icon.remove}
+            </button>
+          </div>
         </header>
 
-        ${buildFieldGridHtml(item)}
+        <hr class="archive-paper-divider">
 
-        <div class="archive-large-box">
-          <label>用户设定</label>
-          <p>${escapeHtml(item.personalitySetting || '—')}</p>
-        </div>
+        <section class="archive-character-paper__hero">
+          <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
+            ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '面具头像')}">` : '<span>头像</span>'}
+          </div>
+          <div class="archive-character-paper__summary">
+            <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
+              <div class="archive-character-paper__field">
+                <label>性别 / Gender</label>
+                <p>${escapeHtml(item.gender || '—')}</p>
+              </div>
+              <div class="archive-character-paper__field">
+                <label>年龄 / Age</label>
+                <p>${escapeHtml(item.age || '—')}</p>
+              </div>
+              <div class="archive-character-paper__field">
+                <label>身份 / Identity</label>
+                <p>${escapeHtml(item.identity || '—')}</p>
+              </div>
+              <div class="archive-character-paper__field">
+                <label>联系方式 / Contact</label>
+                <p>${escapeHtml(item.contact || '—')}</p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <div class="archive-chip-list">
+        <hr class="archive-paper-divider">
+
+        <section class="archive-character-paper__section">
+          <div class="archive-character-paper__section-title">
+            <span>一句话签名 / Signature</span>
+          </div>
+          <div class="archive-character-paper__content">
+            <p>${escapeHtml(item.signature || '—')}</p>
+          </div>
+        </section>
+
+        <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
+          <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
+            <span>用户设定 / User Profile</span>
+            <i class="archive-setting-chevron">${icon.chevronRight}</i>
+          </div>
+          <div class="archive-setting-body" style="display:none;">
+            <div class="archive-character-paper__content archive-character-paper__content--fixed">
+              <p>${escapeHtml(item.personalitySetting || '—')}</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="archive-chip-list" style="position:relative;z-index:1;">
           ${boundRoles.length
             ? boundRoles.map((role) => `<span class="archive-chip">${escapeHtml(role.name || '未命名角色')}</span>`).join('')
             : '<span class="archive-chip archive-chip--muted">尚未绑定角色</span>'}
         </div>
-
-        <footer class="archive-card-actions">
-          <button class="ui-button" type="button" data-action="select-mask" data-id="${item.id}">${icon.check}<span>选定</span></button>
-          <button class="ui-button" type="button" data-action="edit-mask" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-          <button class="ui-button danger" type="button" data-action="delete-mask" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-        </footer>
       </article>
     `;
   };
@@ -791,12 +858,12 @@ export async function mount(container, context) {
       <i class="archive-paper-corner archive-paper-corner--bl"></i>
       <i class="archive-paper-corner archive-paper-corner--br"></i>
 
-      <!-- [模块标注] 纸张底部装饰性水印印章 -->
-      <div class="archive-paper-watermark"></div>
+      <!-- [修改标注·需求3] 去除纸张底部装饰性水印印章圆圈 -->
 
-      <!-- [修改标注·需求2] 去除 eyebrow 和 subtitle，仅保留大标题 h3 + 右侧编辑/删除按钮 -->
+      <!-- [修改标注·需求2] 姓名上方添加英文装饰名 + 去除 eyebrow 和 subtitle -->
       <header class="archive-character-paper__header">
         <div class="archive-character-paper__title-block">
+          <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
           <h3>${escapeHtml(item.name || '未命名角色')}</h3>
         </div>
         <div class="archive-character-paper__actions" aria-label="角色档案操作">
@@ -855,14 +922,16 @@ export async function mount(container, context) {
         </div>
       </section>
 
-      <!-- [修改标注·需求3] 人物设定在一句话签名下方 -->
-      <section class="archive-character-paper__section">
-        <div class="archive-character-paper__section-title">
+      <!-- [修改标注·需求1] 人物设定改为折叠栏样式 + 印章改为展开/收起图标 -->
+      <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
+        <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
           <span>人物设定 / Experience & Profile</span>
-          <i>${icon.seal}</i>
+          <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
-        <div class="archive-character-paper__content archive-character-paper__content--fixed">
-          <p>${escapeHtml(item.personalitySetting || '—')}</p>
+        <div class="archive-setting-body" style="display:none;">
+          <div class="archive-character-paper__content archive-character-paper__content--fixed">
+            <p>${escapeHtml(item.personalitySetting || '—')}</p>
+          </div>
         </div>
       </section>
 
@@ -895,32 +964,70 @@ export async function mount(container, context) {
   `;
   };
 
+  /* [修改标注·需求6] 配角档案详情改为与角色档案一致的纸质展开样式 */
   const buildSupportingDetailCard = (item) => `
-    <article class="archive-support-card is-selected" data-card-id="${item.id}">
-      <div class="archive-support-card__left">
-        <div class="archive-avatar-box archive-avatar-box--small ${item.avatar ? 'has-image' : ''}">
-          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '配角头像')}">` : '<span>头像</span>'}
-        </div>
-        <div class="archive-support-meta">
+    <article class="archive-character-paper" data-card-id="${item.id}">
+      <button class="archive-paper-close-btn" type="button" data-action="close-supporting-detail" aria-label="关闭详情返回列表">
+        ${icon.close}
+      </button>
+
+      <i class="archive-paper-corner archive-paper-corner--tl"></i>
+      <i class="archive-paper-corner archive-paper-corner--tr"></i>
+      <i class="archive-paper-corner archive-paper-corner--bl"></i>
+      <i class="archive-paper-corner archive-paper-corner--br"></i>
+
+      <header class="archive-character-paper__header">
+        <div class="archive-character-paper__title-block">
+          <span class="archive-character-paper__en-name">${escapeHtml(item.name || 'Unnamed')}</span>
           <h3>${escapeHtml(item.name || '未命名配角')}</h3>
         </div>
-      </div>
-      <div class="archive-grid-fields archive-grid-fields--supporting">
-        <div class="archive-mini-box"><label>姓名</label><p>${escapeHtml(item.name || '—')}</p></div>
-        <div class="archive-mini-box"><label>性别</label><p>${escapeHtml(item.gender || '—')}</p></div>
-      </div>
-      <div class="archive-large-box">
-        <label>基本设定</label>
-        <p>${escapeHtml(item.basicSetting || '—')}</p>
-      </div>
-      <footer class="archive-card-actions">
-        <button class="ui-button" type="button" data-action="select-supporting" data-id="${item.id}">${icon.check}<span>选中</span></button>
-        <button class="ui-button" type="button" data-action="edit-supporting" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-        <button class="ui-button danger" type="button" data-action="delete-supporting" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-      </footer>
+        <div class="archive-character-paper__actions" aria-label="配角操作">
+          <button class="archive-character-paper__icon-btn" type="button" data-action="edit-supporting" data-id="${item.id}" aria-label="编辑配角">
+            ${icon.edit}
+          </button>
+          <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-supporting" data-id="${item.id}" aria-label="删除配角">
+            ${icon.remove}
+          </button>
+        </div>
+      </header>
+
+      <hr class="archive-paper-divider">
+
+      <section class="archive-character-paper__hero">
+        <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
+          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '配角头像')}">` : '<span>头像</span>'}
+        </div>
+        <div class="archive-character-paper__summary">
+          <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
+            <div class="archive-character-paper__field">
+              <label>姓名 / Name</label>
+              <p>${escapeHtml(item.name || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field">
+              <label>性别 / Gender</label>
+              <p>${escapeHtml(item.gender || '—')}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="archive-paper-divider">
+
+      <section class="archive-character-paper__section archive-setting-section" data-collapsed="true">
+        <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
+          <span>基本设定 / Basic Profile</span>
+          <i class="archive-setting-chevron">${icon.chevronRight}</i>
+        </div>
+        <div class="archive-setting-body" style="display:none;">
+          <div class="archive-character-paper__content archive-character-paper__content--fixed">
+            <p>${escapeHtml(item.basicSetting || '—')}</p>
+          </div>
+        </div>
+      </section>
     </article>
   `;
 
+  /* [修改标注·需求6] 用户面具改为点击卡片展开详情（与角色档案一致的列表/详情切换模式） */
   const renderMaskTab = () => {
     const list = state.data.masks;
     if (!list.length) {
@@ -934,9 +1041,20 @@ export async function mount(container, context) {
 
     const selected = list.find((item) => item.id === state.selectedMaskId) || list[0];
 
+    if (state.maskViewMode === 'detail' && selected) {
+      return `
+        <section class="archive-character-panel">
+          <section class="archive-character-detail-section">
+            ${buildMaskDetailCard(selected)}
+          </section>
+        </section>
+      `;
+    }
+
     return `
-      ${renderCompactProfileList(list, selected?.id || '', 'show-mask-detail', '面具头像', true)}
-      ${selected ? `<section class="archive-detail-section">${buildMaskDetailCard(selected)}</section>` : ''}
+      <section class="archive-character-panel">
+        ${renderCompactProfileList(list, '', 'open-mask-detail', '面具头像', true)}
+      </section>
     `;
   };
 
@@ -972,6 +1090,7 @@ export async function mount(container, context) {
     `;
   };
 
+  /* [修改标注·需求6] 配角档案改为点击卡片展开详情（与角色档案一致的列表/详情切换模式） */
   const renderSupportingTab = () => {
     const list = state.data.supportingRoles;
     if (!list.length) {
@@ -985,9 +1104,20 @@ export async function mount(container, context) {
 
     const selected = list.find((item) => item.id === state.selectedSupportingId) || list[0];
 
+    if (state.supportingViewMode === 'detail' && selected) {
+      return `
+        <section class="archive-character-panel">
+          <section class="archive-character-detail-section">
+            ${buildSupportingDetailCard(selected)}
+          </section>
+        </section>
+      `;
+    }
+
     return `
-      ${renderCompactProfileList(list, selected?.id || '', 'show-supporting-detail', '配角头像')}
-      ${selected ? `<section class="archive-detail-section">${buildSupportingDetailCard(selected)}</section>` : ''}
+      <section class="archive-character-panel">
+        ${renderCompactProfileList(list, '', 'open-supporting-detail', '配角头像')}
+      </section>
     `;
   };
 
@@ -1306,7 +1436,8 @@ export async function mount(container, context) {
             <label><span>年龄</span><input data-role="age" type="text" value="${escapeHtml(currentItem?.age || '')}" /></label>
             <label><span>身份</span><input data-role="identity" type="text" value="${escapeHtml(currentItem?.identity || '')}" /></label>
             <label><span>一句话签名</span><input data-role="signature" type="text" value="${escapeHtml(currentItem?.signature || '')}" /></label>
-            <label><span>${isMask ? '联系方式' : '联系方式（微信号）'}</span><input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" /></label>
+            <!-- [修改标注·需求5] 去除编辑框里的"（微信号）"文字 -->
+            <label><span>联系方式</span><input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" /></label>
           </div>
 
           <label class="archive-form-row">
@@ -1719,9 +1850,10 @@ export async function mount(container, context) {
       const nextTab = actionEl.getAttribute('data-tab');
       if (TAB_META[nextTab]) {
         state.activeTab = nextTab;
-        if (nextTab === 'character') {
-          state.characterViewMode = 'list';
-        }
+        /* [修改标注·需求6] 切换tab时重置所有viewMode为list */
+        state.characterViewMode = 'list';
+        state.maskViewMode = 'list';
+        state.supportingViewMode = 'list';
         rerender();
       }
       return;
@@ -1729,6 +1861,21 @@ export async function mount(container, context) {
 
     if (action === 'show-mask-detail') {
       state.selectedMaskId = id;
+      rerender();
+      return;
+    }
+
+    /* [修改标注·需求6] 面具列表点击卡片展开详情 */
+    if (action === 'open-mask-detail') {
+      state.selectedMaskId = id;
+      state.maskViewMode = 'detail';
+      rerender();
+      return;
+    }
+
+    /* [修改标注·需求6] 面具详情关闭返回列表 */
+    if (action === 'close-mask-detail') {
+      state.maskViewMode = 'list';
       rerender();
       return;
     }
@@ -1816,6 +1963,21 @@ export async function mount(container, context) {
       return;
     }
 
+    /* [修改标注·需求6] 配角列表点击卡片展开详情 */
+    if (action === 'open-supporting-detail') {
+      state.selectedSupportingId = id;
+      state.supportingViewMode = 'detail';
+      rerender();
+      return;
+    }
+
+    /* [修改标注·需求6] 配角详情关闭返回列表 */
+    if (action === 'close-supporting-detail') {
+      state.supportingViewMode = 'list';
+      rerender();
+      return;
+    }
+
     if (action === 'select-supporting') {
       state.selectedSupportingId = id;
       rerender();
@@ -1865,6 +2027,25 @@ export async function mount(container, context) {
         notify('关系条目已删除', 'success');
         rerender();
       }, true);
+      return;
+    }
+
+    /* [修改标注·需求1] 人物设定折叠栏：点击标题展开/收起 */
+    if (action === 'toggle-setting') {
+      const section = actionEl.closest('.archive-setting-section');
+      if (!section) return;
+      const body = section.querySelector('.archive-setting-body');
+      const chevron = section.querySelector('.archive-setting-chevron');
+      const isCollapsed = section.getAttribute('data-collapsed') === 'true';
+      if (isCollapsed) {
+        section.setAttribute('data-collapsed', 'false');
+        if (body) body.style.display = '';
+        if (chevron) chevron.innerHTML = icon.chevronDown;
+      } else {
+        section.setAttribute('data-collapsed', 'true');
+        if (body) body.style.display = 'none';
+        if (chevron) chevron.innerHTML = icon.chevronRight;
+      }
       return;
     }
 
@@ -1950,11 +2131,30 @@ export async function mount(container, context) {
   rerender();
 
   container.addEventListener('click', onContainerClick);
+
+  /* [修改标注·需求7] 面具生效开关事件处理 —— 切换面具的全局生效状态 */
+  const onMaskToggleChange = (event) => {
+    const toggle = event.target.closest('[data-role="mask-active-toggle"]');
+    if (!toggle) return;
+    const maskId = toggle.getAttribute('data-id');
+    if (!maskId) return;
+    if (toggle.checked) {
+      state.data.activeMaskId = maskId;
+    } else {
+      state.data.activeMaskId = '';
+    }
+    emitActiveMaskChanged();
+    saveData();
+    rerender();
+  };
+  container.addEventListener('change', onMaskToggleChange);
+
   importInputEl?.addEventListener('change', handleImportInputChange);
 
   return {
     destroy() {
       container.removeEventListener('click', onContainerClick);
+      container.removeEventListener('change', onMaskToggleChange);
       importInputEl?.removeEventListener('change', handleImportInputChange);
       closeModal();
 

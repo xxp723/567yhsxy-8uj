@@ -71,8 +71,15 @@
   animation: archiveFadeIn 220ms ease;
 }
 
+/* [修改标注·需求4] 角色列表初始背景改成和用户面具背景一样的颜色 */
 .archive-tab-panel--character {
   min-height: 100%;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 250, 238, 0.72), transparent 30%),
+    radial-gradient(circle at 82% 20%, rgba(191, 148, 87, 0.08), transparent 28%),
+    linear-gradient(180deg, #f5efdf 0%, #e7d8bc 100%);
+  border-radius: 14px;
+  padding: 6px;
 }
 
 /* [模块标注] 角色档案双列错落卡片列表模块：
@@ -131,18 +138,16 @@
   box-shadow: 0 6px 18px rgba(71, 46, 24, 0.10);
 }
 
-.archive-character-grid-card.is-square .archive-character-grid-card__media {
-  aspect-ratio: 1 / 1.04;
+/* [修改标注·需求4] 移除固定比例，让上传的头像图片保持原有尺寸比例 */
+.archive-character-grid-card__media {
+  aspect-ratio: auto;
 }
 
-.archive-character-grid-card.is-portrait .archive-character-grid-card__media {
-  aspect-ratio: 1 / 1.36;
-}
-
+/* [修改标注·需求4] 图片保持原始尺寸比例 */
 .archive-character-grid-card__media img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
 }
 
 .archive-character-grid-card__media svg {
@@ -270,39 +275,7 @@
   box-shadow: 0 26px 0 0 rgba(108, 74, 41, 0.35);
 }
 
-/* [模块标注] 纸张底部装饰性水印印章（CSS 绘制） */
-.archive-paper-watermark {
-  position: absolute;
-  bottom: 16px;
-  right: 18px;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 2.5px solid rgba(141, 49, 46, 0.22);
-  opacity: 0.35;
-  z-index: 1;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.archive-paper-watermark::before {
-  content: '';
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(141, 49, 46, 0.18);
-}
-
-.archive-paper-watermark::after {
-  content: '密';
-  position: absolute;
-  font-size: 16px;
-  font-weight: 900;
-  color: rgba(141, 49, 46, 0.20);
-  font-family: 'KaiTi', 'STKaiti', serif;
-}
+/* [修改标注·需求3] 已移除纸张底部装饰性水印印章 */
 
 /* [模块标注] 纸张顶部装饰分割线 */
 .archive-paper-divider {
@@ -569,7 +542,7 @@
 .archive-character-paper__section-title i {
   width: 22px;
   height: 22px;
-  color: var(--archive-red-seal);
+  color: var(--archive-subtext);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -578,6 +551,40 @@
 .archive-character-paper__section-title i svg {
   width: 18px;
   height: 18px;
+}
+
+/* [修改标注·需求2] 英文装饰名样式 */
+.archive-character-paper__en-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(108, 74, 41, 0.45);
+  letter-spacing: 0.08em;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+
+/* [修改标注·需求1] 人物设定折叠栏样式 */
+.archive-setting-toggle {
+  user-select: none;
+}
+
+.archive-setting-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--archive-subtext);
+  transition: transform 0.2s ease;
+}
+
+.archive-setting-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.archive-setting-body {
+  animation: archiveFadeIn 180ms ease;
 }
 
 .archive-character-paper__content {
@@ -1291,6 +1298,15 @@
   background: rgba(137, 45, 45, 0.96);
 }
 
+/* [修改标注·需求3] 去除开场白折叠栏按钮周围的圆圈 */
+.archive-greeting-section .archive-character-paper__section-title i,
+.archive-setting-section .archive-character-paper__section-title i {
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
 /* [修改标注·需求4c] 开场白折叠栏样式 */
 .archive-greeting-section {
   transition: border-color 0.2s ease;
@@ -1398,10 +1414,15 @@
     gap: 14px;
   }
 
-  .archive-character-paper__header,
-  .archive-character-paper__hero {
+  .archive-character-paper__header {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  /* [修改标注·需求1] 小屏下保持头像左侧+信息右侧的并排布局，仅缩小头像尺寸 */
+  .archive-character-paper__hero {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 10px;
   }
 
   .archive-character-paper__header {
