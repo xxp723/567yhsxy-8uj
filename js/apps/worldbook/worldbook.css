@@ -1138,6 +1138,109 @@
   }
 }
 
+/* ===================== [修改标注·需求2] 底部TAB栏圆弧交界处更圆润 ===================== */
+.wb-tab-add-bg {
+  border-radius: 60% 60% 0 0;
+}
+.wb-tab-add-bg::before,
+.wb-tab-add-bg::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
+.wb-tab-add-bg::before {
+  left: -14px;
+  border-bottom-right-radius: 14px;
+  box-shadow: 6px 0 0 0 #17120d;
+}
+.wb-tab-add-bg::after {
+  right: -14px;
+  border-bottom-left-radius: 14px;
+  box-shadow: -6px 0 0 0 #17120d;
+}
+
+/* ===================== [修改标注·需求3] 世界书封面名称居中 + 浅棕色背景圆角 ===================== */
+.wb-book-card__inner {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.wb-book-card__name {
+  margin-bottom: 0;
+  padding-top: 0;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+/* 浅棕色背景边框改为圆角（四个角） */
+.wb-content {
+  border-radius: 14px;
+  margin: 4px 6px 0;
+}
+
+/* ===================== [修改标注·需求5] 开关行小字体样式 ===================== */
+.wb-entry-switch-row--small > label {
+  font-size: 12px;
+  color: var(--wb-text);
+}
+
+/* ===================== [修改标注·需求6] 内容板块放大按钮 ===================== */
+.wb-entry-field__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.wb-entry-field__label-row label {
+  margin-bottom: 0;
+}
+.wb-content-expand-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 249, 236, 0.92);
+  color: var(--wb-subtext);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.wb-content-expand-btn:active {
+  transform: scale(0.92);
+}
+.wb-content-expand-btn svg {
+  width: 14px;
+  height: 14px;
+}
+/* 放大弹窗中的大文本编辑区 */
+.wb-expand-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--wb-text);
+  font-size: 13px;
+  padding: 10px;
+  outline: none;
+  resize: vertical;
+  min-height: 200px;
+  font-family: inherit;
+  line-height: 1.6;
+}
+.wb-expand-textarea:focus {
+  border-color: rgba(127, 92, 62, 0.45);
+  box-shadow: 0 0 0 3px rgba(127, 92, 62, 0.13);
+}
+
 /* ===================== 响应式 ===================== */
 @media (max-width: 380px) {
   .wb-book-grid {

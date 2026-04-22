@@ -132,7 +132,11 @@ const I = {
   globe: '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M6 24h36M24 6c-6 6-9 12-9 18s3 12 9 18c6-6 9-12 9-18s-3-12-9-18Z" stroke="currentColor" stroke-width="3"/></svg>',
   pin: '<svg viewBox="0 0 48 48" fill="none"><path d="M24 44s16-12 16-24a16 16 0 0 0-32 0c0 12 16 24 16 24Z" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="20" r="5" stroke="currentColor" stroke-width="3"/></svg>',
   book: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 8h14a4 4 0 0 1 4 4v28a3 3 0 0 0-3-3H6V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M42 8H28a4 4 0 0 0-4 4v28a3 3 0 0 1 3-3h15V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>',
-  link: '<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l-4 4a7 7 0 0 0 10 10l4-4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M29 19l4-4a7 7 0 0 0-10-10l-4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 30l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
+  link: '<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l-4 4a7 7 0 0 0 10 10l4-4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M29 19l4-4a7 7 0 0 0-10-10l-4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 30l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
+  /* [修改标注·需求6-改] 放大/全屏图标 - IconPark FullScreen */
+  expand: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 6h12M6 6v12M42 6H30M42 6v12M6 42h12M6 42V30M42 42H30M42 42V30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  /* [修改标注·需求6-改] 收缩/退出全屏图标 - IconPark OffScreen */
+  shrink: '<svg viewBox="0 0 48 48" fill="none"><path d="M18 6v12H6M30 6v12h12M18 42V30H6M30 42V30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 
 const POS_LABELS = { top: '置顶', beforeChar: '角色前', afterChar: '角色后' };
@@ -225,15 +229,19 @@ export async function mount(container, context) {
     return '<div class="wb-entry-card' + (ex ? ' is-expanded' : '') + (sm ? ' is-search-match' : '') + '" data-eid="' + e.id + '" data-bid="' + bid + '">' +
       '<div class="wb-entry-card__header" data-a="te" data-eid="' + e.id + '"><span class="wb-entry-card__chevron">' + I.chev + '</span><span class="wb-entry-card__title">' + esc(e.name || '未命名条目') + '</span>' + enableBadge + '<span class="wb-entry-card__trigger-badge">' + tl + '</span></div>' +
       '<div class="wb-entry-card__body">' +
-      '<div class="wb-entry-switch-row"><label>启用此条目</label><label class="wb-entry-toggle"><input type="checkbox" data-f="enabled" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.enabled ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      /* [修改标注·需求5] "启用此条目"字体调小至与条目内容字体大小一致 */
+      '<div class="wb-entry-switch-row wb-entry-switch-row--small"><label>启用此条目</label><label class="wb-entry-toggle"><input type="checkbox" data-f="enabled" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.enabled ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
       '<div class="wb-entry-field"><label>条目名称</label><input type="text" data-f="name" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.name) + '" placeholder="输入名称"></div>' +
-      '<div class="wb-entry-field"><label>内容</label><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
+      /* [修改标注·需求6] 内容板块标题行右侧添加放大按钮 */
+      '<div class="wb-entry-field wb-entry-field--content"><div class="wb-entry-field__label-row"><label>内容</label><button class="wb-content-expand-btn" data-a="expandcontent" data-eid="' + e.id + '" data-bid="' + bid + '" title="放大内容编辑区">' + I.expand + '</button></div><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
       '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>位置</label><button class="wb-pos-picker-btn" data-a="openpos" data-eid="' + e.id + '" data-bid="' + bid + '">' + esc(POS_LABELS[e.position] || e.position) + '</button></div>' +
       '<div class="wb-entry-field" style="flex:1"><label>排序</label><input type="number" data-f="order" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + e.order + '"></div></div>' +
       '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>触发方式</label><button class="wb-pos-picker-btn" data-a="opentrigger" data-eid="' + e.id + '" data-bid="' + bid + '">' + (e.triggerType === 'always' ? '常驻' : '关键词') + '</button></div>' +
       '<div class="wb-entry-field" style="flex:1"><label>关键词</label><input type="text" data-f="keywords" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.keywords.join(', ')) + '" placeholder="逗号分隔"' + (e.triggerType === 'always' ? ' disabled' : '') + '></div></div>' +
-      '<div class="wb-entry-switch-row"><label>禁用递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="disableRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.disableRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
-      '<div class="wb-entry-switch-row"><label>阻止后续递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="preventFurtherRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.preventFurtherRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      /* [修改标注·需求5] "禁止递归"改为"不可递归"，字体调小至与条目内容字体大小一致 */
+      '<div class="wb-entry-switch-row wb-entry-switch-row--small"><label>不可递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="disableRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.disableRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      /* [修改标注·需求5] "阻止后续递归"改为"防止进一步递归"，字体调小至与条目内容字体大小一致 */
+      '<div class="wb-entry-switch-row wb-entry-switch-row--small"><label>防止进一步递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="preventFurtherRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.preventFurtherRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
       '<button class="wb-entry-delete-btn wb-btn wb-btn--danger" data-a="de" data-eid="' + e.id + '" data-bid="' + bid + '">' + I.del + ' 删除条目</button></div></div>';
   };
 
@@ -269,21 +277,23 @@ export async function mount(container, context) {
     if (S.openId) {
       const book = findBook(S.openId);
       const bookName = book ? book.name : '世界书';
+      /* [修改标注·需求1-改] 左侧改为返回上一级按钮（">"按钮），去除搜索按钮，"+"号移到右侧 */
       const left = document.createElement('span'); left.className = 'wb-header-left';
-      left.innerHTML = '<button class="wb-header-btn" data-a="ae" title="添加条目">' + I.add + '</button>';
+      left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button>';
       header.appendChild(left);
-      if (titleEl) { titleEl.textContent = bookName; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'goback'; }
+      /* [修改标注·需求1-改] 点击世界书名称的文字区域返回桌面 */
+      if (titleEl) { titleEl.textContent = bookName; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'gohome'; }
+      /* [修改标注·需求1-改] "+"号移到标题栏右侧 */
       const right = document.createElement('span'); right.className = 'wb-header-right';
-      right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索">' + I.search + '</button>';
+      right.innerHTML = '<button class="wb-header-btn" data-a="ae" title="添加条目">' + I.add + '</button>';
       header.appendChild(right);
     } else {
       const left = document.createElement('span'); left.className = 'wb-header-left';
       left.innerHTML = '<button class="wb-header-btn" data-a="imp" title="导入">' + I.imp + '</button><button class="wb-header-btn" data-a="expall" title="导出">' + I.exp + '</button>';
       header.appendChild(left);
+      /* [修改标注·需求1-改] 点击"世情"大标题文字区域返回桌面 */
       if (titleEl) { titleEl.textContent = '世情'; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'gohome'; }
-      const right = document.createElement('span'); right.className = 'wb-header-right';
-      right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索">' + I.search + '</button>';
-      header.appendChild(right);
+      /* [修改标注·需求1-改] 去除搜索按钮，主界面右侧无按钮 */
     }
   };
 
@@ -392,6 +402,8 @@ export async function mount(container, context) {
     if (a === 'de') { const el = ev.target.closest('[data-a="de"]'); const eid = el.dataset.eid; const bid = el.dataset.bid; confirmDel('确定删除此条目？', () => { const book = findBook(bid); if (book) { book.entries = book.entries.filter(e => e.id !== eid); save(); render(); toast('已删除', 'success'); } }); return; }
     if (a === 'openpos') { const el = ev.target.closest('[data-a="openpos"]'); openPositionPicker(el.dataset.pos || 'afterChar', el.dataset.eid, el.dataset.bid); return; }
     if (a === 'opentrigger') { const el = ev.target.closest('[data-a="opentrigger"]'); openTriggerPicker(el.dataset.trigger || 'keyword', el.dataset.eid, el.dataset.bid); return; }
+    /* [修改标注·需求6] 放大内容编辑区弹窗 */
+    if (a === 'expandcontent') { const el = ev.target.closest('[data-a="expandcontent"]'); const eid = el.dataset.eid; const bid = el.dataset.bid; const book = findBook(bid); if (!book) return; const entry = book.entries.find(en => en.id === eid); if (!entry) return; openMod({ title: '编辑内容 - ' + (entry.name || '未命名条目'), okTxt: '保存', body: '<textarea id="wb-expand-content" class="wb-expand-textarea" rows="16" placeholder="输入条目内容">' + esc(entry.content) + '</textarea>', onOk: mel => { const ta = mel.querySelector('#wb-expand-content'); if (ta) { entry.content = ta.value; save(); render(); } } }); return; }
   };
 
   /* 输入事件 */
