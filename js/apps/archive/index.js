@@ -88,6 +88,21 @@ function normalizeString(value) {
   return String(value ?? '').trim();
 }
 
+/* [修改标注·需求1] 规范化角色卡自带的绑定世界书信息，供档案展示与世情应用联动导入 */
+function normalizeImportedWorldBooks(value) {
+  return normalizeArray(value).map((item, index) => {
+    const safe = item && typeof item === 'object' ? item : {};
+    const raw = safe.raw && typeof safe.raw === 'object' ? safe.raw : {};
+    const name = normalizeString(safe.name) || pickFirst(raw, ['name', 'title']) || `世界书 ${index + 1}`;
+    const sourceKey = normalizeString(safe.sourceKey);
+    return {
+      sourceKey,
+      name,
+      raw
+    };
+  }).filter((item) => item.name || Object.keys(item.raw || {}).length);
+}
+
 /* [修改标注·需求4] normalizeProfile 新增 greetings 字段（数组），用于存储角色的多条开场白 */
 function normalizeProfile(item, type = 'mask') {
   const roleBindingIds = type === 'mask'
@@ -106,7 +121,9 @@ function normalizeProfile(item, type = 'mask') {
     avatar: normalizeString(item?.avatar),
     /* [修改标注·需求4] greetings: 开场白数组，每个元素为一条开场白文本 */
     greetings: normalizeArray(item?.greetings).map((g) => normalizeString(g)).filter(Boolean),
-    ...(type === 'mask' ? { roleBindingIds } : {})
+    ...(type === 'mask'
+      ? { roleBindingIds }
+      : { boundWorldBooks: normalizeImportedWorldBooks(item?.boundWorldBooks) })
   };
 }
 
@@ -1177,23 +1194,6 @@ export async function mount(container, context) {
         </div>
       </section>
 
-      <!-- [修改标注·需求1] 绑定世界书显示板块 -->
-      ${(() => {
-        const wbNames = getCharacterWorldBookNames(item.id);
-        if (!wbNames.length) return '';
-        return `
-      <section class="archive-character-paper__section archive-worldbook-section">
-        <div class="archive-character-paper__section-title">
-          <span>${icon.book} 绑定世界书</span>
-        </div>
-        <div class="archive-character-paper__content">
-          <div class="archive-chip-list" style="flex-wrap:wrap;gap:6px;">
-            ${wbNames.map(n => `<span class="archive-chip">${escapeHtml(n)}</span>`).join('')}
-          </div>
-        </div>
-      </section>`;
-      })()}
-
       <!-- [修改标注·需求4c] 开场白折叠栏：点击标题展开/收起；多开场白时显示切换按钮 -->
       <section class="archive-character-paper__section archive-greeting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-greeting-toggle" data-action="toggle-greeting" style="cursor:pointer;">
@@ -1217,6 +1217,23 @@ export async function mount(container, context) {
           `}
         </div>
       </section>
+
+      <!-- [修改标注·需求1] 绑定世界书显示板块：放在角色档案信息界面最下方 -->
+      ${(() => {
+        const wbNames = getCharacterWorldBookNames(item.id);
+        if (!wbNames.length) return '';
+        return `
+      <section class="archive-character-paper__section archive-worldbook-section">
+        <div class="archive-character-paper__section-title">
+          <span>${icon.book} 绑定世界书</span>
+        </div>
+        <div class="archive-character-paper__content">
+          <div class="archive-chip-list" style="flex-wrap:wrap;gap:6px;">
+            ${wbNames.map(n => `<span class="archive-chip">${escapeHtml(n)}</span>`).join('')}
+          </div>
+        </div>
+      </section>`;
+      })()}
     </article>
   `;
   };
@@ -1871,6 +1888,8 @@ export async function mount(container, context) {
           contact: collectInputValue(modalScope, 'contact'),
           personalitySetting: collectTextareaValue(modalScope, 'personalitySetting'),
           greetings: !isMask ? greetings : undefined,
+          /* [修改标注·需求1] 编辑角色档案时保留导入角色卡自带的绑定世界书元数据 */
+          boundWorldBooks: !isMask ? (currentItem?.boundWorldBooks || []) : undefined,
           roleBindingIds: isMask
             ? Array.from(modalScope.querySelectorAll('[data-role="role-binding"]:checked')).map((el) => normalizeString(el.value))
             : undefined
@@ -2118,26 +2137,78 @@ export async function mount(container, context) {
     });
   };
 
-  /* [修改标注·需求1] 从角色卡对象中提取世界书数据 */
+  /* [修改标注·需求1] 从角色卡对象中提取世界书数据（兼容常见字段与数组结构） */
   const extractWorldBooksFromCharCard = (rawObj) => {
     const root = rawObj?.data && typeof rawObj.data === 'object' ? rawObj.data : rawObj || {};
+    const extensions = root.extensions && typeof root.extensions === 'object' ? root.extensions : {};
     const books = [];
-    if (root.character_book && typeof root.character_book === 'object') {
-      books.push(root.character_book);
-    }
-    if (root.world && typeof root.world === 'object') {
-      books.push(root.world);
-    }
+    const seen = new Set();
+
+    const pushBook = (candidate) => {
+      if (!candidate) return;
+      if (Array.isArray(candidate)) {
+        candidate.forEach(pushBook);
+        return;
+      }
+      if (typeof candidate !== 'object') return;
+
+      const entries = candidate.entries;
+      const entryCount = Array.isArray(entries)
+        ? entries.length
+        : (entries && typeof entries === 'object' ? Object.keys(entries).length : 0);
+
+      const signature = JSON.stringify({
+        name: pickFirst(candidate, ['name', 'title']),
+        entryCount,
+        keys: Object.keys(candidate).sort()
+      });
+
+      if (seen.has(signature)) return;
+      seen.add(signature);
+      books.push(candidate);
+    };
+
+    pushBook(root.character_book);
+    pushBook(root.world);
+    pushBook(root.worldBooks);
+    pushBook(root.world_books);
+    pushBook(extensions.world);
+    pushBook(extensions.worldBooks);
+    pushBook(extensions.world_books);
+    pushBook(extensions.lorebooks);
+
     return books;
   };
 
-  /* [修改标注·需求1] 获取角色绑定的世界书名称列表（从世情应用数据中查询） */
+  /* [修改标注·需求1] 解析角色卡世界书名称，导入后立即供档案详情页显示 */
+  const getImportedWorldBookName = (worldBook, index = 0) => {
+    const root = worldBook && typeof worldBook === 'object' ? worldBook : {};
+    return pickFirst(root, ['name', 'title']) || `世界书 ${index + 1}`;
+  };
+
+  /* [修改标注·需求1] 获取角色绑定的世界书名称列表：
+     1) 优先读取世情应用中当前仍绑定到该角色的世界书；
+     2) 若世情应用尚未同步导入，则回退到档案内角色卡自带的绑定世界书名称。 */
   const getCharacterWorldBookNames = (characterId) => {
+    const fallbackNames = normalizeArray(
+      state.data.characters.find((item) => item.id === characterId)?.boundWorldBooks
+    ).map((item) => normalizeString(item.name)).filter(Boolean);
+
     try {
       const wbData = JSON.parse(localStorage.getItem('miniphone_worldbook_data_v1') || '[]');
-      if (!Array.isArray(wbData)) return [];
-      return wbData.filter(b => b.boundCharacterId === characterId).map(b => b.name || '未命名世界书');
-    } catch { return []; }
+      if (!Array.isArray(wbData)) return [...new Set(fallbackNames)];
+
+      const activeBoundNames = wbData
+        .filter((book) => book?.boundCharacterId === characterId)
+        .map((book) => normalizeString(book?.name || '未命名世界书'))
+        .filter(Boolean);
+
+      /* [修改标注·需求1] 档案页始终保留角色卡原始绑定世界书名称；
+         若世情应用中仍保持局部绑定，则一并合并显示。 */
+      return [...new Set([...fallbackNames, ...activeBoundNames])];
+    } catch (_) {
+      return [...new Set(fallbackNames)];
+    }
   };
 
   const addCharacterFromImportedObject = (obj, avatarDataUrl = '') => {
@@ -2148,16 +2219,23 @@ export async function mount(container, context) {
       notify('导入成功，但未解析到 description，已保留空人物设定', 'info');
     }
 
+    /* [修改标注·需求1] 导入角色卡后立即记录其自带的绑定世界书，便于档案页即时显示与世情联动 */
+    const worldBooks = extractWorldBooksFromCharCard(obj);
+    mapped.boundWorldBooks = worldBooks.map((worldBook, index) => ({
+      sourceKey: `${mapped.id}::${index}`,
+      name: getImportedWorldBookName(worldBook, index),
+      raw: worldBook
+    }));
+
     state.data.characters.push(mapped);
     state.selectedCharacterId = mapped.id;
 
     /* [修改标注·需求1] 解析角色卡中的世界书，发送事件给世情应用 */
-    const worldBooks = extractWorldBooksFromCharCard(obj);
-    if (worldBooks.length > 0) {
+    if (mapped.boundWorldBooks.length > 0) {
       context.eventBus?.emit('character:imported', {
         characterId: mapped.id,
         characterName: mapped.name,
-        worldBooks: worldBooks
+        worldBooks: mapped.boundWorldBooks
       });
     }
 
