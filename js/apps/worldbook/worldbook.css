@@ -3,9 +3,12 @@
  * 用途: 世情（WorldBook）应用独立样式
  * 说明:
  *  - 命名空间 wb-* 避免影响其它应用
- *  - 复古牛皮纸风格，直角卡片，与小手机主题统一
+ *  - 复古牛皮纸风格，圆角卡片，与小手机主题统一
  *  - iPhone 风格开关复用 toggle-switch 模式
  *  - 隐藏滚动条
+ *
+ * [修改标注·需求3] 条目状态徽章、去除封面开关
+ * [修改标注·需求6] 圆角背景、美化世界书卡片、长按弹窗样式
  */
 
 /* ===================== CSS 变量 ===================== */
@@ -958,6 +961,169 @@
 .wb-char-item.is-selected {
   border-color: var(--wb-primary);
   background: rgba(127, 92, 62, 0.08);
+}
+
+/* ===================== [修改标注·需求3] 条目状态徽章 ===================== */
+.wb-entry-card__status-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.wb-entry-card__status-badge--on {
+  background: rgba(77, 139, 102, 0.15);
+  color: var(--wb-success);
+}
+
+.wb-entry-card__status-badge--off {
+  background: rgba(177, 72, 66, 0.1);
+  color: var(--wb-danger);
+}
+
+/* ===================== 位置/触发选择按钮 ===================== */
+.wb-pos-picker-btn {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--wb-text);
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.wb-pos-picker-btn:active {
+  border-color: rgba(127, 92, 62, 0.45);
+}
+
+/* ===================== 位置选择弹窗列表 ===================== */
+.wb-position-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.wb-position-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  background: rgba(255, 253, 249, 0.96);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--wb-text);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.wb-position-option:active {
+  background: rgba(231, 216, 200, 0.4);
+}
+
+.wb-position-option.is-active {
+  border-color: var(--wb-primary);
+  background: rgba(127, 92, 62, 0.06);
+}
+
+.wb-position-option svg {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.wb-position-radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(122, 95, 67, 0.3);
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.wb-position-radio.is-checked {
+  border-color: var(--wb-primary);
+}
+
+.wb-position-radio.is-checked::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wb-primary);
+}
+
+/* ===================== [修改标注·需求6] 长按弹窗菜单 ===================== */
+.wb-longpress-menu {
+  display: grid;
+  gap: 14px;
+}
+
+.wb-longpress-section {
+  display: grid;
+  gap: 8px;
+}
+
+.wb-longpress-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wb-subtext);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===================== [修改标注·需求6] 书籍卡片美化 - 绑定角色标签 ===================== */
+.wb-book-card__inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 6px;
+}
+
+.wb-book-card__bind {
+  font-size: 9px;
+  color: rgba(61, 42, 24, 0.65);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-book-card__bind svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+/* [修改标注·需求6] 圆角书籍卡片 */
+.wb-book-card {
+  border-radius: 10px;
+}
+
+/* ===================== 绑定信息 SVG ===================== */
+.wb-book-open__binding svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* ===================== 动画 ===================== */

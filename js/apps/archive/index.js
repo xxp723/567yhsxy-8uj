@@ -6,6 +6,8 @@
  *  - 复用主题弹窗风格（managed-resource-modal），不使用浏览器原生 alert/confirm/prompt
  *  - 图标使用 IconPark outline 风格 SVG
  *  - 样式独立文件：js/apps/archive/archive.css（由本模块动态注入）
+ *
+ * [修改标注·需求1] 联动世情应用：导入角色卡时解析绑定世界书并显示+发送事件
  */
 
 const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
@@ -505,6 +507,8 @@ function icons() {
     close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
     docDetail: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 6h18l6 6v28H12V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M30 6v8h8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 22h12M18 30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
     seal: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l4.6 4.2l6.1-.9l2.4 5.7l5.7 2.4l-.9 6.1L46 28l-4.2 4.6l.9 6.1l-5.7 2.4l-2.4 5.7l-6.1-.9L24 46l-4.6-4.2l-6.1.9l-2.4-5.7l-5.7-2.4l.9-6.1L2 24l4.2-4.6l-.9-6.1l5.7-2.4l2.4-5.7l6.1.9L24 6Z" fill="currentColor"/><circle cx="24" cy="24" r="8" fill="rgba(255,255,255,0.18)"/><path d="M20 27.5c1.6-3.8 6.4-3.8 8 0M19.5 20.5c1 .9 2.1 1.4 3.3 1.4c1.3 0 2.4-.5 3.5-1.4c.9 1 2 1.5 3.2 1.5" stroke="#F7E7D9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    /* [修改标注·需求1] 世界书图标 */
+    book: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 8h14a4 4 0 0 1 4 4v28a3 3 0 0 0-3-3H6V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M42 8H28a4 4 0 0 0-4 4v28a3 3 0 0 1 3-3h15V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
     /* [修改标注·需求4] 新增图标：折叠箭头、左右切换箭头、消息气泡 —— IconPark */
     chevronDown: `<svg viewBox="0 0 48 48" fill="none"><path d="M36 18L24 30L12 18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     chevronRight: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -1172,6 +1176,23 @@ export async function mount(container, context) {
           </div>
         </div>
       </section>
+
+      <!-- [修改标注·需求1] 绑定世界书显示板块 -->
+      ${(() => {
+        const wbNames = getCharacterWorldBookNames(item.id);
+        if (!wbNames.length) return '';
+        return `
+      <section class="archive-character-paper__section archive-worldbook-section">
+        <div class="archive-character-paper__section-title">
+          <span>${icon.book} 绑定世界书</span>
+        </div>
+        <div class="archive-character-paper__content">
+          <div class="archive-chip-list" style="flex-wrap:wrap;gap:6px;">
+            ${wbNames.map(n => `<span class="archive-chip">${escapeHtml(n)}</span>`).join('')}
+          </div>
+        </div>
+      </section>`;
+      })()}
 
       <!-- [修改标注·需求4c] 开场白折叠栏：点击标题展开/收起；多开场白时显示切换按钮 -->
       <section class="archive-character-paper__section archive-greeting-section" data-collapsed="true">
@@ -2097,6 +2118,28 @@ export async function mount(container, context) {
     });
   };
 
+  /* [修改标注·需求1] 从角色卡对象中提取世界书数据 */
+  const extractWorldBooksFromCharCard = (rawObj) => {
+    const root = rawObj?.data && typeof rawObj.data === 'object' ? rawObj.data : rawObj || {};
+    const books = [];
+    if (root.character_book && typeof root.character_book === 'object') {
+      books.push(root.character_book);
+    }
+    if (root.world && typeof root.world === 'object') {
+      books.push(root.world);
+    }
+    return books;
+  };
+
+  /* [修改标注·需求1] 获取角色绑定的世界书名称列表（从世情应用数据中查询） */
+  const getCharacterWorldBookNames = (characterId) => {
+    try {
+      const wbData = JSON.parse(localStorage.getItem('miniphone_worldbook_data_v1') || '[]');
+      if (!Array.isArray(wbData)) return [];
+      return wbData.filter(b => b.boundCharacterId === characterId).map(b => b.name || '未命名世界书');
+    } catch { return []; }
+  };
+
   const addCharacterFromImportedObject = (obj, avatarDataUrl = '') => {
     const mapped = mapImportedRole(obj);
     if (avatarDataUrl) mapped.avatar = avatarDataUrl;
@@ -2107,6 +2150,17 @@ export async function mount(container, context) {
 
     state.data.characters.push(mapped);
     state.selectedCharacterId = mapped.id;
+
+    /* [修改标注·需求1] 解析角色卡中的世界书，发送事件给世情应用 */
+    const worldBooks = extractWorldBooksFromCharCard(obj);
+    if (worldBooks.length > 0) {
+      context.eventBus?.emit('character:imported', {
+        characterId: mapped.id,
+        characterName: mapped.name,
+        worldBooks: worldBooks
+      });
+    }
+
     rerender();
     notify(`已导入角色：${mapped.name || '未命名角色'}`, 'success');
   };

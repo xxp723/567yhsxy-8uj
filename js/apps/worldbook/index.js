@@ -1,8 +1,14 @@
 /**
  * js/apps/worldbook/index.js - 世情(WorldBook)应用
+ *
+ * [修改标注·需求1] 联动档案应用：自动解析角色卡世界书、显示绑定角色
+ * [修改标注·需求2] 所有原生浏览器弹窗替换为自定义弹窗
+ * [修改标注·需求3] 条目添加单独开关、去除封面开关、折叠栏显示启用状态
+ * [修改标注·需求4] 去除封面删除按钮、长按封面触发弹窗
+ * [修改标注·需求5] 标题栏布局调整
+ * [修改标注·需求6] 圆角背景、美化世界书卡片、长按弹窗含删除确认+位置选择
  */
 
-/* ── 常量 & 工具 ── */
 const WB_KEY = 'miniphone_worldbook_data_v1';
 const WB_DB_PFX = 'worldbook::';
 const WB_STYLE = 'miniphone-worldbook-style';
@@ -10,22 +16,15 @@ const uid = (p = 'wb') => `${p}-${Date.now()}-${Math.random().toString(36).slice
 const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const sj = t => { try { return JSON.parse(t); } catch { return null; } };
 const b64u = b => { try { return new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0))); } catch { return ''; } };
-const ft = ts => {
-  const d = new Date(ts), p = n => String(n).padStart(2, '0');
-  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
-};
 
-/* ── 数据模型 ── */
 function mkBook(o = {}) {
   return {
-    id: o.id || uid('book'),
-    name: String(o.name || '未命名世界书').trim(),
+    id: o.id || uid('book'), name: String(o.name || '未命名世界书').trim(),
     enabled: typeof o.enabled === 'boolean' ? o.enabled : true,
     type: o.type === 'local' ? 'local' : 'global',
     boundCharacterId: o.boundCharacterId || null,
     entries: Array.isArray(o.entries) ? o.entries.map(mkEntry) : [],
-    createdAt: o.createdAt || Date.now(),
-    updatedAt: Date.now()
+    createdAt: o.createdAt || Date.now(), updatedAt: Date.now()
   };
 }
 
@@ -34,62 +33,48 @@ function mkEntry(o = {}) {
   if (Array.isArray(o.keywords)) kw = o.keywords.map(k => String(k).trim()).filter(Boolean);
   else if (typeof o.keywords === 'string') kw = o.keywords.split(/[,，\s]+/).filter(Boolean);
   return {
-    id: o.id || uid('e'),
-    name: String(o.name || '').trim(),
+    id: o.id || uid('e'), name: String(o.name || '').trim(),
     content: String(o.content || '').trim(),
     position: ['top', 'beforeChar', 'afterChar'].includes(o.position) ? o.position : 'afterChar',
     triggerType: o.triggerType === 'always' ? 'always' : 'keyword',
-    keywords: kw,
-    order: typeof o.order === 'number' ? o.order : 100,
+    keywords: kw, order: typeof o.order === 'number' ? o.order : 100,
+    enabled: typeof o.enabled === 'boolean' ? o.enabled : true,
     disableRecursion: !!o.disableRecursion,
     preventFurtherRecursion: !!o.preventFurtherRecursion
   };
 }
 
-/* ── 持久化 ── */
 function rdLocal() { try { const r = localStorage.getItem(WB_KEY); return r ? JSON.parse(r).map(mkBook) : []; } catch { return []; } }
-function wrLocal(b) { try { localStorage.setItem(WB_KEY, JSON.stringify(b)); } catch { } }
+function wrLocal(b) { try { localStorage.setItem(WB_KEY, JSON.stringify(b)); } catch {} }
 async function ldDB(db) {
-  try {
-    const a = await db?.getAll?.('appsData');
-    const r = a?.find(x => x.id === WB_DB_PFX + 'all-books');
-    if (r?.value && Array.isArray(r.value)) return r.value.map(mkBook);
-  } catch { }
-  return null;
+  try { const a = await db?.getAll?.('appsData'); const r = a?.find(x => x.id === WB_DB_PFX + 'all-books'); if (r?.value && Array.isArray(r.value)) return r.value.map(mkBook); } catch {} return null;
 }
 async function svDB(db, aid, books) {
   wrLocal(books);
-  try { await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() }); } catch { }
+  try { await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() }); } catch {}
 }
 
-/* ── CSS 注入 ── */
 function ensureCSS() {
   if (document.getElementById(WB_STYLE)) return;
-  const l = document.createElement('link');
-  l.id = WB_STYLE; l.rel = 'stylesheet'; l.href = 'js/apps/worldbook/worldbook.css';
-  document.head.appendChild(l);
+  const l = document.createElement('link'); l.id = WB_STYLE; l.rel = 'stylesheet'; l.href = 'js/apps/worldbook/worldbook.css'; document.head.appendChild(l);
 }
 
-/* ── 酒馆格式解析 ── */
 function parseTavE(r) {
   if (!r || typeof r !== 'object') return null;
   let p = 'afterChar';
   if (r.position === 0 || r.position === 'before_char') p = 'beforeChar';
   else if (r.position === 4 || r.position === 'top') p = 'top';
   let kw = [];
-  if (Array.isArray(r.key)) kw = r.key;
-  else if (Array.isArray(r.keys)) kw = r.keys;
+  if (Array.isArray(r.key)) kw = r.key; else if (Array.isArray(r.keys)) kw = r.keys;
   else if (typeof r.key === 'string') kw = r.key.split(/[,，]+/).filter(Boolean);
   else if (typeof r.keys === 'string') kw = r.keys.split(/[,，]+/).filter(Boolean);
   return mkEntry({
     name: String(r.comment || r.name || r.title || '').trim(),
-    content: String(r.content || '').trim(),
-    position: p,
+    content: String(r.content || '').trim(), position: p,
     triggerType: (r.constant === true || r.constant === 1) ? 'always' : 'keyword',
-    keywords: kw,
-    order: typeof r.order === 'number' ? r.order : (typeof r.insertion_order === 'number' ? r.insertion_order : 100),
-    disableRecursion: !!r.disable,
-    preventFurtherRecursion: !!r.preventRecursion
+    keywords: kw, order: typeof r.order === 'number' ? r.order : (typeof r.insertion_order === 'number' ? r.insertion_order : 100),
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : (r.disable !== true),
+    disableRecursion: !!r.disable, preventFurtherRecursion: !!r.preventRecursion
   });
 }
 
@@ -103,44 +88,24 @@ function parseTavWB(obj, fn = '导入的世界书') {
   return mkBook({ name: String(obj.name || obj.title || fn).trim(), entries });
 }
 
-/* ── PNG 解析 ── */
 function parsePng(buf) {
-  const v = new DataView(buf);
-  const s = new Uint8Array(buf.slice(0, 8));
+  const v = new DataView(buf); const s = new Uint8Array(buf.slice(0, 8));
   if (![137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => s[i] === b)) throw new Error('Bad PNG');
-  const dc = new TextDecoder();
-  const ch = [];
-  let o = 8;
+  const dc = new TextDecoder(); const ch = []; let o = 8;
   while (o + 8 <= v.byteLength) {
     const ln = v.getUint32(o); o += 4;
     const tp = dc.decode(new Uint8Array(buf, o, 4)); o += 4;
     if (o + ln + 4 > v.byteLength) break;
     const dt = new Uint8Array(buf, o, ln); o += ln; o += 4;
-    if (tp === 'tEXt') {
-      const z = dt.indexOf(0);
-      if (z > -1) ch.push({ kw: dc.decode(dt.slice(0, z)), txt: dc.decode(dt.slice(z + 1)) });
-    }
-    if (tp === 'iTXt') {
-      let c = 0;
-      const rn = () => { const s2 = c; while (c < dt.length && dt[c] !== 0) c++; const r2 = dc.decode(dt.slice(s2, c)); c++; return r2; };
-      const kw2 = rn(); const cf = dt[c] || 0; c += 2; rn(); rn();
-      if (cf === 0) ch.push({ kw: kw2, txt: dc.decode(dt.slice(c)) });
-    }
+    if (tp === 'tEXt') { const z = dt.indexOf(0); if (z > -1) ch.push({ kw: dc.decode(dt.slice(0, z)), txt: dc.decode(dt.slice(z + 1)) }); }
+    if (tp === 'iTXt') { let c = 0; const rn = () => { const s2 = c; while (c < dt.length && dt[c] !== 0) c++; const r2 = dc.decode(dt.slice(s2, c)); c++; return r2; }; const kw2 = rn(); const cf = dt[c] || 0; c += 2; rn(); rn(); if (cf === 0) ch.push({ kw: kw2, txt: dc.decode(dt.slice(c)) }); }
     if (tp === 'IEND') break;
   }
   return ch;
 }
 
 function extObj(chs) {
-  for (const c of chs) {
-    const t = String(c.txt || '').trim();
-    if (!t) continue;
-    let o = sj(t);
-    if (o && typeof o === 'object') return o;
-    const d = b64u(t);
-    if (d) { o = sj(d); if (o && typeof o === 'object') return o; }
-  }
-  return null;
+  for (const c of chs) { const t = String(c.txt || '').trim(); if (!t) continue; let o = sj(t); if (o && typeof o === 'object') return o; const d = b64u(t); if (d) { o = sj(d); if (o && typeof o === 'object') return o; } } return null;
 }
 
 function extCB(s) {
@@ -150,14 +115,10 @@ function extCB(s) {
 }
 
 function dlJson(fn, d) {
-  const b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-  const u = URL.createObjectURL(b);
-  const a = document.createElement('a');
-  a.href = u; a.download = fn; a.click();
-  URL.revokeObjectURL(u);
+  const b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = u; a.download = fn; a.click(); URL.revokeObjectURL(u);
 }
 
-/* ── SVG 图标 ── */
 const I = {
   search: '<svg viewBox="0 0 48 48" fill="none"><circle cx="21" cy="21" r="11" stroke="currentColor" stroke-width="3"/><path d="M29.5 29.5L40 40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
   imp: '<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M16 20l8 10 8-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 38h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -166,385 +127,376 @@ const I = {
   cls: '<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
   back: '<svg viewBox="0 0 48 48" fill="none"><path d="M31 36L19 24 31 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevDown: '<svg viewBox="0 0 48 48" fill="none"><path d="M36 18L24 30L12 18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   del: '<svg viewBox="0 0 48 48" fill="none"><path d="M12 14h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M17 14V10h14v4" stroke="currentColor" stroke-width="3"/><path d="M16 14l1 24h14l1-24" stroke="currentColor" stroke-width="3"/></svg>',
   globe: '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M6 24h36M24 6c-6 6-9 12-9 18s3 12 9 18c6-6 9-12 9-18s-3-12-9-18Z" stroke="currentColor" stroke-width="3"/></svg>',
-  pin: '<svg viewBox="0 0 48 48" fill="none"><path d="M24 44s16-12 16-24a16 16 0 0 0-32 0c0 12 16 24 16 24Z" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="20" r="5" stroke="currentColor" stroke-width="3"/></svg>'
+  pin: '<svg viewBox="0 0 48 48" fill="none"><path d="M24 44s16-12 16-24a16 16 0 0 0-32 0c0 12 16 24 16 24Z" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="20" r="5" stroke="currentColor" stroke-width="3"/></svg>',
+  book: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 8h14a4 4 0 0 1 4 4v28a3 3 0 0 0-3-3H6V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M42 8H28a4 4 0 0 0-4 4v28a3 3 0 0 1 3-3h15V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>',
+  link: '<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l-4 4a7 7 0 0 0 10 10l4-4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M29 19l4-4a7 7 0 0 0-10-10l-4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 30l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>'
 };
 
-/* ═══════════════════════════════════════════════════════
-   mount / unmount
-   ═══════════════════════════════════════════════════════ */
+const POS_LABELS = { top: '置顶', beforeChar: '角色前', afterChar: '角色后' };
 
 export async function mount(container, context) {
   ensureCSS();
-
-  /* ── 状态 ── */
-  const S = {
-    books: [], tab: 'global', openId: null,
-    sOpen: false, sQ: '',
-    sBooks: new Set(), sEntries: new Set(), expEnt: new Set()
-  };
-  const { db, appId, windowManager: wm } = context;
-
+  const S = { books: [], tab: 'global', openId: null, sOpen: false, sQ: '', sBooks: new Set(), sEntries: new Set(), expEnt: new Set() };
+  const { db, appId, eventBus, windowManager: wm } = context;
   const save = () => { S.books.forEach(b => { b.updatedAt = Date.now(); }); void svDB(db, appId, S.books); };
   const chars = () => { try { const d = JSON.parse(localStorage.getItem('miniphone_archive_app_data_v1') || '{}'); return Array.isArray(d.characters) ? d.characters : []; } catch { return []; } };
   const curBooks = () => S.books.filter(b => b.type === S.tab);
   const findBook = id => S.books.find(b => b.id === id);
-
-  /* 加载数据 */
   const fromDB = await ldDB(db);
   S.books = (fromDB && fromDB.length > 0) ? fromDB : rdLocal();
 
-  /* ── DOM 骨架 ── */
-  container.innerHTML = `<div class="wb-app">
-    <div class="wb-content" id="wbc"></div>
-    <nav class="wb-tabbar" id="wbt"></nav>
-    <div id="wbm" class="wb-modal hidden"></div>
-    <div id="wbto" class="wb-toast"></div>
-    <input id="wbi" type="file" accept=".json,.png" style="display:none">
-  </div>`;
+  const appWindow = container.closest('.app-window');
+  const header = appWindow?.querySelector('.app-window__header') || null;
+  const closeBtn = header?.querySelector('.app-window__close') || null;
+  const actionsEl = header?.querySelector('.app-window__actions') || null;
+  const titleEl = header?.querySelector('.app-window__title') || null;
+
+  container.innerHTML = '<div class="wb-app"><div class="wb-content" id="wbc"></div><nav class="wb-tabbar" id="wbt"></nav><div id="wbm" class="wb-modal hidden"></div><div id="wbto" class="wb-toast"></div><input id="wbi" type="file" accept=".json,.png" style="display:none"></div>';
   const $c = container.querySelector('#wbc');
   const $t = container.querySelector('#wbt');
   const $m = container.querySelector('#wbm');
   const $to = container.querySelector('#wbto');
   const $fi = container.querySelector('#wbi');
-
-  let mClean = () => { };
+  let mClean = () => {};
   let tTmr = null;
+  let longPressTimer = null;
 
-  /* ── Toast ── */
-  const toast = msg => {
-    if (!$to) return;
-    $to.textContent = msg; $to.classList.add('show');
-    if (tTmr) clearTimeout(tTmr);
-    tTmr = setTimeout(() => $to.classList.remove('show'), 1800);
-  };
-
-  /* ── 模态框 ── */
-  const closeMod = () => { $m.classList.add('hidden'); $m.innerHTML = ''; mClean(); mClean = () => { }; };
-
-  const openMod = ({ title = '', body = '', okTxt = '确认', noTxt = '取消', foot = true, onOpen, onOk }) => {
+  const toast = (msg, type = 'info') => { if (!$to) return; $to.textContent = msg; $to.dataset.type = type; $to.classList.add('show'); if (tTmr) clearTimeout(tTmr); tTmr = setTimeout(() => $to.classList.remove('show'), 1800); };
+  const closeMod = () => { $m.classList.add('hidden'); $m.innerHTML = ''; mClean(); mClean = () => {}; };
+  const openMod = ({ title = '', body = '', okTxt = '确认', noTxt = '取消', foot = true, danger = false, onOpen, onOk }) => {
     closeMod();
-    $m.innerHTML = `<div class="wb-modal__mask" data-a="mc"></div>
-      <div class="wb-modal__panel">
-        <div class="wb-modal__header"><span>${esc(title)}</span><button class="wb-modal__close" data-a="mc">${I.cls}</button></div>
-        <div class="wb-modal__body">${body}</div>
-        ${foot ? `<div class="wb-modal__footer">
-          <button class="wb-btn" data-a="mc">${esc(noTxt)}</button>
-          <button class="wb-btn wb-btn--primary" data-a="mok">${esc(okTxt)}</button>
-        </div>` : ''}
-      </div>`;
+    $m.innerHTML = '<div class="wb-modal__mask" data-a="mc"></div><div class="wb-modal__panel"><div class="wb-modal__header"><span>' + esc(title) + '</span><button class="wb-modal__close" data-a="mc">' + I.cls + '</button></div><div class="wb-modal__body">' + body + '</div>' + (foot ? '<div class="wb-modal__footer"><button class="wb-btn" data-a="mc">' + esc(noTxt) + '</button><button class="wb-btn ' + (danger ? 'wb-btn--danger' : 'wb-btn--primary') + '" data-a="mok">' + esc(okTxt) + '</button></div>' : '') + '</div>';
     $m.classList.remove('hidden');
-    const h = async e => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'mc') { closeMod(); return; }
-      if (a === 'mok' && onOk) { const r = await onOk($m); if (r !== false) closeMod(); }
-    };
-    $m.addEventListener('click', h);
-    mClean = () => $m.removeEventListener('click', h);
+    const h = async e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'mc') { closeMod(); return; } if (a === 'mok' && onOk) { const r = await onOk($m); if (r !== false) closeMod(); } };
+    $m.addEventListener('click', h); mClean = () => $m.removeEventListener('click', h);
     if (onOpen) onOpen($m);
   };
 
-  const confirmDel = (msg, fn) => openMod({
-    title: '确认操作',
-    body: `<p class="wb-modal-hint">${esc(msg)}</p>`,
-    okTxt: '确认删除',
-    onOk: () => { fn?.(); }
-  });
+  const confirmDel = (msg, fn) => openMod({ title: '确认操作', body: '<p class="wb-modal-hint">' + esc(msg) + '</p>', okTxt: '确认删除', danger: true, onOk: () => { fn?.(); } });
 
-  /* ── 搜索 ── */
-  const doSearch = q => {
-    S.sBooks.clear(); S.sEntries.clear();
-    if (!q) return;
-    const ql = q.toLowerCase();
-    S.books.forEach(b => {
-      if (b.name.toLowerCase().includes(ql)) S.sBooks.add(b.id);
-      b.entries.forEach(e => {
-        if (e.name.toLowerCase().includes(ql)) { S.sBooks.add(b.id); S.sEntries.add(e.id); }
-      });
+  const openPositionPicker = (currentPos, eid, bid) => {
+    const ps = [{ value: 'top', label: '置顶' }, { value: 'beforeChar', label: '角色前' }, { value: 'afterChar', label: '角色后' }];
+    openMod({ title: '选择条目位置', foot: false,
+      body: '<div class="wb-position-picker">' + ps.map(p => '<div class="wb-position-option' + (p.value === currentPos ? ' is-active' : '') + '" data-a="pickpos" data-pos="' + p.value + '"><span>' + p.label + '</span><span class="wb-position-radio' + (p.value === currentPos ? ' is-checked' : '') + '"></span></div>').join('') + '</div>',
+      onOpen: el => { el.addEventListener('click', ev => { const opt = ev.target.closest('[data-a="pickpos"]'); if (!opt) return; const book = findBook(bid); if (!book) return; const entry = book.entries.find(en => en.id === eid); if (!entry) return; entry.position = opt.dataset.pos; save(); closeMod(); render(); }); }
     });
   };
 
-  /* ═══════════════  渲染  ═══════════════ */
+  const openTriggerPicker = (curTrig, eid, bid) => {
+    const ts = [{ value: 'keyword', label: '关键词' }, { value: 'always', label: '常驻' }];
+    openMod({ title: '选择触发方式', foot: false,
+      body: '<div class="wb-position-picker">' + ts.map(t => '<div class="wb-position-option' + (t.value === curTrig ? ' is-active' : '') + '" data-a="picktrig" data-trig="' + t.value + '"><span>' + t.label + '</span><span class="wb-position-radio' + (t.value === curTrig ? ' is-checked' : '') + '"></span></div>').join('') + '</div>',
+      onOpen: el => { el.addEventListener('click', ev => { const opt = ev.target.closest('[data-a="picktrig"]'); if (!opt) return; const book = findBook(bid); if (!book) return; const entry = book.entries.find(en => en.id === eid); if (!entry) return; entry.triggerType = opt.dataset.trig; save(); closeMod(); render(); }); }
+    });
+  };
+
+  /* [修改标注·需求6] 长按世界书封面弹窗：删除确认 + 位置选择 */
+  const openBookLongPressMenu = book => {
+    const isLocal = book.type === 'local';
+    const isGlobal = book.type === 'global';
+    openMod({ title: esc(book.name), foot: false,
+      body: '<div class="wb-longpress-menu">' +
+        '<div class="wb-longpress-section"><div class="wb-longpress-section-title">放置位置</div>' +
+        '<div class="wb-position-picker"><div class="wb-position-option' + (isGlobal ? ' is-active' : '') + '" data-a="settype" data-type="global"><span>' + I.globe + ' 全局</span><span class="wb-position-radio' + (isGlobal ? ' is-checked' : '') + '"></span></div>' +
+        '<div class="wb-position-option' + (isLocal ? ' is-active' : '') + '" data-a="settype" data-type="local"><span>' + I.pin + ' 局部</span><span class="wb-position-radio' + (isLocal ? ' is-checked' : '') + '"></span></div></div></div>' +
+        '<div class="wb-longpress-section"><div class="wb-longpress-section-title">危险操作</div>' +
+        '<button class="wb-btn wb-btn--danger" style="width:100%" data-a="delbook">' + I.del + ' 删除此世界书</button></div></div>',
+      onOpen: el => {
+        el.addEventListener('click', ev => {
+          const setT = ev.target.closest('[data-a="settype"]');
+          if (setT) { book.type = setT.dataset.type; save(); closeMod(); render(); return; }
+          const delB = ev.target.closest('[data-a="delbook"]');
+          if (delB) { closeMod(); confirmDel('确定删除世界书"' + book.name + '"吗？此操作不可撤销。', () => { S.books = S.books.filter(b => b.id !== book.id); save(); S.openId = null; render(); toast('已删除', 'success'); }); }
+        });
+      }
+    });
+  };
+
+  const doSearch = q => { S.sBooks.clear(); S.sEntries.clear(); if (!q) return; const ql = q.toLowerCase(); S.books.forEach(b => { if (b.name.toLowerCase().includes(ql)) S.sBooks.add(b.id); b.entries.forEach(e => { if (e.name.toLowerCase().includes(ql)) { S.sBooks.add(b.id); S.sEntries.add(e.id); } }); }); };
 
   const rEntry = (e, bid) => {
     const ex = S.expEnt.has(e.id);
     const sm = S.sEntries.has(e.id);
     const tl = e.triggerType === 'always' ? '常驻' : '关键词';
-    return `<div class="wb-entry-card${ex ? ' is-expanded' : ''}${sm ? ' is-search-match' : ''}" data-eid="${e.id}" data-bid="${bid}">
-      <div class="wb-entry-card__header" data-a="te" data-eid="${e.id}">
-        <span class="wb-entry-card__chevron">${I.chev}</span>
-        <span class="wb-entry-card__title">${esc(e.name || '未命名条目')}</span>
-        <span class="wb-entry-card__trigger-badge">${tl}</span>
-      </div>
-      <div class="wb-entry-card__body">
-        <div class="wb-entry-field"><label>条目名称</label><input type="text" data-f="name" data-eid="${e.id}" data-bid="${bid}" value="${esc(e.name)}" placeholder="输入名称"></div>
-        <div class="wb-entry-field"><label>内容</label><textarea data-f="content" data-eid="${e.id}" data-bid="${bid}" rows="4" placeholder="输入条目内容">${esc(e.content)}</textarea></div>
-        <div class="wb-entry-field-row">
-          <div class="wb-entry-field" style="flex:1"><label>位置</label><select data-f="position" data-eid="${e.id}" data-bid="${bid}">
-            <option value="top"${e.position === 'top' ? ' selected' : ''}>置顶</option>
-            <option value="beforeChar"${e.position === 'beforeChar' ? ' selected' : ''}>角色前</option>
-            <option value="afterChar"${e.position === 'afterChar' ? ' selected' : ''}>角色后</option>
-          </select></div>
-          <div class="wb-entry-field" style="flex:1"><label>排序</label><input type="number" data-f="order" data-eid="${e.id}" data-bid="${bid}" value="${e.order}"></div>
-        </div>
-        <div class="wb-entry-field-row">
-          <div class="wb-entry-field" style="flex:1"><label>触发方式</label><select data-f="triggerType" data-eid="${e.id}" data-bid="${bid}">
-            <option value="keyword"${e.triggerType === 'keyword' ? ' selected' : ''}>关键词</option>
-            <option value="always"${e.triggerType === 'always' ? ' selected' : ''}>常驻</option>
-          </select></div>
-          <div class="wb-entry-field" style="flex:1"><label>关键词</label><input type="text" data-f="keywords" data-eid="${e.id}" data-bid="${bid}" value="${esc(e.keywords.join(', '))}" placeholder="逗号分隔"${e.triggerType === 'always' ? ' disabled' : ''}></div>
-        </div>
-        <div class="wb-entry-switch-row"><label>禁用递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="disableRecursion" data-eid="${e.id}" data-bid="${bid}"${e.disableRecursion ? ' checked' : ''}><span class="wb-toggle-track"></span></label></div>
-        <div class="wb-entry-switch-row"><label>阻止后续递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="preventFurtherRecursion" data-eid="${e.id}" data-bid="${bid}"${e.preventFurtherRecursion ? ' checked' : ''}><span class="wb-toggle-track"></span></label></div>
-        <button class="wb-entry-delete-btn wb-btn wb-btn--danger" data-a="de" data-eid="${e.id}" data-bid="${bid}">${I.del} 删除条目</button>
-      </div>
-    </div>`;
+    const enableBadge = e.enabled ? '<span class="wb-entry-card__status-badge wb-entry-card__status-badge--on">ON</span>' : '<span class="wb-entry-card__status-badge wb-entry-card__status-badge--off">OFF</span>';
+    return '<div class="wb-entry-card' + (ex ? ' is-expanded' : '') + (sm ? ' is-search-match' : '') + '" data-eid="' + e.id + '" data-bid="' + bid + '">' +
+      '<div class="wb-entry-card__header" data-a="te" data-eid="' + e.id + '"><span class="wb-entry-card__chevron">' + I.chev + '</span><span class="wb-entry-card__title">' + esc(e.name || '未命名条目') + '</span>' + enableBadge + '<span class="wb-entry-card__trigger-badge">' + tl + '</span></div>' +
+      '<div class="wb-entry-card__body">' +
+      '<div class="wb-entry-switch-row"><label>启用此条目</label><label class="wb-entry-toggle"><input type="checkbox" data-f="enabled" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.enabled ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      '<div class="wb-entry-field"><label>条目名称</label><input type="text" data-f="name" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.name) + '" placeholder="输入名称"></div>' +
+      '<div class="wb-entry-field"><label>内容</label><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
+      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>位置</label><button class="wb-pos-picker-btn" data-a="openpos" data-eid="' + e.id + '" data-bid="' + bid + '">' + esc(POS_LABELS[e.position] || e.position) + '</button></div>' +
+      '<div class="wb-entry-field" style="flex:1"><label>排序</label><input type="number" data-f="order" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + e.order + '"></div></div>' +
+      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>触发方式</label><button class="wb-pos-picker-btn" data-a="opentrigger" data-eid="' + e.id + '" data-bid="' + bid + '">' + (e.triggerType === 'always' ? '常驻' : '关键词') + '</button></div>' +
+      '<div class="wb-entry-field" style="flex:1"><label>关键词</label><input type="text" data-f="keywords" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.keywords.join(', ')) + '" placeholder="逗号分隔"' + (e.triggerType === 'always' ? ' disabled' : '') + '></div></div>' +
+      '<div class="wb-entry-switch-row"><label>禁用递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="disableRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.disableRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      '<div class="wb-entry-switch-row"><label>阻止后续递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="preventFurtherRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.preventFurtherRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
+      '<button class="wb-entry-delete-btn wb-btn wb-btn--danger" data-a="de" data-eid="' + e.id + '" data-bid="' + bid + '">' + I.del + ' 删除条目</button></div></div>';
   };
 
   const rBookOpen = book => {
-    const cn = book.boundCharacterId ? chars().find(c => c.id === book.boundCharacterId)?.name || '未知角色' : '';
-    const bd = book.type === 'local' ? `<div class="wb-book-open__binding">绑定角色: ${cn || '未绑定'}</div>` : '';
-    return `<div class="wb-book-open">
-      <div class="wb-book-open__header">
-        <button class="wb-book-open__back" data-a="bb">${I.back}</button>
-        <span class="wb-book-open__title">${esc(book.name)}</span>
-        <button class="wb-book-open__add-entry wb-header-btn" data-a="ae" data-bid="${book.id}">${I.add}</button>
-      </div>${bd}
-      <div class="wb-entry-list">
-        ${book.entries.length ? book.entries.map(e => rEntry(e, book.id)).join('') : '<div class="wb-empty">暂无条目，点击右上角 + 添加</div>'}
-      </div>
-    </div>`;
+    const cn = book.boundCharacterId ? (chars().find(c => c.id === book.boundCharacterId)?.name || '未知角色') : '';
+    const bd = book.type === 'local' && cn ? '<div class="wb-book-open__binding">' + I.link + ' 绑定角色: ' + esc(cn) + '</div>' : '';
+    return '<div class="wb-book-open">' + bd +
+      '<div class="wb-entry-list">' + (book.entries.length ? book.entries.map(e => rEntry(e, book.id)).join('') : '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 + 添加新条目</p></div>') + '</div></div>';
+  };
+
+  const rBookCard = b => {
+    const sm = S.sBooks.has(b.id);
+    const cn = b.boundCharacterId ? (chars().find(c => c.id === b.boundCharacterId)?.name || '') : '';
+    return '<div class="wb-book-card' + (sm ? ' is-search-match' : '') + '" data-a="ob" data-id="' + b.id + '">' +
+      '<div class="wb-book-card__inner"><span class="wb-book-card__name">' + esc(b.name) + '</span>' +
+      (cn ? '<span class="wb-book-card__bind">' + I.link + ' ' + esc(cn) + '</span>' : '') +
+      '</div></div>';
   };
 
   const rGrid = () => {
-    const books = curBooks();
-    const sq = S.sQ;
-    let sb = '';
-    if (S.sOpen) sb = `<div class="wb-search-bar"><input type="text" id="wb-sinp" placeholder="搜索书名/条目名..." value="${esc(sq)}"><button data-a="sc">${I.cls}</button></div>`;
-    let g = '';
-    if (!books.length) {
-      g = `<div class="wb-empty">暂无${S.tab === 'global' ? '全局' : '局部'}世界书</div>`;
-    } else {
-      g = '<div class="wb-book-grid">' + books.map(b => {
-        const sm = S.sBooks.has(b.id);
-        const mc = sq && sm ? ' is-search-match' : '';
-        const hc = sq && !sm ? ' hidden' : '';
-        return `<div class="wb-book-card${mc}${hc}" data-bid="${b.id}" data-a="ob">
-          <div class="wb-book-card__name">${esc(b.name)}</div>
-          <label class="wb-book-card__switch"><label class="wb-book-toggle" data-a="stop"><input type="checkbox" data-a="tb" data-bid="${b.id}"${b.enabled ? ' checked' : ''}><span class="wb-toggle-track"></span></label></label>
-          <button class="wb-book-card__del" data-a="db" data-bid="${b.id}" title="删除">${I.del}</button>
-        </div>`;
-      }).join('') + '</div>';
-    }
-    return sb + g;
+    const bs = curBooks();
+    if (!bs.length) return '<div class="wb-empty"><h3>暂无' + (S.tab === 'global' ? '全局' : '局部') + '世界书</h3><p>点击标题栏导入或底部 + 新建</p></div>';
+    return '<div class="wb-book-grid">' + bs.map(rBookCard).join('') + '</div>';
   };
 
-  const rTabbar = () => {
-    $t.innerHTML = `
-      <button class="wb-tab-btn${S.tab === 'global' ? ' is-active' : ''}" data-a="st" data-tab="global">${I.globe}<span>全局</span></button>
-      <div class="wb-tab-add-wrapper"><div class="wb-tab-add-bg"></div><button class="wb-tab-add-btn" data-a="ab">${I.add}</button></div>
-      <button class="wb-tab-btn${S.tab === 'local' ? ' is-active' : ''}" data-a="st" data-tab="local">${I.pin}<span>局部</span></button>`;
-  };
+  /* [修改标注·需求5] 标题栏渲染 */
+  const renderHeader = () => {
+    if (!header) return;
+    if (closeBtn) closeBtn.style.display = 'none';
+    if (actionsEl) actionsEl.style.display = 'none';
+    header.querySelectorAll('.wb-header-left,.wb-header-right').forEach(el => el.remove());
 
-  /* ── 标题栏 ── */
-  const setHeader = () => {
-    if (!wm) return;
     if (S.openId) {
-      wm.setTitle?.(appId, findBook(S.openId)?.name || '世情');
-      wm.setBackAction?.(appId, () => { S.openId = null; render(); });
-      wm.setHeaderActions?.(appId, []);
+      const book = findBook(S.openId);
+      const bookName = book ? book.name : '世界书';
+      const left = document.createElement('span'); left.className = 'wb-header-left';
+      left.innerHTML = '<button class="wb-header-btn" data-a="ae" title="添加条目">' + I.add + '</button>';
+      header.appendChild(left);
+      if (titleEl) { titleEl.textContent = bookName; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'goback'; }
+      const right = document.createElement('span'); right.className = 'wb-header-right';
+      right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索">' + I.search + '</button>';
+      header.appendChild(right);
     } else {
-      wm.setTitle?.(appId, '世情');
-      wm.setBackAction?.(appId, null);
-      wm.setHeaderActions?.(appId, [
-        { label: '搜索', icon: I.search, onClick: () => { S.sOpen = !S.sOpen; if (!S.sOpen) { S.sQ = ''; doSearch(''); } render(); } },
-        { label: '导入', icon: I.imp, onClick: () => $fi.click() },
-        { label: '导出', icon: I.exp, onClick: doExport }
-      ]);
+      const left = document.createElement('span'); left.className = 'wb-header-left';
+      left.innerHTML = '<button class="wb-header-btn" data-a="imp" title="导入">' + I.imp + '</button><button class="wb-header-btn" data-a="expall" title="导出">' + I.exp + '</button>';
+      header.appendChild(left);
+      if (titleEl) { titleEl.textContent = '世情'; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'gohome'; }
+      const right = document.createElement('span'); right.className = 'wb-header-right';
+      right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索">' + I.search + '</button>';
+      header.appendChild(right);
     }
   };
 
-  /* ── 主渲染 ── */
+  /* 渲染主函数 */
   const render = () => {
     if (S.openId) {
       const book = findBook(S.openId);
-      $c.innerHTML = book ? rBookOpen(book) : '<div class="wb-empty">世界书不存在</div>';
-      $t.style.display = 'none';
+      if (!book) { S.openId = null; render(); return; }
+      $c.innerHTML = (S.sOpen ? '<div class="wb-search-bar"><input type="text" placeholder="搜索条目..." value="' + esc(S.sQ) + '" data-a="si"><button data-a="sc">' + I.cls + '</button></div>' : '') + rBookOpen(book);
     } else {
-      $c.innerHTML = rGrid();
-      $t.style.display = '';
-      rTabbar();
-      if (S.sOpen) {
-        const inp = $c.querySelector('#wb-sinp');
-        if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-      }
+      $c.innerHTML = (S.sOpen ? '<div class="wb-search-bar"><input type="text" placeholder="搜索世界书..." value="' + esc(S.sQ) + '" data-a="si"><button data-a="sc">' + I.cls + '</button></div>' : '') + rGrid();
     }
-    setHeader();
+    $t.innerHTML = '<button class="wb-tab-btn' + (S.tab === 'global' ? ' is-active' : '') + '" data-a="tg" data-tab="global">' + I.globe + ' 全局</button>' +
+      '<div class="wb-tab-add-wrapper"><div class="wb-tab-add-bg"></div><button class="wb-tab-add-btn" data-a="na">' + I.add + '</button></div>' +
+      '<button class="wb-tab-btn' + (S.tab === 'local' ? ' is-active' : '') + '" data-a="tg" data-tab="local">' + I.pin + ' 局部</button>';
+    renderHeader();
   };
 
-  /* ── 添加世界书弹窗 ── */
-  const showAddBook = () => {
-    const cc = chars();
-    const co = cc.map(c => `<div class="wb-char-item" data-cid="${c.id}">${esc(c.name || c.id)}</div>`).join('');
-    openMod({
-      title: '添加世界书',
-      body: `<div class="wb-form-group"><label>名称</label><input type="text" id="wb-nb-name" placeholder="输入世界书名称"></div>
-        <div class="wb-form-group"><label>类型</label><div class="wb-form-row">
-          <button class="wb-btn wb-btn--primary" id="wb-nb-tg" data-v="global">全局</button>
-          <button class="wb-btn" id="wb-nb-tl" data-v="local">局部</button>
-        </div></div>
-        <div class="wb-form-group" id="wb-nb-chargrp" style="display:none"><label>绑定角色</label>
-          <div class="wb-char-list">${co || '<div class="wb-empty" style="padding:8px">暂无角色卡</div>'}</div>
-        </div>`,
+  /* 新建世界书弹窗 */
+  const openNewBookMod = () => {
+    openMod({ title: '新建世界书', okTxt: '创建',
+      body: '<div class="wb-form-group"><label>名称</label><input id="wbnbn" type="text" placeholder="世界书名称"></div>' +
+        '<div class="wb-form-group"><label>放置位置</label><div class="wb-position-picker"><div class="wb-position-option is-active" data-nbt="global"><span>' + I.globe + ' 全局</span><span class="wb-position-radio is-checked"></span></div><div class="wb-position-option" data-nbt="local"><span>' + I.pin + ' 局部</span><span class="wb-position-radio"></span></div></div></div>',
       onOpen: el => {
-        let st2 = 'global', sc2 = null;
-        const tg = el.querySelector('#wb-nb-tg'), tl = el.querySelector('#wb-nb-tl'), cg = el.querySelector('#wb-nb-chargrp');
-        tg.onclick = () => { st2 = 'global'; tg.className = 'wb-btn wb-btn--primary'; tl.className = 'wb-btn'; cg.style.display = 'none'; };
-        tl.onclick = () => { st2 = 'local'; tl.className = 'wb-btn wb-btn--primary'; tg.className = 'wb-btn'; cg.style.display = ''; };
-        el.querySelectorAll('.wb-char-item').forEach(ci => ci.onclick = () => {
-          el.querySelectorAll('.wb-char-item').forEach(x => x.classList.remove('is-active'));
-          ci.classList.add('is-active'); sc2 = ci.dataset.cid;
+        let selType = 'global';
+        el.querySelectorAll('[data-nbt]').forEach(opt => {
+          opt.addEventListener('click', () => {
+            selType = opt.dataset.nbt;
+            el.querySelectorAll('[data-nbt]').forEach(o2 => { o2.classList.toggle('is-active', o2.dataset.nbt === selType); o2.querySelector('.wb-position-radio').classList.toggle('is-checked', o2.dataset.nbt === selType); });
+          });
         });
-        el._getData = () => ({ type: st2, charId: sc2 });
+        el._getType = () => selType;
+        setTimeout(() => el.querySelector('#wbnbn')?.focus(), 100);
       },
       onOk: el => {
-        const nm = el.querySelector('#wb-nb-name')?.value?.trim();
-        if (!nm) { toast('请输入世界书名称'); return false; }
-        const { type, charId } = el._getData();
-        const book = mkBook({ name: nm, type, boundCharacterId: type === 'local' ? charId : null });
-        S.books.push(book); S.tab = type; save(); render();
-        toast('已创建: ' + nm);
+        const n = el.querySelector('#wbnbn')?.value?.trim();
+        if (!n) { toast('请输入名称'); return false; }
+        const tp = el._getType?.() || 'global';
+        const nb = mkBook({ name: n, type: tp }); S.books.push(nb); save();
+        S.tab = tp; render(); toast('已创建', 'success');
       }
     });
   };
 
-  /* ── 导出 ── */
-  const doExport = () => {
-    const books = curBooks();
-    if (!books.length) { toast('当前无可导出的世界书'); return; }
-    if (books.length === 1) { dlJson(books[0].name + '_' + ft(Date.now()) + '.json', books[0]); toast('已导出'); return; }
-    openMod({
-      title: '选择导出的世界书',
-      body: '<div class="wb-char-list">' + books.map(b => `<div class="wb-char-item" data-bid="${b.id}">${esc(b.name)}</div>`).join('') + '</div>',
+  /* 添加条目弹窗 */
+  const openNewEntryMod = bid => {
+    openMod({ title: '新建条目', okTxt: '添加',
+      body: '<div class="wb-form-group"><label>条目名称</label><input id="wbnen" type="text" placeholder="输入名称"></div>',
+      onOpen: el => setTimeout(() => el.querySelector('#wbnen')?.focus(), 100),
       onOk: el => {
-        const sel = el.querySelector('.wb-char-item.is-active');
-        if (!sel) { toast('请选择一本世界书'); return false; }
-        const book = findBook(sel.dataset.bid);
-        if (book) { dlJson(book.name + '_' + ft(Date.now()) + '.json', book); toast('已导出'); }
-      },
-      onOpen: el => {
-        el.querySelectorAll('.wb-char-item').forEach(ci => ci.onclick = () => {
-          el.querySelectorAll('.wb-char-item').forEach(x => x.classList.remove('is-active'));
-          ci.classList.add('is-active');
-        });
+        const n = el.querySelector('#wbnen')?.value?.trim();
+        if (!n) { toast('请输入名称'); return false; }
+        const book = findBook(bid); if (!book) return;
+        const ne = mkEntry({ name: n }); book.entries.push(ne); save();
+        S.expEnt.add(ne.id); render(); toast('已添加', 'success');
       }
     });
   };
 
-  /* ── 导入 ── */
-  const doImport = async file => {
-    const fn = file.name.toLowerCase();
-    if (fn.endsWith('.png')) {
-      try {
-        const buf = await file.arrayBuffer();
-        const chs = parsePng(buf);
-        const obj = extObj(chs);
-        if (!obj) { toast('PNG中未找到角色数据'); return; }
+  /* 文件导入 */
+  const handleImport = async file => {
+    try {
+      const fn = file.name.toLowerCase();
+      if (fn.endsWith('.json')) {
+        const txt = await file.text(); const obj = sj(txt);
+        if (!obj) { toast('JSON 解析失败', 'error'); return; }
+        const wb = parseTavWB(obj, file.name.replace(/\.json$/i, ''));
+        if (wb) { wb.type = S.tab; S.books.push(wb); save(); render(); toast('导入成功: ' + wb.entries.length + ' 条目', 'success'); }
+        else { toast('未找到有效世界书数据', 'error'); }
+      } else if (fn.endsWith('.png')) {
+        const buf = await file.arrayBuffer(); const chs = parsePng(buf); const obj = extObj(chs);
+        if (!obj) { toast('PNG中未找到数据', 'error'); return; }
         const cb = extCB(obj);
-        if (!cb) { toast('角色卡中无世界书数据'); return; }
-        const book = parseTavWB(cb, file.name.replace(/\.png$/i, ''));
-        if (!book) { toast('无法解析世界书条目'); return; }
-        S.books.push(book); save(); render();
-        toast('已从PNG导入: ' + book.name);
-      } catch (err) { toast('PNG解析失败: ' + err.message); }
-    } else {
-      try {
-        const text = await file.text();
-        const obj = sj(text);
-        if (!obj) { toast('JSON解析失败'); return; }
-        // 本应用格式
-        if (obj.id && obj.entries && Array.isArray(obj.entries)) {
-          const book = mkBook(obj); S.books.push(book); save(); render();
-          toast('已导入: ' + book.name); return;
-        }
-        // 酒馆世界书格式
-        const tavBook = parseTavWB(obj, file.name.replace(/\.json$/i, ''));
-        if (tavBook) { S.books.push(tavBook); save(); render(); toast('已导入酒馆格式: ' + tavBook.name); return; }
-        // 角色卡JSON中提取character_book
-        const cb = extCB(obj);
-        if (cb) {
-          const bk = parseTavWB(cb, file.name.replace(/\.json$/i, ''));
-          if (bk) { S.books.push(bk); save(); render(); toast('已从角色卡导入: ' + bk.name); return; }
-        }
-        toast('无法识别的JSON格式');
-      } catch (err) { toast('导入失败: ' + err.message); }
-    }
+        if (cb) { const wb = parseTavWB(cb, file.name.replace(/\.png$/i, '')); if (wb) { wb.type = S.tab; S.books.push(wb); save(); render(); toast('导入成功', 'success'); return; } }
+        const wb = parseTavWB(obj, file.name.replace(/\.png$/i, ''));
+        if (wb) { wb.type = S.tab; S.books.push(wb); save(); render(); toast('导入成功', 'success'); }
+        else { toast('未找到世界书数据', 'error'); }
+      } else { toast('不支持的文件格式', 'error'); }
+    } catch (err) { toast('导入出错', 'error'); console.error(err); }
   };
 
-  $fi.addEventListener('change', e => { const f = e.target.files?.[0]; if (f) doImport(f); $fi.value = ''; });
+  /* 导出全部 */
+  const exportAll = () => {
+    const bs = curBooks();
+    if (!bs.length) { toast('无可导出的世界书'); return; }
+    bs.forEach(b => { const d = { name: b.name, entries: {} }; b.entries.forEach((e, i) => { d.entries[i] = { comment: e.name, content: e.content, key: e.keywords, order: e.order, constant: e.triggerType === 'always', position: e.position === 'top' ? 4 : (e.position === 'beforeChar' ? 0 : 1), disable: e.disableRecursion, enabled: e.enabled }; }); dlJson(b.name + '.json', d); });
+    toast('已导出 ' + bs.length + ' 本', 'success');
+  };
 
-  /* ── 事件委托 ── */
-  const hClick = e => {
-    const a = e.target.closest('[data-a]')?.dataset.a;
+  /* 事件代理 */
+  const onClick = ev => {
+    const a = ev.target.closest('[data-a]')?.dataset.a;
     if (!a) return;
-    if (a === 'st') { const tab = e.target.closest('[data-tab]')?.dataset.tab; if (tab && tab !== S.tab) { S.tab = tab; S.sQ = ''; doSearch(''); render(); } }
-    if (a === 'ab') showAddBook();
-    if (a === 'ob') { const bid = e.target.closest('[data-bid]')?.dataset.bid; if (bid) { S.openId = bid; S.expEnt.clear(); render(); } }
-    if (a === 'bb') { S.openId = null; render(); }
-    if (a === 'tb') { e.stopPropagation(); const bid = e.target.dataset.bid; const book = findBook(bid); if (book) { book.enabled = e.target.checked; save(); } }
-    if (a === 'stop') e.stopPropagation();
-    if (a === 'db') { e.stopPropagation(); const bid = e.target.closest('[data-bid]')?.dataset.bid; const book = findBook(bid); if (book) confirmDel('确定删除世界书「' + book.name + '」？', () => { S.books = S.books.filter(b => b.id !== bid); save(); render(); }); }
-    if (a === 'te') { const eid = e.target.closest('[data-eid]')?.dataset.eid; if (eid) { S.expEnt.has(eid) ? S.expEnt.delete(eid) : S.expEnt.add(eid); render(); } }
-    if (a === 'ae') { const bid = e.target.closest('[data-bid]')?.dataset.bid; const book = findBook(bid); if (book) { const ne = mkEntry({ name: '新条目' }); book.entries.push(ne); S.expEnt.add(ne.id); save(); render(); } }
-    if (a === 'de') { const eid = e.target.closest('[data-eid]')?.dataset.eid; const bid = e.target.closest('[data-bid]')?.dataset.bid; const book = findBook(bid); if (book) confirmDel('确定删除该条目？', () => { book.entries = book.entries.filter(en => en.id !== eid); S.expEnt.delete(eid); save(); render(); }); }
-    if (a === 'sc') { S.sQ = ''; S.sOpen = false; doSearch(''); render(); }
+
+    if (a === 'ob') { const id = ev.target.closest('[data-a="ob"]').dataset.id; S.openId = id; S.sOpen = false; S.sQ = ''; S.expEnt.clear(); render(); return; }
+    if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
+    if (a === 'gohome') { if (wm) wm.close(appId); return; }
+    if (a === 'tg') { S.tab = ev.target.closest('[data-a="tg"]').dataset.tab; S.openId = null; render(); return; }
+    if (a === 'na') { openNewBookMod(); return; }
+    if (a === 'ae') { if (S.openId) openNewEntryMod(S.openId); return; }
+    if (a === 'imp') { $fi.click(); return; }
+    if (a === 'expall') { exportAll(); return; }
+    if (a === 'ts') { S.sOpen = !S.sOpen; if (!S.sOpen) { S.sQ = ''; S.sBooks.clear(); S.sEntries.clear(); } render(); return; }
+    if (a === 'sc') { S.sOpen = false; S.sQ = ''; S.sBooks.clear(); S.sEntries.clear(); render(); return; }
+    if (a === 'te') { const eid = ev.target.closest('[data-a="te"]').dataset.eid; S.expEnt.has(eid) ? S.expEnt.delete(eid) : S.expEnt.add(eid); render(); return; }
+    if (a === 'de') { const el = ev.target.closest('[data-a="de"]'); const eid = el.dataset.eid; const bid = el.dataset.bid; confirmDel('确定删除此条目？', () => { const book = findBook(bid); if (book) { book.entries = book.entries.filter(e => e.id !== eid); save(); render(); toast('已删除', 'success'); } }); return; }
+    if (a === 'openpos') { const el = ev.target.closest('[data-a="openpos"]'); openPositionPicker(el.dataset.pos || 'afterChar', el.dataset.eid, el.dataset.bid); return; }
+    if (a === 'opentrigger') { const el = ev.target.closest('[data-a="opentrigger"]'); openTriggerPicker(el.dataset.trigger || 'keyword', el.dataset.eid, el.dataset.bid); return; }
   };
 
-  const hInput = e => {
-    const t = e.target;
-    if (t.id === 'wb-sinp') { S.sQ = t.value; doSearch(S.sQ); render(); return; }
-    const f = t.dataset.f, eid = t.dataset.eid, bid = t.dataset.bid;
+  /* 输入事件 */
+  const onInput = ev => {
+    const t = ev.target;
+    if (t.dataset.a === 'si') { S.sQ = t.value; doSearch(S.sQ); render(); const inp = $c.querySelector('[data-a="si"]'); if (inp) { inp.focus(); inp.selectionStart = inp.selectionEnd = inp.value.length; } return; }
+    const f = t.dataset.f; const eid = t.dataset.eid; const bid = t.dataset.bid;
     if (!f || !eid || !bid) return;
     const book = findBook(bid); if (!book) return;
-    const entry = book.entries.find(en => en.id === eid); if (!entry) return;
+    const entry = book.entries.find(e => e.id === eid); if (!entry) return;
     if (f === 'name') entry.name = t.value;
-    if (f === 'content') entry.content = t.value;
-    if (f === 'position') entry.position = t.value;
-    if (f === 'order') entry.order = parseInt(t.value) || 0;
-    if (f === 'triggerType') { entry.triggerType = t.value; const kwInp = $c.querySelector(`input[data-f="keywords"][data-eid="${eid}"]`); if (kwInp) kwInp.disabled = t.value === 'always'; }
-    if (f === 'keywords') entry.keywords = t.value.split(/[,，\s]+/).filter(Boolean);
-    if (f === 'disableRecursion') entry.disableRecursion = t.checked;
-    if (f === 'preventFurtherRecursion') entry.preventFurtherRecursion = t.checked;
+    else if (f === 'content') entry.content = t.value;
+    else if (f === 'order') entry.order = parseInt(t.value) || 0;
+    else if (f === 'keywords') entry.keywords = t.value.split(/[,，]+/).map(k => k.trim()).filter(Boolean);
     save();
   };
 
-  container.addEventListener('click', hClick);
-  container.addEventListener('input', hInput);
-  container.addEventListener('change', hInput);
-
-  /* ── 全局API：供档案应用调用 ── */
-  window.importWorldBookFromCharacterCard = async file => {
-    await doImport(file);
+  /* checkbox 事件 */
+  const onChange = ev => {
+    const t = ev.target;
+    if (t.type !== 'checkbox') return;
+    const f = t.dataset.f; const eid = t.dataset.eid; const bid = t.dataset.bid;
+    if (!f || !eid || !bid) return;
+    const book = findBook(bid); if (!book) return;
+    const entry = book.entries.find(e => e.id === eid); if (!entry) return;
+    entry[f] = t.checked;
+    save();
+    if (f === 'enabled') { const card = t.closest('.wb-entry-card'); if (card) { const badge = card.querySelector('.wb-entry-card__status-badge'); if (badge) { badge.textContent = t.checked ? 'ON' : 'OFF'; badge.className = 'wb-entry-card__status-badge ' + (t.checked ? 'wb-entry-card__status-badge--on' : 'wb-entry-card__status-badge--off'); } } }
   };
 
-  /* ── 首次渲染 ── */
+  /* [修改标注·需求4] 长按世界书封面 */
+  const onPointerDown = ev => {
+    const card = ev.target.closest('.wb-book-card[data-a="ob"]');
+    if (!card) return;
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      ev.preventDefault();
+      const bid = card.dataset.id; const book = findBook(bid);
+      if (book) openBookLongPressMenu(book);
+      card.dataset._lp = '1';
+    }, 600);
+  };
+  const onPointerUp = ev => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    const card = ev.target.closest('.wb-book-card[data-a="ob"]');
+    if (card && card.dataset._lp === '1') { ev.preventDefault(); ev.stopPropagation(); delete card.dataset._lp; }
+  };
+
+  /* 标题点击 */
+  const onHeaderClick = ev => {
+    const a = ev.target.closest('[data-a]')?.dataset.a;
+    if (a === 'gohome') { if (wm) wm.close(appId); return; }
+    if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
+    if (a === 'imp') { $fi.click(); return; }
+    if (a === 'expall') { exportAll(); return; }
+    if (a === 'ts') { S.sOpen = !S.sOpen; if (!S.sOpen) { S.sQ = ''; S.sBooks.clear(); S.sEntries.clear(); } render(); return; }
+    if (a === 'ae') { if (S.openId) openNewEntryMod(S.openId); return; }
+  };
+
+  $fi.addEventListener('change', ev => { const f = ev.target.files?.[0]; if (f) handleImport(f); $fi.value = ''; });
+
+  $c.addEventListener('click', onClick);
+  $c.addEventListener('input', onInput);
+  $c.addEventListener('change', onChange);
+  $c.addEventListener('pointerdown', onPointerDown);
+  $c.addEventListener('pointerup', onPointerUp);
+  $c.addEventListener('pointercancel', onPointerUp);
+  $t.addEventListener('click', onClick);
+  if (header) header.addEventListener('click', onHeaderClick);
+
+  /* [修改标注·需求1] 监听角色卡导入事件 */
+  const onCharImported = (data) => {
+    if (!data || !data.worldBooks || !Array.isArray(data.worldBooks)) return;
+    data.worldBooks.forEach(wb => {
+      const book = parseTavWB(wb, wb.name || '角色卡世界书');
+      if (book) {
+        book.type = 'local';
+        book.boundCharacterId = data.characterId || null;
+        S.books.push(book); save();
+      }
+    });
+    render();
+  };
+  if (eventBus) eventBus.on('character:imported', onCharImported);
+
   render();
 
-  return {
-    destroy: () => {
-      container.removeEventListener('click', hClick);
-      container.removeEventListener('input', hInput);
-      container.removeEventListener('change', hInput);
-      delete window.importWorldBookFromCharacterCard;
-      closeMod();
-      if (tTmr) clearTimeout(tTmr);
-    }
+  /* unmount */
+  return () => {
+    $c.removeEventListener('click', onClick);
+    $c.removeEventListener('input', onInput);
+    $c.removeEventListener('change', onChange);
+    $c.removeEventListener('pointerdown', onPointerDown);
+    $c.removeEventListener('pointerup', onPointerUp);
+    $c.removeEventListener('pointercancel', onPointerUp);
+    $t.removeEventListener('click', onClick);
+    if (header) header.removeEventListener('click', onHeaderClick);
+    if (eventBus) eventBus.off('character:imported', onCharImported);
+    if (closeBtn) closeBtn.style.display = '';
+    if (actionsEl) actionsEl.style.display = '';
+    if (titleEl) { titleEl.style.cursor = ''; delete titleEl.dataset.a; }
+    header?.querySelectorAll('.wb-header-left,.wb-header-right').forEach(el => el.remove());
+    if (longPressTimer) clearTimeout(longPressTimer);
+    if (tTmr) clearTimeout(tTmr);
   };
 }
 
-export function unmount(instance) {
-  instance?.destroy?.();
-  const s = document.getElementById(WB_STYLE);
-  if (s) s.remove();
-}
+export function unmount() {}
