@@ -259,18 +259,24 @@
 }
 
 /* ===================== 底部 Tab 栏 ===================== */
+/* [本次修改标注·仅限需求1] 底部 TAB 中央“+”独立悬浮模块：只重做世情应用底部栏中间按钮外观，不改其它区域 */
 .wb-tabbar {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  height: 52px;
-  border-radius: 16px;
-  border: 1px solid rgba(20, 14, 9, 0.08);
-  background: #17120d;
-  display: flex;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  height: 64px;
+  padding: 8px 10px 10px;
+  border-radius: 24px;
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  background: linear-gradient(180deg, rgba(255, 252, 245, 0.96) 0%, rgba(239, 229, 212, 0.98) 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
   align-items: stretch;
-  box-shadow: 0 8px 24px rgba(25, 16, 10, 0.35);
+  gap: 0;
+  box-shadow:
+    0 14px 28px rgba(60, 38, 18, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
   z-index: 50;
   overflow: visible;
   isolation: isolate;
@@ -279,20 +285,20 @@
 .wb-tab-btn {
   position: relative;
   z-index: 2;
-  flex: 1;
+  width: 100%;
   border: 0;
-  border-radius: 12px;
+  border-radius: 18px;
   background: transparent;
-  color: rgba(255, 247, 235, 0.72);
+  color: rgba(69, 52, 37, 0.68);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   font-weight: 600;
-  gap: 4px;
+  gap: 6px;
   transition: all 0.18s ease;
   cursor: pointer;
-  margin: 5px;
+  margin: 0;
 }
 
 .wb-tab-btn svg {
@@ -302,59 +308,65 @@
 
 .wb-tab-btn.is-active {
   z-index: 3;
-  color: #fffdf7;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  color: var(--wb-text);
+  background: rgba(127, 92, 62, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(122, 95, 67, 0.12);
 }
 
-/* [模块标注] 底部 Tab 中央凸起弧形 + "+"按钮 */
+/* [本次修改标注·仅限需求1] 中央悬浮“+”按钮容器：使用中间保留槽位，让按钮脱离 TAB 栏主体 */
 .wb-tab-add-wrapper {
   position: relative;
   z-index: 1;
-  flex: 0 0 62px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  pointer-events: none;
 }
 
 .wb-tab-add-bg {
   position: absolute;
-  top: -18px;
+  top: -14px;
   left: 50%;
   transform: translateX(-50%);
-  width: 58px;
-  height: 36px;
-  background: #17120d;
-  border-radius: 50% 50% 0 0;
+  width: 74px;
+  height: 74px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.2) 44%, rgba(255, 255, 255, 0) 72%);
+  box-shadow: 0 18px 24px rgba(127, 92, 62, 0.18);
+  pointer-events: none;
   z-index: 0;
-  /* 上方弧形伪元素 */
 }
 
 .wb-tab-add-btn {
-  position: relative;
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 1;
-  width: 42px;
-  height: 42px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 247, 235, 0.25);
-  background: var(--wb-primary);
-  color: #fff;
+  border: 3px solid rgba(255, 250, 241, 0.96);
+  background: linear-gradient(180deg, #8a6647 0%, #6f5038 100%);
+  color: #fffdf7;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(127, 92, 62, 0.35);
+  box-shadow:
+    0 14px 24px rgba(86, 59, 35, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  margin-top: -16px;
+  pointer-events: auto;
 }
 
 .wb-tab-add-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .wb-tab-add-btn:active {
-  transform: scale(0.93);
+  transform: translateX(-50%) scale(0.94);
 }
 
 /* ===================== 书籍展开视图 ===================== */
@@ -927,6 +939,38 @@
   transform: scale(0.96);
 }
 
+/* [本次修改标注·仅限需求2] 世情标题点击返回桌面按钮样式：只作用于世情标题与世界书名称标题 */
+.wb-header-title-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 164px);
+  min-width: 0;
+  padding: 4px 12px;
+  margin: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.12s ease, background 0.15s ease;
+}
+
+.wb-header-title-btn:active {
+  opacity: 0.78;
+  transform: scale(0.98);
+  background: rgba(127, 92, 62, 0.08);
+}
+
 /* ===================== 角色选择列表 ===================== */
 .wb-char-list {
   display: grid;
@@ -1155,9 +1199,9 @@
   }
 }
 
-/* ===================== [修改标注·需求6] 修正底部TAB圆弧交界遮挡边框的多余黑点 ===================== */
+/* ===================== [本次修改标注·仅限需求1] 兼容旧版中央加号背景修正规则：保留新的完整圆形悬浮光晕 ===================== */
 .wb-tab-add-bg {
-  border-radius: 999px 999px 0 0;
+  border-radius: 999px;
   pointer-events: none;
 }
 .wb-tab-add-bg::before,

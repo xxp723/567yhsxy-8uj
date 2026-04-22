@@ -343,6 +343,12 @@ export async function mount(container, context) {
     return '<div class="wb-book-grid">' + bs.map(rBookCard).join('') + '</div>';
   };
 
+  /* [本次修改标注·仅限需求2] 世情应用标题改为内嵌可点击按钮，绕过全局标题 pointer-events:none，仅修复“世情/世界书名称”返回桌面功能 */
+  const renderHomeTitle = (title) => {
+    if (!titleEl) return;
+    titleEl.innerHTML = '<button type="button" class="wb-header-title-btn" data-a="gohome" title="返回桌面">' + esc(title) + '</button>';
+  };
+
   /* [修改标注·需求3/需求5] 标题栏渲染：标题文字返回桌面，右侧补搜索按钮 */
   const renderHeader = () => {
     if (!header) return;
@@ -356,8 +362,8 @@ export async function mount(container, context) {
       const left = document.createElement('span'); left.className = 'wb-header-left';
       left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button>';
       header.appendChild(left);
-      /* [修改标注·需求3] 点击世界书名称文字返回桌面 */
-      if (titleEl) { titleEl.textContent = bookName; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'gohome'; }
+      /* [本次修改标注·仅限需求2] 打开世界书后，点击标题中的世界书名称直接返回桌面 */
+      renderHomeTitle(bookName);
       const right = document.createElement('span'); right.className = 'wb-header-right';
       /* [修改标注·需求5] 右侧添加搜索按钮，同时保留新增条目按钮 */
       right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索条目">' + I.search + '</button><button class="wb-header-btn" data-a="ae" title="添加条目">' + I.add + '</button>';
@@ -366,8 +372,8 @@ export async function mount(container, context) {
       const left = document.createElement('span'); left.className = 'wb-header-left';
       left.innerHTML = '<button class="wb-header-btn" data-a="imp" title="导入">' + I.imp + '</button><button class="wb-header-btn" data-a="expall" title="导出">' + I.exp + '</button>';
       header.appendChild(left);
-      /* [修改标注·需求3] 点击“世情”标题文字返回桌面 */
-      if (titleEl) { titleEl.textContent = '世情'; titleEl.style.cursor = 'pointer'; titleEl.dataset.a = 'gohome'; }
+      /* [本次修改标注·仅限需求2] 主列表页点击“世情”标题直接返回桌面 */
+      renderHomeTitle('世情');
       const right = document.createElement('span'); right.className = 'wb-header-right';
       /* [修改标注·需求5] 在“世情”标题右侧添加搜索世界书按钮 */
       right.innerHTML = '<button class="wb-header-btn" data-a="ts" title="搜索世界书">' + I.search + '</button>';
@@ -590,7 +596,7 @@ export async function mount(container, context) {
     if (eventBus) eventBus.off('character:imported', onCharImported);
     if (closeBtn) closeBtn.style.display = '';
     if (actionsEl) actionsEl.style.display = '';
-    if (titleEl) { titleEl.style.cursor = ''; delete titleEl.dataset.a; }
+    if (titleEl) { titleEl.textContent = ''; titleEl.style.cursor = ''; delete titleEl.dataset.a; }
     header?.querySelectorAll('.wb-header-left,.wb-header-right').forEach(el => el.remove());
     if (longPressTimer) clearTimeout(longPressTimer);
     if (tTmr) clearTimeout(tTmr);
