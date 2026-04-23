@@ -35,6 +35,8 @@ export class AppManager {
     this.loadedModules = new Map();
     /** @type {Map<string, any>} */
     this.mountedInstances = new Map();
+    /** @type {Map<string, Promise<any>>} */
+    this.openingPromises = new Map();
 
     this.bindEvents();
   }
@@ -58,39 +60,53 @@ export class AppManager {
       return;
     }
 
-    try {
-      // 已打开则直接聚焦
-      if (this.mountedInstances.has(appId)) {
-        this.windowManager.focus(appId);
-        return;
-      }
-
-      const moduleRef = await this.loadModule(appMeta);
-      if (!moduleRef || typeof moduleRef.mount !== 'function') {
-        throw new Error(`应用入口缺少 mount 方法: ${appMeta.entry}`);
-      }
-
-      const contentEl = this.windowManager.open(appMeta);
-
-      const context = {
-        appId,
-        appMeta,
-        eventBus: this.eventBus,
-        globalMemory: this.globalMemory,
-        settings: this.settings,
-        db: this.db,
-        windowManager: this.windowManager
-      };
-
-      const instance = await moduleRef.mount(contentEl, context);
-      this.mountedInstances.set(appId, instance || {});
-
-      this.eventBus.emit('app:opened', { appId, appMeta });
-      Logger.info(`应用已打开: ${appMeta.name}`);
-    } catch (error) {
-      Logger.error(`打开应用失败: ${appId}`, error);
-      this.windowManager.showError(appId, '应用启动失败，请查看日志。');
+    // 已打开则直接聚焦
+    if (this.mountedInstances.has(appId)) {
+      this.windowManager.focus(appId);
+      return;
     }
+
+    // [修改标注·本次需求2] 防止桌面图标连点时重复创建同一应用窗口，避免挂载竞争导致渲染不完整/点不开
+    if (this.openingPromises.has(appId)) {
+      await this.openingPromises.get(appId);
+      this.windowManager.focus(appId);
+      return;
+    }
+
+    const openingTask = (async () => {
+      try {
+        const moduleRef = await this.loadModule(appMeta);
+        if (!moduleRef || typeof moduleRef.mount !== 'function') {
+          throw new Error(`应用入口缺少 mount 方法: ${appMeta.entry}`);
+        }
+
+        const contentEl = this.windowManager.open(appMeta);
+
+        const context = {
+          appId,
+          appMeta,
+          eventBus: this.eventBus,
+          globalMemory: this.globalMemory,
+          settings: this.settings,
+          db: this.db,
+          windowManager: this.windowManager
+        };
+
+        const instance = await moduleRef.mount(contentEl, context);
+        this.mountedInstances.set(appId, instance || {});
+
+        this.eventBus.emit('app:opened', { appId, appMeta });
+        Logger.info(`应用已打开: ${appMeta.name}`);
+      } catch (error) {
+        Logger.error(`打开应用失败: ${appId}`, error);
+        this.windowManager.showError(appId, '应用启动失败，请查看日志。');
+      } finally {
+        this.openingPromises.delete(appId);
+      }
+    })();
+
+    this.openingPromises.set(appId, openingTask);
+    await openingTask;
   }
 
   async close(appId) {

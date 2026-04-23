@@ -10,8 +10,6 @@ import { Logger } from '../../utils/Logger.js';
  * 4) 支持模型拉取、连接测试、主 API 已保存配置快速切换
  */
 
-const API_LOCAL_STORAGE_KEY = 'miniphone:api-config-v2';
-
 const PROVIDER_META = {
   openai: {
     id: 'openai',
@@ -100,22 +98,6 @@ function safeParseJSON(text) {
     return JSON.parse(text);
   } catch {
     return null;
-  }
-}
-
-function readApiConfigFromLocalStorage() {
-  if (typeof localStorage === 'undefined') return null;
-  const raw = localStorage.getItem(API_LOCAL_STORAGE_KEY);
-  if (!raw) return null;
-  const parsed = safeParseJSON(raw);
-  return parsed && typeof parsed === 'object' ? parsed : null;
-}
-
-function writeApiConfigToLocalStorage(config) {
-  try {
-    localStorage.setItem(API_LOCAL_STORAGE_KEY, JSON.stringify(config));
-  } catch (error) {
-    Logger.warn(`API 配置写入 localStorage 失败: ${error?.message || '未知错误'}`);
   }
 }
 
@@ -256,11 +238,10 @@ function normalizeSavedPrimaryConfigs(rawList) {
 
 function normalizeApiSettings(inputApi) {
   const defaults = getDefaultApiSettings();
-  const storageBackup = readApiConfigFromLocalStorage();
   const source =
     inputApi && typeof inputApi === 'object'
       ? inputApi
-      : (storageBackup && typeof storageBackup === 'object' ? storageBackup : {});
+      : {};
 
   const isNewStructure =
     source?.version >= 3 &&
@@ -1815,7 +1796,6 @@ export function bindApiEvents(container, { settings }) {
     const nextApi = collectApiStateFromForm(container, fallback);
 
     await settings.update({ api: nextApi });
-    writeApiConfigToLocalStorage(nextApi);
     currentApiCache = nextApi;
 
     Logger.info(saveNote);
@@ -1980,7 +1960,6 @@ export function bindApiEvents(container, { settings }) {
       ].slice(0, 20);
 
       await settings.update({ api: nextApi });
-      writeApiConfigToLocalStorage(nextApi);
       currentApiCache = nextApi;
 
       renderSavedPrimaryConfigsInto(container, nextApi);
@@ -2077,7 +2056,6 @@ export function bindApiEvents(container, { settings }) {
           savedPrimaryConfigs: snapshot.savedPrimaryConfigs.filter((item) => item.id !== savedId)
         };
         await settings.update({ api: nextApi });
-        writeApiConfigToLocalStorage(nextApi);
         currentApiCache = nextApi;
         renderSavedPrimaryConfigsInto(container, nextApi);
         setResultByProfile(container, 'primary', 'success', `已删除：${savedItem.name}`);

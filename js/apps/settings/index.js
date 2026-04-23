@@ -11,6 +11,7 @@ import {
   bindAppearanceEvents,
   getAppearanceCustomWidgetState
 } from './appearance.js';
+import { Logger } from '../../utils/Logger.js';
 import { Registry } from '../../core/logic/Registry.js';
 import { renderApiSection, bindApiEvents } from './api.js';
 import { renderDataSection, bindDataEvents } from './data.js';
@@ -59,9 +60,54 @@ const ICONS = {
   memoWidget: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M12 8H36V40H12V8Z" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M18 18H30" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M18 24H30" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M18 30H26" stroke="#333" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
+async function hydrateAppearancePersistence(current) {
+  const persistentKV = window.__MINIPHONE_PERSISTENT_KV__;
+  if (!persistentKV) {
+    throw new Error('PersistentKV 未初始化，设置应用无法读取外观持久化数据');
+  }
+
+  const appearance = { ...(current.appearance || {}) };
+
+  const iconImages = { ...(appearance.iconImages || {}) };
+
+  // 从 IndexedDB 读取所有 app icon 数据
+  const allKvKeys = Object.keys(iconImages);
+  for (const appIdKey of allKvKeys) {
+    if (!iconImages[appIdKey]) {
+      const val = await persistentKV.get(`miniphone_app_icon_${appIdKey}`, null);
+      if (val) iconImages[appIdKey] = val;
+    }
+  }
+
+  const [customWidgets, hiddenWidgetIds, customWidgetDraft, statusBarHidden, fullscreen, wallpaper, wallpaperCrop] = await Promise.all([
+    persistentKV.get('miniphone_custom_widgets', appearance.customWidgets || []),
+    persistentKV.get('miniphone_hidden_widget_library_ids', appearance.hiddenWidgetIds || []),
+    persistentKV.get('miniphone_custom_widget_draft', appearance.customWidgetDraft || ''),
+    persistentKV.get('miniphone_status_bar_hidden', Boolean(appearance.statusBarHidden)),
+    persistentKV.get('miniphone_fullscreen', Boolean(appearance.fullscreen)),
+    persistentKV.get('miniphone_wallpaper', appearance.desktopWallpaper || appearance.wallpaper || ''),
+    persistentKV.get('miniphone_wallpaper_crop', appearance.desktopWallpaperCrop || {})
+  ]);
+
+  current.appearance = {
+    ...appearance,
+    customWidgets: Array.isArray(customWidgets) ? customWidgets : [],
+    hiddenWidgetIds: Array.isArray(hiddenWidgetIds) ? hiddenWidgetIds : [],
+    customWidgetDraft: String(customWidgetDraft || ''),
+    statusBarHidden: Boolean(statusBarHidden),
+    fullscreen: Boolean(fullscreen),
+    wallpaper: String(wallpaper || ''),
+    desktopWallpaper: String(wallpaper || ''),
+    desktopWallpaperCrop: wallpaperCrop || {},
+    iconImages
+  };
+
+  return current;
+}
+
 export async function mount(container, context) {
   const { settings, eventBus, windowManager, appId } = context;
-  const current = await settings.getAll();
+  const current = await hydrateAppearancePersistence(await settings.getAll());
   const registry = new Registry();
   await registry.initDefaults();
   const apps = registry.getAll();

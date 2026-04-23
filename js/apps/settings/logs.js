@@ -1,3 +1,5 @@
+import { Logger } from '../../utils/Logger.js';
+
 export function renderLogsSection() {
   return `
       <!-- 日志详情页 -->
@@ -23,35 +25,37 @@ export function renderLogsSection() {
 }
 
 export function bindLogsEvents(container) {
-  const renderLogs = (type) => {
+  const renderLogs = async (type) => {
     const logEl = container.querySelector('#log-viewer-area');
     if (!logEl) return;
 
     logEl.style.display = 'block';
-    const logs = localStorage.getItem('miniphone_sys_logs') || '[]';
+    logEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
+
     let parsedLogs = [];
     try {
-      parsedLogs = JSON.parse(logs);
-    } catch (e) {}
-
-    let filteredLogs = parsedLogs;
-    if (type === 'error') {
-      filteredLogs = parsedLogs.filter((l) => l.level === 'error');
+      if (type === 'error') {
+        parsedLogs = await Logger.getErrorLogs();
+      } else {
+        parsedLogs = await Logger.getAllLogs();
+      }
+    } catch (e) {
+      parsedLogs = [];
     }
 
-    if (!filteredLogs.length) {
+    if (!parsedLogs.length) {
       logEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">暂无相关日志</div>';
       return;
     }
 
-    logEl.innerHTML = filteredLogs
-      .reverse()
+    logEl.innerHTML = parsedLogs
       .slice(0, 100)
       .map((item) => {
         const color = item.level === 'error' ? 'red' : item.level === 'warn' ? 'orange' : 'inherit';
+        const details = item.details || item.detail;
         return `<div style="margin-bottom:6px;color:${color};border-bottom:1px dashed #ccc;padding-bottom:4px;">
-          [${item.level.toUpperCase()}] ${new Date(item.timestamp).toLocaleString()} <br>
-          ${item.message}${item.details ? `<pre style="margin:2px 0 0;white-space:pre-wrap;font-size:10px;background:#eee;padding:2px;">${JSON.stringify(item.details)}</pre>` : ''}
+          [${(item.level || 'info').toUpperCase()}] ${new Date(item.timestamp).toLocaleString()} <br>
+          ${item.message}${details ? `<pre style="margin:2px 0 0;white-space:pre-wrap;font-size:10px;background:#eee;padding:2px;">${JSON.stringify(details)}</pre>` : ''}
         </div>`;
       })
       .join('');

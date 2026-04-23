@@ -460,43 +460,192 @@
     (() => {
       const $ = (id) => document.getElementById(id);
 
-      // 状态栏显示控制（与设置应用对接：localStorage miniphone_status_bar_hidden = '1'）
-      const statusHidden = localStorage.getItem('miniphone_status_bar_hidden') === '1';
-      if (statusHidden) document.body.classList.add('hide-status-bar');
+      // ===== IndexedDB 内联读写辅助（替代 localStorage）=====
+      const DB_NAME = 'MiniPhoneDB';
+      const DB_VER = 1;
+      const STORE = 'appsData';
+      const KV_APP = 'persistent-kv';
+      const kvId = (k) => `${KV_APP}::${k}`;
 
-      // 全屏模式控制（与设置应用对接：localStorage miniphone_fullscreen = '1'）
-      const fullscreenOn = localStorage.getItem('miniphone_fullscreen') === '1';
-      if (fullscreenOn) document.body.classList.add('fullscreen-mode');
+      // 打开 DB（只读用途；写入也复用）
+      const _openDB = () => new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VER);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('desktop')) db.createObjectStore('desktop', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('memories')) {
+            const s = db.createObjectStore('memories', { keyPath: 'key' });
+            s.createIndex('sourceApp', 'sourceApp', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(STORE)) {
+            const s = db.createObjectStore(STORE, { keyPath: 'id' });
+            s.createIndex('appId', 'appId', { unique: false });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
 
-      // [模块标注] 启动阶段桌面壁纸同步模块：初始化桌面壁纸与裁切参数，避免覆盖设置页中保存的全屏顶区铺满效果
-      const screen = $('screen-root');
-      const savedWallpaper = localStorage.getItem('miniphone_wallpaper');
-      const savedWallpaperCrop = (() => {
+      let _dbP = null;
+      const getDB = () => { if (!_dbP) _dbP = _openDB(); return _dbP; };
+
+      const kvGet = async (key, def = null) => {
+        const db = await getDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readonly');
+          const r = tx.objectStore(STORE).get(kvId(key));
+          r.onsuccess = () => resolve(r.result?.value ?? def);
+          r.onerror = () => reject(r.error);
+        });
+      };
+
+      const kvSet = async (key, value) => {
+        const db = await getDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          const r = tx.objectStore(STORE).put({
+            id: kvId(key), appId: KV_APP, key, value, updatedAt: Date.now()
+          });
+          r.onsuccess = () => resolve(value);
+          r.onerror = () => reject(r.error);
+        });
+      };
+
+      const kvRemove = async (key) => {
+        const db = await getDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          const r = tx.objectStore(STORE).delete(kvId(key));
+          r.onsuccess = () => resolve(true);
+          r.onerror = () => reject(r.error);
+        });
+      };
+
+      // ===== IndexedDB 异步初始化 UI 状态 =====
+      (async () => {
         try {
-          return JSON.parse(localStorage.getItem('miniphone_wallpaper_crop') || '{}');
-        } catch (_) {
-          return {};
+          // 状态栏显示控制
+          const statusHidden = await kvGet('miniphone_status_bar_hidden');
+          if (statusHidden === '1') document.body.classList.add('hide-status-bar');
+
+          // 全屏模式控制
+          const fullscreenOn = await kvGet('miniphone_fullscreen');
+          if (fullscreenOn === '1') document.body.classList.add('fullscreen-mode');
+
+          // 壁纸
+          const screen = $('screen-root');
+          const savedWallpaper = await kvGet('miniphone_wallpaper');
+          let savedWallpaperCrop = {};
+          try {
+            const cropStr = await kvGet('miniphone_wallpaper_crop');
+            savedWallpaperCrop = cropStr ? (typeof cropStr === 'object' ? cropStr : JSON.parse(cropStr)) : {};
+          } catch (_) { savedWallpaperCrop = {}; }
+
+          const cropX = Number.isFinite(Number(savedWallpaperCrop?.x)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.x))) : 50;
+          const cropY = Number.isFinite(Number(savedWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.y))) : 50;
+          const cropScale = Number.isFinite(Number(savedWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(savedWallpaperCrop.scale))) : 1;
+          const wallpaperSize = `${Math.max(100, cropScale * 100)}% ${Math.max(100, cropScale * 100)}%`;
+          const wallpaperPosition = `${cropX}% ${cropY}%`;
+
+          if (savedWallpaper) {
+            document.documentElement.style.setProperty('--desktop-wallpaper', `url("${savedWallpaper}")`);
+            document.documentElement.style.setProperty('--desktop-wallpaper-size', wallpaperSize);
+            document.documentElement.style.setProperty('--desktop-wallpaper-position', wallpaperPosition);
+          }
+          if (screen && savedWallpaper) {
+            screen.style.backgroundImage = `url(${savedWallpaper})`;
+            screen.style.backgroundSize = wallpaperSize;
+            screen.style.backgroundPosition = wallpaperPosition;
+            screen.style.backgroundRepeat = 'no-repeat';
+          }
+
+          // 恢复图片
+          const savedAvatar = await kvGet('miniphone_widget_avatar');
+          if (savedAvatar) applyImageDOM('avatar', savedAvatar);
+          const savedTicket = await kvGet('miniphone_widget_ticket');
+          if (savedTicket) applyImageDOM('ticket', savedTicket);
+          const savedNewsImg = await kvGet('miniphone_widget_news_img');
+          if (savedNewsImg) applyImageDOM('news', savedNewsImg);
+
+          // 恢复文本
+          for (const id of textFieldIds) {
+            const el = $(id);
+            if (!el) continue;
+            const saved = await kvGet('miniphone_widget_' + id);
+            if (saved) el.innerHTML = saved;
+          }
+        } catch (err) {
+          console.error('[index.html] IndexedDB 初始化读取失败:', err);
         }
       })();
-      const cropX = Number.isFinite(Number(savedWallpaperCrop?.x)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.x))) : 50;
-      const cropY = Number.isFinite(Number(savedWallpaperCrop?.y)) ? Math.max(0, Math.min(100, Number(savedWallpaperCrop.y))) : 50;
-      const cropScale = Number.isFinite(Number(savedWallpaperCrop?.scale)) ? Math.max(1, Math.min(2.5, Number(savedWallpaperCrop.scale))) : 1;
-      // [模块标注] 启动阶段壁纸裁切一致性模块：与设置页/Theme 同步使用双轴缩放，确保重启后全屏顶部区域与桌面取景一致
-      const wallpaperSize = `${Math.max(100, cropScale * 100)}% ${Math.max(100, cropScale * 100)}%`;
-      const wallpaperPosition = `${cropX}% ${cropY}%`;
 
-      if (savedWallpaper) {
-        document.documentElement.style.setProperty('--desktop-wallpaper', `url("${savedWallpaper}")`);
-        document.documentElement.style.setProperty('--desktop-wallpaper-size', wallpaperSize);
-        document.documentElement.style.setProperty('--desktop-wallpaper-position', wallpaperPosition);
-      }
+      // ===== 纯 DOM 辅助（无持久化）=====
+      const applyImageDOM = (target, src) => {
+        if (target === 'avatar') {
+          const img = $('widget-avatar');
+          const hint = $('widget-avatar-hint');
+          if (img) { img.src = src; img.style.display = 'block'; }
+          if (hint) hint.style.display = 'none';
+        } else if (target === 'ticket' || target === 'ticket2') {
+          const img = $('widget-ticket-img');
+          if (img) { img.src = src; img.style.display = 'block'; }
+        } else if (target === 'news') {
+          const img = $('widget-news-img');
+          if (img) { img.src = src; img.style.display = 'block'; }
+        }
+      };
 
-      if (screen && savedWallpaper) {
-        screen.style.backgroundImage = `url(${savedWallpaper})`;
-        screen.style.backgroundSize = wallpaperSize;
-        screen.style.backgroundPosition = wallpaperPosition;
-        screen.style.backgroundRepeat = 'no-repeat';
-      }
+      const removeImageDOM = (target) => {
+        if (target === 'avatar') {
+          const img = $('widget-avatar');
+          const hint = $('widget-avatar-hint');
+          if (img) { img.src = ''; img.style.display = 'none'; }
+          if (hint) hint.style.display = 'block';
+        } else if (target === 'ticket' || target === 'ticket2') {
+          const img = $('widget-ticket-img');
+          if (img) { img.src = ''; img.style.display = 'none'; }
+        }
+      };
+
+      // 通用图片应用（含 IndexedDB 持久化）
+      const applyImage = (target, src) => {
+        applyImageDOM(target, src);
+        if (target === 'avatar') {
+          kvSet('miniphone_widget_avatar', src).catch(e => console.error(e));
+        } else if (target === 'ticket' || target === 'ticket2') {
+          kvSet('miniphone_widget_ticket', src).catch(e => console.error(e));
+        } else if (target === 'news') {
+          kvSet('miniphone_widget_news_img', src).catch(e => console.error(e));
+        }
+      };
+
+      // 删除图片（含 IndexedDB 持久化）
+      const removeImage = (target) => {
+        removeImageDOM(target);
+        if (target === 'avatar') {
+          kvRemove('miniphone_widget_avatar').catch(e => console.error(e));
+        } else if (target === 'ticket' || target === 'ticket2') {
+          kvRemove('miniphone_widget_ticket').catch(e => console.error(e));
+        }
+      };
+
+      // 文本字段列表
+      const textFieldIds = [
+        'cfg-avatar-desc', 'cfg-news-title', 'cfg-news-content',
+        'cfg-ticket-brand', 'cfg-ticket-title', 'cfg-ticket-desc', 'cfg-ticket-stamp',
+        'cfg-p1-ticket-brand', 'cfg-p1-ticket-date', 'cfg-p1-ticket-from',
+        'cfg-p1-ticket-to', 'cfg-p1-ticket-name', 'cfg-p1-ticket-time', 'cfg-p1-ticket-no'
+      ];
+      // 绑定文本字段 blur 事件（写入 IndexedDB）
+      textFieldIds.forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener('blur', () => {
+          kvSet('miniphone_widget_' + id, el.innerHTML).catch(e => console.error(e));
+        });
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+      });
 
       // 时钟（顶部 & 组件）
       const updateClock = () => {
@@ -539,76 +688,7 @@
         }
       }
 
-      // 通用图片应用
-      const applyImage = (target, src) => {
-        if (target === 'avatar') {
-          const img = $('widget-avatar');
-          const hint = $('widget-avatar-hint');
-          if (img) { img.src = src; img.style.display = 'block'; }
-          if (hint) hint.style.display = 'none';localStorage.setItem('miniphone_widget_avatar', src);
-        } else if (target === 'ticket' || target === 'ticket2') {
-          const img = $('widget-ticket-img');
-          if (img) { img.src = src; img.style.display = 'block'; }
-          localStorage.setItem('miniphone_widget_ticket', src);
-        } else if (target === 'news') {
-          const img = $('widget-news-img');
-          if (img) { img.src = src; img.style.display = 'block'; }
-          localStorage.setItem('miniphone_widget_news_img', src);
-        }
-      };
-
-      // 删除图片
-      const removeImage = (target) => {
-        if (target === 'avatar') {
-          const img = $('widget-avatar');
-          const hint = $('widget-avatar-hint');
-          if (img) { img.src = ''; img.style.display = 'none'; }
-          if (hint) hint.style.display = 'block';
-          localStorage.removeItem('miniphone_widget_avatar');
-        } else if (target === 'ticket' || target === 'ticket2') {
-          const img = $('widget-ticket-img');
-          if (img) { img.src = ''; img.style.display = 'none'; }
-          localStorage.removeItem('miniphone_widget_ticket');
-        }
-      };
-
-      // 恢复图片
-      const savedAvatar = localStorage.getItem('miniphone_widget_avatar');
-      if (savedAvatar) applyImage('avatar', savedAvatar);
-      const savedTicket = localStorage.getItem('miniphone_widget_ticket');
-      if (savedTicket) applyImage('ticket', savedTicket);
-      const savedNewsImg = localStorage.getItem('miniphone_widget_news_img');
-      if (savedNewsImg) applyImage('news', savedNewsImg);
-
-      // 恢复文本
-      const textFields = [
-        'cfg-avatar-desc',
-        'cfg-news-title',
-        'cfg-news-content',
-        'cfg-ticket-brand',
-        'cfg-ticket-title',
-        'cfg-ticket-desc',
-        'cfg-ticket-stamp',
-        'cfg-p1-ticket-brand',
-        'cfg-p1-ticket-date',
-        'cfg-p1-ticket-from',
-        'cfg-p1-ticket-to',
-        'cfg-p1-ticket-name',
-        'cfg-p1-ticket-time',
-        'cfg-p1-ticket-no'
-      ];
-      textFields.forEach(id => {
-        const el = $(id);
-        if (!el) return;
-        const saved = localStorage.getItem('miniphone_widget_' + id);
-        if (saved) el.innerHTML = saved;
-        el.addEventListener('blur', () => {
-          localStorage.setItem('miniphone_widget_' + id, el.innerHTML);
-        });
-        el.addEventListener('mousedown', (e) => e.stopPropagation());
-      });
-
-      // 弹窗相关
+      // 弹窗相关（已在上方定义 applyImage / removeImage 使用 IndexedDB）
       const modal = $('widget-modal');
       const modalClose = $('widget-modal-close');
       const modalSave = $('widget-modal-save');
@@ -894,7 +974,7 @@
             const descEl = $('cfg-avatar-desc');
             if (descEl) {
               descEl.innerText = desc;
-              localStorage.setItem('miniphone_widget_cfg-avatar-desc', descEl.innerHTML);
+              kvSet('miniphone_widget_cfg-avatar-desc', descEl.innerHTML).catch(e => console.error(e));
             }
           } else if (currentModalMode === 'news') {
             const title = modalNewsTitleInput.value || '';
@@ -903,19 +983,19 @@
             const contentEl = $('cfg-news-content');
             if (titleEl) {
               titleEl.innerText = title;
-              localStorage.setItem('miniphone_widget_cfg-news-title', titleEl.innerHTML);
+              kvSet('miniphone_widget_cfg-news-title', titleEl.innerHTML).catch(e => console.error(e));
             }
             if (contentEl) {
               const html = content.replace(/\n/g, '<br>');
               contentEl.innerHTML = html;
-              localStorage.setItem('miniphone_widget_cfg-news-content', contentEl.innerHTML);
+              kvSet('miniphone_widget_cfg-news-content', contentEl.innerHTML).catch(e => console.error(e));
             }
           } else if (currentModalMode === 'ticket1') {
             const saveText = (id, val) => {
               const el = $(id);
               if (el) {
                 el.innerText = val;
-                localStorage.setItem('miniphone_widget_' + id, el.innerHTML);
+                kvSet('miniphone_widget_' + id, el.innerHTML).catch(e => console.error(e));
               }
             };
             saveText('cfg-p1-ticket-brand', modalTicket1Brand.value || '');
@@ -930,7 +1010,7 @@
               const el = $(id);
               if (el) {
                 el.innerText = val;
-                localStorage.setItem('miniphone_widget_' + id, el.innerHTML);
+                kvSet('miniphone_widget_' + id, el.innerHTML).catch(e => console.error(e));
               }
             };
             saveText('cfg-ticket-brand', modalTicket2Brand.value || '');
@@ -946,7 +1026,7 @@
                 span.innerText = line;
                 descEl.appendChild(span);
               });
-              localStorage.setItem('miniphone_widget_cfg-ticket-desc', descEl.innerHTML);
+              kvSet('miniphone_widget_cfg-ticket-desc', descEl.innerHTML).catch(e => console.error(e));
             }
           }
           hideModal();

@@ -190,8 +190,8 @@
 .wb-book-toggle input:checked + .wb-toggle-track::after { transform: translateX(16px); }
 
 /* [修改标注·本次需求1+4] 底部 Tab 栏：深色#17120d + CircularNotchedRectangle缺口 */
-/* [本次修改标注·需求1-TAB圆角连接修复] 重新调整中部缺口遮罩与两侧肩部曲率，避免顶部横线与圆弧交界处发硬、发白 */
-/* [本次修改标注·需求1-中心加号按钮显示修复] 恢复中心承托底座并抬高 FAB 层级，让中间“+”按钮稳定显示 */
+/* [本次修改标注·需求1-TAB圆角连接修复] 收紧缺口与肩部过渡，去除中央区域不协调的浅白残痕与白道 */
+/* [本次修改标注·需求1-中心加号按钮显示修复] 提升 FAB 对比度、层级与实体感，让中间“+”按钮稳定显示 */
 .wb-tabbar {
   position: absolute;
   left: 10px; right: 10px; bottom: 10px;
@@ -205,20 +205,20 @@
     0 14px 30px rgba(25, 16, 10, 0.38),
     inset 0 0 0 1px rgba(255, 248, 235, 0.04);
   z-index: 50; overflow: visible; isolation: isolate;
-  -webkit-mask-image: radial-gradient(circle 40px at 50% -7px, transparent 36px, black 37px);
-  mask-image: radial-gradient(circle 40px at 50% -7px, transparent 36px, black 37px);
+  -webkit-mask-image: radial-gradient(circle 41px at 50% -7px, transparent 37px, black 38px);
+  mask-image: radial-gradient(circle 41px at 50% -7px, transparent 37px, black 38px);
 }
 .wb-tabbar::before,
 .wb-tabbar::after {
   content: '';
   position: absolute;
   top: 0;
-  width: 40px;
+  width: 42px;
   height: 24px;
   background: linear-gradient(180deg, #1a140f 0%, #120d09 100%);
   z-index: 1;
   pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 248, 235, 0.04);
+  box-shadow: none;
 }
 .wb-tabbar::before {
   left: calc(50% - 58px);
@@ -256,37 +256,44 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 51;
-  width: 92px;
-  height: 46px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 252, 245, 0.98) 0%, rgba(242, 230, 208, 0.96) 100%);
+  width: 90px;
+  height: 44px;
+  border-radius: 24px 24px 20px 20px;
+  background: linear-gradient(180deg, #efe2ca 0%, #e3cfb1 100%);
   box-shadow:
-    0 8px 18px rgba(73, 48, 25, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    0 6px 14px rgba(73, 48, 25, 0.12),
+    inset 0 1px 0 rgba(255, 250, 241, 0.5);
 }
 /* [修改标注·本次需求1] 中心FAB：56px圆形，嵌入缺口 */
 /* [修改标注·本次需求·修改3] 强化中间“+”按钮的实体感与可见性，避免出现“隐形圆按钮”观感 */
 .wb-tab-add-btn {
-  position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: -31px; left: 50%; transform: translateX(-50%);
   z-index: 52; width: 58px; height: 58px; border-radius: 50%;
-  border: 3px solid #f8efe1;
-  background: radial-gradient(circle at 30% 28%, #b79269 0%, #8d6747 42%, #6f4d34 100%);
+  border: 3px solid #f3e4ce;
+  background: radial-gradient(circle at 30% 24%, #caa27a 0%, #9a724f 43%, #6d4a31 100%);
   color: #fffdf7;
   display: inline-flex; align-items: center; justify-content: center;
   box-shadow:
-    0 14px 26px rgba(86, 59, 35, 0.4),
-    0 0 0 1px rgba(23, 18, 13, 0.08),
+    0 16px 28px rgba(86, 59, 35, 0.42),
+    0 3px 8px rgba(28, 19, 12, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   pointer-events: auto;
+  filter: saturate(1.04);
 }
 .wb-tab-add-btn svg {
-  width: 24px;
-  height: 24px;
-  stroke-width: 3.4;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.16));
+  width: 26px;
+  height: 26px;
+  stroke-width: 3.8;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
 }
-.wb-tab-add-btn:active { transform: translateX(-50%) scale(0.94); }
+.wb-tab-add-btn:active {
+  transform: translateX(-50%) scale(0.94);
+  box-shadow:
+    0 10px 18px rgba(86, 59, 35, 0.32),
+    0 2px 5px rgba(28, 19, 12, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
 
 /* 书籍展开视图 */
 .wb-book-open { animation: wbFadeIn 220ms ease; }

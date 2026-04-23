@@ -48,13 +48,10 @@ function mkEntry(o = {}) {
   };
 }
 
-function rdLocal() { try { const r = localStorage.getItem(WB_KEY); return r ? JSON.parse(r).map(mkBook) : []; } catch { return []; } }
-function wrLocal(b) { try { localStorage.setItem(WB_KEY, JSON.stringify(b)); } catch {} }
 async function ldDB(db) {
-  try { const a = await db?.getAll?.('appsData'); const r = a?.find(x => x.id === WB_DB_PFX + 'all-books'); if (r?.value && Array.isArray(r.value)) return r.value.map(mkBook); } catch {} return null;
+  try { const a = await db?.getAll?.('appsData'); const r = a?.find(x => x.id === WB_DB_PFX + 'all-books'); if (r?.value && Array.isArray(r.value)) return r.value.map(mkBook); } catch {} return [];
 }
 async function svDB(db, aid, books) {
-  wrLocal(books);
   try { await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() }); } catch {}
 }
 
@@ -154,7 +151,16 @@ export async function mount(container, context) {
   /* [修改标注·需求3] 点击标题文字返回桌面时，复用应用统一关闭事件，避免仅移除窗口壳体 */
   const closeToDesktop = () => { eventBus?.emit('app:close', { appId }); };
   const save = () => { S.books.forEach(b => { b.updatedAt = Date.now(); }); void svDB(db, appId, S.books); };
-  const chars = () => { try { const d = JSON.parse(localStorage.getItem('miniphone_archive_app_data_v1') || '{}'); return Array.isArray(d.characters) ? d.characters : []; } catch { return []; } };
+  /* chars() 从 IndexedDB 缓存读取档案数据（由 loadArchiveCache 预加载） */
+  let _archiveCharsCache = [];
+  const loadArchiveCache = async () => {
+    try {
+      const all = await db?.getAll?.('appsData');
+      const rec = all?.find(x => x.id === 'archive::data');
+      if (rec?.value && Array.isArray(rec.value.characters)) _archiveCharsCache = rec.value.characters;
+    } catch {}
+  };
+  const chars = () => _archiveCharsCache;
   /* [修改标注·需求1] 从档案持久化数据中提取角色卡自带的绑定世界书，确保世情应用晚于档案打开时也能自动补导 */
   const archiveBoundBooks = () => chars().flatMap((character) => {
     const boundWorldBooks = Array.isArray(character?.boundWorldBooks) ? character.boundWorldBooks : [];
@@ -195,8 +201,8 @@ export async function mount(container, context) {
   };
   const curBooks = () => S.books.filter(b => b.type === S.tab);
   const findBook = id => S.books.find(b => b.id === id);
-  const fromDB = await ldDB(db);
-  S.books = (fromDB && fromDB.length > 0) ? fromDB : rdLocal();
+  await loadArchiveCache();
+  S.books = await ldDB(db);
   syncArchiveBoundWorldBooks();
 
   const appWindow = container.closest('.app-window');

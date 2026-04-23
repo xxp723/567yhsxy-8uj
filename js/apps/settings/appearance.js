@@ -4,6 +4,13 @@ const CUSTOM_WIDGET_STORAGE_KEY = 'miniphone_custom_widgets';
 const CUSTOM_WIDGET_DRAFT_KEY = 'miniphone_custom_widget_draft';
 const HIDDEN_WIDGET_STORAGE_KEY = 'miniphone_hidden_widget_library_ids';
 
+// [模块标注] 外观设置持久化状态缓存模块：外观页运行期统一从当前设置快照读取，不再直接访问 localStorage
+const appearanceStorageState = {
+  customWidgets: [],
+  hiddenWidgetIds: [],
+  customWidgetDraft: ''
+};
+
 // [模块标注] 组件代码编辑器默认框架模块：默认模板图标统一使用 IconPark 风格 SVG，便于继续扩展自定义组件
 const DEFAULT_CUSTOM_WIDGET_TEMPLATE = `{
   "id": "custom-polaroid-note",
@@ -41,38 +48,42 @@ const ICON_SHADOW_OPTIONS = [
   { value: 'neumorphism', label: '新拟态' }
 ];
 
+function syncAppearanceStorageState(appearance = {}) {
+  appearanceStorageState.customWidgets = Array.isArray(appearance.customWidgets) ? [...appearance.customWidgets] : [];
+  appearanceStorageState.hiddenWidgetIds = Array.isArray(appearance.hiddenWidgetIds)
+    ? [...new Set(appearance.hiddenWidgetIds.filter(Boolean))]
+    : [];
+  appearanceStorageState.customWidgetDraft = String(
+    appearance.customWidgetDraft || appearanceStorageState.customWidgetDraft || DEFAULT_CUSTOM_WIDGET_TEMPLATE
+  );
+
+  return appearanceStorageState;
+}
+
 function getSavedCustomWidgets() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CUSTOM_WIDGET_STORAGE_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    return [];
-  }
+  return Array.isArray(appearanceStorageState.customWidgets) ? [...appearanceStorageState.customWidgets] : [];
 }
 
 function saveCustomWidgets(widgets) {
-  localStorage.setItem(CUSTOM_WIDGET_STORAGE_KEY, JSON.stringify(Array.isArray(widgets) ? widgets : []));
+  appearanceStorageState.customWidgets = Array.isArray(widgets) ? [...widgets] : [];
 }
 
 function getHiddenWidgetIds() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(HIDDEN_WIDGET_STORAGE_KEY) || '[]');
-    return Array.isArray(parsed) ? [...new Set(parsed.filter(Boolean))] : [];
-  } catch (_) {
-    return [];
-  }
+  return Array.isArray(appearanceStorageState.hiddenWidgetIds)
+    ? [...new Set(appearanceStorageState.hiddenWidgetIds.filter(Boolean))]
+    : [];
 }
 
 function saveHiddenWidgetIds(ids) {
-  localStorage.setItem(HIDDEN_WIDGET_STORAGE_KEY, JSON.stringify([...new Set((ids || []).filter(Boolean))]));
+  appearanceStorageState.hiddenWidgetIds = [...new Set((ids || []).filter(Boolean))];
 }
 
 function saveDraft(code) {
-  localStorage.setItem(CUSTOM_WIDGET_DRAFT_KEY, code || '');
+  appearanceStorageState.customWidgetDraft = String(code || '');
 }
 
 function getDraft() {
-  return localStorage.getItem(CUSTOM_WIDGET_DRAFT_KEY) || DEFAULT_CUSTOM_WIDGET_TEMPLATE;
+  return appearanceStorageState.customWidgetDraft || DEFAULT_CUSTOM_WIDGET_TEMPLATE;
 }
 
 function getDefaultIconAdjustmentState(overrides = {}) {
@@ -613,8 +624,9 @@ function renderSliderField({ id, label, value, min, max, step = 1 }) {
 }
 
 export function renderAppearanceSections({ current, icons, apps = [] }) {
-  const customDraft = getDraft();
   const appearance = current.appearance || {};
+  syncAppearanceStorageState(appearance);
+  const customDraft = getDraft();
   const iconImages = normalizeIconImages(appearance.iconImages);
   const iconAdjustments = getDefaultIconAdjustmentState(appearance);
   const dockAdjustments = getDefaultDockAdjustmentState(appearance);
@@ -691,7 +703,7 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
             <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;">
               <span>显示顶部状态栏</span>
               <label class="toggle-switch toggle-switch--theme">
-                <input id="setting-status-bar" type="checkbox" ${localStorage.getItem('miniphone_status_bar_hidden') === '1' ? '' : 'checked'}>
+                <input id="setting-status-bar" type="checkbox" ${appearance.statusBarHidden ? '' : 'checked'}>
                 <span class="toggle-slider"></span>
               </label>
             </label>
@@ -702,7 +714,7 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
             <label style="display:flex;align-items:center;justify-content:space-between;font-size:13px;">
               <span>启用全屏显示模式</span>
               <label class="toggle-switch toggle-switch--theme">
-                <input id="setting-fullscreen" type="checkbox" ${localStorage.getItem('miniphone_fullscreen') === '1' ? 'checked' : ''}>
+                <input id="setting-fullscreen" type="checkbox" ${appearance.fullscreen ? 'checked' : ''}>
                 <span class="toggle-slider"></span>
               </label>
             </label>
@@ -1166,6 +1178,7 @@ function ensureFontUrlPresetModal(container, icons) {
 }
 
 export function bindAppearanceEvents(container, { settings, eventBus, current, icons, apps = [] }) {
+  syncAppearanceStorageState(current.appearance || {});
   let isSelectionMode = false;
   let selectedWidgetIds = new Set();
   let activeIconEditorAppId = '';
@@ -1179,6 +1192,26 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   const fontUrlPresetModal = ensureFontUrlPresetModal(container, icons);
 
   const getWidgetCards = () => Array.from(container.querySelectorAll('[data-widget-library-id]'));
+
+  const persistAppearance = async (partial = {}, emitPayload = null) => {
+    const nextAppearance = {
+      ...(current.appearance || {}),
+      ...partial
+    };
+
+    await settings.update({
+      appearance: nextAppearance
+    });
+
+    current.appearance = nextAppearance;
+    syncAppearanceStorageState(nextAppearance);
+
+    if (emitPayload) {
+      eventBus?.emit('settings:appearance-changed', emitPayload);
+    }
+
+    return nextAppearance;
+  };
 
   const emitCustomWidgetsChanged = (widgets) => {
     eventBus?.emit('desktop:custom-widgets-changed', { widgets });
@@ -1383,7 +1416,7 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     renderSelectionState();
   };
 
-  const deleteWidgetLibraryItems = (widgetIds) => {
+  const deleteWidgetLibraryItems = async (widgetIds) => {
     const ids = Array.from(new Set((widgetIds || []).filter(Boolean)));
     if (!ids.length) return;
 
@@ -1393,12 +1426,15 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     const builtinOrSystemIds = ids.filter((id) => !customIdSet.has(id));
 
     const nextCustomWidgets = currentCustomWidgets.filter((item) => !customIds.includes(item.id));
-    saveCustomWidgets(nextCustomWidgets);
 
     const hiddenIds = new Set(getHiddenWidgetIds());
     builtinOrSystemIds.forEach((id) => hiddenIds.add(id));
     customIds.forEach((id) => hiddenIds.delete(id));
-    saveHiddenWidgetIds([...hiddenIds]);
+
+    await persistAppearance({
+      customWidgets: nextCustomWidgets,
+      hiddenWidgetIds: [...hiddenIds]
+    });
 
     selectedWidgetIds = new Set([...selectedWidgetIds].filter((id) => !ids.includes(id)));
     updateWidgetLibraryList();
@@ -1525,18 +1561,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   const collectIconImages = () => {
     const entries = apps.map((app) => [app.id, getIconTileValue(app.id)]);
     return normalizeIconImages(Object.fromEntries(entries));
-  };
-
-  const syncIconImagesToLocalStorage = (iconImages) => {
-    apps.forEach((app) => {
-      const value = String(iconImages[app.id] || '').trim();
-      const storageKey = `miniphone_app_icon_${app.id}`;
-      if (value) {
-        localStorage.setItem(storageKey, value);
-      } else {
-        localStorage.removeItem(storageKey);
-      }
-    });
   };
 
   // [模块标注] 字体设置状态渲染模块：统一刷新内置字体选项与已上传字体列表，便于后续维护字体卡片结构
@@ -1743,27 +1767,21 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   };
 
   // [模块标注] 界面设置-状态栏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
-  const onToggleStatusBar = () => {
+  const onToggleStatusBar = async () => {
     const statusBarChecked = container.querySelector('#setting-status-bar')?.checked;
-    if (statusBarChecked) {
-      localStorage.removeItem('miniphone_status_bar_hidden');
-      document.body.classList.remove('hide-status-bar');
-    } else {
-      localStorage.setItem('miniphone_status_bar_hidden', '1');
-      document.body.classList.add('hide-status-bar');
-    }
+    const statusBarHidden = !statusBarChecked;
+
+    document.body.classList.toggle('hide-status-bar', statusBarHidden);
+    await persistAppearance({ statusBarHidden }, { statusBarHidden });
   };
 
   // [模块标注] 界面设置-全屏即时开关模块：点击滑动开关立即生效，不依赖保存按钮
-  const onToggleFullscreen = () => {
+  const onToggleFullscreen = async () => {
     const fullscreenChecked = container.querySelector('#setting-fullscreen')?.checked;
-    if (fullscreenChecked) {
-      localStorage.setItem('miniphone_fullscreen', '1');
-      document.body.classList.add('fullscreen-mode');
-    } else {
-      localStorage.removeItem('miniphone_fullscreen');
-      document.body.classList.remove('fullscreen-mode');
-    }
+    const fullscreen = Boolean(fullscreenChecked);
+
+    document.body.classList.toggle('fullscreen-mode', fullscreen);
+    await persistAppearance({ fullscreen }, { fullscreen });
   };
 
   const onSaveDockSettings = async () => {
@@ -1830,58 +1848,33 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     const desktopWallpaper = String(container.querySelector('#setting-desktop-wallpaper')?.value || '').trim();
     const desktopWallpaperCrop = normalizeWallpaperCrop(desktopWallpaperCropDraft);
 
-    // [模块标注] 壁纸兼容存储模块：同步写入桌面壁纸与裁切参数，确保全屏与顶部状态栏区域读取同一组背景数据
-    if (desktopWallpaper) {
-      localStorage.setItem('miniphone_wallpaper', desktopWallpaper);
-      localStorage.setItem('miniphone_wallpaper_crop', JSON.stringify(desktopWallpaperCrop));
-    } else {
-      localStorage.removeItem('miniphone_wallpaper');
-      localStorage.removeItem('miniphone_wallpaper_crop');
-    }
-
-    await settings.update({
-      appearance: {
-        ...(current.appearance || {}),
+    await persistAppearance(
+      {
+        wallpaper: desktopWallpaper,
+        desktopWallpaper,
+        desktopWallpaperCrop
+      },
+      {
         wallpaper: desktopWallpaper,
         desktopWallpaper,
         desktopWallpaperCrop
       }
-    });
+    );
 
-    current.appearance = {
-      ...(current.appearance || {}),
-      wallpaper: desktopWallpaper,
-      desktopWallpaper,
-      desktopWallpaperCrop
-    };
-
-    eventBus?.emit('settings:appearance-changed', {
-      wallpaper: desktopWallpaper,
-      desktopWallpaper,
-      desktopWallpaperCrop
-    });
     Logger.info('壁纸设置已保存');
   };
 
   const onSaveCustomIconSettings = async () => {
     const iconImages = collectIconImages();
-    syncIconImagesToLocalStorage(iconImages);
 
-    await settings.update({
-      appearance: {
-        ...(current.appearance || {}),
+    await persistAppearance(
+      {
         iconImage: '',
         iconImages
-      }
-    });
+      },
+      { iconImage: '', iconImages }
+    );
 
-    current.appearance = {
-      ...(current.appearance || {}),
-      iconImage: '',
-      iconImages
-    };
-
-    eventBus?.emit('settings:appearance-changed', { iconImage: '', iconImages });
     Logger.info('图标图片设置已保存');
   };
 
@@ -1889,26 +1882,18 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     apps.forEach((app) => {
       const input = getIconImageInput(app.id);
       if (input) input.value = '';
-      localStorage.removeItem(`miniphone_app_icon_${app.id}`);
     });
 
     updateAllIconTilePreviews();
 
-    await settings.update({
-      appearance: {
-        ...(current.appearance || {}),
+    await persistAppearance(
+      {
         iconImage: '',
         iconImages: {}
-      }
-    });
+      },
+      { iconImage: '', iconImages: {} }
+    );
 
-    current.appearance = {
-      ...(current.appearance || {}),
-      iconImage: '',
-      iconImages: {}
-    };
-
-    eventBus?.emit('settings:appearance-changed', { iconImage: '', iconImages: {} });
     Logger.info('所有自定义图标图片已恢复默认');
   };
 
@@ -2003,19 +1988,22 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
     Logger.info('图标美化已恢复默认');
   };
 
-  const onSaveCustomWidget = () => {
+  const onSaveCustomWidget = async () => {
     try {
       const code = container.querySelector('#custom-widget-code')?.value || '';
       const parsed = parseCustomWidgetCode(code);
       const saved = getSavedCustomWidgets().filter((item) => item.id !== parsed.id);
 
       saved.push(parsed);
-      saveCustomWidgets(saved);
-      saveDraft(code);
 
       const hiddenIds = new Set(getHiddenWidgetIds());
       hiddenIds.delete(parsed.id);
-      saveHiddenWidgetIds([...hiddenIds]);
+
+      await persistAppearance({
+        customWidgets: saved,
+        hiddenWidgetIds: [...hiddenIds],
+        customWidgetDraft: code
+      });
 
       updateWidgetLibraryList();
       updatePreview();
@@ -2201,6 +2189,12 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
   container.querySelector('#custom-widget-preview-toggle')?.addEventListener('change', updatePreview);
   container.querySelector('#custom-widget-code')?.addEventListener('input', (event) => {
     saveDraft(event.target.value);
+    persistAppearance({
+      customWidgetDraft: String(event.target.value || '')
+    }).catch((error) => {
+      Logger.error('自定义组件草稿保存失败', error);
+    });
+
     const previewToggle = container.querySelector('#custom-widget-preview-toggle');
     if (previewToggle?.checked) {
       updatePreview();

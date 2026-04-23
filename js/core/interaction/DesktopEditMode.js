@@ -7,11 +7,12 @@
 import { Logger } from '../../utils/Logger.js';
 
 export class DesktopEditMode {
-  constructor(desktopContainer, eventBus, appManager, dragDrop) {
+  constructor(desktopContainer, eventBus, appManager, dragDrop, db = null) {
     this.desktopContainer = desktopContainer;
     this.eventBus = eventBus;
     this.appManager = appManager;
     this.dragDrop = dragDrop;
+    this.db = db;
 
     this.isEditMode = false;
     this.gridCols = 4;
@@ -62,11 +63,48 @@ export class DesktopEditMode {
       { id: 'memo', name: '快捷便签', icon: '✎', selector: '.widget-memo-card', colSpan: 2, rowSpan: 2, source: 'builtin' }
     ];
 
+    this.desktopEditStoreName = 'appsData';
+    this.desktopEditStoreAppId = 'desktop-edit-mode';
+
     this.bindEvents();
     this.loadLayout();
     this.loadDockState();
     this.initToolbarDrag();
     this.initManagedWidgetModal();
+  }
+
+  // [修改标注·本次需求3] 桌面编辑态核心持久化迁移到 IndexedDB，localStorage 仅保留旧数据兜底读取
+  buildDesktopEditDbId(key) {
+    return `${this.desktopEditStoreAppId}::${key}`;
+  }
+
+  async getDesktopEditDbValue(key) {
+    if (!this.db) return null;
+
+    try {
+      const record = await this.db.get(this.desktopEditStoreName, this.buildDesktopEditDbId(key));
+      return record?.value ?? null;
+    } catch (error) {
+      Logger.warn(`读取桌面编辑态 IndexedDB 失败: ${key}`, error);
+      return null;
+    }
+  }
+
+  persistDesktopEditDbValue(key, value) {
+    if (!this.db) return;
+    this.db.put(this.desktopEditStoreName, {
+      id: this.buildDesktopEditDbId(key),
+      appId: this.desktopEditStoreAppId,
+      key,
+      value,
+      updatedAt: Date.now()
+    }).catch((error) => {
+      Logger.warn(`写入桌面编辑态 IndexedDB 失败: ${key}`, error);
+    });
+  }
+
+  async migrateDesktopEditStorageValue(key) {
+    return await this.getDesktopEditDbValue(key);
   }
 
   bindEvents() {
@@ -301,25 +339,18 @@ export class DesktopEditMode {
     const left = parseFloat(this.toolbar.style.left || '');
     const top = parseFloat(this.toolbar.style.top || '');
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-    localStorage.setItem(this.toolbarPosStorageKey, JSON.stringify({ left, top }));
+    this.persistDesktopEditDbValue(this.toolbarPosStorageKey, { left, top });
   }
 
-  restoreToolbarPosition() {
+  async restoreToolbarPosition() {
     if (!this.toolbar) return;
-    const saved = localStorage.getItem(this.toolbarPosStorageKey);
-    if (!saved) return;
+    const pos = await this.migrateDesktopEditStorageValue(this.toolbarPosStorageKey);
+    if (!Number.isFinite(pos?.left) || !Number.isFinite(pos?.top)) return;
 
-    try {
-      const pos = JSON.parse(saved);
-      if (!Number.isFinite(pos?.left) || !Number.isFinite(pos?.top)) return;
-
-      this.toolbar.classList.add('is-custom-position');
-      this.toolbar.style.bottom = 'auto';
-      this.toolbar.style.left = `${pos.left}px`;
-      this.toolbar.style.top = `${pos.top}px`;
-    } catch (_) {
-      // 忽略坏数据
-    }
+    this.toolbar.classList.add('is-custom-position');
+    this.toolbar.style.bottom = 'auto';
+    this.toolbar.style.left = `${pos.left}px`;
+    this.toolbar.style.top = `${pos.top}px`;
   }
 
   initManagedWidgetModal() {
@@ -638,24 +669,26 @@ export class DesktopEditMode {
     });
   }
 
-  getCustomWidgetStorageList() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('miniphone_custom_widgets') || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return [];
-    }
+  async getCustomWidgetStorageList() {
+    const parsed = await this.migrateDesktopEditStorageValue('miniphone_custom_widgets');
+    return Array.isArray(parsed) ? parsed : [];
   }
 
-  saveCustomWidgetStorageList(list) {
-    localStorage.setItem('miniphone_custom_widgets', JSON.stringify(Array.isArray(list) ? list : []));
+  async saveCustomWidgetStorageList(list) {
+    await this.db.put(this.desktopEditStoreName, {
+      id: this.buildDesktopEditDbId('miniphone_custom_widgets'),
+      appId: this.desktopEditStoreAppId,
+      key: 'miniphone_custom_widgets',
+      value: Array.isArray(list) ? list : [],
+      updatedAt: Date.now()
+    });
   }
 
-  updateCustomWidgetDefinition(nextConfig) {
+  async updateCustomWidgetDefinition(nextConfig) {
     if (!nextConfig?.id) return;
-    const list = this.getCustomWidgetStorageList();
+    const list = await this.getCustomWidgetStorageList();
     const nextList = list.map((item) => item.id === nextConfig.id ? { ...item, ...nextConfig } : item);
-    this.saveCustomWidgetStorageList(nextList);
+    await this.saveCustomWidgetStorageList(nextList);
     this.eventBus?.emit?.('desktop:custom-widgets-changed', { widgets: nextList });
   }
 
@@ -904,8 +937,8 @@ export class DesktopEditMode {
     });
   }
 
-  openCustomWidgetModal(widgetId) {
-    const widgets = this.getCustomWidgetStorageList();
+  async openCustomWidgetModal(widgetId) {
+    const widgets = await this.getCustomWidgetStorageList();
     const current = widgets.find((item) => item.id === widgetId);
     if (!current) return;
 
@@ -935,7 +968,7 @@ export class DesktopEditMode {
             return;
           }
 
-          this.updateCustomWidgetDefinition(next);
+          await this.updateCustomWidgetDefinition(next);
           this.refreshCustomWidgetElement(widgetId);
           this.showToast('自定义组件已更新');
           this.hideManagedWidgetModal();
@@ -1185,16 +1218,11 @@ export class DesktopEditMode {
     });
   }
 
-  loadDockState() {
-    const saved = localStorage.getItem('miniphone_dock_layout');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        this.dockState = this.dedupeDockState(Array.isArray(parsed) ? parsed : []);
-      } catch (e) {
-        Logger.error('解析 Dock 布局失败', e);
-        this.initDefaultDockState();
-      }
+  async loadDockState() {
+    const parsed = await this.migrateDesktopEditStorageValue('miniphone_dock_layout');
+
+    if (Array.isArray(parsed)) {
+      this.dockState = this.dedupeDockState(parsed);
     } else {
       this.initDefaultDockState();
     }
@@ -1264,7 +1292,7 @@ export class DesktopEditMode {
 
   saveDockState() {
     this.dockState = this.dedupeDockState(this.dockState || []);
-    localStorage.setItem('miniphone_dock_layout', JSON.stringify(this.dockState));
+    this.persistDesktopEditDbValue('miniphone_dock_layout', this.dockState);
     this.savedDockSnapshot = [...this.dockState];
   }
 
@@ -1757,25 +1785,15 @@ export class DesktopEditMode {
   }
 
   getCustomWidgetLibrary() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('miniphone_custom_widgets') || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return [];
-    }
+    return [];
   }
 
   getHiddenWidgetIds() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('miniphone_hidden_widget_library_ids') || '[]');
-      return Array.isArray(parsed) ? [...new Set(parsed.filter(Boolean))] : [];
-    } catch (_) {
-      return [];
-    }
+    return [];
   }
 
   persistCurrentLayoutSilently() {
-    localStorage.setItem('miniphone_desktop_layout', JSON.stringify(this.layout || {}));
+    this.persistDesktopEditDbValue('miniphone_desktop_layout', this.layout || {});
     this.savedLayoutSnapshot = this.cloneLayout(this.layout);
   }
 
@@ -1887,17 +1905,12 @@ export class DesktopEditMode {
 
   loadBuiltinWidgetState(id) {
     const defaults = this.getBuiltinWidgetDefaultState(id);
-    try {
-      const parsed = JSON.parse(localStorage.getItem(this.getBuiltinWidgetStorageKey(id)) || '{}');
-      return { ...defaults, ...(parsed || {}) };
-    } catch (_) {
-      return { ...defaults };
-    }
+    return { ...defaults };
   }
 
   saveBuiltinWidgetState(id, nextState) {
     const merged = { ...this.getBuiltinWidgetDefaultState(id), ...(nextState || {}) };
-    localStorage.setItem(this.getBuiltinWidgetStorageKey(id), JSON.stringify(merged));
+    this.persistDesktopEditDbValue(this.getBuiltinWidgetStorageKey(id), merged);
     return merged;
   }
 
@@ -2455,9 +2468,8 @@ export class DesktopEditMode {
   createAppItemElement(app) {
     if (!app) return null;
 
-    const customImg = localStorage.getItem(`miniphone_app_icon_${app.id}`);
-    const imgStyle = customImg ? '' : 'display:none;';
-    const btnClass = customImg ? 'app-icon-btn has-img' : 'app-icon-btn';
+    const imgStyle = 'display:none;';
+    const btnClass = 'app-icon-btn';
 
     const itemEl = document.createElement('div');
     itemEl.className = 'app-icon desktop-item absolute-layout';
@@ -2647,15 +2659,11 @@ export class DesktopEditMode {
 
   // --- 布局保存与恢复核心 ---
 
-  loadLayout() {
-    const saved = localStorage.getItem('miniphone_desktop_layout');
-    if (saved) {
-      try {
-        this.layout = JSON.parse(saved);
-      } catch (e) {
-        Logger.error('解析桌面布局失败', e);
-        this.initDefaultLayout();
-      }
+  async loadLayout() {
+    const parsed = await this.migrateDesktopEditStorageValue('miniphone_desktop_layout');
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      this.layout = parsed;
     } else {
       this.initDefaultLayout();
     }
@@ -2677,7 +2685,7 @@ export class DesktopEditMode {
     this.sanitizeLayoutForUniquenessAndOverlap();
     this.applyLayoutToDOM();
 
-    localStorage.setItem('miniphone_desktop_layout', JSON.stringify(this.layout));
+    this.persistDesktopEditDbValue('miniphone_desktop_layout', this.layout);
     this.savedLayoutSnapshot = this.cloneLayout(this.layout);
 
     // 同步保存 Dock 可见状态

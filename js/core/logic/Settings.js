@@ -83,7 +83,7 @@ export class Settings {
 
     let logs = [];
     try {
-      logs = JSON.parse(localStorage.getItem('miniphone:error-logs') || '[]');
+      logs = await Logger.getErrorLogs();
     } catch {
       logs = [];
     }
@@ -138,7 +138,7 @@ export class Settings {
     }
 
     if (Array.isArray(logs)) {
-      localStorage.setItem('miniphone:error-logs', JSON.stringify(logs.slice(0, 200)));
+      await Logger.saveErrorLog(logs.slice(0, 200));
     }
 
     Logger.info('导入数据完成');

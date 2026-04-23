@@ -57,28 +57,6 @@ function escapeHtml(value) {
   return text.replace(/[&<>"']/g, (char) => htmlEscapeMap[char] || char);
 }
 
-function readArchiveData() {
-  try {
-    const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
-    if (!raw) return createDefaultData();
-    const parsed = JSON.parse(raw);
-    return normalizeArchiveData(parsed);
-  } catch (_) {
-    return createDefaultData();
-  }
-}
-
-function writeArchiveData(data) {
-  const normalized = normalizeArchiveData(data);
-  try {
-    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(normalized));
-  } catch (error) {
-    const wrapped = new Error('ARCHIVE_STORAGE_WRITE_FAILED');
-    wrapped.cause = error;
-    throw wrapped;
-  }
-  return normalized;
-}
 
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
@@ -540,7 +518,7 @@ export async function mount(container, context) {
   const icon = icons();
 
   const state = {
-    data: readArchiveData(),
+    data: createDefaultData(),
     activeTab: 'mask',
     selectedMaskId: '',
     selectedCharacterId: '',
@@ -637,34 +615,22 @@ export async function mount(container, context) {
       || !!safe.activeMaskId;
   };
 
-  /* [修改标注·需求6] 档案持久化兜底：
-     角色卡导入后若头像/base64 较大，localStorage 可能因配额导致刷新后丢失。
-     这里保留 localStorage 兼容，同时增加 IndexedDB(appsData) 作为稳定缓存。 */
   const loadPersistedArchiveData = async () => {
-    const localData = readArchiveData();
-
     try {
       const record = await context.db?.get?.('appsData', ARCHIVE_DB_RECORD_ID);
       if (record?.value && hasArchiveContent(record.value)) {
         return normalizeArchiveData(record.value);
       }
     } catch (_) {
-      // 忽略 IndexedDB 读取失败，回退到 localStorage
+      // IndexedDB 读取失败，返回默认数据
     }
-
-    return localData;
+    return createDefaultData();
   };
 
   const persistArchiveData = async () => {
     state.data.selectedTab = state.activeTab;
     const normalized = normalizeArchiveData(state.data);
     state.data = normalized;
-
-    try {
-      localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(normalized));
-    } catch (_) {
-      // localStorage 可能因配额不足失败，继续写入 IndexedDB 作为主兜底
-    }
 
     try {
       await context.db?.put?.('appsData', {
@@ -676,12 +642,6 @@ export async function mount(container, context) {
       });
     } catch (_) {
       // 忽略 IndexedDB 写入失败，避免阻断 UI
-    }
-
-    if (normalized.activeMaskId) {
-      localStorage.setItem(ARCHIVE_ACTIVE_MASK_KEY, normalized.activeMaskId);
-    } else {
-      localStorage.removeItem(ARCHIVE_ACTIVE_MASK_KEY);
     }
   };
 
@@ -2191,73 +2151,62 @@ export async function mount(container, context) {
     return pickFirst(root, ['name', 'title']) || `世界书 ${index + 1}`;
   };
 
-  /* [修改标注·需求1] 获取角色绑定的世界书名称列表：
-     1) 优先读取世情应用中当前仍绑定到该角色的世界书；
-     2) 若世情应用尚未同步导入，则回退到档案内角色卡自带的绑定世界书名称。
-     [修改标注·本次需求2] 改用 boundCharacterIds 数组判断绑定关系 */
+  /* 世情应用世界书数据缓存（从 IndexedDB 加载） */
+  let _worldBookCache = [];
+  const loadWorldBookCache = async () => {
+    try {
+      const all = await context.db?.getAll?.('appsData');
+      const rec = all?.find(x => x.id === 'worldbook::all-books');
+      if (rec?.value && Array.isArray(rec.value)) _worldBookCache = rec.value;
+      else _worldBookCache = [];
+    } catch (_) {
+      _worldBookCache = [];
+    }
+  };
+
   const getCharacterWorldBookNames = (characterId) => {
     const fallbackNames = normalizeArray(
       state.data.characters.find((item) => item.id === characterId)?.boundWorldBooks
     ).map((item) => normalizeString(item.name)).filter(Boolean);
 
-    try {
-      const wbData = JSON.parse(localStorage.getItem('miniphone_worldbook_data_v1') || '[]');
-      if (!Array.isArray(wbData)) return [...new Set(fallbackNames)];
+    const activeBoundNames = _worldBookCache
+      .filter((book) => {
+        const bids = Array.isArray(book?.boundCharacterIds) ? book.boundCharacterIds : [];
+        return bids.includes(characterId);
+      })
+      .map((book) => normalizeString(book?.name || '未命名世界书'))
+      .filter(Boolean);
 
-      const activeBoundNames = wbData
-        .filter((book) => {
-          const bids = Array.isArray(book?.boundCharacterIds) ? book.boundCharacterIds : [];
-          return bids.includes(characterId);
-        })
-        .map((book) => normalizeString(book?.name || '未命名世界书'))
-        .filter(Boolean);
-
-      return [...new Set([...fallbackNames, ...activeBoundNames])];
-    } catch (_) {
-      return [...new Set(fallbackNames)];
-    }
+    return [...new Set([...fallbackNames, ...activeBoundNames])];
   };
 
-  /* [修改标注·本次需求2] 获取世情应用局部板块所有世界书列表（供角色档案界面点按绑定） */
   const getLocalWorldBooks = () => {
-    try {
-      const wbData = JSON.parse(localStorage.getItem('miniphone_worldbook_data_v1') || '[]');
-      if (!Array.isArray(wbData)) return [];
-      return wbData.filter((book) => book?.type === 'local').map((book) => ({
-        id: book.id,
-        name: normalizeString(book.name || '未命名世界书'),
-        boundCharacterIds: Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds : []
-      }));
-    } catch (_) {
-      return [];
-    }
+    return _worldBookCache.filter((book) => book?.type === 'local').map((book) => ({
+      id: book.id,
+      name: normalizeString(book.name || '未命名世界书'),
+      boundCharacterIds: Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds : []
+    }));
   };
 
-  /* [修改标注·本次需求2] 切换角色与世界书的绑定状态（一书多绑） */
-  const toggleWorldBookBinding = (bookId, characterId) => {
+  const toggleWorldBookBinding = async (bookId, characterId) => {
+    const book = _worldBookCache.find((b) => b.id === bookId);
+    if (!book) return;
+    if (!Array.isArray(book.boundCharacterIds)) book.boundCharacterIds = [];
+    const idx = book.boundCharacterIds.indexOf(characterId);
+    if (idx >= 0) {
+      book.boundCharacterIds.splice(idx, 1);
+    } else {
+      book.boundCharacterIds.push(characterId);
+    }
+    book.updatedAt = Date.now();
     try {
-      const raw = localStorage.getItem('miniphone_worldbook_data_v1') || '[]';
-      const wbData = JSON.parse(raw);
-      if (!Array.isArray(wbData)) return;
-      const book = wbData.find((b) => b.id === bookId);
-      if (!book) return;
-      if (!Array.isArray(book.boundCharacterIds)) book.boundCharacterIds = [];
-      const idx = book.boundCharacterIds.indexOf(characterId);
-      if (idx >= 0) {
-        book.boundCharacterIds.splice(idx, 1);
-      } else {
-        book.boundCharacterIds.push(characterId);
-      }
-      book.updatedAt = Date.now();
-      localStorage.setItem('miniphone_worldbook_data_v1', JSON.stringify(wbData));
-      /* 同步写入 IndexedDB */
-      context.db?.put?.('appsData', {
+      await context.db?.put?.('appsData', {
         id: 'worldbook::all-books',
         appId: 'worldbook',
         key: 'all-books',
-        value: wbData,
+        value: _worldBookCache,
         updatedAt: Date.now()
-      }).catch(() => {});
+      });
     } catch (_) {
       // ignore
     }
@@ -2709,13 +2658,9 @@ export async function mount(container, context) {
     context.eventBus?.emit('app:close', { appId: context.appId });
   };
 
+  await loadWorldBookCache();
   state.data = await loadPersistedArchiveData();
   state.activeTab = TAB_META[state.data.selectedTab] ? state.data.selectedTab : 'mask';
-
-  const storedActiveMaskId = normalizeString(localStorage.getItem(ARCHIVE_ACTIVE_MASK_KEY));
-  if (storedActiveMaskId && state.data.masks.some((item) => item.id === storedActiveMaskId)) {
-    state.data.activeMaskId = storedActiveMaskId;
-  }
 
   createHeaderControls();
   rerender();

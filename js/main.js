@@ -20,6 +20,7 @@ import { DragDrop } from './core/interaction/DragDrop.js';
 import { Gestures } from './core/interaction/Gestures.js';
 
 import { DB } from './core/data/DB.js';
+import { PersistentKV } from './core/data/PersistentKV.js';
 
 import { Registry } from './core/logic/Registry.js';
 import { AppManager } from './core/logic/AppManager.js';
@@ -36,6 +37,9 @@ class MiniPhoneApp {
 
     /** @type {DB} */
     this.db = new DB();
+
+    /** @type {PersistentKV} */
+    this.persistentKV = new PersistentKV(this.db);
 
     /** @type {Registry} */
     this.registry = new Registry();
@@ -87,11 +91,57 @@ class MiniPhoneApp {
     
     /** @type {DesktopEditMode} */
     this.desktopEditMode = new DesktopEditMode(
-      document.getElementById('desktop-container'), 
-      this.eventBus, 
-      this.appManager, 
-      this.dragDrop
+      document.getElementById('desktop-container'),
+      this.eventBus,
+      this.appManager,
+      this.dragDrop,
+      this.db
     );
+  }
+
+  /**
+   * 一次性将旧 localStorage 数据迁移到 IndexedDB（PersistentKV），
+   * 迁移完成后清除 localStorage 并在 IndexedDB 中标记已完成，
+   * 后续启动不再重复执行。
+   */
+  async migrateLocalStorageToIndexedDB() {
+    const MIGRATION_FLAG = '__ls_migrated__';
+
+    // 检查是否已经迁移过
+    const migrated = await this.persistentKV.get(MIGRATION_FLAG);
+    if (migrated) return;
+
+    const count = window.localStorage.length;
+    if (count === 0) {
+      // 没有旧数据，直接标记完成
+      await this.persistentKV.set(MIGRATION_FLAG, Date.now());
+      return;
+    }
+
+    Logger.info(`开始迁移 localStorage → IndexedDB，共 ${count} 条`);
+
+    for (let i = 0; i < count; i++) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      const raw = window.localStorage.getItem(key);
+
+      // 尝试还原 JSON，失败则保存原始字符串
+      let value;
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        value = raw;
+      }
+
+      await this.persistentKV.set(key, value);
+    }
+
+    // 清除全部旧数据
+    window.localStorage.clear();
+
+    // 标记迁移完成
+    await this.persistentKV.set(MIGRATION_FLAG, Date.now());
+    Logger.info('localStorage → IndexedDB 迁移完成，已清除 localStorage');
   }
 
   async init() {
@@ -101,29 +151,39 @@ class MiniPhoneApp {
       // 1) 初始化 IndexedDB
       await this.db.init();
 
-      // 2) 初始化逻辑层数据
+      // 1.5) 一次性迁移旧 localStorage 数据
+      try {
+        await this.migrateLocalStorageToIndexedDB();
+      } catch (migErr) {
+        Logger.warn('localStorage 迁移失败（非致命）', migErr);
+      }
+
+      // 2) 初始化统一持久化入口
+      window.__MINIPHONE_PERSISTENT_KV__ = this.persistentKV;
+
+      // 3) 初始化逻辑层数据
       await this.settings.initDefaults();
       await this.registry.initDefaults();
       await this.desktopConfig.initDefaults();
       await this.globalMemory.init();
 
-      // 3) 应用主题
+      // 4) 应用主题
       const currentSettings = await this.settings.getAll();
       this.theme.apply(currentSettings.appearance || {});
 
-      // 4) 渲染桌面
+      // 5) 渲染桌面
       const desktopState = await this.desktopConfig.getConfig();
       this.desktop.render(desktopState);
 
-      // 5) 绑定交互
+      // 6) 绑定交互
       this.gestures.bind();
       this.dragDrop.bind();
 
-      // 6) 状态栏时间刷新
+      // 7) 状态栏时间刷新
       this.setupClock();
       this.setupBattery();
 
-      // 7) 注册 service worker
+      // 8) 注册 service worker
       await this.registerServiceWorker();
 
       // 移除防白屏过渡
@@ -136,6 +196,7 @@ class MiniPhoneApp {
       this.eventBus.emit('app:ready', { time: Date.now() });
       window.__MINIPHONE_APP_READY__ = true;
     } catch (error) {
+      window.__MINIPHONE_PERSISTENT_KV__ = null;
       Logger.error('MiniPhone 启动失败', error);
       window.__MINIPHONE_APP_READY__ = false;
     }
