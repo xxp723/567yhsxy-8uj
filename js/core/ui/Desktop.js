@@ -238,28 +238,24 @@ export class Desktop {
   }
 
   bindIconEvents() {
-    // 桌面内应用图标绑定
-    const buttons = this.container.querySelectorAll('[data-open-app]');
-    buttons.forEach((btn) => {
+    /* [本次修改标注·需求2-桌面图标点击去重修复] 静态桌面会多次 render，此处为桌面图标与 Dock 图标统一增加 click 去重绑定，避免一次点击触发多次 app:open 导致打不开或渲染不完整 */
+    const bindOpenHandler = (btn) => {
+      if (!btn || btn.dataset.openBound === 'true') return;
+      btn.dataset.openBound = 'true';
       btn.addEventListener('click', () => {
         const appId = btn.getAttribute('data-open-app');
         if (!appId) return;
         this.eventBus.emit('app:open', { appId });
       });
-    });
+    };
+
+    // 桌面内应用图标绑定
+    const buttons = this.container.querySelectorAll('[data-open-app]');
+    buttons.forEach(bindOpenHandler);
 
     // Dock 栏图标事件绑定 (因为 Dock 是脱离 desktop-container 的，所以在外层绑定一次)
     const dockButtons = document.querySelectorAll('#dock-container [data-open-app]');
-    dockButtons.forEach((btn) => {
-      // 避免重复绑定
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = "true";
-      btn.addEventListener('click', () => {
-        const appId = btn.getAttribute('data-open-app');
-        if (!appId) return;
-        this.eventBus.emit('app:open', { appId });
-      });
-    });
+    dockButtons.forEach(bindOpenHandler);
   }
 
   initWidgets() {
