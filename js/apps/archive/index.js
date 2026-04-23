@@ -1225,7 +1225,8 @@ export async function mount(container, context) {
         return `
       <section class="archive-character-paper__section archive-worldbook-section archive-setting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-          <span>${icon.book} 绑定世界书</span>
+          <!-- [修改标注·本次需求·修改1] 去除绑定世界书上方的大图标，仅保留文字 -->
+          <span>绑定世界书</span>
           <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
         <div class="archive-setting-body" style="display:none;">
