@@ -189,111 +189,113 @@
 .wb-book-toggle input:checked + .wb-toggle-track { background: var(--wb-primary); }
 .wb-book-toggle input:checked + .wb-toggle-track::after { transform: translateX(16px); }
 
-/* [修改标注·本次需求1+4] 底部 Tab 栏：深色#17120d + CircularNotchedRectangle缺口 */
-/* [本次修改标注·需求1-TAB圆角连接修复] 收紧缺口与肩部过渡，去除中央区域不协调的浅白残痕与白道 */
-/* [本次修改标注·需求1-中心加号按钮显示修复] 提升 FAB 对比度、层级与实体感，让中间“+”按钮稳定显示 */
+/* [修改标注·本次需求2] 底部 Tab 栏中间圆形“+”按钮改为内嵌显示，不再悬浮在栏体上方 */
 .wb-tabbar {
   position: absolute;
-  left: 10px; right: 10px; bottom: 10px;
-  height: 56px; border-radius: 22px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 56px;
+  border-radius: 22px;
   border: none;
   background: linear-gradient(180deg, #2a1f17 0%, #1a120d 100%);
   padding: 6px;
-  display: grid; grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1fr);
   gap: 6px;
   box-shadow:
     0 14px 30px rgba(25, 16, 10, 0.34),
     inset 0 1px 0 rgba(255, 247, 234, 0.08),
     inset 0 0 0 1px rgba(255, 248, 235, 0.04);
-  z-index: 50; overflow: visible; isolation: isolate;
+  z-index: 50;
+  overflow: hidden;
 }
-.wb-tabbar::before,
-.wb-tabbar::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  width: 52px;
-  height: 28px;
-  background: linear-gradient(180deg, #2a1f17 0%, #1a120d 100%);
-  z-index: 1;
-  pointer-events: none;
-  box-shadow: none;
-}
-.wb-tabbar::before {
-  left: calc(50% - 66px);
-  border-top-left-radius: 0;
-  border-top-right-radius: 28px;
-}
-.wb-tabbar::after {
-  right: calc(50% - 66px);
-  border-top-left-radius: 28px;
-  border-top-right-radius: 0;
-}
+
 .wb-tab-btn {
-  position: relative; z-index: 2; width: 100%; border: 0; border-radius: 14px;
-  background: transparent; color: rgba(255, 247, 235, 0.72);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 600; gap: 6px;
-  transition: all 0.18s ease; cursor: pointer; margin: 0;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(255, 247, 235, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  transition: all 0.18s ease;
+  cursor: pointer;
+  margin: 0;
 }
-.wb-tab-btn svg { width: 20px; height: 20px; }
+
+.wb-tab-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 .wb-tab-btn.is-active {
-  z-index: 3; color: #fffdf7;
+  z-index: 3;
+  color: #fffdf7;
   background: rgba(243, 228, 206, 0.16);
   box-shadow:
     inset 0 0 0 1px rgba(255, 248, 235, 0.18),
     0 4px 10px rgba(0, 0, 0, 0.08);
 }
+
 .wb-tab-add-wrapper {
-  position: relative; z-index: 51;
-  display: flex; align-items: flex-start; justify-content: center;
-  overflow: visible;
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   pointer-events: none;
 }
+
 .wb-tab-add-bg {
-  display: block;
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 51;
-  width: 96px;
-  height: 52px;
-  border-radius: 30px 30px 22px 22px;
-  background: linear-gradient(180deg, #f5efdf 0%, #ebdfc8 100%);
-  box-shadow: none;
+  display: none;
 }
-/* [修改标注·本次需求1] 中心FAB：56px圆形，嵌入缺口 */
-/* [修改标注·本次需求·修改3] 强化中间“+”按钮的实体感与可见性，避免出现“隐形圆按钮”观感 */
+
+/* [修改标注·本次需求2] 中心加号按钮嵌入 Tab 栏内部，圆形与对比度强化 */
 .wb-tab-add-btn {
-  position: absolute; top: -31px; left: 50%; transform: translateX(-50%);
-  z-index: 60; width: 58px; height: 58px; border-radius: 50%;
-  border: 3px solid rgba(247, 234, 214, 0.98);
-  background: radial-gradient(circle at 30% 24%, #d7b48d 0%, #b6855b 42%, #7a5034 100%);
+  position: relative;
+  top: 0;
+  left: 0;
+  transform: none;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(247, 234, 214, 0.95);
+  background: radial-gradient(circle at 30% 24%, #d8b88f 0%, #b08158 45%, #7a5235 100%);
   color: #fffdf7;
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   box-shadow:
-    0 18px 30px rgba(86, 59, 35, 0.44),
-    0 4px 10px rgba(28, 19, 12, 0.24),
-    0 0 0 4px rgba(245, 239, 223, 0.92),
+    0 7px 14px rgba(28, 19, 12, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.3),
     inset 0 -2px 6px rgba(80, 50, 30, 0.24);
-  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   pointer-events: auto;
   filter: saturate(1.08);
 }
+
 .wb-tab-add-btn svg {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   stroke-width: 4;
   opacity: 1;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.22));
 }
+
 .wb-tab-add-btn:active {
-  transform: translateX(-50%) scale(0.94);
+  transform: scale(0.94);
   box-shadow:
-    0 10px 18px rgba(86, 59, 35, 0.32),
-    0 2px 5px rgba(28, 19, 12, 0.18),
+    0 4px 9px rgba(28, 19, 12, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 

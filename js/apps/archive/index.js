@@ -1178,35 +1178,24 @@ export async function mount(container, context) {
         </div>
       </section>
 
-      <!-- [修改标注·本次需求1] 绑定世界书折叠栏改为优先显示角色自身已导入的 boundWorldBooks，避免必须先进入世情应用后才可见 -->
+      <!-- [修改标注·本次需求2] 绑定世界书改为折叠栏，显示世情局部板块所有世界书，点击切换绑定状态 -->
       ${(() => {
         const localBooks = getLocalWorldBooks();
-        const boundNames = getCharacterWorldBookNames(item.id);
-        if (!localBooks.length && !boundNames.length) return '';
+        if (!localBooks.length) return '';
         return `
       <section class="archive-character-paper__section archive-worldbook-section archive-setting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-          <span>绑定世界书${boundNames.length ? ` (${boundNames.length})` : ''}</span>
+          <!-- [修改标注·本次需求·修改1] 去除绑定世界书上方的大图标，仅保留文字 -->
+          <span>绑定世界书</span>
           <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
         <div class="archive-setting-body" style="display:none;">
-          <div class="archive-character-paper__content">
-            ${boundNames.length
-              ? `
-                <div class="archive-chip-list">
-                  ${boundNames.map((name) => `<span class="archive-chip">${escapeHtml(name)}</span>`).join('')}
-                </div>
-              `
-              : '<p style="color:var(--archive-subtext);">暂无已绑定世界书</p>'}
+          <div class="archive-wb-bind-list">
+            ${localBooks.map(wb => {
+              const isBound = wb.boundCharacterIds.includes(item.id);
+              return `<button type="button" class="archive-wb-bind-chip ${isBound ? 'is-bound' : ''}" data-action="toggle-wb-bind" data-book-id="${wb.id}" data-char-id="${item.id}">${escapeHtml(wb.name)}</button>`;
+            }).join('')}
           </div>
-          ${localBooks.length ? `
-            <div class="archive-wb-bind-list">
-              ${localBooks.map((wb) => {
-                const isBound = wb.boundCharacterIds.includes(item.id);
-                return `<button type="button" class="archive-wb-bind-chip ${isBound ? 'is-bound' : ''}" data-action="toggle-wb-bind" data-book-id="${wb.id}" data-char-id="${item.id}">${escapeHtml(wb.name)}</button>`;
-              }).join('')}
-            </div>
-          ` : ''}
         </div>
       </section>`;
       })()}
@@ -2163,15 +2152,132 @@ export async function mount(container, context) {
   };
 
   /* 世情应用世界书数据缓存（从 IndexedDB 加载） */
+  const WORLD_BOOK_DB_RECORD_ID = 'worldbook::all-books';
   let _worldBookCache = [];
   const loadWorldBookCache = async () => {
     try {
       const all = await context.db?.getAll?.('appsData');
-      const rec = all?.find(x => x.id === 'worldbook::all-books');
+      const rec = all?.find(x => x.id === WORLD_BOOK_DB_RECORD_ID);
       if (rec?.value && Array.isArray(rec.value)) _worldBookCache = rec.value;
       else _worldBookCache = [];
     } catch (_) {
       _worldBookCache = [];
+    }
+  };
+
+  /* [修改标注·本次需求1] 角色卡导入后在档案应用内立即落地世界书到 IndexedDB（worldbook::all-books） */
+  const normalizeWorldBookEntryFromRaw = (rawEntry = {}, index = 0) => {
+    const safe = rawEntry && typeof rawEntry === 'object' ? rawEntry : {};
+    const keywords = Array.isArray(safe.keywords)
+      ? safe.keywords
+      : Array.isArray(safe.key)
+        ? safe.key
+        : typeof safe.keywords === 'string'
+          ? safe.keywords.split(/[,，\s]+/)
+          : typeof safe.key === 'string'
+            ? safe.key.split(/[,，\s]+/)
+            : [];
+
+    let position = 'afterChar';
+    if (safe.position === 4 || safe.position === 'top') position = 'top';
+    if (safe.position === 0 || safe.position === 'before_char' || safe.position === 'beforeChar') position = 'beforeChar';
+
+    return {
+      id: normalizeString(safe.id) || uid('e'),
+      name: pickFirst(safe, ['name', 'title', 'comment']) || `条目 ${index + 1}`,
+      content: normalizeString(safe.content),
+      position,
+      triggerType: (safe.triggerType === 'always' || safe.constant === true || safe.constant === 1) ? 'always' : 'keyword',
+      keywords: keywords.map((k) => normalizeString(k)).filter(Boolean),
+      order: Number.isFinite(Number(safe.order))
+        ? Number(safe.order)
+        : (Number.isFinite(Number(safe.insertion_order)) ? Number(safe.insertion_order) : 100),
+      enabled: typeof safe.enabled === 'boolean' ? safe.enabled : (safe.disable !== true),
+      disableRecursion: !!safe.disableRecursion || !!safe.disable,
+      preventFurtherRecursion: !!safe.preventFurtherRecursion || !!safe.preventRecursion
+    };
+  };
+
+  const parseWorldBookEntriesFromRaw = (rawWorldBook) => {
+    const safe = rawWorldBook && typeof rawWorldBook === 'object' ? rawWorldBook : {};
+    const entriesRaw = Array.isArray(safe.entries)
+      ? safe.entries
+      : (safe.entries && typeof safe.entries === 'object' ? Object.values(safe.entries) : []);
+    return entriesRaw.map((entry, index) => normalizeWorldBookEntryFromRaw(entry, index));
+  };
+
+  const buildImportedWorldBookRecord = ({ raw, name, characterId, sourceKey }) => {
+    const safeRaw = raw && typeof raw === 'object' ? raw : {};
+    return {
+      id: uid('book'),
+      name: normalizeString(name) || pickFirst(safeRaw, ['name', 'title']) || '角色卡世界书',
+      enabled: typeof safeRaw.enabled === 'boolean' ? safeRaw.enabled : !(safeRaw.disable === true || safeRaw.disable === 1),
+      type: 'local',
+      boundCharacterIds: characterId ? [characterId] : [],
+      archiveSourceCharacterId: characterId || null,
+      archiveSourceKey: sourceKey || uid('archivewb'),
+      entries: parseWorldBookEntriesFromRaw(safeRaw),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  };
+
+  const upsertImportedWorldBooksForCharacter = async (character) => {
+    const targetCharacterId = normalizeString(character?.id);
+    const importedBooks = normalizeArray(character?.boundWorldBooks);
+    if (!targetCharacterId || !importedBooks.length) return;
+
+    let changed = false;
+    const worldBooks = Array.isArray(_worldBookCache) ? [..._worldBookCache] : [];
+
+    importedBooks.forEach((item, index) => {
+      const raw = item?.raw && typeof item.raw === 'object' ? item.raw : null;
+      if (!raw) return;
+
+      const sourceKey = normalizeString(item?.sourceKey) || `${targetCharacterId}::${index}`;
+      const existed = worldBooks.find((book) => {
+        return book?.archiveSourceCharacterId === targetCharacterId && book?.archiveSourceKey === sourceKey;
+      });
+
+      if (existed) {
+        const parsedEntries = parseWorldBookEntriesFromRaw(raw);
+        existed.name = normalizeString(item?.name) || existed.name || pickFirst(raw, ['name', 'title']) || '角色卡世界书';
+        existed.type = 'local';
+        existed.enabled = typeof raw.enabled === 'boolean' ? raw.enabled : existed.enabled;
+        existed.entries = parsedEntries.length ? parsedEntries : normalizeArray(existed.entries);
+        if (!Array.isArray(existed.boundCharacterIds)) existed.boundCharacterIds = [];
+        if (!existed.boundCharacterIds.includes(targetCharacterId)) {
+          existed.boundCharacterIds.push(targetCharacterId);
+        }
+        existed.archiveSourceCharacterId = targetCharacterId;
+        existed.archiveSourceKey = sourceKey;
+        existed.updatedAt = Date.now();
+        changed = true;
+        return;
+      }
+
+      worldBooks.push(buildImportedWorldBookRecord({
+        raw,
+        name: item?.name,
+        characterId: targetCharacterId,
+        sourceKey
+      }));
+      changed = true;
+    });
+
+    if (!changed) return;
+
+    _worldBookCache = worldBooks;
+    try {
+      await context.db?.put?.('appsData', {
+        id: WORLD_BOOK_DB_RECORD_ID,
+        appId: 'worldbook',
+        key: 'all-books',
+        value: worldBooks,
+        updatedAt: Date.now()
+      });
+    } catch (_) {
+      // 忽略写入失败，保持档案 UI 可继续工作
     }
   };
 
@@ -2212,7 +2318,7 @@ export async function mount(container, context) {
     book.updatedAt = Date.now();
     try {
       await context.db?.put?.('appsData', {
-        id: 'worldbook::all-books',
+        id: WORLD_BOOK_DB_RECORD_ID,
         appId: 'worldbook',
         key: 'all-books',
         value: _worldBookCache,
@@ -2223,7 +2329,7 @@ export async function mount(container, context) {
     }
   };
 
-  const addCharacterFromImportedObject = (obj, avatarDataUrl = '') => {
+  const addCharacterFromImportedObject = async (obj, avatarDataUrl = '') => {
     const mapped = mapImportedRole(obj);
     if (avatarDataUrl) mapped.avatar = avatarDataUrl;
 
@@ -2241,6 +2347,9 @@ export async function mount(container, context) {
 
     state.data.characters.push(mapped);
     state.selectedCharacterId = mapped.id;
+
+    /* [修改标注·本次需求1] 角色导入后立即把绑定世界书写入 IndexedDB，避免必须先进入世情应用才可见 */
+    await upsertImportedWorldBooksForCharacter(mapped);
 
     /* [修改标注·需求1] 解析角色卡中的世界书，发送事件给世情应用 */
     if (mapped.boundWorldBooks.length > 0) {
@@ -2273,7 +2382,7 @@ export async function mount(container, context) {
         return;
       }
 
-      addCharacterFromImportedObject(source);
+      await addCharacterFromImportedObject(source);
       return;
     }
 
@@ -2284,7 +2393,7 @@ export async function mount(container, context) {
       const avatarDataUrl = await fileToDataURL(file);
 
       if (roleObj) {
-        addCharacterFromImportedObject(roleObj, avatarDataUrl);
+        await addCharacterFromImportedObject(roleObj, avatarDataUrl);
       } else {
         const fallback = normalizeProfile({
           id: uid('char'),
