@@ -324,13 +324,20 @@ export async function mount(container, context) {
       '<button class="wb-entry-delete-btn wb-btn wb-btn--danger" data-a="de" data-eid="' + e.id + '" data-bid="' + bid + '">' + I.del + ' 删除条目</button></div></div>';
   };
 
+  /* [修改标注·本次需求2] 搜索时只列出匹配的条目，不再显示所有条目仅高亮 */
   const rBookOpen = book => {
-    /* [修改标注·本次需求2] 显示所有绑定角色名称（一书多绑） */
     const bids = Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds : [];
     const cnames = bids.map(cid => chars().find(c => c.id === cid)?.name || '未知角色').filter(Boolean);
     const bd = book.type === 'local' && cnames.length ? '<div class="wb-book-open__binding">' + I.link + ' 绑定角色: ' + esc(cnames.join(', ')) + '</div>' : '';
-    return '<div class="wb-book-open">' + bd +
-      '<div class="wb-entry-list">' + (book.entries.length ? book.entries.map(e => rEntry(e, book.id)).join('') : '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 + 添加新条目</p></div>') + '</div></div>';
+    const entries = (S.sOpen && S.sQ) ? book.entries.filter(e => S.sEntries.has(e.id)) : book.entries;
+    let listHtml;
+    if (!entries.length) {
+      if (S.sOpen && S.sQ) listHtml = '<div class="wb-empty"><h3>未找到匹配的条目</h3><p>尝试更换关键词搜索</p></div>';
+      else listHtml = '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 + 添加新条目</p></div>';
+    } else {
+      listHtml = entries.map(e => rEntry(e, book.id)).join('');
+    }
+    return '<div class="wb-book-open">' + bd + '<div class="wb-entry-list">' + listHtml + '</div></div>';
   };
 
   const rBookCard = b => {
@@ -344,10 +351,15 @@ export async function mount(container, context) {
       '</div></div>';
   };
 
+  /* [修改标注·本次需求2] 搜索时只列出匹配的世界书，不再显示所有书籍仅高亮 */
   const rGrid = () => {
     const bs = curBooks();
-    if (!bs.length) return '<div class="wb-empty"><h3>暂无' + (S.tab === 'global' ? '全局' : '局部') + '世界书</h3><p>点击标题栏导入或底部 + 新建</p></div>';
-    return '<div class="wb-book-grid">' + bs.map(rBookCard).join('') + '</div>';
+    const filtered = (S.sOpen && S.sQ) ? bs.filter(b => S.sBooks.has(b.id)) : bs;
+    if (!filtered.length) {
+      if (S.sOpen && S.sQ) return '<div class="wb-empty"><h3>未找到匹配的世界书</h3><p>尝试更换关键词搜索</p></div>';
+      return '<div class="wb-empty"><h3>暂无' + (S.tab === 'global' ? '全局' : '局部') + '世界书</h3><p>点击标题栏导入或底部 + 新建</p></div>';
+    }
+    return '<div class="wb-book-grid">' + filtered.map(rBookCard).join('') + '</div>';
   };
 
   /* [本次修改标注·仅限需求2] 世情应用标题改为内嵌可点击按钮，绕过全局标题 pointer-events:none，仅修复“世情/世界书名称”返回桌面功能 */
