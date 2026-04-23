@@ -206,29 +206,27 @@
     inset 0 1px 0 rgba(255, 247, 234, 0.08),
     inset 0 0 0 1px rgba(255, 248, 235, 0.04);
   z-index: 50; overflow: visible; isolation: isolate;
-  -webkit-mask-image: radial-gradient(circle 41px at 50% -7px, transparent 37px, black 38px);
-  mask-image: radial-gradient(circle 41px at 50% -7px, transparent 37px, black 38px);
 }
 .wb-tabbar::before,
 .wb-tabbar::after {
   content: '';
   position: absolute;
-  top: 0;
-  width: 42px;
-  height: 24px;
+  top: -2px;
+  width: 52px;
+  height: 28px;
   background: linear-gradient(180deg, #2a1f17 0%, #1a120d 100%);
   z-index: 1;
   pointer-events: none;
   box-shadow: none;
 }
 .wb-tabbar::before {
-  left: calc(50% - 58px);
+  left: calc(50% - 66px);
   border-top-left-radius: 0;
-  border-top-right-radius: 24px;
+  border-top-right-radius: 28px;
 }
 .wb-tabbar::after {
-  right: calc(50% - 58px);
-  border-top-left-radius: 24px;
+  right: calc(50% - 66px);
+  border-top-left-radius: 28px;
   border-top-right-radius: 0;
 }
 .wb-tab-btn {
@@ -255,14 +253,14 @@
 .wb-tab-add-bg {
   display: block;
   position: absolute;
-  top: -8px;
+  top: -14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 51;
-  width: 90px;
-  height: 44px;
-  border-radius: 24px 24px 20px 20px;
-  background: linear-gradient(180deg, #2a1f17 0%, #1a120d 100%);
+  width: 96px;
+  height: 52px;
+  border-radius: 30px 30px 22px 22px;
+  background: linear-gradient(180deg, #f5efdf 0%, #ebdfc8 100%);
   box-shadow: none;
 }
 /* [修改标注·本次需求1] 中心FAB：56px圆形，嵌入缺口 */
@@ -270,13 +268,14 @@
 .wb-tab-add-btn {
   position: absolute; top: -31px; left: 50%; transform: translateX(-50%);
   z-index: 60; width: 58px; height: 58px; border-radius: 50%;
-  border: 3px solid rgba(247, 234, 214, 0.95);
-  background: radial-gradient(circle at 30% 24%, #d2ae85 0%, #ab7d56 42%, #744d32 100%);
+  border: 3px solid rgba(247, 234, 214, 0.98);
+  background: radial-gradient(circle at 30% 24%, #d7b48d 0%, #b6855b 42%, #7a5034 100%);
   color: #fffdf7;
   display: inline-flex; align-items: center; justify-content: center;
   box-shadow:
     0 18px 30px rgba(86, 59, 35, 0.44),
     0 4px 10px rgba(28, 19, 12, 0.24),
+    0 0 0 4px rgba(245, 239, 223, 0.92),
     inset 0 1px 0 rgba(255, 255, 255, 0.3),
     inset 0 -2px 6px rgba(80, 50, 30, 0.24);
   cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;

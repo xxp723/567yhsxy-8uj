@@ -1178,24 +1178,35 @@ export async function mount(container, context) {
         </div>
       </section>
 
-      <!-- [修改标注·本次需求2] 绑定世界书改为折叠栏，显示世情局部板块所有世界书，点击切换绑定状态 -->
+      <!-- [修改标注·本次需求1] 绑定世界书折叠栏改为优先显示角色自身已导入的 boundWorldBooks，避免必须先进入世情应用后才可见 -->
       ${(() => {
         const localBooks = getLocalWorldBooks();
-        if (!localBooks.length) return '';
+        const boundNames = getCharacterWorldBookNames(item.id);
+        if (!localBooks.length && !boundNames.length) return '';
         return `
       <section class="archive-character-paper__section archive-worldbook-section archive-setting-section" data-collapsed="true">
         <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
-          <!-- [修改标注·本次需求·修改1] 去除绑定世界书上方的大图标，仅保留文字 -->
-          <span>绑定世界书</span>
+          <span>绑定世界书${boundNames.length ? ` (${boundNames.length})` : ''}</span>
           <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
         <div class="archive-setting-body" style="display:none;">
-          <div class="archive-wb-bind-list">
-            ${localBooks.map(wb => {
-              const isBound = wb.boundCharacterIds.includes(item.id);
-              return `<button type="button" class="archive-wb-bind-chip ${isBound ? 'is-bound' : ''}" data-action="toggle-wb-bind" data-book-id="${wb.id}" data-char-id="${item.id}">${escapeHtml(wb.name)}</button>`;
-            }).join('')}
+          <div class="archive-character-paper__content">
+            ${boundNames.length
+              ? `
+                <div class="archive-chip-list">
+                  ${boundNames.map((name) => `<span class="archive-chip">${escapeHtml(name)}</span>`).join('')}
+                </div>
+              `
+              : '<p style="color:var(--archive-subtext);">暂无已绑定世界书</p>'}
           </div>
+          ${localBooks.length ? `
+            <div class="archive-wb-bind-list">
+              ${localBooks.map((wb) => {
+                const isBound = wb.boundCharacterIds.includes(item.id);
+                return `<button type="button" class="archive-wb-bind-chip ${isBound ? 'is-bound' : ''}" data-action="toggle-wb-bind" data-book-id="${wb.id}" data-char-id="${item.id}">${escapeHtml(wb.name)}</button>`;
+              }).join('')}
+            </div>
+          ` : ''}
         </div>
       </section>`;
       })()}
