@@ -48,12 +48,14 @@ export class DesktopConfig {
     };
   }
 
+  /* [修改标注·Issue2修复] 修复刷新后桌面应用丢失：不再用过于严格的条件判断已有配置是否有效，
+     只要存在有效的 pages 数组结构即保留用户配置，不强制重置 */
   async initDefaults() {
     const existing = await this.store.getConfig();
     
-    // 检查旧配置的结构，如果存在但不是分多页的结构，则强制重置以防页面渲染白屏
-    // 例如旧版 pages[0].id 是 'page-1' 但只含有所有应用
-    if (existing && existing.pages && existing.pages.length === 2 && existing.pages[0].appIds.includes('archive')) {
+    // 只要已有配置包含有效的 pages 数组且至少有一页，即认定为有效配置并保留
+    if (existing && Array.isArray(existing.pages) && existing.pages.length > 0
+        && existing.pages.every(p => p && Array.isArray(p.appIds))) {
       this.config = existing;
       return existing;
     }

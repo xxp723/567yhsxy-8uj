@@ -30,8 +30,13 @@ export class Settings {
       appearance: {
         wallpaper: '',
         desktopWallpaper: '',
+        desktopWallpaperCrop: { x: 50, y: 50, scale: 1 },
         lockscreenWallpaper: '',
         themeColor: '#4f46e5',
+        fullscreen: false,
+        statusBarHidden: false,
+        dockOpacity: 88,
+        dockColor: '#f5f1ea',
         iconSize: 56,
         iconImage: '',
         iconImages: {},

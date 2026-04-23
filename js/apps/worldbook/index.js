@@ -156,7 +156,8 @@ export async function mount(container, context) {
   const loadArchiveCache = async () => {
     try {
       const all = await db?.getAll?.('appsData');
-      const rec = all?.find(x => x.id === 'archive::data');
+      /* [修改标注·Issue3修复] 档案数据ID与archive应用一致：archive::archive-data */
+      const rec = all?.find(x => x.id === 'archive::archive-data');
       if (rec?.value && Array.isArray(rec.value.characters)) _archiveCharsCache = rec.value.characters;
     } catch {}
   };
@@ -181,7 +182,24 @@ export async function mount(container, context) {
     if (!raw || typeof raw !== 'object') return false;
     const safeSourceKey = sourceKey || uid('archivewb');
     const existed = S.books.find((book) => book.archiveSourceCharacterId === characterId && book.archiveSourceKey === safeSourceKey);
-    if (existed) return false;
+    if (existed) {
+      const nextBook = parseTavWB(raw, name || existed.name || '角色卡世界书');
+      if (!nextBook) return false;
+
+      existed.name = nextBook.name || existed.name;
+      existed.entries = Array.isArray(nextBook.entries) ? nextBook.entries : existed.entries;
+      existed.enabled = typeof nextBook.enabled === 'boolean' ? nextBook.enabled : existed.enabled;
+      existed.type = 'local';
+      existed.archiveSourceCharacterId = characterId || existed.archiveSourceCharacterId || null;
+      existed.archiveSourceKey = safeSourceKey;
+
+      if (!Array.isArray(existed.boundCharacterIds)) existed.boundCharacterIds = [];
+      if (characterId && !existed.boundCharacterIds.includes(characterId)) {
+        existed.boundCharacterIds.push(characterId);
+      }
+
+      return true;
+    }
     const book = parseTavWB(raw, name || '角色卡世界书');
     if (!book) return false;
     book.type = 'local';
@@ -586,6 +604,17 @@ export async function mount(container, context) {
   /* [修改标注·需求1] 监听档案应用角色卡导入事件，并同步角色卡自带世界书到世情局部板块 */
   const onCharImported = (data) => {
     if (!data || !Array.isArray(data.worldBooks)) return;
+
+    if (data.characterId) {
+      const idx = _archiveCharsCache.findIndex((item) => item?.id === data.characterId);
+      const nextCharacter = {
+        id: data.characterId,
+        name: data.characterName || _archiveCharsCache[idx]?.name || '未知角色'
+      };
+      if (idx >= 0) _archiveCharsCache[idx] = { ..._archiveCharsCache[idx], ...nextCharacter };
+      else _archiveCharsCache.push(nextCharacter);
+    }
+
     let changed = false;
     data.worldBooks.forEach((wb, index) => {
       const raw = wb?.raw && typeof wb.raw === 'object' ? wb.raw : (wb && typeof wb === 'object' ? wb : null);

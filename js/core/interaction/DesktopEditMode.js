@@ -2465,10 +2465,13 @@ export class DesktopEditMode {
     this.layout = nextLayout;
   }
 
+  /* [修改标注·Issue2修复] 修复 createAppItemElement 中 customImg 未定义导致的 ReferenceError，
+     该错误会导致刷新后无法重建已保存到布局中的应用图标元素 */
   createAppItemElement(app) {
     if (!app) return null;
 
-    const imgStyle = 'display:none;';
+    const customImg = app.customImg || '';
+    const imgStyle = customImg ? '' : 'display:none;';
     const btnClass = 'app-icon-btn';
 
     const itemEl = document.createElement('div');
@@ -2480,7 +2483,7 @@ export class DesktopEditMode {
     itemEl.innerHTML = `
       <button class="${btnClass}" type="button" data-open-app="${app.id}">
         <span class="app-icon-glyph">${app.icon || ''}</span>
-        <img class="app-custom-img" src="${customImg || ''}" style="${imgStyle}" alt="${app.name}" />
+        <img class="app-custom-img" src="${customImg}" style="${imgStyle}" alt="${app.name}" />
       </button>
       <span class="app-icon-label">${app.name}</span>
       <div class="edit-delete-btn">${this.getEditModeIconSvg('delete')}</div>
@@ -2748,20 +2751,31 @@ export class DesktopEditMode {
         w.remove();
       });
 
-      const allItems = page.querySelectorAll('.p1-clock-widget, .p1-avatar-widget, .p1-news-widget, .p1-ticket-widget, .p2-ticket-widget, .app-icon');
+      const allItems = page.querySelectorAll('.desktop-item, .app-icon, .desktop-widget-card, .widget-custom-card, .p1-clock-widget, .p1-avatar-widget, .p1-news-widget, .p1-ticket-widget, .p2-ticket-widget');
       const domMap = new Map();
       const duplicates = [];
 
       allItems.forEach((el) => {
-        let key = null;
-        if (el.classList.contains('p1-clock-widget')) key = 'clock';
-        else if (el.classList.contains('p1-avatar-widget')) key = 'avatar';
-        else if (el.classList.contains('p1-news-widget')) key = 'news';
-        else if (el.classList.contains('p1-ticket-widget')) key = 'ticket1';
-        else if (el.classList.contains('p2-ticket-widget')) key = 'ticket2';
-        else if (el.classList.contains('app-icon')) {
+        let key = el.getAttribute('data-item-id') || null;
+
+        if (!key && el.classList.contains('p1-clock-widget')) key = 'clock';
+        else if (!key && el.classList.contains('p1-avatar-widget')) key = 'avatar';
+        else if (!key && el.classList.contains('p1-news-widget')) key = 'news';
+        else if (!key && el.classList.contains('p1-ticket-widget')) key = 'ticket1';
+        else if (!key && el.classList.contains('p2-ticket-widget')) key = 'ticket2';
+        else if (!key && el.classList.contains('app-icon')) {
           const appId = el.getAttribute('data-app-id');
           if (appId) key = `app-${appId}`;
+        }
+
+        if (!key) {
+          const customWidgetId = el.getAttribute('data-custom-widget-id');
+          if (customWidgetId) key = customWidgetId;
+        }
+
+        if (!key) {
+          const builtinWidgetId = el.getAttribute('data-builtin-widget-id');
+          if (builtinWidgetId) key = builtinWidgetId;
         }
 
         if (!key) return;

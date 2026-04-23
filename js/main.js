@@ -171,6 +171,14 @@ class MiniPhoneApp {
       const currentSettings = await this.settings.getAll();
       this.theme.apply(currentSettings.appearance || {});
 
+      // 4.5) [模块标注] 启动时恢复界面设置（全屏、状态栏）模块：从持久化设置中读取并还原 body class
+      if (currentSettings.appearance?.fullscreen) {
+        document.body.classList.add('fullscreen-mode');
+      }
+      if (currentSettings.appearance?.statusBarHidden) {
+        document.body.classList.add('hide-status-bar');
+      }
+
       // 5) 渲染桌面
       const desktopState = await this.desktopConfig.getConfig();
       this.desktop.render(desktopState);
