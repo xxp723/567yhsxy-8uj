@@ -22,7 +22,8 @@ function mkBook(o = {}) {
     id: o.id || uid('book'), name: String(o.name || '未命名世界书').trim(),
     enabled: typeof o.enabled === 'boolean' ? o.enabled : true,
     type: o.type === 'local' ? 'local' : 'global',
-    boundCharacterId: o.boundCharacterId || null,
+    /* [修改标注·本次需求2] boundCharacterIds 改为数组，支持一书多绑（一本世界书可绑定多个角色） */
+    boundCharacterIds: Array.isArray(o.boundCharacterIds) ? [...o.boundCharacterIds] : (o.boundCharacterId ? [o.boundCharacterId] : []),
     /* [修改标注·需求1] 记录来自档案角色卡的世界书来源，便于自动补导与绑定恢复 */
     archiveSourceCharacterId: o.archiveSourceCharacterId || null,
     archiveSourceKey: o.archiveSourceKey || null,
@@ -178,7 +179,8 @@ export async function mount(container, context) {
     const book = parseTavWB(raw, name || '角色卡世界书');
     if (!book) return false;
     book.type = 'local';
-    book.boundCharacterId = characterId || null;
+    /* [修改标注·本次需求2] 使用 boundCharacterIds 数组支持一书多绑 */
+    book.boundCharacterIds = characterId ? [characterId] : [];
     book.archiveSourceCharacterId = characterId || null;
     book.archiveSourceKey = safeSourceKey;
     S.books.push(book);
@@ -261,9 +263,10 @@ export async function mount(container, context) {
             book.type = nextType;
             /* [修改标注·需求2] 放入全局板块后不再与档案角色绑定；切回局部时恢复原始角色绑定来源 */
             if (nextType === 'global') {
-              book.boundCharacterId = null;
-            } else if (!book.boundCharacterId && book.archiveSourceCharacterId) {
-              book.boundCharacterId = book.archiveSourceCharacterId;
+              /* [修改标注·本次需求2] 切到全局时清空绑定角色数组 */
+              book.boundCharacterIds = [];
+            } else if ((!book.boundCharacterIds || book.boundCharacterIds.length === 0) && book.archiveSourceCharacterId) {
+              book.boundCharacterIds = [book.archiveSourceCharacterId];
             }
             save(); closeMod(); render(); return;
           }
@@ -322,15 +325,19 @@ export async function mount(container, context) {
   };
 
   const rBookOpen = book => {
-    const cn = book.boundCharacterId ? (chars().find(c => c.id === book.boundCharacterId)?.name || '未知角色') : '';
-    const bd = book.type === 'local' && cn ? '<div class="wb-book-open__binding">' + I.link + ' 绑定角色: ' + esc(cn) + '</div>' : '';
+    /* [修改标注·本次需求2] 显示所有绑定角色名称（一书多绑） */
+    const bids = Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds : [];
+    const cnames = bids.map(cid => chars().find(c => c.id === cid)?.name || '未知角色').filter(Boolean);
+    const bd = book.type === 'local' && cnames.length ? '<div class="wb-book-open__binding">' + I.link + ' 绑定角色: ' + esc(cnames.join(', ')) + '</div>' : '';
     return '<div class="wb-book-open">' + bd +
       '<div class="wb-entry-list">' + (book.entries.length ? book.entries.map(e => rEntry(e, book.id)).join('') : '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 + 添加新条目</p></div>') + '</div></div>';
   };
 
   const rBookCard = b => {
     const sm = S.sBooks.has(b.id);
-    const cn = b.type === 'local' && b.boundCharacterId ? (chars().find(c => c.id === b.boundCharacterId)?.name || '') : '';
+    /* [修改标注·本次需求2] 卡片上显示绑定角色名称（一书多绑） */
+    const bids2 = Array.isArray(b.boundCharacterIds) ? b.boundCharacterIds : [];
+    const cn = b.type === 'local' && bids2.length ? bids2.map(cid => chars().find(c => c.id === cid)?.name || '').filter(Boolean).join(', ') : '';
     return '<div class="wb-book-card' + (sm ? ' is-search-match' : '') + '" data-a="ob" data-id="' + b.id + '">' +
       '<div class="wb-book-card__inner"><span class="wb-book-card__name">' + esc(b.name) + '</span>' +
       (cn ? '<span class="wb-book-card__bind">' + I.link + ' ' + esc(cn) + '</span>' : '') +

@@ -1218,18 +1218,22 @@ export async function mount(container, context) {
         </div>
       </section>
 
-      <!-- [修改标注·需求1] 绑定世界书显示板块：放在角色档案信息界面最下方 -->
+      <!-- [修改标注·本次需求2] 绑定世界书改为折叠栏，显示世情局部板块所有世界书，点击切换绑定状态 -->
       ${(() => {
-        const wbNames = getCharacterWorldBookNames(item.id);
-        if (!wbNames.length) return '';
+        const localBooks = getLocalWorldBooks();
+        if (!localBooks.length) return '';
         return `
-      <section class="archive-character-paper__section archive-worldbook-section">
-        <div class="archive-character-paper__section-title">
+      <section class="archive-character-paper__section archive-worldbook-section archive-setting-section" data-collapsed="true">
+        <div class="archive-character-paper__section-title archive-setting-toggle" data-action="toggle-setting" style="cursor:pointer;">
           <span>${icon.book} 绑定世界书</span>
+          <i class="archive-setting-chevron">${icon.chevronRight}</i>
         </div>
-        <div class="archive-character-paper__content">
-          <div class="archive-chip-list" style="flex-wrap:wrap;gap:6px;">
-            ${wbNames.map(n => `<span class="archive-chip">${escapeHtml(n)}</span>`).join('')}
+        <div class="archive-setting-body" style="display:none;">
+          <div class="archive-wb-bind-list">
+            ${localBooks.map(wb => {
+              const isBound = wb.boundCharacterIds.includes(item.id);
+              return `<button type="button" class="archive-wb-bind-chip ${isBound ? 'is-bound' : ''}" data-action="toggle-wb-bind" data-book-id="${wb.id}" data-char-id="${item.id}">${escapeHtml(wb.name)}</button>`;
+            }).join('')}
           </div>
         </div>
       </section>`;
@@ -2188,7 +2192,8 @@ export async function mount(container, context) {
 
   /* [修改标注·需求1] 获取角色绑定的世界书名称列表：
      1) 优先读取世情应用中当前仍绑定到该角色的世界书；
-     2) 若世情应用尚未同步导入，则回退到档案内角色卡自带的绑定世界书名称。 */
+     2) 若世情应用尚未同步导入，则回退到档案内角色卡自带的绑定世界书名称。
+     [修改标注·本次需求2] 改用 boundCharacterIds 数组判断绑定关系 */
   const getCharacterWorldBookNames = (characterId) => {
     const fallbackNames = normalizeArray(
       state.data.characters.find((item) => item.id === characterId)?.boundWorldBooks
@@ -2199,15 +2204,61 @@ export async function mount(container, context) {
       if (!Array.isArray(wbData)) return [...new Set(fallbackNames)];
 
       const activeBoundNames = wbData
-        .filter((book) => book?.boundCharacterId === characterId)
+        .filter((book) => {
+          const bids = Array.isArray(book?.boundCharacterIds) ? book.boundCharacterIds : [];
+          return bids.includes(characterId);
+        })
         .map((book) => normalizeString(book?.name || '未命名世界书'))
         .filter(Boolean);
 
-      /* [修改标注·需求1] 档案页始终保留角色卡原始绑定世界书名称；
-         若世情应用中仍保持局部绑定，则一并合并显示。 */
       return [...new Set([...fallbackNames, ...activeBoundNames])];
     } catch (_) {
       return [...new Set(fallbackNames)];
+    }
+  };
+
+  /* [修改标注·本次需求2] 获取世情应用局部板块所有世界书列表（供角色档案界面点按绑定） */
+  const getLocalWorldBooks = () => {
+    try {
+      const wbData = JSON.parse(localStorage.getItem('miniphone_worldbook_data_v1') || '[]');
+      if (!Array.isArray(wbData)) return [];
+      return wbData.filter((book) => book?.type === 'local').map((book) => ({
+        id: book.id,
+        name: normalizeString(book.name || '未命名世界书'),
+        boundCharacterIds: Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds : []
+      }));
+    } catch (_) {
+      return [];
+    }
+  };
+
+  /* [修改标注·本次需求2] 切换角色与世界书的绑定状态（一书多绑） */
+  const toggleWorldBookBinding = (bookId, characterId) => {
+    try {
+      const raw = localStorage.getItem('miniphone_worldbook_data_v1') || '[]';
+      const wbData = JSON.parse(raw);
+      if (!Array.isArray(wbData)) return;
+      const book = wbData.find((b) => b.id === bookId);
+      if (!book) return;
+      if (!Array.isArray(book.boundCharacterIds)) book.boundCharacterIds = [];
+      const idx = book.boundCharacterIds.indexOf(characterId);
+      if (idx >= 0) {
+        book.boundCharacterIds.splice(idx, 1);
+      } else {
+        book.boundCharacterIds.push(characterId);
+      }
+      book.updatedAt = Date.now();
+      localStorage.setItem('miniphone_worldbook_data_v1', JSON.stringify(wbData));
+      /* 同步写入 IndexedDB */
+      context.db?.put?.('appsData', {
+        id: 'worldbook::all-books',
+        appId: 'worldbook',
+        key: 'all-books',
+        value: wbData,
+        updatedAt: Date.now()
+      }).catch(() => {});
+    } catch (_) {
+      // ignore
     }
   };
 
@@ -2562,6 +2613,18 @@ export async function mount(container, context) {
         section.setAttribute('data-collapsed', 'true');
         if (body) body.style.display = 'none';
         if (chevron) chevron.innerHTML = icon.chevronRight;
+      }
+      return;
+    }
+
+    /* [修改标注·本次需求2] 点击世界书名称切换绑定状态（灰色↔白色） */
+    if (action === 'toggle-wb-bind') {
+      const bookId = actionEl.getAttribute('data-book-id');
+      const charId = actionEl.getAttribute('data-char-id');
+      if (bookId && charId) {
+        toggleWorldBookBinding(bookId, charId);
+        /* 切换按钮样式 */
+        actionEl.classList.toggle('is-bound');
       }
       return;
     }
