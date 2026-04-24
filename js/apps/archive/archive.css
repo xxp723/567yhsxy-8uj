@@ -1007,8 +1007,8 @@
 
 .archive-relation-layout {
   display: grid;
-  gap: 12px;
-  padding-top: 2px;
+  gap: 10px;
+  padding-top: 0;
 }
 
 /* [修改标注·本次问题1-关系网络分类高度] 关系网络三分类条高度缩小并对齐底部 TAB 栏高度（52px） */
@@ -1110,16 +1110,44 @@
 
 .archive-relation-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* [修改标注·本次问题1] 关系条目折叠栏 */
 .archive-relation-accordion {
   padding: 0;
   overflow: hidden;
+  border-radius: 14px;
 }
 
+/* [修改标注·本次问题1] 折叠栏头部改为“左侧工具 + 右侧折叠按钮”紧凑布局 */
 .archive-relation-accordion__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.archive-relation-accordion__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.archive-relation-accordion__tools .archive-character-paper__icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.archive-relation-accordion__tools .archive-character-paper__icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.archive-relation-accordion__toggle {
   width: 100%;
   border: 0;
   background: transparent;
@@ -1128,13 +1156,13 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 4px 2px;
 }
 
 .archive-relation-accordion__arrow {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: rgba(123, 104, 85, 0.85);
   display: inline-flex;
   align-items: center;
@@ -1142,14 +1170,14 @@
 }
 
 .archive-relation-accordion__arrow svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .archive-relation-accordion__body {
-  padding: 0 12px 12px;
+  padding: 0 10px 10px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .archive-relation-detail-item {
@@ -1199,39 +1227,40 @@
 
 .archive-relation-item__title {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .archive-relation-item__title strong {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
 .archive-relation-item__title span {
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--archive-subtext);
 }
 
 .archive-relation-cognition {
-  margin-top: 10px;
+  margin-top: 0;
   border: 1px solid rgba(122, 95, 67, 0.12);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 253, 249, 0.84);
-  padding: 10px 11px;
+  padding: 8px 9px;
 }
 
 .archive-relation-cognition label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-size: 11px;
   color: var(--archive-subtext);
 }
 
 .archive-relation-cognition p {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--archive-text);
-  line-height: 1.55;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1378,6 +1407,11 @@
 }
 
 /* [修改标注·本次问题1] 关系主体/对象自定义选择器（非原生 select） */
+.archive-relation-picker-row {
+  position: relative;
+  overflow: visible;
+}
+
 .archive-relation-picker-trigger {
   width: 100%;
   border-radius: 10px;
@@ -1423,6 +1457,7 @@
   padding: 8px;
   display: flex;
   align-items: flex-start;
+  touch-action: pan-y;
 }
 
 .archive-relation-picker-modal.hidden {
@@ -1437,6 +1472,7 @@
   background: rgba(255, 251, 244, 0.98);
   box-shadow: 0 10px 24px rgba(66, 43, 22, 0.16);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -1458,7 +1494,10 @@
   display: grid;
   gap: 6px;
   padding: 8px;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

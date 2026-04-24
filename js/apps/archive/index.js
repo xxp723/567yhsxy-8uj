@@ -1465,22 +1465,18 @@ export async function mount(container, context) {
         .filter(Boolean)
       : [];
 
-    const groupedRelations = perspectiveRelations.reduce((acc, item) => {
-      const key = buildRelationOwnerKey(item.counterpartType, item.counterpartId);
-      const current = acc.get(key) || {
-        key,
+    /* [修改标注·本次问题1] 关系列表改为“每条关系=一个折叠栏”，避免出现“关系记录1”文案 */
+    const relationEntries = selectedOwner
+      ? perspectiveRelations.map((item) => ({
+        key: item.relationId,
+        relationId: item.relationId,
         counterpartType: item.counterpartType,
         counterpartId: item.counterpartId,
         counterpartName: item.counterpartName,
         counterpartTypeLabel: item.counterpartTypeLabel,
-        items: []
-      };
-      current.items.push(item);
-      acc.set(key, current);
-      return acc;
-    }, new Map());
-
-    const relationGroups = Array.from(groupedRelations.values());
+        currentPerception: item.currentPerception
+      }))
+      : [];
 
     return `
       <section class="archive-relation-layout">
@@ -1526,49 +1522,38 @@ export async function mount(container, context) {
 
         ${selectedOwner ? `
           <div class="archive-relation-list">
-            ${relationGroups.map((group) => {
-              const isExpanded = !!state.relationExpandedKeys[group.key];
+            ${relationEntries.map((entry) => {
+              const isExpanded = !!state.relationExpandedKeys[entry.key];
+              const selfName = selectedOwner?.name || '未命名';
+              const otherName = entry.counterpartName;
+              const relationTitle = `${selfName}和${otherName}`;
               return `
                 <article class="archive-relation-item archive-relation-accordion ${isExpanded ? 'is-expanded' : ''}">
-                  <button
-                    class="archive-relation-accordion__head"
-                    type="button"
-                    data-action="toggle-relation-group"
-                    data-group-key="${group.key}"
-                  >
-                    <div class="archive-relation-item__title">
-                      <strong>${escapeHtml(group.counterpartName)}</strong>
-                      <span>${escapeHtml(group.counterpartTypeLabel)} · ${group.items.length} 条消息</span>
+                  <div class="archive-relation-accordion__head">
+                    <!-- [修改标注·本次问题1] 编辑/删除图标按钮位于折叠按钮左侧，避免在 button 内嵌套 button -->
+                    <div class="archive-relation-accordion__tools">
+                      <button class="archive-character-paper__icon-btn" type="button" data-action="edit-relation" data-id="${entry.relationId}" aria-label="编辑关系">${icon.edit}</button>
+                      <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-relation" data-id="${entry.relationId}" aria-label="删除关系">${icon.remove}</button>
                     </div>
-                    <i class="archive-relation-accordion__arrow">${isExpanded ? icon.chevronDown : icon.chevronRight}</i>
-                  </button>
+                    <button
+                      class="archive-relation-accordion__toggle"
+                      type="button"
+                      data-action="toggle-relation-group"
+                      data-group-key="${entry.key}"
+                    >
+                      <div class="archive-relation-item__title">
+                        <strong>${escapeHtml(relationTitle)}</strong>
+                        <span>${escapeHtml(selfName)}认为${escapeHtml(otherName)}是：${escapeHtml(entry.currentPerception || '未填写')}</span>
+                      </div>
+                      <i class="archive-relation-accordion__arrow">${isExpanded ? icon.chevronDown : icon.chevronRight}</i>
+                    </button>
+                  </div>
 
                   <div class="archive-relation-accordion__body" style="${isExpanded ? '' : 'display:none;'}">
-                    ${group.items.map((item, index) => {
-                      const selfName = selectedOwner?.name || '未命名';
-                      const otherName = item.counterpartName;
-                      const systemPrompt = buildRelationSystemPrompt(selectedOwnerType, selectedOwnerId);
-                      return `
-                        <section class="archive-relation-detail-item">
-                          <div class="archive-relation-detail-item__head">
-                            <strong>${escapeHtml(otherName)} · 关系记录 ${index + 1}</strong>
-                            <div class="archive-relation-detail-item__tools">
-                              <button class="archive-character-paper__icon-btn" type="button" data-action="edit-relation" data-id="${item.relationId}" aria-label="编辑关系">${icon.edit}</button>
-                              <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-relation" data-id="${item.relationId}" aria-label="删除关系">${icon.remove}</button>
-                            </div>
-                          </div>
-                          <div class="archive-relation-cognition">
-                            <label>${escapeHtml(selfName)}对${escapeHtml(otherName)}的关系认知</label>
-                            <p>${escapeHtml(item.currentPerception || '未填写')}</p>
-                          </div>
-                          <div class="archive-relation-cognition">
-                            <label>${escapeHtml(otherName)}对${escapeHtml(selfName)}的关系认知</label>
-                            <p>${escapeHtml(item.counterpartPerception || '未填写')}</p>
-                          </div>
-                          <div hidden>${escapeHtml(systemPrompt)}</div>
-                        </section>
-                      `;
-                    }).join('')}
+                    <div class="archive-relation-cognition">
+                      <label>${escapeHtml(selfName)}对${escapeHtml(otherName)}的关系认知</label>
+                      <p>${escapeHtml(entry.currentPerception || '未填写')}</p>
+                    </div>
                   </div>
                 </article>
               `;
@@ -2103,7 +2088,7 @@ export async function mount(container, context) {
       confirmText: isEdit ? '保存修改' : '创建',
       content: `
         <div class="archive-form-grid">
-          <label class="archive-form-row">
+          <label class="archive-form-row archive-relation-picker-row">
             <span>关系主体（锁定为${escapeHtml(RELATION_ENTITY_TAB_META[lockedOwnerType]?.label || '主体')}）</span>
             <input type="hidden" data-role="relation-owner" value="${escapeHtml(defaultOwnerValue)}">
             <button class="archive-relation-picker-trigger" type="button" data-action="open-owner-picker">
@@ -2121,7 +2106,7 @@ export async function mount(container, context) {
             </div>
           </label>
 
-          <label class="archive-form-row">
+          <label class="archive-form-row archive-relation-picker-row">
             <span>关系对象</span>
             <input type="hidden" data-role="relation-target" value="${escapeHtml(defaultTargetValue)}">
             <button class="archive-relation-picker-trigger" type="button" data-action="open-target-picker">
@@ -2299,8 +2284,8 @@ export async function mount(container, context) {
 
         state.relationEntityTab = relation.ownerType;
         state.selectedRelationOwnerKey = buildRelationOwnerKey(relation.ownerType, relation.ownerId);
-        const expandedKey = buildRelationOwnerKey(relation.targetType, relation.targetId);
-        state.relationExpandedKeys[expandedKey] = true;
+        /* [修改标注·本次问题1] 新增/编辑后自动展开该关系条目折叠栏 */
+        state.relationExpandedKeys[relation.id] = true;
 
         notify(isEdit ? '关系条目已更新' : '关系条目已创建', 'success');
         rerender();
