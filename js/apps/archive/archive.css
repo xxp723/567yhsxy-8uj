@@ -438,13 +438,14 @@
   overflow: hidden;
 }
 
-/* [修改标注·本次问题1-修复] 详情页头像容器增加固定高度约束：
+/* [修改标注·本次问题1-修复] 详情页头像容器使用确定高度 + 相对定位：
    防止大尺寸 PNG 角色卡图片按原始尺寸撑开容器，导致整屏缩小出现黑边与滚动失效。
-   max-height 限制最大高度，object-fit: cover 保证裁切填满。 */
+   使用固定 height 而非 max-height，配合内部 img 绝对定位，彻底杜绝溢出。 */
 .archive-character-paper__photo {
+  position: relative;
   width: 100%;
-  min-height: 146px;
-  max-height: 200px;
+  height: 180px;
+  min-height: 0;
   border: 1.5px solid rgba(108, 74, 41, 0.32);
   background: rgba(201, 173, 130, 0.22);
   display: flex;
@@ -458,9 +459,11 @@
     3px 3px 0 rgba(108, 74, 41, 0.06);
 }
 
+/* [修改标注·本次问题1-修复] img 绝对定位填充容器，阻止大尺寸图片撑破布局 */
 .archive-character-paper__photo img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
