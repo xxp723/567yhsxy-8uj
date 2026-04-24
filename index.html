@@ -12,11 +12,39 @@
   <link rel="icon" href="assets/icons/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <link rel="stylesheet" href="css/styles.css" />
+  <!-- [模块标注] 首屏全屏恢复防闪烁模块：在读取 IndexedDB 设置前暂时隐藏页面，避免先出现默认手机外壳 -->
+  <script>
+    (() => {
+      document.documentElement.setAttribute('data-booting-fullscreen-check', '1');
+    })();
+  </script>
+  <style id="boot-fullscreen-guard">
+    html[data-booting-fullscreen-check="1"] body {
+      visibility: hidden;
+    }
+  </style>
   <!-- [修改标注·本次问题修复] 预加载档案/世情应用样式，避免首次从桌面打开时先渲染内容再补应用 CSS -->
   <link id="miniphone-archive-style" rel="stylesheet" href="js/apps/archive/archive.css" />
   <link id="miniphone-worldbook-style" rel="stylesheet" href="js/apps/worldbook/worldbook.css" />
 </head>
 <body>
+  <script type="module">
+    import { DB } from './js/core/data/DB.js';
+
+    // [模块标注] 首屏全屏恢复模块：启动早期仅通过 DB.js 读取 settings/global-settings.appearance.fullscreen 并还原全屏 class
+    try {
+      const bootDb = new DB();
+      await bootDb.init();
+      const bootSettings = await bootDb.get('settings', 'global-settings');
+      if (bootSettings?.appearance?.fullscreen) {
+        document.body.classList.add('fullscreen-mode');
+      }
+    } catch (error) {
+      console.warn('[index.html] 首屏全屏恢复失败（非致命）', error);
+    } finally {
+      document.documentElement.removeAttribute('data-booting-fullscreen-check');
+    }
+  </script>
   <div class="phone-frame">
     <div class="screen" id="screen-root">
       <!--顶部状态栏（可在设置中隐藏/显示） -->
@@ -531,10 +559,6 @@
           // 状态栏显示控制
           const statusHidden = await kvGet('miniphone_status_bar_hidden');
           if (statusHidden === '1') document.body.classList.add('hide-status-bar');
-
-          // 全屏模式控制
-          const fullscreenOn = await kvGet('miniphone_fullscreen');
-          if (fullscreenOn === '1') document.body.classList.add('fullscreen-mode');
 
           // 壁纸
           const screen = $('screen-root');
