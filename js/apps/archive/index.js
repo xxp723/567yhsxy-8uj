@@ -2309,12 +2309,36 @@ export async function mount(container, context) {
     const book = _worldBookCache.find((b) => b.id === bookId);
     if (!book) return;
     if (!Array.isArray(book.boundCharacterIds)) book.boundCharacterIds = [];
+
     const idx = book.boundCharacterIds.indexOf(characterId);
-    if (idx >= 0) {
+    const isUnbinding = idx >= 0;
+
+    if (isUnbinding) {
       book.boundCharacterIds.splice(idx, 1);
+
+      /* [修改标注·本次需求1] 真正解绑时同步移除角色档案内对应的世界书来源，避免世情应用再次从档案数据补绑定 */
+      const archiveSourceCharacterId = normalizeString(book.archiveSourceCharacterId);
+      const archiveSourceKey = normalizeString(book.archiveSourceKey);
+
+      state.data.characters = state.data.characters.map((character) => {
+        if (character.id !== characterId) return character;
+
+        const nextBoundWorldBooks = normalizeArray(character.boundWorldBooks).filter((item, itemIndex) => {
+          const itemSourceKey = normalizeString(item?.sourceKey) || `${character.id}::${itemIndex}`;
+          const matchedBySourceKey = archiveSourceKey && itemSourceKey === archiveSourceKey;
+          const matchedByName = !archiveSourceKey && normalizeString(item?.name) === normalizeString(book.name);
+          return !(archiveSourceCharacterId === characterId && (matchedBySourceKey || matchedByName));
+        });
+
+        return {
+          ...character,
+          boundWorldBooks: nextBoundWorldBooks
+        };
+      });
     } else {
       book.boundCharacterIds.push(characterId);
     }
+
     book.updatedAt = Date.now();
     try {
       await context.db?.put?.('appsData', {
