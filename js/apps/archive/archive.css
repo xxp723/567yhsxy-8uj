@@ -31,10 +31,14 @@
   --archive-red-seal: #8d312e;
 }
 
+/* [修改标注·本次问题1-修复] 根容器增强溢出约束：
+   防止大尺寸角色卡 PNG 图片水平溢出导致整屏缩小出现黑边与滚动失效。 */
 .archive-v2 {
   position: relative;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   background:
@@ -60,10 +64,14 @@
 }
 
 /* [修改标注·需求7] 主内容区滚动条隐藏 */
+/* [修改标注·本次问题1-修复] 内容区增加 overflow-x: hidden，阻止水平溢出冒泡 */
 .archive-v2__content {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 12px 12px 92px;
   -webkit-overflow-scrolling: touch;
@@ -420,11 +428,14 @@
   color: var(--archive-danger);
 }
 
+/* [修改标注·本次问题1-修复] hero 区域增加 min-width/overflow 约束，防止图片撑破网格 */
 .archive-character-paper__hero {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* [修改标注·本次问题1-修复] 详情页头像容器增加固定高度约束：
