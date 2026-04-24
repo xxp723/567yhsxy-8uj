@@ -14,7 +14,8 @@ import { Logger } from '../../utils/Logger.js';
 export class DB {
   constructor() {
     this.dbName = 'MiniPhoneDB';
-    this.dbVersion = 1;
+    // [修改标注·问题2-日志仓库] 升级版本以创建 logs 对象仓库（沿用同一个 MiniPhoneDB）
+    this.dbVersion = 2;
     this.db = null;
   }
 
@@ -46,6 +47,15 @@ export class DB {
         if (!db.objectStoreNames.contains('appsData')) {
           db.createObjectStore('appsData', { keyPath: 'id' });
           transaction.objectStore('appsData').createIndex('appId', 'appId', { unique: false });
+        }
+
+        // [修改标注·问题2-日志仓库] 全局日志/错误日志统一存储仓库
+        // 记录结构：{ id, timestamp, level, module, message }
+        if (!db.objectStoreNames.contains('logs')) {
+          const logsStore = db.createObjectStore('logs', { keyPath: 'id', autoIncrement: true });
+          logsStore.createIndex('timestamp', 'timestamp', { unique: false });
+          logsStore.createIndex('level', 'level', { unique: false });
+          logsStore.createIndex('module', 'module', { unique: false });
         }
       };
 
