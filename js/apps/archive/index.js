@@ -118,6 +118,7 @@ function normalizeSupportingRole(item) {
     id: normalizeString(item?.id) || uid('support'),
     name: normalizeString(item?.name),
     gender: normalizeString(item?.gender),
+    contact: normalizeString(item?.contact),
     basicSetting: normalizeString(item?.basicSetting),
     avatar: normalizeString(item?.avatar)
   };
@@ -1862,8 +1863,12 @@ export async function mount(container, context) {
             <label><span>身份</span><input data-role="identity" type="text" value="${escapeHtml(currentItem?.identity || '')}" /></label>
             <!-- [修改标注·需求3] "一句话签名"改名为"个性签名" -->
             <label><span>个性签名</span><input data-role="signature" type="text" value="${escapeHtml(currentItem?.signature || '')}" /></label>
-            <!-- [修改标注·需求5] 去除编辑框里的"（微信号）"文字 -->
-            <label><span>联系方式</span><input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" /></label>
+            <!-- [修改标注·本次需求3] 联系方式限制：11位数字 -->
+            <label>
+              <span>联系方式</span>
+              <input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" />
+              <small style="font-size:11px;color:var(--archive-subtext);">联系方式限定为11位数字</small>
+            </label>
           </div>
 
           <label class="archive-form-row">
@@ -1988,6 +1993,12 @@ export async function mount(container, context) {
           return false;
         }
 
+        /* [修改标注·本次需求3] 新增用户面具 / 新增角色档案：联系方式限定11位数字（为空则不校验） */
+        if (profile.contact && !/^\d{11}$/.test(profile.contact)) {
+          notify('联系方式需为11位数字', 'error');
+          return false;
+        }
+
         if (isMask) {
           if (isEdit) {
             state.data.masks = state.data.masks.map((item) => item.id === currentItem.id ? profile : item);
@@ -2057,6 +2068,13 @@ export async function mount(container, context) {
             <label><span>性别</span><input data-role="gender" type="text" value="${escapeHtml(currentItem?.gender || '')}" /></label>
           </div>
 
+          <!-- [修改标注·本次需求3] 新增配角档案窗口补充联系方式输入，限制11位数字 -->
+          <label class="archive-form-row">
+            <span>联系方式</span>
+            <input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" />
+            <small style="font-size:11px;color:var(--archive-subtext);">联系方式限定为11位数字</small>
+          </label>
+
           <label class="archive-form-row">
             <span>基本设定</span>
             <textarea data-role="basicSetting" rows="5" placeholder="请输入配角基本设定">${escapeHtml(currentItem?.basicSetting || '')}</textarea>
@@ -2072,11 +2090,18 @@ export async function mount(container, context) {
           avatar: collectAvatarValue(modalScope),
           name: collectInputValue(modalScope, 'name'),
           gender: collectInputValue(modalScope, 'gender'),
+          contact: collectInputValue(modalScope, 'contact'),
           basicSetting: collectTextareaValue(modalScope, 'basicSetting')
         });
 
         if (!item.name) {
           notify('请至少填写配角姓名', 'error');
+          return false;
+        }
+
+        /* [修改标注·本次需求3] 新增配角档案：联系方式限定11位数字（为空则不校验） */
+        if (item.contact && !/^\d{11}$/.test(item.contact)) {
+          notify('联系方式需为11位数字', 'error');
           return false;
         }
 

@@ -337,6 +337,38 @@
 }
 .wb-book-open__binding svg { width: 14px; height: 14px; flex-shrink: 0; }
 
+/* [修改标注·本次需求2] 世界书条目页顶部统计卡片（总条目 / 已开启 / 已开启Token） */
+.wb-book-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wb-book-stat-card {
+  min-height: 68px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 95, 67, 0.16);
+  background: rgba(255, 252, 246, 0.92);
+  box-shadow: 0 3px 10px rgba(66, 43, 22, 0.07);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+.wb-book-stat-card__value {
+  font-size: 16px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+.wb-book-stat-card__label {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--wb-subtext);
+}
+
 /* 条目卡片 */
 .wb-entry-list { display: grid; gap: 8px; }
 .wb-entry-card {
@@ -362,6 +394,23 @@
 .wb-entry-card__title {
   flex: 1; font-size: 13px; font-weight: 600; color: var(--wb-text);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* [修改标注·本次需求1] 条目 token 标签（折叠栏与内容区统一字号） */
+.wb-entry-token-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 95, 67, 0.2);
+  background: rgba(127, 92, 62, 0.08);
+  color: var(--wb-subtext);
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .wb-entry-card__trigger-badge {
   font-size: 10px; padding: 2px 6px; border-radius: 4px;
@@ -613,6 +662,13 @@
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
 }
 .wb-entry-field__label-row label { margin-bottom: 0; }
+
+/* [修改标注·本次需求1] 内容标题行右侧 token + 放大按钮容器 */
+.wb-entry-field__label-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .wb-content-expand-btn {
   width: 24px; height: 24px;
   border: 1px solid rgba(122, 95, 67, 0.18); border-radius: 6px;

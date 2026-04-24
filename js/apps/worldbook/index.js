@@ -169,6 +169,18 @@ const I = {
 
 const POS_LABELS = { top: '置顶', beforeChar: '角色前', afterChar: '角色后' };
 
+/* [修改标注·本次需求1] 条目 token 估算函数（统一口径，便于后续集中调整） */
+function countEntryTokens(content = '') {
+  const text = String(content || '').trim();
+  if (!text) return 0;
+
+  const cjkCount = (text.match(/[\u3400-\u9fff]/g) || []).length;
+  const latinWordCount = (text.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g) || []).length;
+  const symbolCount = text.replace(/[\sA-Za-z0-9_\u3400-\u9fff]/g, '').length;
+
+  return cjkCount + latinWordCount + symbolCount;
+}
+
 export async function mount(container, context) {
   /* [修改标注·本次问题1] 等待样式可用后再挂载内容，减少首屏无样式闪烁 */
   await ensureCSS();
@@ -354,15 +366,19 @@ export async function mount(container, context) {
     const ex = S.expEnt.has(e.id);
     const sm = S.sEntries.has(e.id);
     const tl = e.triggerType === 'always' ? '常驻' : '关键词';
+    const tokenCount = countEntryTokens(e.content);
     const enableBadge = e.enabled ? '<span class="wb-entry-card__status-badge wb-entry-card__status-badge--on">ON</span>' : '<span class="wb-entry-card__status-badge wb-entry-card__status-badge--off">OFF</span>';
+    /* [修改标注·本次需求1] 折叠态 token 显示在条目折叠栏；展开态只在内容区放大按钮左侧显示 */
+    const collapseTokenHtml = !ex ? '<span class="wb-entry-token-badge">' + tokenCount + ' tokens</span>' : '';
+    const expandTokenHtml = ex ? '<span class="wb-entry-token-badge">' + tokenCount + ' tokens</span>' : '';
     return '<div class="wb-entry-card' + (ex ? ' is-expanded' : '') + (sm ? ' is-search-match' : '') + '" data-eid="' + e.id + '" data-bid="' + bid + '">' +
-      '<div class="wb-entry-card__header" data-a="te" data-eid="' + e.id + '"><span class="wb-entry-card__chevron">' + I.chev + '</span><span class="wb-entry-card__title">' + esc(e.name || '未命名条目') + '</span>' + enableBadge + '<span class="wb-entry-card__trigger-badge">' + tl + '</span></div>' +
+      '<div class="wb-entry-card__header" data-a="te" data-eid="' + e.id + '"><span class="wb-entry-card__chevron">' + I.chev + '</span><span class="wb-entry-card__title">' + esc(e.name || '未命名条目') + '</span>' + collapseTokenHtml + enableBadge + '<span class="wb-entry-card__trigger-badge">' + tl + '</span></div>' +
       '<div class="wb-entry-card__body">' +
       /* [修改标注·需求5] "启用此条目"字体调小至与条目内容字体大小一致 */
       '<div class="wb-entry-switch-row wb-entry-switch-row--small"><label>启用此条目</label><label class="wb-entry-toggle"><input type="checkbox" data-f="enabled" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.enabled ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
       '<div class="wb-entry-field"><label>条目名称</label><input type="text" data-f="name" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.name) + '" placeholder="输入名称"></div>' +
       /* [修改标注·需求6] 内容板块标题行右侧添加放大按钮 */
-      '<div class="wb-entry-field wb-entry-field--content"><div class="wb-entry-field__label-row"><label>内容</label><button class="wb-content-expand-btn" data-a="expandcontent" data-eid="' + e.id + '" data-bid="' + bid + '" title="放大内容编辑区">' + I.expand + '</button></div><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
+      '<div class="wb-entry-field wb-entry-field--content"><div class="wb-entry-field__label-row"><label>内容</label><div class="wb-entry-field__label-actions">' + expandTokenHtml + '<button class="wb-content-expand-btn" data-a="expandcontent" data-eid="' + e.id + '" data-bid="' + bid + '" title="放大内容编辑区">' + I.expand + '</button></div></div><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
       '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>位置</label><button class="wb-pos-picker-btn" data-a="openpos" data-eid="' + e.id + '" data-bid="' + bid + '">' + esc(POS_LABELS[e.position] || e.position) + '</button></div>' +
       '<div class="wb-entry-field" style="flex:1"><label>排序</label><input type="number" data-f="order" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + e.order + '"></div></div>' +
       '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>触发方式</label><button class="wb-pos-picker-btn" data-a="opentrigger" data-eid="' + e.id + '" data-bid="' + bid + '">' + (e.triggerType === 'always' ? '常驻' : '关键词') + '</button></div>' +
@@ -380,14 +396,28 @@ export async function mount(container, context) {
     const cnames = bids.map(cid => chars().find(c => c.id === cid)?.name || '未知角色').filter(Boolean);
     const bd = book.type === 'local' && cnames.length ? '<div class="wb-book-open__binding">' + I.link + ' 绑定角色: ' + esc(cnames.join(', ')) + '</div>' : '';
     const entries = (S.sOpen && S.sQ) ? book.entries.filter(e => S.sEntries.has(e.id)) : book.entries;
+
+    /* [修改标注·本次需求2] 世界书条目页顶部三卡统计：总条目 / 已开启条目 / 已开启条目总token */
+    const totalEntries = book.entries.length;
+    const enabledEntries = book.entries.filter((entry) => entry.enabled).length;
+    const enabledTokens = book.entries
+      .filter((entry) => entry.enabled)
+      .reduce((sum, entry) => sum + countEntryTokens(entry.content), 0);
+
+    const statCards = '<div class="wb-book-stats-cards">' +
+      '<div class="wb-book-stat-card"><span class="wb-book-stat-card__value">' + totalEntries + '</span><span class="wb-book-stat-card__label">总条目</span></div>' +
+      '<div class="wb-book-stat-card"><span class="wb-book-stat-card__value">' + enabledEntries + '</span><span class="wb-book-stat-card__label">已开启</span></div>' +
+      '<div class="wb-book-stat-card"><span class="wb-book-stat-card__value">' + enabledTokens + '</span><span class="wb-book-stat-card__label">已开启Token</span></div>' +
+      '</div>';
+
     let listHtml;
     if (!entries.length) {
       if (S.sOpen && S.sQ) listHtml = '<div class="wb-empty"><h3>未找到匹配的条目</h3><p>尝试更换关键词搜索</p></div>';
-      else listHtml = '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 + 添加新条目</p></div>';
+      else listHtml = '<div class="wb-empty"><h3>暂无条目</h3><p>点击标题栏左上角 +添加新条目</p></div>';
     } else {
       listHtml = entries.map(e => rEntry(e, book.id)).join('');
     }
-    return '<div class="wb-book-open">' + bd + '<div class="wb-entry-list">' + listHtml + '</div></div>';
+    return '<div class="wb-book-open">' + bd + statCards + '<div class="wb-entry-list">' + listHtml + '</div></div>';
   };
 
   const rBookCard = b => {
