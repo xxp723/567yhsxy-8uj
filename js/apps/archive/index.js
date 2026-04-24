@@ -1336,13 +1336,13 @@ export async function mount(container, context) {
         <div class="archive-character-paper__summary">
           <div class="archive-character-paper__summary-grid archive-character-paper__summary-grid--side">
             <div class="archive-character-paper__field">
-              <!-- [修改标注·需求3] 去除英文标题 -->
-              <label>姓名</label>
-              <p>${escapeHtml(item.name || '—')}</p>
-            </div>
-            <div class="archive-character-paper__field">
               <label>性别</label>
               <p>${escapeHtml(item.gender || '—')}</p>
+            </div>
+            <div class="archive-character-paper__field">
+              <!-- [修改标注·本次任务2] 配角档案详情补充联系方式展示 -->
+              <label>联系方式</label>
+              <p>${escapeHtml(item.contact || '—')}</p>
             </div>
           </div>
         </div>
@@ -1863,11 +1863,11 @@ export async function mount(container, context) {
             <label><span>身份</span><input data-role="identity" type="text" value="${escapeHtml(currentItem?.identity || '')}" /></label>
             <!-- [修改标注·需求3] "一句话签名"改名为"个性签名" -->
             <label><span>个性签名</span><input data-role="signature" type="text" value="${escapeHtml(currentItem?.signature || '')}" /></label>
-            <!-- [修改标注·本次需求3] 联系方式限制：11位数字 -->
+            <!-- [修改标注·本次任务1] 联系方式右侧小字标注 -->
             <label>
               <span>联系方式</span>
               <input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" />
-              <small style="font-size:11px;color:var(--archive-subtext);">联系方式限定为11位数字</small>
+              <small style="font-size:11px;color:var(--archive-subtext);">（11位数字）</small>
             </label>
           </div>
 
@@ -2068,11 +2068,11 @@ export async function mount(container, context) {
             <label><span>性别</span><input data-role="gender" type="text" value="${escapeHtml(currentItem?.gender || '')}" /></label>
           </div>
 
-          <!-- [修改标注·本次需求3] 新增配角档案窗口补充联系方式输入，限制11位数字 -->
+          <!-- [修改标注·本次任务1] 联系方式右侧小字标注 -->
           <label class="archive-form-row">
             <span>联系方式</span>
             <input data-role="contact" type="text" value="${escapeHtml(currentItem?.contact || '')}" />
-            <small style="font-size:11px;color:var(--archive-subtext);">联系方式限定为11位数字</small>
+            <small style="font-size:11px;color:var(--archive-subtext);">（11位数字）</small>
           </label>
 
           <label class="archive-form-row">
