@@ -2,7 +2,7 @@
  * 文件名: js/apps/archive/index.js
  * 用途: 档案（Archive）应用完整实现（用户面具 / 角色档案 / 配角档案 / 关系网络）
  * 说明:
- *  - 纯前端 localStorage 存储
+ *  - 持久化统一走 db.js（IndexedDB）
  *  - 复用主题弹窗风格（managed-resource-modal），不使用浏览器原生 alert/confirm/prompt
  *  - 图标使用 IconPark outline 风格 SVG
  *  - 样式独立文件：js/apps/archive/archive.css（由本模块动态注入）
@@ -10,8 +10,6 @@
  * [修改标注·需求1] 联动世情应用：导入角色卡时解析绑定世界书并显示+发送事件
  */
 
-const ARCHIVE_STORAGE_KEY = 'miniphone_archive_app_data_v1';
-const ARCHIVE_ACTIVE_MASK_KEY = 'miniphone_archive_active_mask_id';
 const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
 const ARCHIVE_STYLE_ID = 'miniphone-archive-style';
 const RELATION_SELF_ID = '__archive_self__';
@@ -28,6 +26,13 @@ const RELATION_ENTITY_TAB_META = {
   mask: { label: '用户', subtitle: '用户' },
   character: { label: '角色', subtitle: '角色' },
   supporting: { label: 'NPC', subtitle: 'NPC' }
+};
+
+/* [修改标注·本次问题1] 关系网络主体/对象约束规则 */
+const RELATION_ALLOWED_TARGET_TYPES = {
+  mask: ['character', 'supporting'],
+  character: ['mask', 'supporting'],
+  supporting: ['mask', 'character']
 };
 
 function createDefaultData() {
@@ -552,6 +557,7 @@ export async function mount(container, context) {
     selectedRelationId: '',
     selectedRelationOwnerKey: '',
     relationEntityTab: 'mask',
+    relationExpandedKeys: {},
     headerRefs: null,
     characterImageRatioMap: {},
     characterViewMode: 'list',
@@ -818,15 +824,49 @@ export async function mount(container, context) {
     };
   };
 
-  const getRelationEntityOptions = (excludeValue = '') => {
-    return RELATION_ENTITY_TYPES.flatMap((type) => {
+  /* [修改标注·本次问题1] 按关系网络板块限制可选主体 */
+  const getRelationOwnerOptionsByTab = (ownerType) => {
+    return getEntitiesByType(ownerType).map((item) => ({
+      value: `${ownerType}:${item.id}`,
+      type: ownerType,
+      id: item.id,
+      label: item.name || '未命名'
+    }));
+  };
+
+  /* [修改标注·本次问题1] 按主体类型限制可选对象 */
+  const getRelationTargetOptionsByOwner = (ownerType, ownerId = '') => {
+    const allowedTypes = RELATION_ALLOWED_TARGET_TYPES[ownerType] || [];
+    return allowedTypes.flatMap((type) => {
       return getEntitiesByType(type).map((item) => ({
         value: `${type}:${item.id}`,
         type,
         id: item.id,
         label: item.name || '未命名'
       }));
-    }).filter((item) => item.value !== excludeValue);
+    }).filter((item) => !(item.type === ownerType && item.id === ownerId));
+  };
+
+  /* [修改标注·本次问题1] 以当前实体视角解析关系认知（支持 owner/target 双向同步展示） */
+  const resolveRelationPerspective = (relation, currentType, currentId) => {
+    const isOwnerSide = relation.ownerType === currentType && relation.ownerId === currentId;
+    const isTargetSide = relation.targetType === currentType && relation.targetId === currentId;
+    if (!isOwnerSide && !isTargetSide) return null;
+
+    const counterpartType = isOwnerSide ? relation.targetType : relation.ownerType;
+    const counterpartId = isOwnerSide ? relation.targetId : relation.ownerId;
+    const currentPerception = isOwnerSide ? relation.userPerception : relation.rolePerception;
+    const counterpartPerception = isOwnerSide ? relation.rolePerception : relation.userPerception;
+
+    return {
+      relationId: relation.id,
+      counterpartType,
+      counterpartId,
+      counterpartName: getEntityDisplayName(counterpartType, counterpartId),
+      counterpartTypeLabel: RELATION_ENTITY_TAB_META[counterpartType]?.subtitle || '人物',
+      currentPerception,
+      counterpartPerception
+    };
   };
 
   /* [修改标注·需求2] 关系网络系统提示词构建器：
@@ -1395,7 +1435,10 @@ export async function mount(container, context) {
     const ownerCards = getEntitiesByType(state.relationEntityTab)
       .map((item) => {
         const relationCount = state.data.relations.filter((relation) => {
-          return relation.ownerType === state.relationEntityTab && relation.ownerId === item.id;
+          return (
+            (relation.ownerType === state.relationEntityTab && relation.ownerId === item.id)
+            || (relation.targetType === state.relationEntityTab && relation.targetId === item.id)
+          );
         }).length;
 
         return {
@@ -1415,9 +1458,29 @@ export async function mount(container, context) {
 
     const [selectedOwnerType = '', selectedOwnerId = ''] = state.selectedRelationOwnerKey.split(':');
     const selectedOwner = ownerCards.find((item) => item.key === state.selectedRelationOwnerKey) || null;
-    const selectedRelations = selectedOwner
-      ? state.data.relations.filter((item) => item.ownerType === selectedOwnerType && item.ownerId === selectedOwnerId)
+
+    const perspectiveRelations = selectedOwner
+      ? state.data.relations
+        .map((relation) => resolveRelationPerspective(relation, selectedOwnerType, selectedOwnerId))
+        .filter(Boolean)
       : [];
+
+    const groupedRelations = perspectiveRelations.reduce((acc, item) => {
+      const key = buildRelationOwnerKey(item.counterpartType, item.counterpartId);
+      const current = acc.get(key) || {
+        key,
+        counterpartType: item.counterpartType,
+        counterpartId: item.counterpartId,
+        counterpartName: item.counterpartName,
+        counterpartTypeLabel: item.counterpartTypeLabel,
+        items: []
+      };
+      current.items.push(item);
+      acc.set(key, current);
+      return acc;
+    }, new Map());
+
+    const relationGroups = Array.from(groupedRelations.values());
 
     return `
       <section class="archive-relation-layout">
@@ -1463,42 +1526,50 @@ export async function mount(container, context) {
 
         ${selectedOwner ? `
           <div class="archive-relation-list">
-            ${selectedRelations.map((item) => {
-              const targetName = getEntityDisplayName(item.targetType, item.targetId);
-              const ownerName = getEntityDisplayName(item.ownerType, item.ownerId);
-              const targetTypeLabel = RELATION_ENTITY_TAB_META[item.targetType]?.subtitle || '人物';
-              const systemPrompt = buildRelationSystemPrompt(item.ownerType, item.ownerId);
-
+            ${relationGroups.map((group) => {
+              const isExpanded = !!state.relationExpandedKeys[group.key];
               return `
-                <article class="archive-relation-item">
-                  <div class="archive-relation-item__head">
+                <article class="archive-relation-item archive-relation-accordion ${isExpanded ? 'is-expanded' : ''}">
+                  <button
+                    class="archive-relation-accordion__head"
+                    type="button"
+                    data-action="toggle-relation-group"
+                    data-group-key="${group.key}"
+                  >
                     <div class="archive-relation-item__title">
-                      <strong>${escapeHtml(targetName)}</strong>
-                      <span>${escapeHtml(targetTypeLabel)}</span>
+                      <strong>${escapeHtml(group.counterpartName)}</strong>
+                      <span>${escapeHtml(group.counterpartTypeLabel)} · ${group.items.length} 条消息</span>
                     </div>
-                    <div class="archive-relation-item__tags">
-                      <span class="archive-chip">${escapeHtml(ownerName)}</span>
-                      <span class="archive-chip archive-chip--arrow">→</span>
-                      <span class="archive-chip">${escapeHtml(targetName)}</span>
-                    </div>
+                    <i class="archive-relation-accordion__arrow">${isExpanded ? icon.chevronDown : icon.chevronRight}</i>
+                  </button>
+
+                  <div class="archive-relation-accordion__body" style="${isExpanded ? '' : 'display:none;'}">
+                    ${group.items.map((item, index) => {
+                      const selfName = selectedOwner?.name || '未命名';
+                      const otherName = item.counterpartName;
+                      const systemPrompt = buildRelationSystemPrompt(selectedOwnerType, selectedOwnerId);
+                      return `
+                        <section class="archive-relation-detail-item">
+                          <div class="archive-relation-detail-item__head">
+                            <strong>${escapeHtml(otherName)} · 关系记录 ${index + 1}</strong>
+                            <div class="archive-relation-detail-item__tools">
+                              <button class="archive-character-paper__icon-btn" type="button" data-action="edit-relation" data-id="${item.relationId}" aria-label="编辑关系">${icon.edit}</button>
+                              <button class="archive-character-paper__icon-btn is-danger" type="button" data-action="delete-relation" data-id="${item.relationId}" aria-label="删除关系">${icon.remove}</button>
+                            </div>
+                          </div>
+                          <div class="archive-relation-cognition">
+                            <label>${escapeHtml(selfName)}对${escapeHtml(otherName)}的关系认知</label>
+                            <p>${escapeHtml(item.currentPerception || '未填写')}</p>
+                          </div>
+                          <div class="archive-relation-cognition">
+                            <label>${escapeHtml(otherName)}对${escapeHtml(selfName)}的关系认知</label>
+                            <p>${escapeHtml(item.counterpartPerception || '未填写')}</p>
+                          </div>
+                          <div hidden>${escapeHtml(systemPrompt)}</div>
+                        </section>
+                      `;
+                    }).join('')}
                   </div>
-
-                  <div class="archive-relation-cognition">
-                    <label>${escapeHtml(ownerName)}对${escapeHtml(targetName)}的关系认知</label>
-                    <p>${escapeHtml(item.userPerception || '未填写')}</p>
-                  </div>
-
-                  <div class="archive-relation-cognition">
-                    <label>${escapeHtml(targetName)}对${escapeHtml(ownerName)}的关系认知</label>
-                    <p>${escapeHtml(item.rolePerception || '未填写')}</p>
-                  </div>
-
-                  <footer class="archive-card-actions archive-card-actions--relation">
-                    <button class="ui-button" type="button" data-action="edit-relation" data-id="${item.id}">${icon.edit}<span>编辑</span></button>
-                    <button class="ui-button danger" type="button" data-action="delete-relation" data-id="${item.id}">${icon.remove}<span>删除</span></button>
-                  </footer>
-
-                  <div hidden>${escapeHtml(systemPrompt)}</div>
                 </article>
               `;
             }).join('')}
@@ -2000,19 +2071,32 @@ export async function mount(container, context) {
 
   const openRelationEditor = (currentItem = null) => {
     const isEdit = !!currentItem;
-    const allEntities = getRelationEntityOptions();
+    const lockedOwnerType = isEdit
+      ? currentItem.ownerType
+      : (RELATION_ENTITY_TYPES.includes(state.relationEntityTab) ? state.relationEntityTab : 'mask');
 
-    if (allEntities.length < 2) {
-      notify('请先准备至少两张用户 / 角色 / 配角档案卡片', 'error');
+    const ownerOptions = getRelationOwnerOptionsByTab(lockedOwnerType);
+    if (!ownerOptions.length) {
+      notify(`请先创建至少一个${RELATION_ENTITY_TAB_META[lockedOwnerType]?.label || '关系主体'}`, 'error');
       return;
     }
 
-    const defaultOwnerValue = currentItem
+    const defaultOwnerValue = isEdit
       ? `${currentItem.ownerType}:${currentItem.ownerId}`
-      : allEntities[0].value;
-    const defaultTargetValue = currentItem
+      : (state.selectedRelationOwnerKey && state.selectedRelationOwnerKey.startsWith(`${lockedOwnerType}:`)
+        ? state.selectedRelationOwnerKey
+        : ownerOptions[0].value);
+
+    const defaultOwner = parseRelationEntityValue(defaultOwnerValue);
+    const initialTargetOptions = getRelationTargetOptionsByOwner(defaultOwner.type, defaultOwner.id);
+    if (!initialTargetOptions.length) {
+      notify('当前关系主体没有可选关系对象，请先补充其它类型档案', 'error');
+      return;
+    }
+
+    const defaultTargetValue = isEdit
       ? `${currentItem.targetType}:${currentItem.targetId}`
-      : allEntities.find((item) => item.value !== defaultOwnerValue)?.value || '';
+      : initialTargetOptions[0].value;
 
     openModal({
       title: `${isEdit ? '编辑' : '新增'}关系条目`,
@@ -2020,19 +2104,39 @@ export async function mount(container, context) {
       content: `
         <div class="archive-form-grid">
           <label class="archive-form-row">
-            <span>关系主体</span>
-            <select data-role="relation-owner">
-              ${allEntities.map((option) => `
-                <option value="${escapeHtml(option.value)}" ${option.value === defaultOwnerValue ? 'selected' : ''}>
-                  ${escapeHtml(RELATION_ENTITY_TAB_META[option.type].subtitle)} · ${escapeHtml(option.label)}
-                </option>
-              `).join('')}
-            </select>
+            <span>关系主体（锁定为${escapeHtml(RELATION_ENTITY_TAB_META[lockedOwnerType]?.label || '主体')}）</span>
+            <input type="hidden" data-role="relation-owner" value="${escapeHtml(defaultOwnerValue)}">
+            <button class="archive-relation-picker-trigger" type="button" data-action="open-owner-picker">
+              <span data-role="relation-owner-trigger-text">${escapeHtml(getEntityValueLabel(defaultOwnerValue))}</span>
+              <i>${icon.chevronRight}</i>
+            </button>
+            <div class="archive-relation-picker-modal hidden" data-role="owner-picker-modal">
+              <div class="archive-relation-picker-modal__panel">
+                <div class="archive-relation-picker-modal__header">
+                  <strong>选择关系主体</strong>
+                  <button class="archive-character-paper__icon-btn" type="button" data-action="close-owner-picker" aria-label="关闭">${icon.close}</button>
+                </div>
+                <div class="archive-relation-picker-modal__list" data-role="owner-picker-options"></div>
+              </div>
+            </div>
           </label>
 
           <label class="archive-form-row">
             <span>关系对象</span>
-            <select data-role="relation-target"></select>
+            <input type="hidden" data-role="relation-target" value="${escapeHtml(defaultTargetValue)}">
+            <button class="archive-relation-picker-trigger" type="button" data-action="open-target-picker">
+              <span data-role="relation-target-trigger-text">${escapeHtml(getEntityValueLabel(defaultTargetValue))}</span>
+              <i>${icon.chevronRight}</i>
+            </button>
+            <div class="archive-relation-picker-modal hidden" data-role="target-picker-modal">
+              <div class="archive-relation-picker-modal__panel">
+                <div class="archive-relation-picker-modal__header">
+                  <strong>选择关系对象</strong>
+                  <button class="archive-character-paper__icon-btn" type="button" data-action="close-target-picker" aria-label="关闭">${icon.close}</button>
+                </div>
+                <div class="archive-relation-picker-modal__list" data-role="target-picker-options"></div>
+              </div>
+            </div>
           </label>
 
           <label class="archive-form-row">
@@ -2047,42 +2151,108 @@ export async function mount(container, context) {
         </div>
       `,
       onOpen: (modalScope) => {
-        const ownerSelect = modalScope.querySelector('[data-role="relation-owner"]');
-        const targetSelect = modalScope.querySelector('[data-role="relation-target"]');
+        const ownerInput = modalScope.querySelector('[data-role="relation-owner"]');
+        const targetInput = modalScope.querySelector('[data-role="relation-target"]');
+        const ownerText = modalScope.querySelector('[data-role="relation-owner-trigger-text"]');
+        const targetText = modalScope.querySelector('[data-role="relation-target-trigger-text"]');
+        const ownerOptionsHost = modalScope.querySelector('[data-role="owner-picker-options"]');
+        const targetOptionsHost = modalScope.querySelector('[data-role="target-picker-options"]');
+        const ownerModal = modalScope.querySelector('[data-role="owner-picker-modal"]');
+        const targetModal = modalScope.querySelector('[data-role="target-picker-modal"]');
         const ownerPerceptionLabel = modalScope.querySelector('[data-role="owner-perception-label"]');
         const targetPerceptionLabel = modalScope.querySelector('[data-role="target-perception-label"]');
 
-        const syncRelationEditor = () => {
-          const ownerValue = normalizeString(ownerSelect?.value);
-          const currentTargetValue = normalizeString(targetSelect?.value);
-          const targetOptions = getRelationEntityOptions(ownerValue);
+        const hideOwnerPicker = () => ownerModal?.classList.add('hidden');
+        const hideTargetPicker = () => targetModal?.classList.add('hidden');
 
-          if (targetSelect) {
-            targetSelect.innerHTML = targetOptions.map((option) => `
-              <option value="${escapeHtml(option.value)}" ${option.value === currentTargetValue || (!currentTargetValue && option.value === defaultTargetValue) ? 'selected' : ''}>
-                ${escapeHtml(RELATION_ENTITY_TAB_META[option.type].subtitle)} · ${escapeHtml(option.label)}
-              </option>
+        const renderOwnerPicker = () => {
+          const options = getRelationOwnerOptionsByTab(lockedOwnerType);
+          if (ownerOptionsHost) {
+            ownerOptionsHost.innerHTML = options.map((option) => `
+              <button
+                type="button"
+                class="archive-relation-picker-option ${normalizeString(ownerInput?.value) === option.value ? 'is-active' : ''}"
+                data-action="pick-owner"
+                data-value="${escapeHtml(option.value)}"
+              >
+                <strong>${escapeHtml(option.label)}</strong>
+                <span>${escapeHtml(RELATION_ENTITY_TAB_META[option.type]?.subtitle || '人物')}</span>
+              </button>
             `).join('');
-
-            if (!targetSelect.value && targetOptions[0]) {
-              targetSelect.value = targetOptions[0].value;
-            }
-          }
-
-          const ownerName = getEntityValueLabel(ownerSelect?.value);
-          const targetName = getEntityValueLabel(targetSelect?.value);
-
-          if (ownerPerceptionLabel) {
-            ownerPerceptionLabel.textContent = `${ownerName}对${targetName}的关系认知`;
-          }
-
-          if (targetPerceptionLabel) {
-            targetPerceptionLabel.textContent = `${targetName}对${ownerName}的关系认知`;
           }
         };
 
-        ownerSelect?.addEventListener('change', syncRelationEditor);
-        targetSelect?.addEventListener('change', syncRelationEditor);
+        const renderTargetPicker = () => {
+          const owner = parseRelationEntityValue(ownerInput?.value);
+          const options = getRelationTargetOptionsByOwner(owner.type, owner.id);
+          if (targetOptionsHost) {
+            targetOptionsHost.innerHTML = options.map((option) => `
+              <button
+                type="button"
+                class="archive-relation-picker-option ${normalizeString(targetInput?.value) === option.value ? 'is-active' : ''}"
+                data-action="pick-target"
+                data-value="${escapeHtml(option.value)}"
+              >
+                <strong>${escapeHtml(option.label)}</strong>
+                <span>${escapeHtml(RELATION_ENTITY_TAB_META[option.type]?.subtitle || '人物')}</span>
+              </button>
+            `).join('');
+          }
+          if (!options.some((option) => option.value === normalizeString(targetInput?.value))) {
+            targetInput.value = options[0]?.value || '';
+          }
+        };
+
+        const syncRelationEditor = () => {
+          renderOwnerPicker();
+          renderTargetPicker();
+
+          const ownerName = getEntityValueLabel(ownerInput?.value);
+          const targetName = getEntityValueLabel(targetInput?.value);
+          if (ownerText) ownerText.textContent = ownerName;
+          if (targetText) targetText.textContent = targetName;
+
+          if (ownerPerceptionLabel) ownerPerceptionLabel.textContent = `${ownerName}对${targetName}的关系认知`;
+          if (targetPerceptionLabel) targetPerceptionLabel.textContent = `${targetName}对${ownerName}的关系认知`;
+        };
+
+        modalScope.addEventListener('click', (event) => {
+          const action = event.target.closest('[data-action]')?.getAttribute('data-action');
+          if (!action) return;
+
+          if (action === 'open-owner-picker') {
+            ownerModal?.classList.remove('hidden');
+            return;
+          }
+          if (action === 'open-target-picker') {
+            targetModal?.classList.remove('hidden');
+            return;
+          }
+          if (action === 'close-owner-picker') {
+            hideOwnerPicker();
+            return;
+          }
+          if (action === 'close-target-picker') {
+            hideTargetPicker();
+            return;
+          }
+          if (action === 'pick-owner') {
+            const next = normalizeString(event.target.closest('[data-value]')?.getAttribute('data-value'));
+            if (!next) return;
+            ownerInput.value = next;
+            hideOwnerPicker();
+            syncRelationEditor();
+            return;
+          }
+          if (action === 'pick-target') {
+            const next = normalizeString(event.target.closest('[data-value]')?.getAttribute('data-value'));
+            if (!next) return;
+            targetInput.value = next;
+            hideTargetPicker();
+            syncRelationEditor();
+          }
+        });
+
         syncRelationEditor();
       },
       onConfirm: (modalScope) => {
@@ -2096,6 +2266,12 @@ export async function mount(container, context) {
 
         if (owner.type === target.type && owner.id === target.id) {
           notify('关系主体与关系对象不能是同一张卡片', 'error');
+          return false;
+        }
+
+        const allowedTypes = RELATION_ALLOWED_TARGET_TYPES[owner.type] || [];
+        if (!allowedTypes.includes(target.type)) {
+          notify('当前关系主体与关系对象类型不符合规则', 'error');
           return false;
         }
 
@@ -2123,6 +2299,8 @@ export async function mount(container, context) {
 
         state.relationEntityTab = relation.ownerType;
         state.selectedRelationOwnerKey = buildRelationOwnerKey(relation.ownerType, relation.ownerId);
+        const expandedKey = buildRelationOwnerKey(relation.targetType, relation.targetId);
+        state.relationExpandedKeys[expandedKey] = true;
 
         notify(isEdit ? '关系条目已更新' : '关系条目已创建', 'success');
         rerender();
@@ -2686,6 +2864,7 @@ export async function mount(container, context) {
       if (RELATION_ENTITY_TYPES.includes(nextTab)) {
         state.relationEntityTab = nextTab;
         state.selectedRelationOwnerKey = '';
+        state.relationExpandedKeys = {};
         rerender();
       }
       return;
@@ -2693,7 +2872,16 @@ export async function mount(container, context) {
 
     if (action === 'select-relation-owner') {
       state.selectedRelationOwnerKey = actionEl.getAttribute('data-owner-key') || '';
+      state.relationExpandedKeys = {};
       rerender();
+      return;
+    }
+
+    if (action === 'toggle-relation-group') {
+      const key = actionEl.getAttribute('data-group-key') || '';
+      if (!key) return;
+      state.relationExpandedKeys[key] = !state.relationExpandedKeys[key];
+      renderContent();
       return;
     }
 

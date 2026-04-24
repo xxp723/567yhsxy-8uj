@@ -1113,6 +1113,85 @@
   gap: 10px;
 }
 
+/* [修改标注·本次问题1] 关系条目折叠栏 */
+.archive-relation-accordion {
+  padding: 0;
+  overflow: hidden;
+}
+
+.archive-relation-accordion__head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+}
+
+.archive-relation-accordion__arrow {
+  width: 18px;
+  height: 18px;
+  color: rgba(123, 104, 85, 0.85);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.archive-relation-accordion__arrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+.archive-relation-accordion__body {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.archive-relation-detail-item {
+  border: 1px solid rgba(122, 95, 67, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.78);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.archive-relation-detail-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.archive-relation-detail-item__head strong {
+  font-size: 13px;
+  line-height: 1.3;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.archive-relation-detail-item__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.archive-relation-detail-item__tools .archive-character-paper__icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.archive-relation-detail-item__tools .archive-character-paper__icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .archive-relation-item__head {
   display: grid;
   gap: 8px;
@@ -1296,6 +1375,123 @@
 .archive-form-row textarea {
   resize: vertical;
   min-height: 86px;
+}
+
+/* [修改标注·本次问题1] 关系主体/对象自定义选择器（非原生 select） */
+.archive-relation-picker-trigger {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 253, 249, 0.96);
+  color: var(--archive-text);
+  font-size: 13px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.archive-relation-picker-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-relation-picker-trigger i {
+  width: 16px;
+  height: 16px;
+  color: var(--archive-subtext);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.archive-relation-picker-trigger i svg {
+  width: 14px;
+  height: 14px;
+}
+
+.archive-relation-picker-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  border-radius: 10px;
+  background: rgba(23, 18, 13, 0.16);
+  padding: 8px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.archive-relation-picker-modal.hidden {
+  display: none;
+}
+
+.archive-relation-picker-modal__panel {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 95, 67, 0.18);
+  background: rgba(255, 251, 244, 0.98);
+  box-shadow: 0 10px 24px rgba(66, 43, 22, 0.16);
+  display: grid;
+  overflow: hidden;
+}
+
+.archive-relation-picker-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(122, 95, 67, 0.12);
+}
+
+.archive-relation-picker-modal__header strong {
+  font-size: 12px;
+  color: var(--archive-text);
+}
+
+.archive-relation-picker-modal__list {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.archive-relation-picker-modal__list::-webkit-scrollbar {
+  display: none;
+}
+
+.archive-relation-picker-option {
+  width: 100%;
+  border: 1px solid rgba(122, 95, 67, 0.14);
+  background: rgba(255, 253, 249, 0.95);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--archive-text);
+  display: grid;
+  gap: 2px;
+}
+
+.archive-relation-picker-option strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.archive-relation-picker-option span {
+  font-size: 11px;
+  color: var(--archive-subtext);
+}
+
+.archive-relation-picker-option.is-active {
+  border-color: rgba(127, 92, 62, 0.34);
+  background: rgba(247, 238, 224, 0.96);
 }
 
 .archive-form-row input:focus,
