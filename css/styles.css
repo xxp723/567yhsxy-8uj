@@ -1104,6 +1104,8 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   pointer-events: none;
 }
 
+/* [修改标注·问题1-修复] 增加 overflow:hidden 防止大尺寸角色卡图片溢出窗口容器，
+   导致浏览器视口缩放出现黑边与滚动失效 */
 .app-window {
   position: absolute;
   top: var(--status-bar-height);
@@ -1118,6 +1120,7 @@ body.is-edit-mode #dock-container.is-edit-mode .app-icon .edit-delete-btn {
   display: flex;
   flex-direction: column;
   border-radius: 0;
+  overflow: hidden;
 }
 
 .app-window.is-active {
