@@ -1005,9 +1005,11 @@
   white-space: nowrap;
 }
 
+/* [修改标注·本次问题1-高度压缩] 关系网络正文区域固定从顶部开始排布，消除居中留白 */
 .archive-relation-layout {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 8px;
   padding-top: 0;
 }
 
@@ -1047,22 +1049,24 @@
   box-shadow: inset 0 0 0 1px rgba(122, 95, 67, 0.08);
 }
 
+/* [修改标注·本次问题1-高度压缩] 主体卡片列表间距收紧 */
 .archive-relation-owner-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
+/* [修改标注·本次问题1-高度压缩] 关系主体卡片降低高度，贴近示例视觉密度 */
 .archive-relation-owner-card {
   width: 100%;
   border: 1px solid rgba(122, 95, 67, 0.16);
   background: rgba(255, 251, 244, 0.92);
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow: var(--archive-shadow);
-  padding: 14px;
+  padding: 10px;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 20px;
+  grid-template-columns: 46px minmax(0, 1fr) 18px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--archive-text);
   text-align: left;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
@@ -1084,19 +1088,19 @@
 }
 
 .archive-relation-owner-card__meta strong {
-  font-size: 15px;
-  line-height: 1.25;
+  font-size: 14px;
+  line-height: 1.22;
   word-break: break-word;
 }
 
 .archive-relation-owner-card__meta span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--archive-subtext);
 }
 
 .archive-relation-owner-card__arrow {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: rgba(123, 104, 85, 0.78);
   display: inline-flex;
   align-items: center;
@@ -1104,13 +1108,15 @@
 }
 
 .archive-relation-owner-card__arrow svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
+/* [修改标注·本次问题1-高度压缩] 关系条目列表向上贴齐，并减少条目间距 */
 .archive-relation-list {
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: 6px;
 }
 
 /* [修改标注·本次问题1] 关系条目折叠栏 */
@@ -1126,7 +1132,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 4px;
-  padding: 6px 8px;
+  padding: 4px 7px;
 }
 
 .archive-relation-accordion__tools {
@@ -1157,7 +1163,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  padding: 4px 2px;
+  padding: 2px 2px;
 }
 
 .archive-relation-accordion__arrow {
