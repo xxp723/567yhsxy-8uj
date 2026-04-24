@@ -83,10 +83,14 @@
   display: none;
 }
 
+/* [修改标注·本次问题1-修复] 标签面板溢出防护：阻止大尺寸图片内容沿DOM树向上传播 */
 .archive-tab-panel {
   display: grid;
   gap: 12px;
   animation: archiveFadeIn 220ms ease;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* [修改标注·需求5] 所有tab去除独立背景边框，直接铺满正文区域 */
@@ -103,20 +107,28 @@
 /* [模块标注] 角色档案双列错落卡片列表模块：
    仅作用于角色档案 tab 顶部人物列表；
    点击卡片后直接切换下方档案详情。 */
+/* [修改标注·本次问题1-修复] 角色面板溢出防护 */
 .archive-character-panel {
   display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
+/* [修改标注·本次问题1-修复] 双列网格溢出防护 */
 .archive-character-grid {
   column-count: 2;
   column-gap: 12px;
   padding: 2px 2px 8px;
+  overflow: hidden;
 }
 
 /* [模块标注] 角色卡片样式 —— 去除浅棕色圆角背景，保持透明轻量 */
+/* [修改标注·本次问题1-修复] 卡片添加 min-width 约束防止被内容撑宽 */
 .archive-character-grid-card {
   position: relative;
   width: 100%;
+  min-width: 0;
   break-inside: avoid;
   margin-bottom: 12px;
   border: none;
@@ -200,6 +212,7 @@
   overflow: hidden;
 }
 
+/* [修改标注·本次问题1-修复] 纸张卡片添加 max-width + box-sizing 防止溢出 */
 .archive-character-paper {
   position: relative;
   display: grid;
@@ -207,6 +220,8 @@
   padding: 28px 20px 24px;
   border-radius: 6px;
   border: 2px solid rgba(110, 80, 48, 0.35);
+  max-width: 100%;
+  box-sizing: border-box;
   background:
     radial-gradient(ellipse at 15% 8%, rgba(255, 248, 228, 0.9), transparent 36%),
     radial-gradient(ellipse at 88% 12%, rgba(200, 160, 95, 0.12), transparent 30%),
