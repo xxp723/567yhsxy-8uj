@@ -424,8 +424,12 @@
   align-items: stretch;
 }
 
+/* [修改标注·本次问题1-修复] 详情页头像容器增加固定高度约束：
+   防止大尺寸 PNG 角色卡图片按原始尺寸撑开容器，导致整屏缩小出现黑边与滚动失效。
+   max-height 限制最大高度，object-fit: cover 保证裁切填满。 */
 .archive-character-paper__photo {
   min-height: 146px;
+  max-height: 200px;
   border: 1.5px solid rgba(108, 74, 41, 0.32);
   background: rgba(201, 173, 130, 0.22);
   display: flex;
