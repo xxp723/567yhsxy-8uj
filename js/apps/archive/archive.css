@@ -1011,20 +1011,15 @@
   padding-top: 2px;
 }
 
-/* [修改标注·本次问题1] 关系网络三分类（用户/角色/NPC）横向占位收紧：
-   将原本满宽三等分改为居中紧凑布局，缩小每个分类块宽度，保持主题风格不变。 */
 .archive-relation-tabs {
   position: sticky;
   top: 0;
   z-index: 6;
   display: grid;
-  grid-template-columns: repeat(3, minmax(76px, auto));
-  justify-content: center;
-  width: fit-content;
-  margin: 0 auto;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
   border: 1px solid rgba(122, 95, 67, 0.14);
   background: rgba(255, 248, 234, 0.92);
   backdrop-filter: blur(10px);
@@ -1032,15 +1027,14 @@
 }
 
 .archive-relation-tabs__btn {
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 40px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: var(--archive-subtext);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
@@ -1652,17 +1646,14 @@
     flex-direction: column;
   }
 
-  /* [修改标注·本次问题1] 小屏下进一步收紧关系网络三分类块宽度 */
   .archive-relation-tabs {
-    grid-template-columns: repeat(3, minmax(68px, auto));
-    gap: 5px;
-    padding: 5px;
+    gap: 6px;
+    padding: 6px;
   }
 
   .archive-relation-tabs__btn {
-    min-height: 34px;
-    padding: 0 8px;
-    font-size: 12px;
+    min-height: 38px;
+    font-size: 13px;
   }
 
   .archive-relation-owner-card {
