@@ -55,9 +55,34 @@ async function svDB(db, aid, books) {
   try { await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() }); } catch {}
 }
 
+/* [修改标注·本次问题1] 世情应用样式预加载守卫：
+   打开世情应用时等待 worldbook.css 首次加载完成（或失败回调），
+   避免先渲染无样式结构再跳变。 */
 function ensureCSS() {
-  if (document.getElementById(WB_STYLE)) return;
-  const l = document.createElement('link'); l.id = WB_STYLE; l.rel = 'stylesheet'; l.href = 'js/apps/worldbook/worldbook.css'; document.head.appendChild(l);
+  const waitForLink = (link) => new Promise((resolve) => {
+    if (!link) { resolve(null); return; }
+    if (link.dataset.loaded === '1' || link.sheet) { resolve(link); return; }
+
+    const done = () => {
+      link.dataset.loaded = '1';
+      link.removeEventListener('load', done);
+      link.removeEventListener('error', done);
+      resolve(link);
+    };
+
+    link.addEventListener('load', done, { once: true });
+    link.addEventListener('error', done, { once: true });
+  });
+
+  const existed = document.getElementById(WB_STYLE);
+  if (existed) return waitForLink(existed);
+
+  const l = document.createElement('link');
+  l.id = WB_STYLE;
+  l.rel = 'stylesheet';
+  l.href = 'js/apps/worldbook/worldbook.css';
+  document.head.appendChild(l);
+  return waitForLink(l);
 }
 
 function parseTavE(r) {
@@ -145,7 +170,8 @@ const I = {
 const POS_LABELS = { top: '置顶', beforeChar: '角色前', afterChar: '角色后' };
 
 export async function mount(container, context) {
-  ensureCSS();
+  /* [修改标注·本次问题1] 等待样式可用后再挂载内容，减少首屏无样式闪烁 */
+  await ensureCSS();
   const S = { books: [], tab: 'global', openId: null, sOpen: false, sQ: '', sBooks: new Set(), sEntries: new Set(), expEnt: new Set() };
   const { db, appId, eventBus } = context;
   /* [修改标注·需求3] 点击标题文字返回桌面时，复用应用统一关闭事件，避免仅移除窗口壳体 */

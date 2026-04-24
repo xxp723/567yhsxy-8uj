@@ -473,16 +473,41 @@ async function fileToDataURL(file) {
   return compressImageDataUrl(rawDataUrl);
 }
 
+/* [修改标注·本次问题1] 档案应用样式预加载守卫：
+   进入应用时等待 archive.css 至少完成首次加载（或失败回调），
+   避免先渲染无样式结构再“闪一下”套上样式。 */
 function ensureArchiveStylesheet() {
+  const waitForLink = (link) => new Promise((resolve) => {
+    if (!link) {
+      resolve(null);
+      return;
+    }
+
+    if (link.dataset.loaded === '1' || link.sheet) {
+      resolve(link);
+      return;
+    }
+
+    const done = () => {
+      link.dataset.loaded = '1';
+      link.removeEventListener('load', done);
+      link.removeEventListener('error', done);
+      resolve(link);
+    };
+
+    link.addEventListener('load', done, { once: true });
+    link.addEventListener('error', done, { once: true });
+  });
+
   let link = document.getElementById(ARCHIVE_STYLE_ID);
-  if (link) return link;
+  if (link) return waitForLink(link);
 
   link = document.createElement('link');
   link.id = ARCHIVE_STYLE_ID;
   link.rel = 'stylesheet';
   link.href = 'js/apps/archive/archive.css';
   document.head.appendChild(link);
-  return link;
+  return waitForLink(link);
 }
 
 function icons() {
@@ -514,7 +539,8 @@ function icons() {
 }
 
 export async function mount(container, context) {
-  ensureArchiveStylesheet();
+  /* [修改标注·本次问题1] 等待样式资源进入可用状态后再挂载内容，减少首屏无样式闪烁 */
+  await ensureArchiveStylesheet();
   const icon = icons();
 
   const state = {

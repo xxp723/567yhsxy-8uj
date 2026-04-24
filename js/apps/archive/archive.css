@@ -148,15 +148,17 @@
   box-shadow: 0 6px 18px rgba(71, 46, 24, 0.10);
 }
 
-/* [修改标注·需求4] 移除固定比例，让上传的头像图片保持原有尺寸比例 */
+/* [修改标注·本次问题1] 角色列表图片容器改为受控比例：
+   修复超高 PNG 造成卡片高度异常、进入详情后出现黑边缩放与滚动失效问题。 */
 .archive-character-grid-card__media {
-  aspect-ratio: auto;
+  aspect-ratio: 3 / 4.35;
 }
 
-/* [修改标注·需求4] 图片保持原始尺寸比例 */
+/* [修改标注·本次问题1] 图片改为填充受控容器，避免按原图高度无限拉伸 */
 .archive-character-grid-card__media img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
