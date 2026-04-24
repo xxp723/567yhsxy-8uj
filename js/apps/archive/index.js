@@ -1125,7 +1125,9 @@ export async function mount(container, context) {
       <!-- [修改标注·需求3] 头像左侧，性别/年龄/身份/联系方式在头像右侧 -->
       <section class="archive-character-paper__hero">
         <div class="archive-character-paper__photo ${item.avatar ? 'has-image' : ''}">
-          ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
+          ${item.avatar
+            ? `<div class="archive-character-paper__photo-bg" role="img" aria-label="${escapeHtml(item.name || '角色头像')}" style="background-image:url('${escapeHtml(item.avatar)}');"></div>`
+            : `<span>${icon.docDetail}</span>`}
         </div>
 
         <div class="archive-character-paper__summary">

@@ -473,9 +473,22 @@
     inset 0 0 0 1px rgba(255, 248, 233, 0.34),
     0 8px 20px rgba(82, 54, 29, 0.14),
     3px 3px 0 rgba(108, 74, 41, 0.06);
+  contain: layout paint style;
 }
 
-/* [修改标注·本次问题1-修复] img 绝对定位填充容器，阻止大尺寸图片撑破布局 */
+/* [修改标注·本次问题1-修复] 详情头像改为背景层渲染，彻底隔离原图尺寸参与布局计算 */
+.archive-character-paper__photo-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
+/* [修改标注·本次问题1-修复] 兼容仍使用 img 的详情块（如面具/配角），统一绝对定位填充容器 */
 .archive-character-paper__photo img {
   position: absolute;
   inset: 0;
