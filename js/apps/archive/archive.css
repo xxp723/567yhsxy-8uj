@@ -1126,18 +1126,19 @@
   border-radius: 14px;
 }
 
-/* [修改标注·本次问题1] 折叠栏头部改为“左侧工具 + 右侧折叠按钮”紧凑布局 */
+/* [修改标注·本次问题1] 折叠栏头部改为“左侧工具 右侧折叠折叠按钮凑紧凑布局 */
 .archive-relation-accordion__head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 4px 7px;
 }
 
 .archive-relation-accordion__tools {
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 4px;
 }
 
@@ -1455,14 +1456,14 @@
 }
 
 .archive-relation-picker-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 30;
-  border-radius: 10px;
-  background: rgba(23, 18, 13, 0.16);
-  padding: 8px;
+  z-index: 120;
+  background: rgba(23, 18, 13, 0.22);
+  padding: 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   touch-action: pan-y;
 }
 
@@ -1471,8 +1472,8 @@
 }
 
 .archive-relation-picker-modal__panel {
-  width: 100%;
-  max-height: 220px;
+  width: min(332px, calc(100vw - 28px));
+  max-height: min(62vh, 420px);
   border-radius: 12px;
   border: 1px solid rgba(122, 95, 67, 0.18);
   background: rgba(255, 251, 244, 0.98);
@@ -1499,7 +1500,7 @@
 .archive-relation-picker-modal__list {
   display: grid;
   gap: 6px;
-  padding: 8px;
+  padding: 8px 8px 12px;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
