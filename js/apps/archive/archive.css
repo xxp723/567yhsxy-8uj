@@ -1011,14 +1011,19 @@
   padding-top: 2px;
 }
 
+/* [修改标注·本次问题1-关系网络宽度] 缩小“用户/角色/NPC”三板块占位：
+   由整行三等分改为内容宽度布局并居中，避免视觉上过宽臃肿。 */
 .archive-relation-tabs {
   position: sticky;
   top: 0;
   z-index: 6;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  justify-content: center;
   gap: 8px;
-  padding: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 6px 8px;
   border-radius: 18px;
   border: 1px solid rgba(122, 95, 67, 0.14);
   background: rgba(255, 248, 234, 0.92);
@@ -1027,7 +1032,8 @@
 }
 
 .archive-relation-tabs__btn {
-  min-height: 40px;
+  flex: 0 0 88px;
+  min-height: 38px;
   border: 0;
   border-radius: 14px;
   background: transparent;
