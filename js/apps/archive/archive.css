@@ -443,24 +443,25 @@
   color: var(--archive-danger);
 }
 
-/* [修改标注·本次问题1-修复] hero 区域增加 min-width/overflow 约束，防止图片撑破网格 */
+/* [修改标注·本次问题1] hero 区域列宽改为硬约束，阻止详情头像把布局最小宽度向外传递 */
 .archive-character-paper__hero {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 110px) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
   min-width: 0;
   overflow: hidden;
 }
 
-/* [修改标注·本次问题1-修复] 详情页头像容器使用确定高度 + 相对定位：
-   防止大尺寸 PNG 角色卡图片按原始尺寸撑开容器，导致整屏缩小出现黑边与滚动失效。
-   使用固定 height 而非 max-height，配合内部 img 绝对定位，彻底杜绝溢出。 */
+/* [修改标注·本次问题1] 详情页头像容器改为固定列宽配合裁切显示：
+   彻底隔离导入 PNG 原图尺寸，避免触发窗口内容区缩放后出现黑边 */
 .archive-character-paper__photo {
   position: relative;
-  width: 100%;
+  width: 110px;
+  max-width: 100%;
   height: 180px;
   min-height: 0;
+  justify-self: start;
   border: 1.5px solid rgba(108, 74, 41, 0.32);
   background: rgba(201, 173, 130, 0.22);
   display: flex;
@@ -1666,9 +1667,9 @@
     display: grid;
   }
 
-  /* [修改标注·需求1] 小屏下保持头像左侧+信息右侧的并排布局，仅缩小头像尺寸 */
+  /* [修改标注·本次问题1] 小屏下同步收紧详情头像列宽，避免触发横向溢出导致页面缩小黑边 */
   .archive-character-paper__hero {
-    grid-template-columns: 90px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 90px) minmax(0, 1fr);
     gap: 10px;
   }
 
@@ -1682,9 +1683,10 @@
   }
 
   .archive-character-paper__photo {
-    width: 100px;
+    width: 90px;
     min-height: 130px;
-    margin: 0 auto;
+    margin: 0;
+    justify-self: start;
   }
 
   .archive-character-paper__summary-grid {
