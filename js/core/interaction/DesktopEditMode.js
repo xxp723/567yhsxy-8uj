@@ -15,6 +15,10 @@ export class DesktopEditMode {
     this.db = db;
     this.settings = settings;
 
+    // [模块标注] 设置外观快照同步模块：桌面编辑模式读取设置应用维护的 appearance 数据，禁止使用 localStorage/sessionStorage
+    this.appearanceSnapshot = {};
+    this.appearanceSnapshotReady = false;
+
     this.isEditMode = false;
     this.gridCols = 4;
     this.gridRows = 6;
@@ -67,6 +71,7 @@ export class DesktopEditMode {
     this.desktopEditStoreName = 'appsData';
     this.desktopEditStoreAppId = 'desktop-edit-mode';
 
+    this.refreshAppearanceSnapshotFromStore();
     this.bindEvents();
     this.loadLayout();
     this.loadDockState();
@@ -127,14 +132,28 @@ export class DesktopEditMode {
       }
     });
 
-    this.eventBus.on('desktop:custom-widgets-changed', () => {
+    this.eventBus.on('settings:changed', ({ settings } = {}) => {
+      this.syncAppearanceSnapshot(settings?.appearance || {});
+      this.refreshAddPanelIfVisible();
+    });
+
+    this.eventBus.on('desktop:custom-widgets-changed', ({ widgets = [] } = {}) => {
+      // [模块标注] 自定义组件添加面板同步模块：设置应用保存后立即同步桌面编辑模式组件库
+      this.syncAppearanceSnapshot({ customWidgets: Array.isArray(widgets) ? widgets : [] });
       this.applyLayoutToDOM();
+      this.refreshAddPanelIfVisible();
       if (this.isEditMode) {
         this.attachDeleteButtons();
       }
     });
 
-    this.eventBus.on('desktop:widget-library-changed', ({ removedIds = [], hiddenIds = [] } = {}) => {
+    this.eventBus.on('desktop:widget-library-changed', ({ removedIds = [], hiddenIds = [], widgets = [] } = {}) => {
+      this.syncAppearanceSnapshot({
+        customWidgets: Array.isArray(widgets) ? widgets : this.getCustomWidgetLibrary(),
+        hiddenWidgetIds: Array.isArray(hiddenIds) ? hiddenIds : this.getHiddenWidgetIds()
+      });
+      this.refreshAddPanelIfVisible();
+
       const idsToRemove = [...new Set([...(removedIds || []), ...(hiddenIds || [])])];
       if (!idsToRemove.length) return;
 
@@ -671,6 +690,35 @@ export class DesktopEditMode {
   }
 
   // [模块标注] 自定义组件编辑同步模块：自定义组件定义统一回写设置应用 appearance.customWidgets，不再使用桌面编辑独立旧键
+  syncAppearanceSnapshot(appearance = {}) {
+    if (!appearance || typeof appearance !== 'object') return this.appearanceSnapshot;
+    this.appearanceSnapshot = {
+      ...(this.appearanceSnapshot || {}),
+      ...appearance
+    };
+    this.appearanceSnapshotReady = true;
+    return this.appearanceSnapshot;
+  }
+
+  async refreshAppearanceSnapshotFromStore() {
+    if (!this.settings?.getAll) return;
+
+    try {
+      const settings = await this.settings.getAll();
+      this.syncAppearanceSnapshot(settings?.appearance || {});
+      this.refreshAddPanelIfVisible();
+    } catch (error) {
+      Logger.warn('读取设置外观快照失败', error);
+    }
+  }
+
+  refreshAddPanelIfVisible() {
+    if (this.addPanel?.classList.contains('is-visible')) {
+      this.showAddPanel();
+    }
+  }
+
+  // [模块标注] 自定义组件编辑同步模块：自定义组件定义统一回写设置应用 appearance.customWidgets，不再使用桌面编辑独立旧键
   async getCustomWidgetStorageList() {
     return this.getCustomWidgetLibrary();
   }
@@ -682,6 +730,7 @@ export class DesktopEditMode {
       customWidgets
     };
 
+    this.syncAppearanceSnapshot(appearance);
     await this.settings?.update?.({ appearance });
     this.eventBus?.emit?.('desktop:custom-widgets-changed', { widgets: customWidgets });
   }
@@ -1787,7 +1836,7 @@ export class DesktopEditMode {
 
   // [模块标注] 组件库设置同步模块：桌面编辑模式直接读取设置应用维护的 appearance 快照，避免保留旧的空列表结构
   getAppearanceSnapshot() {
-    return this.settings?.current?.appearance || {};
+    return this.appearanceSnapshotReady ? (this.appearanceSnapshot || {}) : {};
   }
 
   getCustomWidgetLibrary() {
@@ -1925,6 +1974,11 @@ export class DesktopEditMode {
       ...(appearance.builtinWidgetStates || {}),
       [id]: merged
     };
+
+    this.syncAppearanceSnapshot({
+      ...appearance,
+      builtinWidgetStates
+    });
 
     this.settings?.update?.({
       appearance: {
