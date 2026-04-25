@@ -1,7 +1,7 @@
 /**
  * 文件名: js/core/logic/Settings.js
  * 用途: 全局设置管理器。
- *       管理外观设置、API设置（Base URL / Key）、语音与生图配置，并提供导入/导出能力。
+ *       管理外观设置、设置应用新版 API 配置与功能开关，并提供导入/导出能力。
  *       与 SettingsStore 交互持久化，同时通过 EventBus 广播设置变更。
  * 位置: /js/core/logic/Settings.js
  * 架构层: 逻辑层（Logic Layer）
@@ -47,9 +47,33 @@ export class Settings {
         iconBorderWidth: 0,
         iconBorderColor: '#d7c9b8'
       },
+      // [设置应用同步标记] API 默认配置区域：与 js/apps/settings/api.js 的 version 3 主/副 API 设置结构保持一致
       api: {
-        textToImage: { baseUrl: '', apiKey: '' },
-        minimaxTTS: { baseUrl: '', apiKey: '', voiceId: '' }
+        version: 3,
+        activeProfile: 'primary',
+        primary: {
+          provider: 'openai',
+          apiKey: '',
+          baseUrl: 'https://api.openai.com/v1',
+          model: '',
+          availableModels: [],
+          stream: true
+        },
+        secondary: {
+          provider: 'gemini',
+          apiKey: '',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+          model: '',
+          availableModels: [],
+          stream: true
+        },
+        global: {
+          temperature: 0.7,
+          maxTokens: 2048,
+          useGlobalTemperature: true,
+          useGlobalMaxTokens: true
+        },
+        savedPrimaryConfigs: []
       },
       features: {
         offlineMode: true

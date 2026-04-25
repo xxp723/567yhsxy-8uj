@@ -1,8 +1,8 @@
 /**
  * 文件名: js/core/data/SettingsStore.js
  * 用途: 全局设置数据访问层（Data Store）。
- *       负责 settings 对象仓库的读写，供逻辑层 Settings 使用。
- *       覆盖范围包括：外观设置、API设置、语音/生图配置等。
+ *       基于项目 DB.js（IndexedDB）负责 settings 对象仓库的读写，供逻辑层 Settings 与设置应用使用。
+ *       覆盖范围包括：外观设置、设置应用新版 API 配置、功能开关与设置应用扩展字段。
  * 位置: /js/core/data/SettingsStore.js
  * 架构层: 数据层（Data Layer）
  */
