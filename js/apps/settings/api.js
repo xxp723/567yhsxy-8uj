@@ -41,13 +41,7 @@ const PROVIDER_META = {
   }
 };
 
-// [模块标注] 模型真实来源模块：仅保留真实拉取结果与当前已选模型，屏蔽旧版本遗留的示例模型列表
-const LEGACY_PROVIDER_PRESET_MODELS = {
-  openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini'],
-  gemini: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
-  claude: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner']
-};
+// [模块标注] 模型真实来源模块：模型列表只保留接口真实拉取结果与用户当前已选模型，不再维护旧版示例模型白名单
 
 // IconPark SVG（统一图标风格 + 用途标注，方便后续修改）
 const ICONS = {
@@ -163,18 +157,6 @@ function uniqueStrings(values) {
   return [...new Set((values || []).filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
 }
 
-function stripLegacyPresetModels(providerId, models) {
-  const normalized = uniqueStrings(models || []);
-  const legacyPresetModels = uniqueStrings(LEGACY_PROVIDER_PRESET_MODELS[providerId] || []);
-  if (!normalized.length || !legacyPresetModels.length) return normalized;
-
-  const isExactLegacyPresetList =
-    normalized.length === legacyPresetModels.length &&
-    normalized.every((model) => legacyPresetModels.includes(model));
-
-  return isExactLegacyPresetList ? [] : normalized;
-}
-
 function mergeModelOptions(providerId, models, selectedModel) {
   return uniqueStrings([...(models || []), selectedModel]);
 }
@@ -188,29 +170,14 @@ function normalizeProfileConfig(profileInput, fallbackProvider = 'openai') {
     apiKey: profileInput?.apiKey || '',
     baseUrl: profileInput?.baseUrl || PROVIDER_META[provider].defaultBaseUrl,
     model,
+    // [模块标注] API 模型列表同步模块：仅合并已保存的真实模型与当前选中模型，不再清洗或兼容旧版示例模型结构
     availableModels: mergeModelOptions(
       provider,
-      stripLegacyPresetModels(provider, profileInput?.availableModels),
+      profileInput?.availableModels,
       model
     ),
     stream: typeof profileInput?.stream === 'boolean' ? profileInput.stream : true
   };
-}
-
-function migrateLegacyProfile(source, profileKey, fallbackProvider) {
-  const selectedProvider = normalizeProviderId(source?.[profileKey]?.provider, fallbackProvider);
-  const providerSource = source?.providers?.[selectedProvider] || {};
-  return normalizeProfileConfig(
-    {
-      provider: selectedProvider,
-      apiKey: providerSource.apiKey,
-      baseUrl: providerSource.baseUrl,
-      model: providerSource.model,
-      availableModels: [],
-      stream: providerSource.stream
-    },
-    selectedProvider
-  );
 }
 
 function normalizeSavedPrimaryConfigs(rawList) {
@@ -243,20 +210,9 @@ function normalizeApiSettings(inputApi) {
       ? inputApi
       : {};
 
-  const isNewStructure =
-    source?.version >= 3 &&
-    source?.primary &&
-    source?.secondary &&
-    typeof source.primary === 'object' &&
-    typeof source.secondary === 'object';
-
-  const primary = isNewStructure
-    ? normalizeProfileConfig(source.primary, defaults.primary.provider)
-    : migrateLegacyProfile(source, 'primary', defaults.primary.provider);
-
-  const secondary = isNewStructure
-    ? normalizeProfileConfig(source.secondary, defaults.secondary.provider)
-    : migrateLegacyProfile(source, 'secondary', defaults.secondary.provider);
+  // [模块标注] API 设置新版结构入口模块：只读取 version 3 的 primary / secondary 结构，旧 providers 结构不再做兜底迁移
+  const primary = normalizeProfileConfig(source.primary, defaults.primary.provider);
+  const secondary = normalizeProfileConfig(source.secondary, defaults.secondary.provider);
 
   return {
     version: 3,

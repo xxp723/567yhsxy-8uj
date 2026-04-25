@@ -125,36 +125,15 @@ function normalizeSupportingRole(item) {
 }
 
 function normalizeRelation(item) {
-  const legacyMainRoleId = normalizeString(item?.mainRoleId);
-  const legacySupportingRoleId = normalizeString(item?.supportingRoleId);
-
+  // [模块标注] 档案关系新版结构模块：关系条目只保留 owner/target + 关系标签/备注结构，不再读取或写回 mainRoleId、supportingRoleId、userPerception、rolePerception 等旧字段
   let ownerType = normalizeString(item?.ownerType);
   let ownerId = normalizeString(item?.ownerId);
   let targetType = normalizeString(item?.targetType);
   let targetId = normalizeString(item?.targetId);
 
-  const legacyUserPerception = normalizeString(item?.userPerception);
-  const legacyRolePerception = normalizeString(item?.rolePerception);
-  const legacyDescription = normalizeString(item?.description);
-
-  // 兼容历史结构：mainRoleId + supportingRoleId + description
-  if ((!ownerType || !ownerId || !targetType || !targetId) && legacySupportingRoleId) {
-    if (legacyMainRoleId && legacyMainRoleId !== RELATION_SELF_ID) {
-      ownerType = 'character';
-      ownerId = legacyMainRoleId;
-    } else {
-      ownerType = 'mask';
-      ownerId = '';
-    }
-
-    targetType = 'supporting';
-    targetId = legacySupportingRoleId;
-  }
-
   if (!RELATION_ENTITY_TYPES.includes(ownerType)) ownerType = 'mask';
   if (!RELATION_ENTITY_TYPES.includes(targetType)) targetType = 'supporting';
 
-  /* [修改标注·本次问题1] 关系认知改造为“关系标签 + 备注”结构；兼容旧字段 */
   const ownerRelationTypeRaw = normalizeString(item?.ownerRelationType);
   const targetRelationTypeRaw = normalizeString(item?.targetRelationType);
   const ownerRelationType = RELATION_PRESET_OPTIONS.includes(ownerRelationTypeRaw) ? ownerRelationTypeRaw : '熟人';
@@ -163,8 +142,8 @@ function normalizeRelation(item) {
   const ownerRelationCustom = normalizeString(item?.ownerRelationCustom);
   const targetRelationCustom = normalizeString(item?.targetRelationCustom);
 
-  const ownerNote = normalizeString(item?.ownerNote) || legacyUserPerception || legacyDescription;
-  const targetNote = normalizeString(item?.targetNote) || legacyRolePerception;
+  const ownerNote = normalizeString(item?.ownerNote);
+  const targetNote = normalizeString(item?.targetNote);
 
   return {
     id: normalizeString(item?.id) || uid('relation'),
@@ -177,10 +156,7 @@ function normalizeRelation(item) {
     ownerNote,
     targetRelationType,
     targetRelationCustom,
-    targetNote,
-    /* 兼容旧逻辑字段 */
-    userPerception: ownerNote,
-    rolePerception: targetNote
+    targetNote
   };
 }
 
@@ -913,7 +889,7 @@ export async function mount(container, context) {
     const relationLines = ownerRelations.map((item) => {
       const targetName = getEntityDisplayName(item.targetType, item.targetId);
       const targetTypeLabel = RELATION_ENTITY_TAB_META[item.targetType]?.subtitle || '人物';
-      return `- 与${targetTypeLabel}「${targetName}」：${item.userPerception || '未填写'}；对方认知：${item.rolePerception || '未填写'}`;
+      return `- 与${targetTypeLabel}「${targetName}」：${item.ownerNote || '未填写'}；对方备注：${item.targetNote || '未填写'}`;
     });
 
     return [
@@ -2276,12 +2252,12 @@ export async function mount(container, context) {
 
           <label class="archive-form-row">
             <span data-role="owner-note-label">关系主体对关系对象的备注</span>
-            <textarea data-role="owner-note" rows="4" placeholder="请输入关系主体对关系对象的备注">${escapeHtml(editItem?.ownerNote || editItem?.userPerception || '')}</textarea>
+            <textarea data-role="owner-note" rows="4" placeholder="请输入关系主体对关系对象的备注">${escapeHtml(editItem?.ownerNote || '')}</textarea>
           </label>
 
           <label class="archive-form-row">
             <span data-role="target-note-label">关系对象对关系主体的备注</span>
-            <textarea data-role="target-note" rows="4" placeholder="请输入关系对象对关系主体的备注">${escapeHtml(editItem?.targetNote || editItem?.rolePerception || '')}</textarea>
+            <textarea data-role="target-note" rows="4" placeholder="请输入关系对象对关系主体的备注">${escapeHtml(editItem?.targetNote || '')}</textarea>
           </label>
         </div>
       `,

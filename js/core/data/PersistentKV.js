@@ -1,8 +1,7 @@
 /**
  * 文件名: js/core/data/PersistentKV.js
  * 用途: 统一前端持久化键值存储封装。
- *       以 IndexedDB appsData 作为唯一持久化方案，
- *       并提供一次性导入旧 localStorage 数据后清理旧键的能力。
+ *       以 IndexedDB appsData 作为唯一持久化方案。
  * 位置: /js/core/data/PersistentKV.js
  * 架构层: 数据层（Data Layer）
  */

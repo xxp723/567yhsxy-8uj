@@ -1,10 +1,7 @@
 import { Logger } from '../../utils/Logger.js';
 
-const CUSTOM_WIDGET_STORAGE_KEY = 'miniphone_custom_widgets';
-const CUSTOM_WIDGET_DRAFT_KEY = 'miniphone_custom_widget_draft';
-const HIDDEN_WIDGET_STORAGE_KEY = 'miniphone_hidden_widget_library_ids';
-
-// [模块标注] 外观设置持久化状态缓存模块：外观页运行期统一从当前设置快照读取，不再直接访问 localStorage
+/* [模块标注] 外观设置持久化状态缓存模块：
+   外观页运行期统一从当前设置快照读取，持久化写入由 Settings / PersistentKV 通过 IndexedDB 完成。 */
 const appearanceStorageState = {
   customWidgets: [],
   hiddenWidgetIds: [],
@@ -2229,9 +2226,6 @@ export function bindAppearanceEvents(container, { settings, eventBus, current, i
 
 export function getAppearanceCustomWidgetState() {
   return {
-    storageKey: CUSTOM_WIDGET_STORAGE_KEY,
-    draftKey: CUSTOM_WIDGET_DRAFT_KEY,
-    hiddenKey: HIDDEN_WIDGET_STORAGE_KEY,
     defaultTemplate: DEFAULT_CUSTOM_WIDGET_TEMPLATE,
     getSavedCustomWidgets,
     saveCustomWidgets,

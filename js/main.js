@@ -95,53 +95,9 @@ class MiniPhoneApp {
       this.eventBus,
       this.appManager,
       this.dragDrop,
-      this.db
+      this.db,
+      this.settings
     );
-  }
-
-  /**
-   * 一次性将旧 localStorage 数据迁移到 IndexedDB（PersistentKV），
-   * 迁移完成后清除 localStorage 并在 IndexedDB 中标记已完成，
-   * 后续启动不再重复执行。
-   */
-  async migrateLocalStorageToIndexedDB() {
-    const MIGRATION_FLAG = '__ls_migrated__';
-
-    // 检查是否已经迁移过
-    const migrated = await this.persistentKV.get(MIGRATION_FLAG);
-    if (migrated) return;
-
-    const count = window.localStorage.length;
-    if (count === 0) {
-      // 没有旧数据，直接标记完成
-      await this.persistentKV.set(MIGRATION_FLAG, Date.now());
-      return;
-    }
-
-    Logger.info(`开始迁移 localStorage → IndexedDB，共 ${count} 条`);
-
-    for (let i = 0; i < count; i++) {
-      const key = window.localStorage.key(i);
-      if (!key) continue;
-      const raw = window.localStorage.getItem(key);
-
-      // 尝试还原 JSON，失败则保存原始字符串
-      let value;
-      try {
-        value = JSON.parse(raw);
-      } catch {
-        value = raw;
-      }
-
-      await this.persistentKV.set(key, value);
-    }
-
-    // 清除全部旧数据
-    window.localStorage.clear();
-
-    // 标记迁移完成
-    await this.persistentKV.set(MIGRATION_FLAG, Date.now());
-    Logger.info('localStorage → IndexedDB 迁移完成，已清除 localStorage');
   }
 
   async init() {
@@ -150,13 +106,6 @@ class MiniPhoneApp {
 
       // 1) 初始化 IndexedDB
       await this.db.init();
-
-      // 1.5) 一次性迁移旧 localStorage 数据
-      try {
-        await this.migrateLocalStorageToIndexedDB();
-      } catch (migErr) {
-        Logger.warn('localStorage 迁移失败（非致命）', migErr);
-      }
 
       // 2) 初始化统一持久化入口
       window.__MINIPHONE_PERSISTENT_KV__ = this.persistentKV;

@@ -7,12 +7,13 @@
 import { Logger } from '../../utils/Logger.js';
 
 export class DesktopEditMode {
-  constructor(desktopContainer, eventBus, appManager, dragDrop, db = null) {
+  constructor(desktopContainer, eventBus, appManager, dragDrop, db = null, settings = null) {
     this.desktopContainer = desktopContainer;
     this.eventBus = eventBus;
     this.appManager = appManager;
     this.dragDrop = dragDrop;
     this.db = db;
+    this.settings = settings;
 
     this.isEditMode = false;
     this.gridCols = 4;
@@ -73,7 +74,7 @@ export class DesktopEditMode {
     this.initManagedWidgetModal();
   }
 
-  // [修改标注·本次需求3] 桌面编辑态核心持久化迁移到 IndexedDB，localStorage 仅保留旧数据兜底读取
+  // [模块标注] 桌面编辑态 IndexedDB 持久化模块：所有桌面编辑数据只写入 db.js 对应的 IndexedDB，不再保留 localStorage 读写或双份兜底
   buildDesktopEditDbId(key) {
     return `${this.desktopEditStoreAppId}::${key}`;
   }
@@ -669,19 +670,20 @@ export class DesktopEditMode {
     });
   }
 
+  // [模块标注] 自定义组件编辑同步模块：自定义组件定义统一回写设置应用 appearance.customWidgets，不再使用桌面编辑独立旧键
   async getCustomWidgetStorageList() {
-    const parsed = await this.migrateDesktopEditStorageValue('miniphone_custom_widgets');
-    return Array.isArray(parsed) ? parsed : [];
+    return this.getCustomWidgetLibrary();
   }
 
   async saveCustomWidgetStorageList(list) {
-    await this.db.put(this.desktopEditStoreName, {
-      id: this.buildDesktopEditDbId('miniphone_custom_widgets'),
-      appId: this.desktopEditStoreAppId,
-      key: 'miniphone_custom_widgets',
-      value: Array.isArray(list) ? list : [],
-      updatedAt: Date.now()
-    });
+    const customWidgets = Array.isArray(list) ? list : [];
+    const appearance = {
+      ...this.getAppearanceSnapshot(),
+      customWidgets
+    };
+
+    await this.settings?.update?.({ appearance });
+    this.eventBus?.emit?.('desktop:custom-widgets-changed', { widgets: customWidgets });
   }
 
   async updateCustomWidgetDefinition(nextConfig) {
@@ -689,7 +691,6 @@ export class DesktopEditMode {
     const list = await this.getCustomWidgetStorageList();
     const nextList = list.map((item) => item.id === nextConfig.id ? { ...item, ...nextConfig } : item);
     await this.saveCustomWidgetStorageList(nextList);
-    this.eventBus?.emit?.('desktop:custom-widgets-changed', { widgets: nextList });
   }
 
   refreshCustomWidgetElement(widgetId) {
@@ -1784,12 +1785,19 @@ export class DesktopEditMode {
     );
   }
 
+  // [模块标注] 组件库设置同步模块：桌面编辑模式直接读取设置应用维护的 appearance 快照，避免保留旧的空列表结构
+  getAppearanceSnapshot() {
+    return this.settings?.current?.appearance || {};
+  }
+
   getCustomWidgetLibrary() {
-    return [];
+    const widgets = this.getAppearanceSnapshot().customWidgets;
+    return Array.isArray(widgets) ? widgets : [];
   }
 
   getHiddenWidgetIds() {
-    return [];
+    const ids = this.getAppearanceSnapshot().hiddenWidgetIds;
+    return Array.isArray(ids) ? ids : [];
   }
 
   persistCurrentLayoutSilently() {
@@ -1905,12 +1913,28 @@ export class DesktopEditMode {
 
   loadBuiltinWidgetState(id) {
     const defaults = this.getBuiltinWidgetDefaultState(id);
-    return { ...defaults };
+    const saved = this.getAppearanceSnapshot().builtinWidgetStates?.[id] || {};
+    return { ...defaults, ...saved };
   }
 
+  // [模块标注] 内建组件状态同步模块：内建组件编辑状态统一保存到设置应用 appearance.builtinWidgetStates，避免桌面设置继续保留旧独立键
   saveBuiltinWidgetState(id, nextState) {
     const merged = { ...this.getBuiltinWidgetDefaultState(id), ...(nextState || {}) };
-    this.persistDesktopEditDbValue(this.getBuiltinWidgetStorageKey(id), merged);
+    const appearance = this.getAppearanceSnapshot();
+    const builtinWidgetStates = {
+      ...(appearance.builtinWidgetStates || {}),
+      [id]: merged
+    };
+
+    this.settings?.update?.({
+      appearance: {
+        ...appearance,
+        builtinWidgetStates
+      }
+    }).catch((error) => {
+      Logger.warn(`保存内建组件状态失败: ${id}`, error);
+    });
+
     return merged;
   }
 
