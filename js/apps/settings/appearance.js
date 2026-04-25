@@ -10,13 +10,13 @@ const appearanceStorageState = {
 
 // [模块标注] 组件代码编辑器默认框架模块：默认模板图标统一使用 IconPark 风格 SVG，便于继续扩展自定义组件
 const DEFAULT_CUSTOM_WIDGET_TEMPLATE = `{
-  "id": "custom-preview-weather-card",
-  "name": "自定义天气便签",
-  "iconSvg": "<svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M16 34H34C39 34 43 30 43 25C43 20 39 16 34 16C32 10 27 6 21 6C13 6 7 12 7 20C3 22 2 25 2 29C2 32 5 34 9 34H16Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/><path d='M16 40H34' stroke='currentColor' stroke-width='3' stroke-linecap='round'/><path d='M22 44H28' stroke='currentColor' stroke-width='3' stroke-linecap='round'/></svg>",
+  "id": "custom-polaroid-note",
+  "name": "自定义拍立得便签",
+  "iconSvg": "<svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M24 6L27.0902 14.9098L36 18L27.0902 21.0902L24 30L20.9098 21.0902L12 18L20.9098 14.9098L24 6Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/><path d='M10 34H38' stroke='currentColor' stroke-width='3' stroke-linecap='round'/><path d='M16 42H32' stroke='currentColor' stroke-width='3' stroke-linecap='round'/></svg>",
   "width": 2,
   "height": 2,
-  "css": "/* [自定义组件示例-样式区域] 只修改 .widget-demo-* 类名下的样式，避免影响其它页面 */.widget-demo-card{height:100%;padding:12px;border-radius:22px;background:linear-gradient(180deg,#fffaf2 0%,#ead8c0 100%);border:1px solid rgba(74,52,42,.14);box-shadow:0 10px 24px rgba(74,52,42,.14);display:flex;flex-direction:column;justify-content:space-between;color:#4A342A;box-sizing:border-box;overflow:hidden;}.widget-demo-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}.widget-demo-title{font-size:14px;font-weight:800;letter-spacing:.5px;}.widget-demo-icon{width:30px;height:30px;border-radius:12px;background:rgba(255,255,255,.58);display:flex;align-items:center;justify-content:center;color:#8B6A4E;}.widget-demo-main{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;}.widget-demo-temp{font-size:34px;font-weight:800;line-height:1;}.widget-demo-note{font-size:11px;line-height:1.5;color:rgba(74,52,42,.72);text-align:right;}.widget-demo-pill{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.54);font-size:11px;color:rgba(74,52,42,.78);}",
-  "html": "<!-- [自定义组件示例-结构区域] 修改下面文字即可快速预览；不要使用 alert/confirm/prompt 原生弹窗 --><div class='widget-demo-card'><div class='widget-demo-head'><div class='widget-demo-title'>今日小组件</div><div class='widget-demo-icon'><svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg' width='22' height='22'><path d='M16 34H34C39 34 43 30 43 25C43 20 39 16 34 16C32 10 27 6 21 6C13 6 7 12 7 20C3 22 2 25 2 29C2 32 5 34 9 34H16Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/></svg></div></div><div class='widget-demo-main'><div class='widget-demo-temp'>24°</div><div class='widget-demo-note'>晴朗微风<br>适合整理桌面</div></div><div class='widget-demo-pill'>☁ 可改成日程 / 便签 / 纪念日</div></div>"
+  "css": "/* [自定义组件示例-样式区域] 只修改 .widget-polaroid-* 类名下的样式，避免影响其它页面 */.widget-polaroid-card{height:100%;padding:12px;border-radius:22px;background:linear-gradient(180deg,#fffdf9 0%,#f0e5d8 100%);border:1px solid rgba(74,52,42,.12);box-shadow:0 10px 24px rgba(74,52,42,.12);display:flex;flex-direction:column;justify-content:space-between;color:#4A342A;box-sizing:border-box;overflow:hidden;}.widget-polaroid-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}.widget-polaroid-title{font-size:14px;font-weight:700;letter-spacing:.5px;}.widget-polaroid-mark{width:28px;height:28px;border-radius:12px;background:rgba(255,255,255,.58);display:flex;align-items:center;justify-content:center;color:#8B6A4E;}.widget-polaroid-photo{height:70px;border-radius:16px;background:linear-gradient(135deg,#d8c1a8,#f5efe6);display:flex;align-items:center;justify-content:center;font-size:28px;}.widget-polaroid-desc{font-size:11px;line-height:1.5;color:rgba(74,52,42,.72);}",
+  "html": "<!-- [组件开头区域] 外层卡片：这里控制组件整体容器 --><div class='widget-polaroid-card'><!-- [组件开头区域] 标题栏：这里放组件标题和 IconPark 风格图标 --><div class='widget-polaroid-head'><div class='widget-polaroid-title'>旅途拍立得</div><div class='widget-polaroid-mark'><svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg' width='20' height='20'><path d='M24 6L27.0902 14.9098L36 18L27.0902 21.0902L24 30L20.9098 21.0902L12 18L20.9098 14.9098L24 6Z' stroke='currentColor' stroke-width='3' stroke-linejoin='round'/></svg></div></div><!-- [组件主体区域] 主体内容：这里放图片、数字、状态或主要信息 --><div class='widget-polaroid-photo'>✦</div><!-- [组件结尾区域] 底部说明：这里放补充描述、备注或操作提示 --><div class='widget-polaroid-desc'>把你的灵感、行程或纪念文字放在这里。</div></div>"
 }`;
 
 const DEFAULT_ICON_ADJUSTMENTS = {
@@ -869,11 +869,6 @@ export function renderAppearanceSections({ current, icons, apps = [] }) {
       <!-- [模块标注] 组件库说明页：组件库操作按钮图标统一使用 IconPark 风格 SVG -->
       <div id="settings-appearance-widget-library" class="settings-detail">
         <div class="settings-detail__body">
-          <section class="ui-card">
-            <h3>组件库</h3>
-            <p class="ui-muted" style="margin-bottom: 10px;">以下组件均可在桌面编辑模式的“添加应用与组件”中添加，并支持自由排列组合。当前页面的长按单删与多选删除，已统一覆盖系统组件、内建组件与自定义组件。</p>
-          </section>
-
           <section class="ui-card">
             <div class="component-library-section-head">
               <div>
