@@ -34,6 +34,16 @@ const DEFAULT_DOCK_ADJUSTMENTS = {
   dockColor: '#f5f1ea'
 };
 
+// [模块标注] 自定义组件编辑器草稿兜正模块：只接受可编辑的字符串代码，避免对象被 textarea 显示为 [object Object]
+function normalizeCustomWidgetDraft(value, fallback = DEFAULT_CUSTOM_WIDGET_TEMPLATE) {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (text && text !== '[object Object]') return value;
+  }
+
+  return fallback;
+}
+
 const DEFAULT_FONT_STACK = '"STSong", "SimSun", serif';
 
 const ICON_SHADOW_OPTIONS = [
@@ -50,8 +60,9 @@ function syncAppearanceStorageState(appearance = {}) {
   appearanceStorageState.hiddenWidgetIds = Array.isArray(appearance.hiddenWidgetIds)
     ? [...new Set(appearance.hiddenWidgetIds.filter(Boolean))]
     : [];
-  appearanceStorageState.customWidgetDraft = String(
-    appearance.customWidgetDraft || appearanceStorageState.customWidgetDraft || DEFAULT_CUSTOM_WIDGET_TEMPLATE
+  appearanceStorageState.customWidgetDraft = normalizeCustomWidgetDraft(
+    appearance.customWidgetDraft,
+    normalizeCustomWidgetDraft(appearanceStorageState.customWidgetDraft)
   );
 
   return appearanceStorageState;
@@ -80,7 +91,7 @@ function saveDraft(code) {
 }
 
 function getDraft() {
-  return appearanceStorageState.customWidgetDraft || DEFAULT_CUSTOM_WIDGET_TEMPLATE;
+  return normalizeCustomWidgetDraft(appearanceStorageState.customWidgetDraft);
 }
 
 function getDefaultIconAdjustmentState(overrides = {}) {
