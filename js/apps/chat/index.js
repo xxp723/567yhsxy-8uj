@@ -63,13 +63,31 @@ const ICON_CHECK = `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l1
    ========================================================================== */
 function loadCSS(href, id) {
   return new Promise((resolve) => {
-    if (document.getElementById(id)) { resolve(); return; }
+    const existing = document.getElementById(id);
+    if (existing) {
+      if (existing.dataset.loaded === '1' || existing.sheet) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        existing.dataset.loaded = '1';
+        resolve();
+      };
+      existing.addEventListener('load', done, { once: true });
+      existing.addEventListener('error', done, { once: true });
+      return;
+    }
+
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
     link.id = id;
-    link.onload = () => resolve();
-    link.onerror = () => resolve(); // 即使加载失败也不阻塞
+    const done = () => {
+      link.dataset.loaded = '1';
+      resolve();
+    };
+    link.addEventListener('load', done, { once: true });
+    link.addEventListener('error', done, { once: true }); // 即使加载失败也不阻塞
     document.head.appendChild(link);
   });
 }
@@ -97,6 +115,18 @@ async function dbPut(db, key, data) {
 }
 
 /* ==========================================================================
+   [区域标注·修改3] 档案数据读取兼容函数
+   说明：档案应用使用 record.value；闲谈自身数据使用 record.data。
+         此函数仅用于读取档案应用写入的激活面具与面具列表。
+   ========================================================================== */
+async function dbGetArchiveData(db, key) {
+  try {
+    const record = await db.get(STORE_NAME, key);
+    return record ? (record.value ?? record.data ?? null) : null;
+  } catch { return null; }
+}
+
+/* ==========================================================================
    [区域标注] mount — 应用挂载入口
    说明：由 AppManager 调用，接收容器元素和上下文
    ========================================================================== */
@@ -107,11 +137,10 @@ export async function mount(container, context) {
      [区域标注·修改5] 并行预加载 CSS + 档案数据
      说明：先加载 CSS 和档案数据，确定当前激活面具后再加载对应面具的聊天数据
      ========================================================================== */
-  const [,, archiveRecord] = await Promise.all([
-    loadCSS('./js/apps/chat/chat.css', 'chat-app-css'),
-    loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css'),
-    dbGet(db, ARCHIVE_DB_RECORD_ID)
-  ]);
+  await loadCSS('./js/apps/chat/chat.css', 'chat-app-css');
+  void loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css');
+
+  const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
 
   /* [修改5·修改6] 解析档案数据，获取当前激活面具 */
   const archiveData = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : {};
@@ -176,7 +205,7 @@ export async function mount(container, context) {
     state.activeMaskId = newMaskId;
 
     /* 重新加载档案数据以获取最新面具列表 */
-    const freshArchive = await dbGet(db, ARCHIVE_DB_RECORD_ID);
+    const freshArchive = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
     const freshData = (freshArchive && typeof freshArchive === 'object') ? freshArchive : {};
     state.archiveMasks = Array.isArray(freshData.masks) ? freshData.masks : [];
 
@@ -227,8 +256,7 @@ function buildAppShell(state) {
            说明：左上角">"返回桌面，中间花体字"Chat"，右上角"+"添加
            ================================================================ -->
       <div class="chat-top-bar">
-        <button class="chat-top-bar__back" data-action="go-home">${TAB_ICONS.back}</button>
-        <div class="chat-top-bar__title">Chat</div>
+        <button class="chat-top-bar__title" data-action="go-home" type="button">Chat</button>
         <button class="chat-top-bar__add" data-action="add-chat">${TAB_ICONS.plus}</button>
       </div>
 
@@ -674,9 +702,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [区域标注·修改1·修改4] 子页面返回按钮
+       [区域标注·修改2] 子页面点击标题返回用户主页
        ========================================================================== */
-    case 'sub-page-back':
+    case 'go-profile':
       closeSubPage(container, state);
       break;
 
@@ -912,14 +940,11 @@ function closeSubPage(container, state) {
    说明：根据 pageType 渲染钱包 / 表情包 / 聊天天数详情页面
    ========================================================================== */
 function renderSubPage(state, pageType) {
-  const backBtn = `<button class="chat-msg-back" data-action="sub-page-back">${ICON_BACK}</button>`;
-
   if (pageType === 'wallet') {
     return `
       <div class="chat-sub-page">
-        <div class="chat-sub-page__header">
-          ${backBtn}
-          <span class="chat-sub-page__title">钱包</span>
+        <div class="chat-sub-page__header chat-sub-page__header--center">
+          <button class="chat-sub-page__title chat-sub-page__title--button chat-sub-page__title--center" data-action="go-profile" type="button">钱包</button>
         </div>
         <div class="chat-sub-page__body">
           <div class="chat-sub-page__empty">
@@ -934,9 +959,8 @@ function renderSubPage(state, pageType) {
   if (pageType === 'sticker') {
     return `
       <div class="chat-sub-page">
-        <div class="chat-sub-page__header">
-          ${backBtn}
-          <span class="chat-sub-page__title">表情包</span>
+        <div class="chat-sub-page__header chat-sub-page__header--center">
+          <button class="chat-sub-page__title chat-sub-page__title--button chat-sub-page__title--center" data-action="go-profile" type="button">表情包</button>
         </div>
         <div class="chat-sub-page__body">
           <div class="chat-sub-page__empty">
@@ -967,9 +991,8 @@ function renderSubPage(state, pageType) {
 
     return `
       <div class="chat-sub-page">
-        <div class="chat-sub-page__header">
-          ${backBtn}
-          <span class="chat-sub-page__title">聊天天数详情</span>
+        <div class="chat-sub-page__header chat-sub-page__header--center">
+          <button class="chat-sub-page__title chat-sub-page__title--button" data-action="go-profile" type="button">聊天天数详情</button>
         </div>
         <div class="chat-sub-page__body">
           <div class="chat-days-detail-total">
@@ -984,7 +1007,7 @@ function renderSubPage(state, pageType) {
     `;
   }
 
-  return `<div class="chat-sub-page"><div class="chat-sub-page__header">${backBtn}<span class="chat-sub-page__title">未知页面</span></div></div>`;
+  return `<div class="chat-sub-page"><div class="chat-sub-page__header chat-sub-page__header--center"><button class="chat-sub-page__title chat-sub-page__title--button" data-action="go-profile" type="button">未知页面</button></div></div>`;
 }
 
 /* ==========================================================================
