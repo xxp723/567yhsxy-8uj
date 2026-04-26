@@ -149,6 +149,65 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次需求1] 通讯录分组 TAB 栏
+   说明：样式参照聊天列表标题下方 TAB；All 旁边为 "+" 分组按钮；
+         分组过多时横向滑动，不影响其它板块。
+   ========================================================================== */
+.contacts-group-tabs {
+  flex-shrink: 0;
+  width: 100%;
+  background: #f8f4ef;
+  padding: 6px 0 10px 0;
+  overflow: hidden;
+}
+
+.contacts-group-tabs__scroller {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.contacts-group-tabs__scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.contacts-group-tab-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.contacts-group-add-tab {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.contacts-group-add-tab:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: scale(0.92);
+}
+
+.contacts-group-add-tab svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ==========================================================================
    [区域标注] 聊天列表主内容区
    说明：可滚动的聊天列表，包含 Recent Chats 和 All Chats 等分区
    ========================================================================== */
@@ -559,6 +618,104 @@
   width: 48px;
   height: 48px;
   opacity: 0.4;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1/2] 通讯录当前列表样式
+   说明：适配 contacts.js 渲染的分组 TAB、联系人条目；
+         页面内不包含搜索框，搜索只出现在右上角 "+" 打开的弹窗中。
+   ========================================================================== */
+.contacts-list-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.contacts-list-area::-webkit-scrollbar {
+  display: none;
+}
+
+.contacts-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.contacts-group__letter {
+  padding: 10px 20px 4px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.4);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.contacts-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.contacts-item:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.contacts-item__avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2 0%, #d4c4b2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid rgba(74, 52, 42, 0.08);
+}
+
+.contacts-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contacts-item__avatar span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.contacts-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.contacts-item__name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contacts-item__sig {
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.52);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ==========================================================================
@@ -1403,6 +1560,181 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次需求1/2] 通讯录弹窗扩展样式
+   说明：分组命名提示、联系方式搜索结果、联系人分组选择均使用应用内弹窗，
+         不使用 alert/confirm/prompt 等原生浏览器弹窗。
+   ========================================================================== */
+.chat-modal-hint,
+.chat-modal-notice {
+  color: rgba(74, 52, 42, 0.48);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  padding: 14px 10px;
+}
+
+.chat-modal-notice {
+  display: none;
+  padding: 0 2px;
+  text-align: left;
+  color: #b45a3c;
+  font-weight: 600;
+}
+
+.chat-modal-notice.is-visible {
+  display: block;
+}
+
+.chat-contact-search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+}
+
+.chat-contact-search-result__avatar,
+.chat-contact-group-picker-head__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4A342A;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.chat-contact-search-result__avatar img,
+.chat-contact-group-picker-head__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-contact-search-result__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-contact-search-result__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-contact-search-result__contact {
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.5);
+  margin-top: 2px;
+}
+
+.chat-contact-search-result__add {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #4A342A;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.chat-contact-search-result__add.is-added {
+  background: rgba(74, 52, 42, 0.16);
+  color: #4A342A;
+}
+
+.chat-contact-search-result__add:active {
+  transform: scale(0.92);
+}
+
+.chat-contact-search-result__add svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-contact-group-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px 2px 2px;
+}
+
+.chat-contact-group-picker-head__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-contact-group-picker-head__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-contact-group-picker-head__tip {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.48);
+}
+
+.chat-contact-group-choice {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.06);
+  color: #4A342A;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.chat-contact-group-choice.is-active {
+  background: rgba(74, 52, 42, 0.14);
+}
+
+.chat-contact-group-choice:active {
+  transform: scale(0.98);
+}
+
+.chat-contact-group-choice i {
+  width: 20px;
+  height: 20px;
+  color: #4A342A;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-contact-group-choice i svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
    [区域标注] 图片上传弹窗样式（封面/头像上传共用）
    说明：替代原生浏览器弹窗，统一使用自定义弹窗风格
          支持两种上传方式：本地文件选择 / URL 链接输入
@@ -1510,11 +1842,15 @@
 }
 
 .chat-sub-page__header {
+  /* ========================================================================
+     [区域标注·本次需求3] 钱包/表情包/聊天天数详情标题栏间距
+     说明：独立子页面标题栏间距对齐聊天列表顶部标题栏。
+     ======================================================================== */
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 14px 16px 10px 16px;
+  padding: 12px 16px 10px 16px;
   background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
   flex-shrink: 0;
 }
@@ -1540,7 +1876,7 @@
 .chat-sub-page__title--button {
   border: none;
   background: transparent;
-  padding: 6px 16px;
+  padding: 4px 16px;
   border-radius: 14px;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;

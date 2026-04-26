@@ -3,7 +3,7 @@
  * 用途: 闲谈应用入口模块。
  *       负责加载 CSS、初始化数据、渲染四大板块骨架、
  *       管理板块切换、事件代理、聊天消息页面跳转等。
- *       使用 DB.js（IndexedDB）进行持久化存储，禁止 localStorage。
+ *       使用 DB.js（IndexedDB）进行持久化存储，禁止浏览器同步键值存储。
  * 架构层: 应用层（由 AppManager 动态加载）
  */
 
@@ -47,6 +47,8 @@ const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
 /* [修改5] 以下 key 函数按 maskId 生成独立 key */
 const DATA_KEY_SESSIONS = (maskId) => `chat_sessions_${maskId || 'default'}`;
 const DATA_KEY_CONTACTS = (maskId) => `chat_contacts_${maskId || 'default'}`;
+/* [区域标注·本次需求1] 通讯录自定义分组按当前面具身份隔离存储 */
+const DATA_KEY_CONTACT_GROUPS = (maskId) => `chat_contact_groups_${maskId || 'default'}`;
 const DATA_KEY_MOMENTS = (maskId) => `chat_moments_${maskId || 'default'}`;
 const DATA_KEY_MESSAGES_PREFIX = (maskId) => `chat_msgs_${maskId || 'default'}_`;
 const PANEL_KEYS = ['chatList', 'contacts', 'moments', 'profile'];
@@ -98,7 +100,7 @@ function removeCSS(id) {
 }
 
 /* ==========================================================================
-   [区域标注] DB 数据读写封装（使用 IndexedDB，禁止 localStorage）
+   [区域标注] DB 数据读写封装（使用 IndexedDB，禁止浏览器同步键值存储）
    说明：所有数据存储在 appsData 仓库，key 为 id 字段
    ========================================================================== */
 async function dbGet(db, key) {
@@ -112,6 +114,55 @@ async function dbPut(db, key, data) {
   try {
     await db.put(STORE_NAME, { id: key, appId: APP_ID, data });
   } catch (e) { console.error('[Chat] DB 写入失败:', key, e); }
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1/2] 通讯录工具函数
+   说明：仅服务通讯录分组、搜索添加联系人弹窗；持久化统一走 DB.js / IndexedDB
+   ========================================================================== */
+function escapeHtml(text) {
+  const map = { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' };
+  return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
+}
+
+function normalizeContactGroups(groups) {
+  return Array.isArray(groups)
+    ? groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+}
+
+function normalizeContacts(contacts) {
+  return Array.isArray(contacts)
+    ? contacts.map(contact => ({
+        ...contact,
+        groupId: String(contact?.groupId || '').trim()
+      }))
+    : [];
+}
+
+function createUid(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function getActiveMask(state) {
+  return state.archiveMasks.find(mask => mask.id === state.activeMaskId) || null;
+}
+
+function getBoundRoleCandidates(state) {
+  const activeMask = getActiveMask(state);
+  const bindingIds = Array.isArray(activeMask?.roleBindingIds) ? activeMask.roleBindingIds : [];
+  return state.archiveCharacters.filter(role => bindingIds.includes(role.id));
+}
+
+function findRoleByContact(state, contactNumber) {
+  const safeContact = String(contactNumber || '').trim();
+  if (!/^\d{11}$/.test(safeContact)) return null;
+  return getBoundRoleCandidates(state).find(role => String(role?.contact || '').trim() === safeContact) || null;
 }
 
 /* ==========================================================================
@@ -145,12 +196,15 @@ export async function mount(container, context) {
   /* [修改5·修改6] 解析档案数据，获取当前激活面具 */
   const archiveData = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : {};
   const archiveMasks = Array.isArray(archiveData.masks) ? archiveData.masks : [];
+  /* [区域标注·本次需求2] 缓存角色档案，用于通过绑定角色联系方式搜索添加通讯录 */
+  const archiveCharacters = Array.isArray(archiveData.characters) ? archiveData.characters : [];
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, contacts, moments] = await Promise.all([
+  const [sessions, contacts, contactGroups, moments] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId))
   ]);
 
@@ -159,10 +213,12 @@ export async function mount(container, context) {
     activePanel: 'chatList',        // 当前激活的板块
     chatSubTab: 'all',              // 聊天列表子TAB: all / private / group
     chatSearchKeyword: '',          // 聊天列表搜索词
-    contactsSearchKeyword: '',      // 通讯录搜索词
     sectionCollapsed: {},           // 折叠状态 {private: false, group: false}
     sessions: sessions || [],       // 聊天会话列表
-    contacts: contacts || [],       // 通讯录好友列表
+    contacts: normalizeContacts(contacts), // 通讯录好友列表
+    /* [区域标注·本次需求1] 通讯录自定义分组；All 为固定默认分组，不写入数组 */
+    contactGroups: normalizeContactGroups(contactGroups),
+    activeContactGroupId: 'all',
     moments: moments || [],         // 朋友圈动态列表
     profile: {},                    // 用户资料（由面具数据生成）
     currentChatId: null,            // 当前打开的聊天会话 ID（null 表示未打开）
@@ -172,6 +228,8 @@ export async function mount(container, context) {
     activeMaskId: currentActiveMaskId,
     /* [修改5] 档案面具列表缓存 */
     archiveMasks: archiveMasks,
+    /* [区域标注·本次需求2] 档案角色列表缓存，用于通讯录搜索 */
+    archiveCharacters: archiveCharacters,
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
   };
@@ -208,6 +266,8 @@ export async function mount(container, context) {
     const freshArchive = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
     const freshData = (freshArchive && typeof freshArchive === 'object') ? freshArchive : {};
     state.archiveMasks = Array.isArray(freshData.masks) ? freshData.masks : [];
+    /* [区域标注·本次需求2] 面具切换时同步角色档案缓存 */
+    state.archiveCharacters = Array.isArray(freshData.characters) ? freshData.characters : [];
 
     /* 加载新面具的数据 */
     await loadMaskData(state, db, newMaskId);
@@ -280,7 +340,7 @@ function buildAppShell(state) {
       </div>
       <!-- [区域标注] 通讯录板块 -->
       <div class="chat-panel ${state.activePanel === 'contacts' ? 'is-active' : ''}" data-panel="contacts">
-        ${renderContacts(state.contacts, state.contactsSearchKeyword)}
+        ${renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId)}
       </div>
       <!-- [区域标注] 朋友圈板块 -->
       <div class="chat-panel ${state.activePanel === 'moments' ? 'is-active' : ''}" data-panel="moments">
@@ -339,7 +399,7 @@ function refreshPanel(container, state, panelKey) {
       panelEl.innerHTML = renderChatList(state.sessions, state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed);
       break;
     case 'contacts':
-      panelEl.innerHTML = renderContacts(state.contacts, state.contactsSearchKeyword);
+      panelEl.innerHTML = renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId);
       break;
     case 'moments':
       panelEl.innerHTML = renderMoments(state.moments);
@@ -382,9 +442,9 @@ function switchPanel(container, state, panelKey) {
     titleEl.textContent = titles[panelKey] || 'Chat';
   }
 
-  /* [区域标注] "+"按钮仅在聊天列表板块显示 */
+  /* [区域标注·本次需求2] "+"按钮在聊天列表与通讯录板块显示：聊天列表添加聊天，通讯录搜索添加联系人 */
   const addBtn = container.querySelector('.chat-top-bar__add');
-  if (addBtn) addBtn.style.display = panelKey === 'chatList' ? '' : 'none';
+  if (addBtn) addBtn.style.display = (panelKey === 'chatList' || panelKey === 'contacts') ? '' : 'none';
 }
 
 /* ==========================================================================
@@ -541,6 +601,201 @@ function showAddChatModal(container, state) {
 /* ==========================================================================
    [区域标注] 关闭弹窗
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·本次需求2] 显示"搜索添加联系人"弹窗
+   说明：右上角 + 在通讯录板块触发；只搜索当前用户面具绑定角色的 11 位联系方式
+   ========================================================================== */
+function showAddContactModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求2] 通讯录搜索添加联系人弹窗 -->
+    <div class="chat-modal-header">
+      <span>添加联系人</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search"
+           type="text"
+           inputmode="numeric"
+           maxlength="11"
+           placeholder="输入绑定角色的11位联系方式"
+           data-role="contact-add-search-input">
+    <div class="chat-modal-body" data-role="contact-search-results">
+      <div class="chat-modal-hint">请输入 11 位数字联系方式，搜索当前面具身份绑定的角色。</div>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => {
+    const input = panel.querySelector('[data-role="contact-add-search-input"]');
+    if (input) input.focus();
+  }, 30);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求2] 渲染通讯录搜索结果
+   说明：搜索结果右侧使用 IconPark "+" 图标按钮添加到通讯录
+   ========================================================================== */
+function renderContactSearchResults(container, state, rawValue) {
+  const body = container.querySelector('[data-role="contact-search-results"]');
+  if (!body) return;
+
+  const contactNumber = String(rawValue || '').replace(/\D/g, '').slice(0, 11);
+  const input = container.querySelector('[data-role="contact-add-search-input"]');
+  if (input && input.value !== contactNumber) input.value = contactNumber;
+
+  if (!contactNumber) {
+    body.innerHTML = `<div class="chat-modal-hint">请输入 11 位数字联系方式，搜索当前面具身份绑定的角色。</div>`;
+    return;
+  }
+
+  if (!/^\d{11}$/.test(contactNumber)) {
+    body.innerHTML = `<div class="chat-modal-hint">联系方式需为 11 位数字。</div>`;
+    return;
+  }
+
+  const role = findRoleByContact(state, contactNumber);
+  if (!role) {
+    body.innerHTML = `<div class="chat-modal-hint">未搜索到当前面具绑定的角色。</div>`;
+    return;
+  }
+
+  const alreadyAdded = state.contacts.some(contact => contact.id === role.id);
+  body.innerHTML = `
+    <!-- [区域标注·本次需求2] 通讯录搜索结果角色：${escapeHtml(role.name || '未命名角色')} -->
+    <div class="chat-contact-search-result">
+      <div class="chat-contact-search-result__avatar">
+        ${role.avatar
+          ? `<img src="${escapeHtml(role.avatar)}" alt="${escapeHtml(role.name || '')}">`
+          : escapeHtml((role.name || '?').charAt(0).toUpperCase())}
+      </div>
+      <div class="chat-contact-search-result__info">
+        <div class="chat-contact-search-result__name">${escapeHtml(role.name || '未命名角色')}</div>
+        <div class="chat-contact-search-result__contact">${escapeHtml(role.contact || '')}</div>
+      </div>
+      <button class="chat-contact-search-result__add ${alreadyAdded ? 'is-added' : ''}"
+              data-action="${alreadyAdded ? 'view-contact' : 'add-contact-from-search'}"
+              data-role-id="${escapeHtml(role.id)}"
+              data-contact-id="${escapeHtml(role.id)}"
+              type="button"
+              aria-label="${alreadyAdded ? '选择分组' : '添加联系人'}">
+        ${alreadyAdded ? ICON_CHECK : TAB_ICONS.plus}
+      </button>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1] 显示"新建通讯录分组"弹窗
+   说明：All 旁边的 "+" 分组按钮触发；使用应用内弹窗，不使用原生浏览器弹窗
+   ========================================================================== */
+function showCreateContactGroupModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求1] 新建通讯录分组弹窗 -->
+    <div class="chat-modal-header">
+      <span>新建分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search"
+           type="text"
+           maxlength="12"
+           placeholder="输入分组名称"
+           data-role="contact-group-name-input">
+    <div class="chat-modal-notice" data-role="modal-notice"></div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-create-contact-group" type="button">完成</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => {
+    const input = panel.querySelector('[data-role="contact-group-name-input"]');
+    if (input) input.focus();
+  }, 30);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1/2] 弹窗内提示文本
+   说明：替代 alert，用于分组命名和联系人搜索提示
+   ========================================================================== */
+function renderModalNotice(container, message) {
+  const notice = container.querySelector('[data-role="modal-notice"]');
+  if (notice) {
+    notice.textContent = message || '';
+    notice.classList.toggle('is-visible', Boolean(message));
+    return;
+  }
+
+  const body = container.querySelector('[data-role="contact-search-results"]');
+  if (body) body.innerHTML = `<div class="chat-modal-hint">${escapeHtml(message || '')}</div>`;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求2] 显示联系人分组选择弹窗
+   说明：点击已添加联系人后，可选择其所属通讯录分组；All 表示不指定自定义分组
+   ========================================================================== */
+function showContactGroupPickerModal(container, state, contactId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const contact = state.contacts.find(item => item.id === contactId);
+  if (!mask || !panel || !contact) return;
+
+  const groups = Array.isArray(state.contactGroups) ? state.contactGroups : [];
+  const currentGroupId = contact.groupId || '';
+
+  const groupButtonsHtml = [
+    { id: '', name: 'All' },
+    ...groups
+  ].map(group => {
+    const isActive = currentGroupId === group.id;
+    return `
+      <!-- [区域标注·本次需求2] 联系人分组选择项：${escapeHtml(group.name)} -->
+      <button class="chat-contact-group-choice ${isActive ? 'is-active' : ''}"
+              data-action="assign-contact-group"
+              data-contact-id="${escapeHtml(contact.id)}"
+              data-contact-group-id="${escapeHtml(group.id)}"
+              type="button">
+        <span>${escapeHtml(group.name)}</span>
+        ${isActive ? `<i>${ICON_CHECK}</i>` : ''}
+      </button>
+    `;
+  }).join('');
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求2] 通讯录联系人分组选择弹窗 -->
+    <div class="chat-modal-header">
+      <span>选择分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-contact-group-picker-head">
+      <div class="chat-contact-group-picker-head__avatar">
+        ${contact.avatar
+          ? `<img src="${escapeHtml(contact.avatar)}" alt="${escapeHtml(contact.name || '')}">`
+          : escapeHtml((contact.name || '?').charAt(0).toUpperCase())}
+      </div>
+      <div class="chat-contact-group-picker-head__info">
+        <div class="chat-contact-group-picker-head__name">${escapeHtml(contact.name || '未命名')}</div>
+        <div class="chat-contact-group-picker-head__tip">选择此联系人所在的通讯录分组</div>
+      </div>
+    </div>
+    <div class="chat-modal-body">
+      ${groupButtonsHtml}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注] 关闭弹窗
+   ========================================================================== */
 function closeModal(container) {
   const mask = container.querySelector('[data-role="modal-mask"]');
   if (mask) mask.classList.add('is-hidden');
@@ -603,9 +858,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* [区域标注] 右上角"+"添加聊天 */
+    /* [区域标注·本次需求2] 右上角"+"：聊天列表添加聊天；通讯录搜索添加联系人 */
     case 'add-chat':
-      showAddChatModal(container, state);
+      if (state.activePanel === 'contacts') {
+        showAddContactModal(container, state);
+      } else {
+        showAddChatModal(container, state);
+      }
       break;
 
     /* [区域标注] 关闭弹窗 */
@@ -637,6 +896,98 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         /* [区域标注] 自动打开新创建的聊天 */
         await openChatMessage(container, state, db, contact.id);
       }
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求1] 通讯录分组 TAB 切换
+       ========================================================================== */
+    case 'switch-contact-group': {
+      const groupId = target.dataset.contactGroupId || 'all';
+      const exists = groupId === 'all' || state.contactGroups.some(group => group.id === groupId);
+      state.activeContactGroupId = exists ? groupId : 'all';
+      refreshPanel(container, state, 'contacts');
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求1] 打开新建通讯录分组弹窗
+       ========================================================================== */
+    case 'create-contact-group':
+      showCreateContactGroupModal(container);
+      break;
+
+    /* ==========================================================================
+       [区域标注·本次需求1] 确认创建通讯录分组
+       ========================================================================== */
+    case 'confirm-create-contact-group': {
+      const input = container.querySelector('[data-role="contact-group-name-input"]');
+      const name = String(input?.value || '').trim();
+      if (!name) {
+        renderModalNotice(container, '请输入分组名称');
+        break;
+      }
+      const group = { id: createUid('contact_group'), name };
+      state.contactGroups.push(group);
+      state.activeContactGroupId = group.id;
+      await dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups);
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求2] 从搜索结果添加角色到通讯录
+       ========================================================================== */
+    case 'add-contact-from-search': {
+      const roleId = target.dataset.roleId;
+      const role = getBoundRoleCandidates(state).find(item => item.id === roleId);
+      if (!role) {
+        renderModalNotice(container, '未找到可添加的绑定角色');
+        break;
+      }
+      if (!state.contacts.some(contact => contact.id === role.id)) {
+        state.contacts.push({
+          id: role.id,
+          roleId: role.id,
+          name: role.name || '未命名角色',
+          avatar: role.avatar || '',
+          signature: role.signature || role.basicSetting || '',
+          contact: role.contact || '',
+          groupId: '',
+          addedAt: Date.now()
+        });
+        await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
+        buildProfileFromMask(state);
+        refreshPanel(container, state, 'contacts');
+        refreshPanel(container, state, 'profile');
+      }
+      showContactGroupPickerModal(container, state, role.id);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求2] 点击联系人后打开通讯录分组选择弹窗
+       ========================================================================== */
+    case 'view-contact': {
+      const contactId = target.dataset.contactId;
+      if (contactId) showContactGroupPickerModal(container, state, contactId);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求2] 保存联系人所属通讯录分组
+       ========================================================================== */
+    case 'assign-contact-group': {
+      const contactId = target.dataset.contactId;
+      const groupId = target.dataset.contactGroupId || '';
+      const safeGroupId = groupId && state.contactGroups.some(group => group.id === groupId) ? groupId : '';
+      state.contacts = state.contacts.map(contact => (
+        contact.id === contactId ? { ...contact, groupId: safeGroupId } : contact
+      ));
+      await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
       break;
     }
 
@@ -743,6 +1094,8 @@ async function saveMaskData(state, db, maskId) {
   await Promise.all([
     dbPut(db, DATA_KEY_SESSIONS(maskId), state.sessions),
     dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
+    /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
+    dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
     dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments)
   ]);
 }
@@ -752,13 +1105,17 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, contacts, moments] = await Promise.all([
+  const [sessions, contacts, contactGroups, moments] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
+    dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
     dbGet(db, DATA_KEY_MOMENTS(maskId))
   ]);
   state.sessions = sessions || [];
-  state.contacts = contacts || [];
+  state.contacts = normalizeContacts(contacts);
+  /* [区域标注·本次需求1] 切换面具时同步加载该面具的通讯录分组 */
+  state.contactGroups = normalizeContactGroups(contactGroups);
+  state.activeContactGroupId = 'all';
   state.moments = moments || [];
 }
 
@@ -1042,10 +1399,12 @@ function handleInput(e, state, container, db) {
     return;
   }
 
-  /* [区域标注] 通讯录搜索输入 */
-  if (target.matches('[data-role="contacts-search-input"]')) {
-    state.contactsSearchKeyword = target.value || '';
-    refreshPanel(container, state, 'contacts');
+  /* ==========================================================================
+     [区域标注·本次需求2] 通讯录弹窗联系方式搜索输入
+     说明：只在弹窗内搜索，通讯录页面内不保留搜索框
+     ========================================================================== */
+  if (target.matches('[data-role="contact-add-search-input"]')) {
+    renderContactSearchResults(container, state, target.value || '');
     return;
   }
 }

@@ -1,7 +1,7 @@
 /**
  * 文件名: js/apps/chat/contacts.js
  * 用途: 闲谈应用 — 通讯录板块
- *       显示已添加好友列表，支持搜索、按字母分组等。
+ *       显示已添加好友列表，支持自定义分组 TAB 切换、按字母分组等。
  * 架构层: 应用层（闲谈子模块）
  */
 
@@ -9,8 +9,10 @@
    [区域标注] IconPark 图标 SVG 定义
    ========================================================================== */
 const ICONS = {
-  /* [区域标注] 搜索图标 */
+  /* [区域标注] 搜索图标（仅保留给弹窗/后续扩展引用，通讯录页内不再渲染搜索框） */
   search: `<svg viewBox="0 0 48 48" fill="none"><circle cx="21" cy="21" r="11" stroke="currentColor" stroke-width="3"/><path d="M29 29l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注] "+" 添加图标（IconPark — Plus） */
+  plus: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 8v32M8 24h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注] 用户图标 */
   user: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 24a10 10 0 1 0 0-20a10 10 0 0 0 0 20Z" stroke="currentColor" stroke-width="3"/><path d="M8 42a16 16 0 0 1 32 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注] 空状态联系人图标 */
@@ -35,18 +37,54 @@ function getInitial(name) {
 }
 
 /* ==========================================================================
-   [区域标注] 渲染通讯录 HTML
-   参数：contacts — 联系人数组 [{id, name, avatar, signature}]
-         searchKeyword — 搜索关键词
+   [区域标注·本次需求1] 渲染通讯录分组 TAB 栏
+   说明：
+     - 默认固定显示 All
+     - All 旁边显示 "+" 图标按钮，用于创建新分组
+     - 自定义分组过多时横向滑动查看
    ========================================================================== */
-export function renderContacts(contacts, searchKeyword) {
-  const keyword = (searchKeyword || '').toLowerCase().trim();
+function renderContactGroupTabs(contactGroups, activeGroupId) {
+  const groups = Array.isArray(contactGroups) ? contactGroups : [];
+  const activeId = activeGroupId || 'all';
 
-  /* [区域标注] 过滤联系人 */
-  const filtered = contacts.filter(c => {
-    if (keyword && !(c.name || '').toLowerCase().includes(keyword)) return false;
-    return true;
-  });
+  return `
+    <!-- [区域标注·本次需求1] 通讯录分组 TAB 栏 -->
+    <div class="contacts-group-tabs" data-role="contacts-group-tabs">
+      <div class="contacts-group-tabs__scroller">
+        <button class="chat-tab-btn contacts-group-tab-btn ${activeId === 'all' ? 'is-active' : ''}"
+                data-action="switch-contact-group"
+                data-contact-group-id="all"
+                type="button">All</button>
+        <button class="contacts-group-add-tab"
+                data-action="create-contact-group"
+                type="button"
+                aria-label="新建通讯录分组">${ICONS.plus}</button>
+        ${groups.map(group => `
+          <!-- [区域标注·本次需求1] 通讯录自定义分组 TAB：${escapeHtml(group.name)} -->
+          <button class="chat-tab-btn contacts-group-tab-btn ${activeId === group.id ? 'is-active' : ''}"
+                  data-action="switch-contact-group"
+                  data-contact-group-id="${escapeHtml(group.id)}"
+                  type="button">${escapeHtml(group.name)}</button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注] 渲染通讯录 HTML
+   参数：
+     contacts — 联系人数组 [{id, name, avatar, signature, groupId}]
+     contactGroups — 自定义分组数组 [{id, name}]
+     activeContactGroupId — 当前选中的分组 id，默认 all
+   ========================================================================== */
+export function renderContacts(contacts, contactGroups = [], activeContactGroupId = 'all') {
+  const activeGroupId = activeContactGroupId || 'all';
+
+  /* [区域标注·本次需求1] 按当前通讯录分组过滤联系人 */
+  const filtered = activeGroupId === 'all'
+    ? contacts
+    : contacts.filter(c => (c.groupId || '') === activeGroupId);
 
   /* [区域标注] 按首字母分组 */
   const groups = {};
@@ -61,35 +99,28 @@ export function renderContacts(contacts, searchKeyword) {
     return a.localeCompare(b);
   });
 
-  /* [区域标注] 搜索栏 */
-  const searchBarHtml = `
-    <!-- [区域标注] 通讯录搜索栏 -->
-    <div class="chat-search-bar">
-      ${ICONS.search}
-      <input type="text" placeholder="搜索联系人..." data-role="contacts-search-input" value="${escapeHtml(searchKeyword || '')}">
-    </div>
-  `;
+  const groupTabsHtml = renderContactGroupTabs(contactGroups, activeGroupId);
 
   /* [区域标注] 空状态 */
   if (filtered.length === 0) {
     return `
-      ${searchBarHtml}
+      ${groupTabsHtml}
       <!-- [区域标注] 通讯录空状态 -->
       <div class="chat-list-empty">
         ${ICONS.peoples}
-        <p>暂无联系人<br>前往档案应用添加角色后即可在此查看</p>
+        <p>${activeGroupId === 'all' ? '暂无联系人' : '当前分组暂无联系人'}<br>点击右上角 + 搜索并添加角色</p>
       </div>
     `;
   }
 
   /* [区域标注] 联系人分组列表 */
   const listHtml = sortedKeys.map(key => `
-    <!-- [区域标注] 通讯录分组：${key} -->
+    <!-- [区域标注] 通讯录字母分组：${key} -->
     <div class="contacts-group">
       <div class="contacts-group__letter">${escapeHtml(key)}</div>
       ${groups[key].map(c => `
-        <!-- [区域标注] 联系人条目：${escapeHtml(c.name)} -->
-        <div class="contacts-item" data-action="view-contact" data-contact-id="${c.id}">
+        <!-- [区域标注·本次需求2] 联系人条目：点击后打开通讯录分组选择弹窗 -->
+        <div class="contacts-item" data-action="view-contact" data-contact-id="${escapeHtml(c.id)}">
           <div class="contacts-item__avatar">
             ${c.avatar
               ? `<img src="${escapeHtml(c.avatar)}" alt="${escapeHtml(c.name)}">`
@@ -105,7 +136,7 @@ export function renderContacts(contacts, searchKeyword) {
   `).join('');
 
   return `
-    ${searchBarHtml}
+    ${groupTabsHtml}
     <!-- [区域标注] 通讯录列表主体 -->
     <div class="contacts-list-area">
       ${listHtml}
