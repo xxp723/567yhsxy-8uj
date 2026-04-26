@@ -16,6 +16,7 @@ import { renderContacts } from './contacts.js';
 import { renderMoments } from './moments.js';
 import { renderProfile } from './profile.js';
 import { renderChatMessage } from './chat-message.js';
+import { chat, normalizeChatPromptSettings } from './prompt.js';
 
 /* ==========================================================================
    [区域标注] IconPark 图标 SVG 定义（底部TAB栏 + 顶部栏用）
@@ -53,6 +54,8 @@ const DATA_KEY_CONTACTS = (maskId) => `chat_contacts_${maskId || 'default'}`;
 const DATA_KEY_CONTACT_GROUPS = (maskId) => `chat_contact_groups_${maskId || 'default'}`;
 const DATA_KEY_MOMENTS = (maskId) => `chat_moments_${maskId || 'default'}`;
 const DATA_KEY_MESSAGES_PREFIX = (maskId) => `chat_msgs_${maskId || 'default'}_`;
+/* [区域标注·本次需求] 聊天消息页设置：当前指令/外部上下文注入/自定义思维链，统一写入 DB.js(IndexedDB) */
+const DATA_KEY_CHAT_PROMPT_SETTINGS = (maskId) => `chat_prompt_settings_${maskId || 'default'}`;
 const PANEL_KEYS = ['chatList', 'contacts', 'moments', 'profile'];
 const PANEL_LABELS = ['Chat', 'Contacts', 'Moments', 'Me'];
 const PANEL_ICON_KEYS = ['chat', 'contacts', 'moments', 'profile'];
@@ -184,7 +187,7 @@ async function dbGetArchiveData(db, key) {
    说明：由 AppManager 调用，接收容器元素和上下文
    ========================================================================== */
 export async function mount(container, context) {
-  const { appMeta, eventBus, db, windowManager } = context;
+  const { appMeta, eventBus, db, windowManager, settings } = context;
 
   /* ==========================================================================
      [区域标注·修改5] 并行预加载 CSS + 档案数据
@@ -206,12 +209,13 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
-    dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId))
+    dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(currentActiveMaskId))
   ]);
 
   /* [区域标注] 应用状态对象 */
@@ -238,6 +242,10 @@ export async function mount(container, context) {
     archiveMasks: archiveMasks,
     /* [区域标注·本次需求2] 档案角色列表缓存，用于通讯录搜索 */
     archiveCharacters: archiveCharacters,
+    /* [区域标注·本次需求] 聊天提示词设置：从 IndexedDB 读取，禁止浏览器同步键值存储 */
+    chatPromptSettings: normalizeChatPromptSettings(chatPromptSettings),
+    /* [区域标注·本次需求] 聊天 API 调用状态 */
+    isAiSending: false,
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
   };
@@ -249,14 +257,16 @@ export async function mount(container, context) {
   container.innerHTML = buildAppShell(state);
 
   /* [区域标注] 绑定全局事件代理 */
-  const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta);
+  const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta, settings);
   const inputHandler = (e) => handleInput(e, state, container, db);
+  const keydownHandler = (e) => handleKeydown(e, state, container, db, settings);
   /* [区域标注·本次需求1] 通讯录分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
   const contactGroupLongPressHandlers = createContactGroupLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
+  container.addEventListener('keydown', keydownHandler);
   container.addEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
@@ -308,6 +318,7 @@ export async function mount(container, context) {
       state.destroyed = true;
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
+      container.removeEventListener('keydown', keydownHandler);
       container.removeEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
@@ -509,7 +520,7 @@ async function openChatMessage(container, state, db, chatId) {
 
   if (msgWrap) {
     msgWrap.style.display = 'flex';
-    msgWrap.innerHTML = renderChatMessage(session, state.currentMessages);
+    renderCurrentChatMessage(container, state);
   }
 
   /* [区域标注] 滚动到消息底部 */
@@ -554,39 +565,121 @@ function closeChatMessage(container, state) {
    [区域标注] 发送消息
    说明：将用户输入的消息添加到当前会话的消息列表并持久化
    ========================================================================== */
-async function sendMessage(container, state, db, content) {
-  if (!content.trim() || !state.currentChatId) return;
+async function sendMessage(container, state, db, content, settingsManager, options = {}) {
+  const userText = String(content || '').trim();
+  if (!userText || !state.currentChatId || state.isAiSending) return;
 
-  const msg = {
-    id: Date.now().toString(),
-    role: 'user',
-    content: content.trim(),
-    timestamp: Date.now()
-  };
-
-  state.currentMessages.push(msg);
-
-  /* [区域标注] 持久化消息到 IndexedDB */
-  await dbPut(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + state.currentChatId, state.currentMessages);
-
-  /* [区域标注] 更新会话的最后消息和时间 */
   const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (session) {
-    session.lastMessage = content.trim();
-    session.lastTime = Date.now();
-    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+  if (!session) return;
+
+  /* [区域标注·本次需求] 用户消息入列并写入 IndexedDB */
+  if (!options.skipAppendUser) {
+    state.currentMessages.push({
+      id: Date.now().toString(),
+      role: 'user',
+      content: userText,
+      timestamp: Date.now()
+    });
   }
 
-  /* [区域标注] 重新渲染消息页面 */
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  if (msgWrap && session) {
-    msgWrap.innerHTML = renderChatMessage(session, state.currentMessages);
-    /* [区域标注] 滚动到底部 */
-    setTimeout(() => {
-      const listArea = msgWrap.querySelector('[data-role="msg-list"]');
-      if (listArea) listArea.scrollTop = listArea.scrollHeight;
-    }, 30);
+  await persistCurrentMessages(state, db);
+
+  session.lastMessage = userText;
+  session.lastTime = Date.now();
+  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+  state.isAiSending = true;
+  renderCurrentChatMessage(container, state);
+
+  try {
+    /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
+    const history = state.currentMessages
+      .filter(item => item.role === 'user' || item.role === 'assistant')
+      .slice(0, -1)
+      .map(item => ({ role: item.role, content: item.content }));
+
+    const result = await chat({
+      userInput: userText,
+      history,
+      chatSettings: state.chatPromptSettings,
+      settingsManager
+    });
+
+    const aiText = String(result?.text || '').trim() || '（AI 没有返回内容）';
+    state.currentMessages.push({
+      id: `ai_${Date.now()}`,
+      role: 'assistant',
+      content: aiText,
+      timestamp: Date.now()
+    });
+
+    session.lastMessage = aiText;
+    session.lastTime = Date.now();
+  } catch (error) {
+    state.currentMessages.push({
+      id: `ai_error_${Date.now()}`,
+      role: 'assistant',
+      content: `API 调用失败：${error?.message || '未知错误'}`,
+      timestamp: Date.now()
+    });
+  } finally {
+    state.isAiSending = false;
+    await persistCurrentMessages(state, db);
+    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+    renderCurrentChatMessage(container, state);
   }
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 持久化当前聊天消息
+   说明：统一写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
+   ========================================================================== */
+async function persistCurrentMessages(state, db) {
+  if (!state.currentChatId) return;
+  await dbPut(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + state.currentChatId, state.currentMessages);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 重新渲染当前聊天消息页
+   ========================================================================== */
+function renderCurrentChatMessage(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !session) return;
+
+  msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
+    chatSettings: state.chatPromptSettings,
+    isSending: state.isAiSending
+  });
+
+  setTimeout(() => {
+    const listArea = msgWrap.querySelector('[data-role="msg-list"]');
+    if (listArea) listArea.scrollTop = listArea.scrollHeight;
+  }, 30);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 魔法棒重新回复
+   说明：删除最新一轮 AI 回复后，直接用用户最新消息重新调用 API。
+   ========================================================================== */
+async function retryLatestAiReply(container, state, db, settingsManager) {
+  if (!state.currentChatId || state.isAiSending) return;
+
+  for (let i = state.currentMessages.length - 1; i >= 0; i -= 1) {
+    if (state.currentMessages[i]?.role === 'assistant') {
+      state.currentMessages.splice(i, 1);
+      break;
+    }
+  }
+
+  const latestUser = [...state.currentMessages].reverse().find(item => item?.role === 'user');
+  if (!latestUser?.content) {
+    renderCurrentChatMessage(container, state);
+    return;
+  }
+
+  await persistCurrentMessages(state, db);
+  await sendMessage(container, state, db, latestUser.content, settingsManager, { skipAppendUser: true });
 }
 
 /* ==========================================================================
@@ -1006,7 +1099,7 @@ function showDeleteContactGroupModal(container, state, groupId) {
    [区域标注] 点击事件代理处理器
    说明：统一处理应用内所有按钮/列表项的点击事件
    ========================================================================== */
-async function handleClick(e, state, container, db, eventBus, windowManager, appMeta) {
+async function handleClick(e, state, container, db, eventBus, windowManager, appMeta, settingsManager) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
@@ -1261,19 +1354,48 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-send': {
       const input = container.querySelector('[data-role="msg-input"]');
       if (input && input.value.trim()) {
-        await sendMessage(container, state, db, input.value);
+        const value = input.value;
+        input.value = '';
+        await sendMessage(container, state, db, value, settingsManager);
       }
       break;
     }
 
-    /* [区域标注] 聊天消息页面 — 咖啡按钮（预留） */
-    case 'msg-coffee':
-      /* 预留功能位，后续扩展 */
+    /* [区域标注·本次需求] 聊天消息页面 — 咖啡按钮：切换升起功能区 */
+    case 'msg-coffee': {
+      const dock = container.querySelector('[data-role="msg-feature-dock"]');
+      if (dock) dock.classList.toggle('is-open');
+      break;
+    }
+
+    /* [区域标注·本次需求] 聊天消息页面 — 魔法棒按钮：删除最新 AI 回复并重新回复 */
+    case 'msg-magic':
+      await retryLatestAiReply(container, state, db, settingsManager);
       break;
 
-    /* [区域标注] 聊天消息页面 — 魔术棒按钮（预留） */
-    case 'msg-magic':
-      /* 预留功能位，后续扩展 */
+    /* [区域标注·本次需求] 聊天消息页面 — 三点设置按钮：进入独立聊天设置页 */
+    case 'msg-more': {
+      const conversation = container.querySelector('[data-role="msg-conversation"]');
+      const settingsPage = container.querySelector('[data-role="msg-settings-page"]');
+      if (conversation) conversation.style.display = 'none';
+      if (settingsPage) settingsPage.style.display = 'flex';
+      break;
+    }
+
+    /* [区域标注·本次需求] 聊天设置页 — 返回聊天消息页 */
+    case 'msg-settings-back':
+      renderCurrentChatMessage(container, state);
+      break;
+
+    /* [区域标注·本次需求] 聊天设置页 — iPhone 风格开关 */
+    case 'toggle-external-context':
+      state.chatPromptSettings.externalContextEnabled = !state.chatPromptSettings.externalContextEnabled;
+      await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+      target.classList.toggle('is-on', state.chatPromptSettings.externalContextEnabled);
+      break;
+
+    /* [区域标注·本次需求] 功能区占位按钮：当前不弹窗、不调用原生 alert */
+    case 'msg-feature-placeholder':
       break;
 
     /* ==========================================================================
@@ -1358,7 +1480,8 @@ async function saveMaskData(state, db, maskId) {
     dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
-    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments)
+    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments),
+    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId), state.chatPromptSettings)
   ]);
 }
 
@@ -1367,12 +1490,13 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
-    dbGet(db, DATA_KEY_MOMENTS(maskId))
+    dbGet(db, DATA_KEY_MOMENTS(maskId)),
+    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId))
   ]);
   state.sessions = sessions || [];
   /* === [本次修改] 聊天列表长按删除联系人：切换面具时恢复对应隐藏状态 === */
@@ -1382,6 +1506,7 @@ async function loadMaskData(state, db, maskId) {
   state.contactGroups = normalizeContactGroups(contactGroups);
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
+  state.chatPromptSettings = normalizeChatPromptSettings(chatPromptSettings);
 }
 
 /* ==========================================================================
@@ -1672,4 +1797,35 @@ function handleInput(e, state, container, db) {
     renderContactSearchResults(container, state, target.value || '');
     return;
   }
+
+  /* ==========================================================================
+     [区域标注·本次需求] 聊天设置输入持久化
+     说明：当前指令、自定义思维链统一写入 DB.js / IndexedDB。
+     ========================================================================== */
+  if (target.matches('[data-role="msg-current-command"]')) {
+    state.chatPromptSettings.currentCommand = target.value || '';
+    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    return;
+  }
+
+  if (target.matches('[data-role="msg-custom-thinking"]')) {
+    state.chatPromptSettings.customThinkingInstruction = target.value || '';
+    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    return;
+  }
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 聊天输入框回车发送
+   说明：用户在输入法中点击“回车”后发送消息；Shift+Enter 不处理（当前为单行输入框）。
+   ========================================================================== */
+async function handleKeydown(e, state, container, db, settingsManager) {
+  const target = e.target;
+  if (!target?.matches?.('[data-role="msg-input"]')) return;
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+
+  e.preventDefault();
+  const value = target.value;
+  target.value = '';
+  await sendMessage(container, state, db, value, settingsManager);
 }

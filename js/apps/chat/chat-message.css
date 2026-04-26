@@ -159,6 +159,20 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次需求] 聊天会话主容器
+   说明：三点设置页打开时隐藏该容器，显示独立设置页。
+   ========================================================================== */
+.msg-conversation {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ==========================================================================
    [区域标注·本次需求5] 消息流区域
    说明：匹配 chat-message.js 的 .msg-list-area 和 data-role="msg-list"。
    ========================================================================== */
@@ -167,7 +181,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 12px 90px 12px;
+  padding: 10px 12px 112px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -302,23 +316,94 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求5] 底部悬浮输入栏
-   说明：匹配 chat-message.js 的 .msg-input-bar / .msg-input-bar__* 类名。
+   [区域标注·本次需求] 底部悬浮输入栏外壳
+   说明：控制四周圆角矩形输入栏与咖啡按钮升起功能区的位置。
    ========================================================================== */
-.msg-input-bar {
+.msg-input-shell {
   position: absolute;
-  bottom: 0;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  overflow: visible;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 咖啡按钮升起功能区
+   说明：点击底栏最左侧咖啡按钮后，从输入栏上边框升起的圆角长方形功能区。
+   ========================================================================== */
+.msg-feature-dock {
+  position: absolute;
   left: 0;
   right: 0;
-  z-index: 20;
+  bottom: calc(100% - 8px);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px 18px;
+  border-radius: 22px 22px 16px 16px;
+  background: rgba(255, 252, 247, 0.96);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(74, 52, 42, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.msg-feature-dock.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.msg-feature-dock__item {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.06);
+  color: #4A342A;
+  padding: 10px 8px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-feature-dock__item:active {
+  background: rgba(74, 52, 42, 0.14);
+  transform: scale(0.95);
+}
+
+.msg-feature-dock__item svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求5] 底部悬浮输入栏
+   说明：四周圆角矩形；左咖啡按钮，中间输入框，右侧魔法棒与纸飞机。
+   ========================================================================== */
+.msg-input-bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: rgba(248, 244, 239, 0.92);
+  padding: 9px 10px;
+  background: rgba(248, 244, 239, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(74, 52, 42, 0.06);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 14px 34px rgba(74, 52, 42, 0.14);
 }
 
 /* [区域标注·本次需求5] 输入栏 IconPark 圆形图标按钮 */
@@ -334,10 +419,15 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
 }
 
-.msg-input-bar__icon-btn:active {
+.msg-input-bar__icon-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.msg-input-bar__icon-btn:active:not(:disabled) {
   background: rgba(74, 52, 42, 0.18);
   transform: scale(0.92);
 }
@@ -347,7 +437,7 @@
   height: 20px;
 }
 
-/* [区域标注·本次需求5] 文字输入框 */
+/* [区域标注·本次需求5] 文字输入框：保持原有圆角输入框风格 */
 .msg-input-bar__input {
   flex: 1;
   min-width: 0;
@@ -377,6 +467,172 @@
   color: #f8f4ef;
 }
 
-.msg-input-bar__send-btn:active {
+.msg-input-bar__send-btn:active:not(:disabled) {
   background: #3a2618;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 聊天设置独立页面
+   说明：三点按钮进入；不使用浏览器原生弹窗。
+   ========================================================================== */
+.msg-settings-page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f8f4ef;
+  overflow: hidden;
+}
+
+.msg-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
+  flex-shrink: 0;
+}
+
+.msg-settings-header__back {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.msg-settings-header__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.msg-settings-header__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.msg-settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.msg-settings-body::-webkit-scrollbar {
+  display: none;
+}
+
+.msg-settings-card {
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(74, 52, 42, 0.07);
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.06);
+  padding: 14px;
+}
+
+.msg-settings-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+  margin-bottom: 8px;
+}
+
+.msg-settings-card__desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(74, 52, 42, 0.52);
+}
+
+.msg-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* [区域标注·本次需求] iPhone 风格滑动开关 */
+.msg-ios-switch {
+  width: 50px;
+  height: 30px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.18);
+  padding: 3px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.msg-ios-switch::after {
+  content: "";
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fffaf4;
+  box-shadow: 0 3px 8px rgba(74, 52, 42, 0.22);
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.18s ease;
+}
+
+.msg-ios-switch.is-on {
+  background: #4A342A;
+}
+
+.msg-ios-switch.is-on::after {
+  transform: translateX(20px);
+}
+
+.msg-settings-textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.86);
+  color: #4A342A;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: inherit;
+  outline: none;
+  padding: 11px 12px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.msg-settings-textarea::-webkit-scrollbar {
+  display: none;
+}
+
+.msg-settings-textarea:focus {
+  border-color: rgba(74, 52, 42, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求] 聊天消息页滚动条隐藏
+   说明：闲谈消息页内所有可上下/左右滑动区域均隐藏滚动条。
+   ========================================================================== */
+.msg-page * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.msg-page *::-webkit-scrollbar {
+  display: none;
 }
