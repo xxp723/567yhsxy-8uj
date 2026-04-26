@@ -713,54 +713,18 @@
   background: linear-gradient(135deg, #e8ddd2 0%, #c9b9a6 60%, #d4c4b2 100%);
   position: relative;
   overflow: hidden;
+  background-size: cover;
+  background-position: center;
 }
 
-.profile-cover__img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* [区域标注] 封面右上角菜单按钮 */
-.profile-cover__menu-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.2);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* [区域标注] 封面区域 — 可点击上传（替代原"Change Cover"按钮和右上角菜单按钮） */
+.profile-cover--clickable {
   cursor: pointer;
-  backdrop-filter: blur(6px);
+  transition: filter 0.2s ease;
 }
 
-/* [区域标注] 封面右下角"Change Cover"按钮 */
-.profile-cover__change-btn {
-  position: absolute;
-  bottom: 14px;
-  right: 14px;
-  padding: 6px 14px;
-  border: none;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-}
-
-.profile-cover__change-btn svg {
-  width: 14px;
-  height: 14px;
+.profile-cover--clickable:active {
+  filter: brightness(0.92);
 }
 
 /* [区域标注] 用户主页头像 — 覆盖在封面底部 */
@@ -788,19 +752,41 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
+/* [区域标注] 头像区域 — 可点击上传（替代原来静态头像） */
+.profile-avatar--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.profile-avatar--clickable:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 .profile-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* [区域标注] 用户昵称 */
-.profile-name {
-  text-align: center;
+/* [区域标注] 头像文字占位符 */
+.profile-avatar__placeholder {
+  font-size: 28px;
+  font-weight: 700;
+  color: #4A342A;
+  user-select: none;
+}
+
+/* [区域标注] 用户昵称（居中显示） */
+.profile-nickname {
   margin-top: 10px;
   font-size: 20px;
   font-weight: 700;
   color: #4A342A;
+}
+
+.profile-nickname--center {
+  text-align: center;
 }
 
 /* [区域标注] 用户标签（位置、职业等） */
@@ -850,35 +836,69 @@
   padding: 0 40px;
 }
 
-/* [区域标注] 用户统计数据卡片区 */
-.profile-stats {
+/* ==========================================================================
+   [区域标注] 用户统计数据 — 三张方形圆角卡片
+   说明：好友数量、身份数量、聊天天数，三张大小一致的方形圆角卡片
+         每张卡片内从上到下依次显示：图标 → 数字 → 标签文字
+   ========================================================================== */
+.profile-stats-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 18px 20px;
   margin-top: 10px;
 }
 
 .profile-stat-card {
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(74, 52, 42, 0.08);
-  border-radius: 16px;
-  padding: 14px 10px;
-  text-align: center;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(74, 52, 42, 0.09);
+  border-radius: 18px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 8px;
+  box-shadow: 0 2px 10px rgba(74, 52, 42, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.profile-stat-card__num {
+.profile-stat-card:active {
+  transform: scale(0.97);
+  box-shadow: 0 1px 4px rgba(74, 52, 42, 0.08);
+}
+
+/* [区域标注] 卡片图标 */
+.profile-stat-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #4A342A;
+  opacity: 0.55;
+}
+
+.profile-stat-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* [区域标注] 卡片数字 */
+.profile-stat-card__number {
   font-size: 22px;
   font-weight: 700;
   color: #4A342A;
+  line-height: 1;
 }
 
+/* [区域标注] 卡片标签文字 */
 .profile-stat-card__label {
   font-size: 11px;
   color: rgba(74, 52, 42, 0.55);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* [区域标注] 用户主页功能入口列表 */
@@ -1092,4 +1112,98 @@
 .chat-modal-btn--primary {
   background: #4A342A;
   color: #fff;
+}
+
+/* ==========================================================================
+   [区域标注] 图片上传弹窗样式（封面/头像上传共用）
+   说明：替代原生浏览器弹窗，统一使用自定义弹窗风格
+         支持两种上传方式：本地文件选择 / URL 链接输入
+   ========================================================================== */
+.chat-upload-modal-body {
+  gap: 16px;
+}
+
+/* [区域标注] 本地文件上传按钮 */
+.chat-upload-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(74, 52, 42, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+}
+
+.chat-upload-option:active {
+  background: rgba(74, 52, 42, 0.06);
+  border-color: rgba(74, 52, 42, 0.35);
+}
+
+.chat-upload-option__icon {
+  width: 28px;
+  height: 28px;
+  color: #4A342A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat-upload-option__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-upload-option__text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4A342A;
+}
+
+/* [区域标注] URL 链接上传区 */
+.chat-upload-url-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-upload-url-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4A342A;
+}
+
+.chat-upload-url-label__icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4A342A;
+}
+
+.chat-upload-url-label__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-upload-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-upload-url-row .chat-modal-search {
+  flex: 1;
+}
+
+.chat-upload-url-row .chat-modal-btn {
+  flex-shrink: 0;
+  padding: 10px 16px;
 }
