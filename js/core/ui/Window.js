@@ -40,6 +40,12 @@ export class WindowManager {
     win.className = 'app-window';
     win.dataset.appId = appMeta.id;
 
+    // [区域标注·本次修改1] 闲谈应用首屏预接管
+    // 说明：只针对 chat。窗口一创建就进入闲谈自己的背景/布局状态，避免动态加载前闪过全局标题栏与 loading 样式。
+    if (appMeta.id === 'chat') {
+      win.classList.add('app-window--chat-pretakeover');
+    }
+
     const header = document.createElement('header');
     header.className = 'app-window__header';
     header.innerHTML = `
@@ -61,7 +67,10 @@ export class WindowManager {
 
     const content = document.createElement('div');
     content.className = 'app-window__content';
-    content.innerHTML = '<div class="loading">应用加载中...</div>';
+
+    // [区域标注·本次修改1] 闲谈应用禁止显示全局 loading
+    // 说明：chat 会在 mount 后直接渲染聊天列表；这里保持空内容并使用 chat.css 预覆盖样式，杜绝全局样式闪现。
+    content.innerHTML = appMeta.id === 'chat' ? '' : '<div class="loading">应用加载中...</div>';
 
     header.querySelector('.app-window__close')?.addEventListener('click', () => {
       this.eventBus.emit('app:close', { appId: appMeta.id });
