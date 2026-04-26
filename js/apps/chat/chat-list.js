@@ -65,8 +65,8 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
 
   /* [区域标注] 渲染单个聊天条目 */
   const renderItem = (session) => `
-    <!-- [区域标注] 聊天条目：${escapeHtml(session.name)} -->
-    <div class="chat-item" data-action="open-chat" data-chat-id="${session.id}">
+    <!-- === [本次修改] 聊天列表长按删除联系人：长按该聊天条目仅从聊天列表隐藏 === -->
+    <div class="chat-item" data-action="open-chat" data-long-press-action="delete-chat-list-contact" data-chat-id="${session.id}">
       <div class="chat-item__avatar">
         ${session.avatar
           ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(session.name)}">`

@@ -46,6 +46,8 @@ const STORE_NAME = 'appsData';
 const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
 /* [修改5] 以下 key 函数按 maskId 生成独立 key */
 const DATA_KEY_SESSIONS = (maskId) => `chat_sessions_${maskId || 'default'}`;
+/* === [本次修改] 聊天列表长按删除联系人：只记录隐藏的聊天会话 ID，保留通讯录与其它聊天数据 === */
+const DATA_KEY_HIDDEN_CHAT_IDS = (maskId) => `chat_hidden_chat_ids_${maskId || 'default'}`;
 const DATA_KEY_CONTACTS = (maskId) => `chat_contacts_${maskId || 'default'}`;
 /* [区域标注·本次需求1] 通讯录自定义分组按当前面具身份隔离存储 */
 const DATA_KEY_CONTACT_GROUPS = (maskId) => `chat_contact_groups_${maskId || 'default'}`;
@@ -204,8 +206,9 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, contacts, contactGroups, moments] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId))
@@ -218,6 +221,8 @@ export async function mount(container, context) {
     chatSearchKeyword: '',          // 聊天列表搜索词
     sectionCollapsed: {},           // 折叠状态 {private: false, group: false}
     sessions: sessions || [],       // 聊天会话列表
+    /* === [本次修改] 聊天列表长按删除联系人：隐藏列表单独持久化，避免删除通讯录/消息/聊天设置 === */
+    hiddenChatIds: Array.isArray(hiddenChatIds) ? hiddenChatIds.map(String) : [],
     contacts: normalizeContacts(contacts), // 通讯录好友列表
     /* [区域标注·本次需求1] 通讯录自定义分组；All 为固定默认分组，不写入数组 */
     contactGroups: normalizeContactGroups(contactGroups),
@@ -248,6 +253,8 @@ export async function mount(container, context) {
   const inputHandler = (e) => handleInput(e, state, container, db);
   /* [区域标注·本次需求1] 通讯录分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
   const contactGroupLongPressHandlers = createContactGroupLongPressHandlers(state, container);
+  /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
+  const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
   container.addEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
@@ -255,6 +262,11 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', chatListLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', chatListLongPressHandlers.contextmenu);
 
   /* ==========================================================================
      [区域标注·修改5] 监听档案应用面具切换事件
@@ -301,6 +313,11 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', chatListLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', chatListLongPressHandlers.contextmenu);
       eventBus.off('archive:active-mask-changed', onMaskChanged);
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
@@ -354,7 +371,7 @@ function buildAppShell(state) {
            ================================================================ -->
       <!-- [区域标注] 聊天列表板块 -->
       <div class="chat-panel ${state.activePanel === 'chatList' ? 'is-active' : ''}" data-panel="chatList">
-        ${renderChatList(state.sessions, state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed)}
+        ${renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed)}
       </div>
       <!-- [区域标注] 通讯录板块 -->
       <div class="chat-panel ${state.activePanel === 'contacts' ? 'is-active' : ''}" data-panel="contacts">
@@ -414,7 +431,7 @@ function refreshPanel(container, state, panelKey) {
 
   switch (panelKey) {
     case 'chatList':
-      panelEl.innerHTML = renderChatList(state.sessions, state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed);
+      panelEl.innerHTML = renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed);
       break;
     case 'contacts':
       panelEl.innerHTML = renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId);
@@ -820,6 +837,94 @@ function closeModal(container) {
 }
 
 /* ==========================================================================
+   === [本次修改] 聊天列表长按删除联系人：仅过滤聊天列表显示 ===
+   说明：删除聊天列表联系人时只写入 hiddenChatIds；不删除通讯录联系人、
+         不删除消息记录、不清空其它聊天设置；持久化统一走 IndexedDB。
+   ========================================================================== */
+function getVisibleChatSessions(state) {
+  const hiddenSet = new Set(Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : []);
+  return (state.sessions || []).filter(session => !hiddenSet.has(String(session.id)));
+}
+
+/* ==========================================================================
+   === [本次修改] 聊天列表长按删除联系人：长按处理器 ===
+   说明：长按聊天条目打开应用内确认弹窗，替代原生 confirm。
+   ========================================================================== */
+function createChatListLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const openDeleteModal = () => {
+    const target = pressedTarget;
+    if (!target) return;
+
+    const chatId = target.dataset.chatId || '';
+    const exists = chatId && getVisibleChatSessions(state).some(session => String(session.id) === String(chatId));
+    if (!exists) return;
+
+    target.dataset.longPressTriggered = '1';
+    showDeleteChatListContactModal(container, state, chatId);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="delete-chat-list-contact"]');
+      if (!target) return;
+
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(openDeleteModal, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="delete-chat-list-contact"]')) {
+        e.preventDefault();
+      }
+    }
+  };
+}
+
+/* ==========================================================================
+   === [本次修改] 聊天列表长按删除联系人：确认弹窗 ===
+   说明：应用内弹窗样式与闲谈/设置风格统一，不使用浏览器原生弹窗。
+   ========================================================================== */
+function showDeleteChatListContactModal(container, state, chatId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const session = (state.sessions || []).find(item => String(item.id) === String(chatId));
+  if (!mask || !panel || !session) return;
+
+  panel.innerHTML = `
+    <!-- === [本次修改] 聊天列表长按删除联系人确认弹窗 === -->
+    <div class="chat-modal-header">
+      <span>删除聊天联系人</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否从聊天列表中删除“${escapeHtml(session.name || '未命名')}”？<br>通讯录联系人、聊天记录和其它聊天设置都会保留。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-chat-list-contact" data-chat-id="${escapeHtml(session.id)}" type="button">删除</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
    [区域标注·本次需求1] 通讯录分组长按删除处理器
    说明：仅除 All 以外的自定义分组可长按删除；删除标签不删除联系人。
    ========================================================================== */
@@ -947,6 +1052,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
     /* [区域标注] 打开聊天对话 */
     case 'open-chat': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        break;
+      }
       const chatId = target.dataset.chatId;
       if (chatId) {
         await openChatMessage(container, state, db, chatId);
@@ -972,26 +1081,52 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'select-contact-for-chat': {
       const contactId = target.dataset.contactId;
       const contact = state.contacts.find(c => c.id === contactId);
-      if (contact && !state.sessions.some(s => s.id === contactId)) {
-        /* [区域标注] 创建新聊天会话 */
-        const newSession = {
-          id: contact.id,
-          name: contact.name || '未命名',
-          avatar: contact.avatar || '',
-          type: 'private',
-          lastMessage: '',
-          lastTime: Date.now(),
-          unread: 0
-        };
-        state.sessions.push(newSession);
-        await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+      if (contact) {
+        const existedSession = state.sessions.find(s => s.id === contactId);
+        if (existedSession) {
+          /* === [本次修改] 聊天列表长按删除联系人：重新添加时只取消隐藏，保留原会话数据 === */
+          state.hiddenChatIds = state.hiddenChatIds.filter(id => String(id) !== String(contactId));
+          await dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds);
+        } else {
+          /* [区域标注] 创建新聊天会话 */
+          const newSession = {
+            id: contact.id,
+            name: contact.name || '未命名',
+            avatar: contact.avatar || '',
+            type: 'private',
+            lastMessage: '',
+            lastTime: Date.now(),
+            unread: 0
+          };
+          state.sessions.push(newSession);
+          await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+        }
 
         closeModal(container);
         refreshPanel(container, state, 'chatList');
 
-        /* [区域标注] 自动打开新创建的聊天 */
+        /* [区域标注] 自动打开新创建或恢复显示的聊天 */
         await openChatMessage(container, state, db, contact.id);
       }
+      break;
+    }
+
+    /* ==========================================================================
+       === [本次修改] 聊天列表长按删除联系人：确认后仅从聊天列表隐藏 ===
+       ========================================================================== */
+    case 'confirm-delete-chat-list-contact': {
+      const chatId = target.dataset.chatId || '';
+      const sessionExists = chatId && state.sessions.some(session => String(session.id) === String(chatId));
+      if (!sessionExists) break;
+
+      const hiddenSet = new Set(Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : []);
+      hiddenSet.add(String(chatId));
+      state.hiddenChatIds = Array.from(hiddenSet);
+
+      await dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds);
+
+      closeModal(container);
+      refreshPanel(container, state, 'chatList');
       break;
     }
 
@@ -1218,6 +1353,8 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 async function saveMaskData(state, db, maskId) {
   await Promise.all([
     dbPut(db, DATA_KEY_SESSIONS(maskId), state.sessions),
+    /* === [本次修改] 聊天列表长按删除联系人：隐藏状态保存到 IndexedDB === */
+    dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId), state.hiddenChatIds),
     dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
@@ -1230,13 +1367,16 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, contacts, contactGroups, moments] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
+    dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
     dbGet(db, DATA_KEY_MOMENTS(maskId))
   ]);
   state.sessions = sessions || [];
+  /* === [本次修改] 聊天列表长按删除联系人：切换面具时恢复对应隐藏状态 === */
+  state.hiddenChatIds = Array.isArray(hiddenChatIds) ? hiddenChatIds.map(String) : [];
   state.contacts = normalizeContacts(contacts);
   /* [区域标注·本次需求1] 切换面具时同步加载该面具的通讯录分组 */
   state.contactGroups = normalizeContactGroups(contactGroups);

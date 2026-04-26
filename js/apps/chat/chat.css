@@ -57,14 +57,14 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求4] Chat/Contacts 标题组
-   说明："+" 按钮跟随在标题文字最右侧；Moments/Me 时由 JS 隐藏该按钮。
+   === [本次修改] Chat/Contacts 顶部 + 按钮右对齐 ===
+   说明：标题始终居中，"+" 按钮固定到顶部栏最右侧；Moments/Me 时由 JS 隐藏该按钮。
    ========================================================================== */
 .chat-top-bar__title-wrap {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -92,8 +92,12 @@
   transform: scale(0.98);
 }
 
-/* [区域标注·本次需求4] 标题文字右侧缩小版 "+" 添加按钮 */
+/* === [本次修改] Chat/Contacts 顶部 + 按钮右对齐：按钮固定在最右侧，不挤压标题 === */
 .chat-top-bar__add {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 28px;
   height: 28px;
   border: none;
@@ -110,7 +114,7 @@
 
 .chat-top-bar__add:active {
   background: rgba(74, 52, 42, 0.18);
-  transform: scale(0.92);
+  transform: translateY(-50%) scale(0.92);
 }
 
 .chat-top-bar__add svg {
@@ -188,9 +192,10 @@
   white-space: nowrap;
 }
 
+/* === [本次修改] Contacts 分组 + 按钮尺寸统一：与顶部右上角 + 按钮保持一致 === */
 .contacts-group-add-tab {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: rgba(74, 52, 42, 0.08);
@@ -209,8 +214,8 @@
 }
 
 .contacts-group-add-tab svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ==========================================================================
@@ -1849,14 +1854,14 @@
 
 .chat-sub-page__header {
   /* ========================================================================
-     [区域标注·本次需求3] 钱包/表情包/聊天天数详情标题栏间距
-     说明：独立子页面标题栏间距对齐聊天列表顶部标题栏。
+     === [本次修改] 用户主页子页面标题统一 ===
+     说明：钱包/表情包/聊天天数详情标题栏间距对齐聊天列表顶部标题栏。
      ======================================================================== */
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 12px 16px 10px 16px;
+  padding: 26px 16px 12px 16px;
   background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
   flex-shrink: 0;
 }
@@ -1867,8 +1872,8 @@
 
 .chat-sub-page__title {
   /* ========================================================================
-     [区域标注·本次需求3] 钱包/表情包/聊天天数详情标题样式
-     说明：这三个用户主页独立子页面标题统一使用 Chat/Contacts/Me 顶部标题的字体、大小和字重。
+     === [本次修改] 用户主页子页面标题统一 ===
+     说明：钱包/表情包/聊天天数详情标题统一使用 Chat/Contacts/Me 顶部标题的字体、大小和字重。
      ======================================================================== */
   font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
   font-style: italic;
