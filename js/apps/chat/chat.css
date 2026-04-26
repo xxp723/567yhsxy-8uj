@@ -9,25 +9,17 @@
    [区域标注] 全局覆盖 — 隐藏系统默认标题栏与窗口装饰
    说明：闲谈应用自行管理顶部栏，因此需要隐藏 WindowManager 自带的 header
    ========================================================================== */
-.app-window[data-app-id="chat"] .app-window__header,
-.app-window--chat-pretakeover .app-window__header {
+.app-window[data-app-id="chat"] .app-window__header {
   display: none !important;
 }
 
-.app-window[data-app-id="chat"] .app-window__content,
-.app-window--chat-pretakeover .app-window__content {
+.app-window[data-app-id="chat"] .app-window__content {
   padding: 0 !important;
   background: #f8f4ef;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-/* [区域标注·本次修改1] 闲谈首屏预接管占位
-   说明：窗口创建瞬间就使用闲谈背景并隐藏全局标题/加载态，等待 chat 模块直接渲染聊天列表。 */
-.app-window--chat-pretakeover {
-  background: #f8f4ef !important;
 }
 
 /* ==========================================================================
@@ -472,10 +464,9 @@
   display: none;
 }
 
-/* [区域标注·本次修改2] 通讯录标题顶部间距
-   说明：参考聊天列表 Chat 标题栏的顶部留白，避免标题贴近顶部。 */
+/* [区域标注] 通讯录标题 */
 .contacts-header {
-  padding: 34px 20px 8px 20px;
+  padding: 14px 20px 8px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -573,10 +564,9 @@
   display: none;
 }
 
-/* [区域标注·本次修改2] 朋友圈标题顶部间距
-   说明：参考聊天列表 Chat 标题栏的顶部留白，避免标题贴近顶部。 */
+/* [区域标注] 朋友圈标题区 */
 .moments-header {
-  padding: 34px 20px 8px 20px;
+  padding: 14px 20px 8px 20px;
 }
 
 .moments-header h2 {
@@ -719,10 +709,9 @@
   z-index: 5;
 }
 
-/* [区域标注·本次修改2] 用户主页顶部间距
-   说明：参考聊天列表 Chat 标题栏的顶部留白，头像区域不再贴近顶部。 */
+/* [区域标注·修改1] 无封面模式下头像向上靠近顶部 */
 .profile-avatar-wrap--no-cover {
-  margin-top: 34px;
+  margin-top: 18px;
 }
 
 .profile-avatar {
@@ -1071,15 +1060,10 @@
   height: 18px;
 }
 
-/* [区域标注·本次修改3] 聊天天数详情标题样式
-   说明：与聊天列表 Chat 标题栏统一为花体、字号和字重。 */
 .chat-days-detail-header__title {
-  font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
-  font-style: italic;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   color: #4A342A;
-  letter-spacing: 1.5px;
 }
 
 .chat-days-detail-item {
@@ -1162,15 +1146,10 @@
   height: 18px;
 }
 
-/* [区域标注·本次修改3] 钱包/表情包标题样式
-   说明：与聊天列表 Chat 标题栏统一为花体、字号和字重。 */
 .profile-sub-page__title {
-  font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
-  font-style: italic;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   color: #4A342A;
-  letter-spacing: 1.5px;
 }
 
 .profile-sub-page__body {
@@ -1532,15 +1511,10 @@
   justify-content: center;
 }
 
-/* [区域标注·本次修改3] 用户主页独立子页面标题样式
-   说明：钱包、表情包、聊天天数详情统一复用聊天列表 Chat 标题栏的字体样式和大小。 */
 .chat-sub-page__title {
-  font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
-  font-style: italic;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   color: #4A342A;
-  letter-spacing: 1.5px;
 }
 
 .chat-sub-page__title--button {

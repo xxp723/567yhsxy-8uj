@@ -74,18 +74,13 @@ export class AppManager {
     }
 
     const openingTask = (async () => {
-      let contentEl = null;
-
       try {
-        // [区域标注·本次修改4] 应用窗口即时反馈
-        // 说明：先创建/聚焦窗口，再动态加载模块，解决其它应用点击后无即时响应、看起来点不进去的问题。
-        //       chat 的首屏预接管样式由 WindowManager + chat.css 单独处理，不影响其它应用默认窗口。
-        contentEl = this.windowManager.open(appMeta);
-
         const moduleRef = await this.loadModule(appMeta);
         if (!moduleRef || typeof moduleRef.mount !== 'function') {
           throw new Error(`应用入口缺少 mount 方法: ${appMeta.entry}`);
         }
+
+        const contentEl = this.windowManager.open(appMeta);
 
         const context = {
           appId,
@@ -104,11 +99,6 @@ export class AppManager {
         Logger.info(`应用已打开: ${appMeta.name}`);
       } catch (error) {
         Logger.error(`打开应用失败: ${appId}`, error);
-        // [区域标注·本次修改4] 启动失败状态清理
-        // 说明：窗口已提前打开时仍复用现有错误展示；没有窗口时再补建窗口，避免后续点击被卡住。
-        if (!contentEl) {
-          this.windowManager.open(appMeta);
-        }
         this.windowManager.showError(appId, '应用启动失败，请查看日志。');
       } finally {
         this.openingPromises.delete(appId);
