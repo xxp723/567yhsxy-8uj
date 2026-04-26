@@ -1,0 +1,1095 @@
+/**
+ * 文件名: js/apps/chat/chat.css
+ * 用途: 闲谈应用主样式表，直接覆盖全局标题栏与窗口样式。
+ *       从应用窗口顶部开始完全接管，不依赖全局 styles.css 的应用窗口布局。
+ * 架构层: 应用层 CSS
+ */
+
+/* ==========================================================================
+   [区域标注] 全局覆盖 — 隐藏系统默认标题栏与窗口装饰
+   说明：闲谈应用自行管理顶部栏，因此需要隐藏 WindowManager 自带的 header
+   ========================================================================== */
+.app-window[data-app-id="chat"] .app-window__header {
+  display: none !important;
+}
+
+.app-window[data-app-id="chat"] .app-window__content {
+  padding: 0 !important;
+  background: #f8f4ef;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   [区域标注] 闲谈应用根容器
+   说明：占满整个应用窗口内容区域，从顶部开始铺满
+   ========================================================================== */
+.chat-app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f8f4ef;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ==========================================================================
+   [区域标注] 顶部导航栏（自定义标题栏）
+   说明：左侧">"返回按钮，中间花体字"Chat"标题，右侧"+"添加按钮
+   ========================================================================== */
+.chat-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px 16px;
+  background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* [区域标注] 返回桌面按钮 — 左上角">"形状 */
+.chat-top-bar__back {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.chat-top-bar__back:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: scale(0.92);
+}
+
+/* [区域标注] 花体字标题 — 居中显示"Chat" */
+.chat-top-bar__title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 24px;
+  font-weight: 700;
+  color: #4A342A;
+  letter-spacing: 1.5px;
+  pointer-events: none;
+}
+
+/* [区域标注] 右上角"+"添加按钮 */
+.chat-top-bar__add {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.chat-top-bar__add:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: scale(0.92);
+}
+
+/* ==========================================================================
+   [区域标注] 聊天列表内部 TAB 栏（All / Private / Group 切换）
+   说明：紧跟顶部导航栏下方，三个选项卡横向排列
+   ========================================================================== */
+.chat-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 16px 10px 16px;
+  flex-shrink: 0;
+  background: #f8f4ef;
+}
+
+.chat-tab-btn {
+  padding: 7px 22px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  color: rgba(74, 52, 42, 0.55);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  letter-spacing: 0.5px;
+}
+
+.chat-tab-btn:active {
+  transform: scale(0.96);
+}
+
+.chat-tab-btn.is-active {
+  background: #4A342A;
+  color: #fff;
+}
+
+/* ==========================================================================
+   [区域标注] 聊天列表主内容区
+   说明：可滚动的聊天列表，包含 Recent Chats 和 All Chats 等分区
+   ========================================================================== */
+.chat-list-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-list-area::-webkit-scrollbar {
+  display: none;
+}
+
+/* [区域标注] 聊天列表分区折叠标题 — 如 "Private"、"Group" */
+.chat-list-section {
+  margin-bottom: 4px;
+}
+
+.chat-list-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 6px 20px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-list-section__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #4A342A;
+  letter-spacing: 0.5px;
+}
+
+.chat-list-section__header .chat-section-toggle {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(74, 52, 42, 0.45);
+  transition: transform 0.25s ease;
+}
+
+.chat-list-section__header.is-collapsed .chat-section-toggle {
+  transform: rotate(-90deg);
+}
+
+.chat-list-section__body {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.chat-list-section__body.is-collapsed {
+  max-height: 0 !important;
+}
+
+/* [区域标注] 搜索栏 — 列表顶部搜索入口 */
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 10px 16px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.06);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+}
+
+.chat-search-bar svg {
+  width: 18px;
+  height: 18px;
+  color: rgba(74, 52, 42, 0.4);
+  flex-shrink: 0;
+}
+
+.chat-search-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #4A342A;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-search-bar input::placeholder {
+  color: rgba(74, 52, 42, 0.35);
+}
+
+/* ==========================================================================
+   [区域标注] 单个聊天列表项（聊天条目）
+   说明：左侧头像、中间名字+最后消息、右侧时间+未读数
+   ========================================================================== */
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.chat-item:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+/* [区域标注] 聊天头像 */
+.chat-item__avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2 0%, #d4c4b2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid rgba(74, 52, 42, 0.1);
+}
+
+.chat-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* [区域标注] 聊天信息（名字+最后消息） */
+.chat-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-item__name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-item__last-msg {
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* [区域标注] 聊天元信息（时间+未读角标） */
+.chat-item__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chat-item__time {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.45);
+  white-space: nowrap;
+}
+
+.chat-item__badge {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+.chat-item__badge.is-hidden {
+  visibility: hidden;
+}
+
+/* ==========================================================================
+   [区域标注] 聊天列表空状态提示
+   说明：当列表为空时显示的占位提示
+   ========================================================================== */
+.chat-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(74, 52, 42, 0.4);
+  text-align: center;
+  gap: 12px;
+}
+
+.chat-list-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.4;
+}
+
+.chat-list-empty p {
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   [区域标注] 底部悬浮 TAB 栏（四大板块切换）
+   说明：参照图片1的设计 — 暗色圆角容器，内含四个图标按钮
+         当前选中项为椭圆形扩展并变色，未选中项为圆形白色
+   ========================================================================== */
+.chat-bottom-tab {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #2c2016;
+  border-radius: 40px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  z-index: 50;
+}
+
+/* [区域标注] 单个底部 TAB 按钮 — 未选中态（圆形白色） */
+.chat-bottom-tab__btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.chat-bottom-tab__btn svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.chat-bottom-tab__btn span {
+  display: none;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+/* [区域标注] 单个底部 TAB 按钮 — 选中态（椭圆形+变色+显示文字） */
+.chat-bottom-tab__btn.is-active {
+  width: auto;
+  min-width: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  background: #c8b89a;
+  color: #2c2016;
+  gap: 6px;
+}
+
+.chat-bottom-tab__btn.is-active span {
+  display: inline;
+}
+
+.chat-bottom-tab__btn:active {
+  transform: scale(0.94);
+}
+
+/* ==========================================================================
+   [区域标注] 四大板块容器 — 用于切换显示
+   说明：聊天列表、通讯录、朋友圈、用户主页 的显隐控制
+   ========================================================================== */
+.chat-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-panel.is-active {
+  display: flex;
+}
+
+/* ==========================================================================
+   [区域标注] 通讯录板块样式
+   说明：好友列表，按字母分组排列
+   ========================================================================== */
+.contacts-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+}
+
+.contacts-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* [区域标注] 通讯录标题 */
+.contacts-header {
+  padding: 14px 20px 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.contacts-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+/* [区域标注] 通讯录好友条目 */
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.contact-item:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.contact-item__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2 0%, #d4c4b2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.contact-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact-item__name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #4A342A;
+  flex: 1;
+}
+
+/* [区域标注] 通讯录分组标题 */
+.contacts-group-title {
+  padding: 8px 20px 4px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.4);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* [区域标注] 通讯录空状态 */
+.contacts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(74, 52, 42, 0.4);
+  text-align: center;
+  gap: 12px;
+}
+
+.contacts-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.4;
+}
+
+/* ==========================================================================
+   [区域标注] 朋友圈板块样式
+   说明：时间线式动态列表
+   ========================================================================== */
+.moments-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+}
+
+.moments-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* [区域标注] 朋友圈标题区 */
+.moments-header {
+  padding: 14px 20px 8px 20px;
+}
+
+.moments-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+/* [区域标注] 朋友圈动态条目 */
+.moment-item {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.moment-item__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.moment-item__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2 0%, #d4c4b2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.moment-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moment-item__head {
+  flex: 1;
+}
+
+.moment-item__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4A342A;
+}
+
+.moment-item__time {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.45);
+}
+
+.moment-item__text {
+  font-size: 14px;
+  color: #4A342A;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.moment-item__images {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.moment-item__images img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.moment-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.moment-action-btn {
+  border: none;
+  background: transparent;
+  color: rgba(74, 52, 42, 0.45);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.moment-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* [区域标注] 朋友圈空状态 */
+.moments-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(74, 52, 42, 0.4);
+  text-align: center;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   [区域标注] 用户主页板块样式
+   说明：参照图片4 — 顶部封面+头像+昵称+标签+统计数据+功能入口
+   ========================================================================== */
+.profile-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+}
+
+.profile-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* [区域标注] 用户主页封面区域 */
+.profile-cover {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, #e8ddd2 0%, #c9b9a6 60%, #d4c4b2 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-cover__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* [区域标注] 封面右上角菜单按钮 */
+.profile-cover__menu-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+/* [区域标注] 封面右下角"Change Cover"按钮 */
+.profile-cover__change-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.profile-cover__change-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* [区域标注] 用户主页头像 — 覆盖在封面底部 */
+.profile-avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: -45px;
+  position: relative;
+  z-index: 5;
+}
+
+.profile-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  border: 4px solid #f8f4ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: #4A342A;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* [区域标注] 用户昵称 */
+.profile-name {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+/* [区域标注] 用户标签（位置、职业等） */
+.profile-tags {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  padding: 0 20px;
+}
+
+.profile-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4A342A;
+}
+
+.profile-tag--dark {
+  background: #2c2016;
+  color: #fff;
+}
+
+.profile-tag--light {
+  background: rgba(74, 52, 42, 0.08);
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  color: #4A342A;
+}
+
+.profile-tag svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* [区域标注] 个性签名 */
+.profile-signature {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(74, 52, 42, 0.45);
+  padding: 0 40px;
+}
+
+/* [区域标注] 用户统计数据卡片区 */
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 16px 20px;
+  margin-top: 10px;
+}
+
+.profile-stat-card {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 16px;
+  padding: 14px 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-stat-card__num {
+  font-size: 22px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.profile-stat-card__label {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.55);
+}
+
+/* [区域标注] 用户主页功能入口列表 */
+.profile-menu {
+  padding: 0 20px 20px 20px;
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(74, 52, 42, 0.06);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.profile-menu-item:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.profile-menu-item__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(74, 52, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4A342A;
+  flex-shrink: 0;
+}
+
+.profile-menu-item__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-menu-item__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4A342A;
+  flex: 1;
+}
+
+/* ==========================================================================
+   [区域标注] 应用内自定义弹窗（替代原生 alert / confirm）
+   说明：统一使用与设置应用一致的弹窗风格
+   ========================================================================== */
+.chat-modal-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(33, 24, 18, 0.38);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.chat-modal-mask.is-hidden {
+  display: none;
+}
+
+.chat-modal-panel {
+  width: min(90%, 340px);
+  border-radius: 24px;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,244,239,0.99) 100%);
+  border: 1px solid rgba(125, 90, 68, 0.12);
+  box-shadow: 0 20px 48px rgba(54, 38, 30, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* [区域标注] 弹窗标题栏 */
+.chat-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(125, 90, 68, 0.1);
+}
+
+.chat-modal-header span {
+  font-size: 16px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.chat-modal-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(215, 201, 184, 0.22);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.chat-modal-close:active {
+  background: rgba(215, 201, 184, 0.42);
+}
+
+.chat-modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* [区域标注] 弹窗内容体 */
+.chat-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* [区域标注] 弹窗中的搜索输入框 */
+.chat-modal-search {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(74, 52, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  color: #4A342A;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-modal-search:focus {
+  border-color: rgba(74, 52, 42, 0.3);
+}
+
+/* [区域标注] 弹窗中的好友选择列表项 */
+.chat-modal-contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.chat-modal-contact:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.chat-modal-contact__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+}
+
+.chat-modal-contact__name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4A342A;
+  flex: 1;
+}
+
+/* [区域标注] 弹窗底部按钮区 */
+.chat-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(125, 90, 68, 0.08);
+}
+
+.chat-modal-btn {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+}
+
+.chat-modal-btn:active {
+  opacity: 0.8;
+  transform: scale(0.97);
+}
+
+.chat-modal-btn--secondary {
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+}
+
+.chat-modal-btn--primary {
+  background: #4A342A;
+  color: #fff;
+}
