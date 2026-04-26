@@ -39,6 +39,13 @@ export class AppManager {
     this.openingPromises = new Map();
 
     this.bindEvents();
+
+    /* ==========================================================================
+       [区域标注·本次需求4] 应用模块空闲预热
+       说明：不改变任何持久化逻辑；仅在浏览器空闲时提前 import 应用入口，
+             让除闲谈外的其它应用点击后也能更快响应、减少“点了没反应”的体感。
+       ========================================================================== */
+    this.scheduleModuleWarmup();
   }
 
   bindEvents() {
@@ -75,12 +82,29 @@ export class AppManager {
 
     const openingTask = (async () => {
       try {
-        const moduleRef = await this.loadModule(appMeta);
-        if (!moduleRef || typeof moduleRef.mount !== 'function') {
-          throw new Error(`应用入口缺少 mount 方法: ${appMeta.entry}`);
+        /* ==========================================================================
+           [区域标注·本次需求4] 先打开窗口再加载模块，提升所有应用的点击响应速度
+           说明：旧逻辑会等动态 import 完成后才打开窗口，容易造成“其它应用点不进去”的体感。
+                 现在普通应用会立即出现窗口；闲谈应用在打开窗口前先加载专属 CSS，避免闪过全局样式。
+           ========================================================================== */
+        const modulePromise = this.loadModule(appMeta);
+
+        if (appId === 'chat') {
+          /* [区域标注·本次需求1] 闲谈首屏样式预加载：窗口显示前先确保 chat.css 可用 */
+          await this.preloadChatCriticalStyles();
         }
 
         const contentEl = this.windowManager.open(appMeta);
+
+        if (appId === 'chat') {
+          /* [区域标注·本次需求1] 清空全局 loading，避免闲谈进入时闪过全局 CSS/加载样式 */
+          contentEl.innerHTML = '';
+        }
+
+        const moduleRef = await modulePromise;
+        if (!moduleRef || typeof moduleRef.mount !== 'function') {
+          throw new Error(`应用入口缺少 mount 方法: ${appMeta.entry}`);
+        }
 
         const context = {
           appId,
@@ -107,6 +131,75 @@ export class AppManager {
 
     this.openingPromises.set(appId, openingTask);
     await openingTask;
+  }
+
+  /* ==========================================================================
+     [区域标注·本次需求1] 闲谈应用关键 CSS 预加载
+     说明：只预加载闲谈自己的样式，不写任何持久化数据。
+   ========================================================================== */
+  async preloadChatCriticalStyles() {
+    await this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css');
+  }
+
+  /* ==========================================================================
+     [区域标注·本次需求1] 通用 CSS 预加载工具
+     说明：与闲谈应用内部 loadCSS 使用同一 link id，避免重复插入样式表。
+   ========================================================================== */
+  preloadStylesheet(href, id) {
+    return new Promise((resolve) => {
+      const existing = document.getElementById(id);
+      if (existing) {
+        if (existing.dataset.loaded === '1' || existing.sheet) {
+          resolve();
+          return;
+        }
+        const done = () => {
+          existing.dataset.loaded = '1';
+          resolve();
+        };
+        existing.addEventListener('load', done, { once: true });
+        existing.addEventListener('error', done, { once: true });
+        return;
+      }
+
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.id = id;
+      const done = () => {
+        link.dataset.loaded = '1';
+        resolve();
+      };
+      link.addEventListener('load', done, { once: true });
+      link.addEventListener('error', done, { once: true });
+      document.head.appendChild(link);
+    });
+  }
+
+  /* ==========================================================================
+     [区域标注·本次需求4] 空闲时预热应用入口模块
+     说明：只做动态 import 缓存，不挂载应用、不读写持久化数据。
+   ========================================================================== */
+  scheduleModuleWarmup() {
+    const run = () => {
+      void this.warmupRegisteredAppModules();
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: 1500 });
+      return;
+    }
+
+    setTimeout(run, 600);
+  }
+
+  async warmupRegisteredAppModules() {
+    try {
+      const apps = this.registry.getAll();
+      await Promise.allSettled(apps.map((appMeta) => this.loadModule(appMeta)));
+    } catch (error) {
+      Logger.warn('应用模块预热失败', error);
+    }
   }
 
   async close(appId) {

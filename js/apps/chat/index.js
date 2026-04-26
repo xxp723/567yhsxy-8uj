@@ -249,7 +249,8 @@ export async function unmount(instance) {
 function buildAppShell(state) {
   return `
     <!-- [区域标注] 闲谈应用根容器 -->
-    <div class="chat-app" data-role="chat-app-root">
+    <!-- [区域标注·本次需求2] data-active-panel 用于精确控制通讯录/朋友圈/用户主页标题栏顶部间距 -->
+    <div class="chat-app" data-role="chat-app-root" data-active-panel="${state.activePanel}">
 
       <!-- ================================================================
            [区域标注] 顶部导航栏
@@ -354,6 +355,10 @@ function refreshPanel(container, state, panelKey) {
    ========================================================================== */
 function switchPanel(container, state, panelKey) {
   state.activePanel = panelKey;
+
+  /* [区域标注·本次需求2] 同步当前板块标记，供 CSS 单独调整非聊天列表标题栏顶部间距 */
+  const rootEl = container.querySelector('[data-role="chat-app-root"]');
+  if (rootEl) rootEl.dataset.activePanel = panelKey;
 
   /* [区域标注] 更新板块显隐 */
   PANEL_KEYS.forEach(k => {

@@ -52,6 +52,18 @@
   z-index: 10;
 }
 
+/* ==========================================================================
+   [区域标注·本次需求2] 通讯录/朋友圈/用户主页标题栏顶部间距
+   说明：仅对这三个板块增加顶部留白，参考聊天界面标题栏的视觉间距；
+         不影响聊天列表、聊天消息页和其它应用。
+   ========================================================================== */
+.chat-app[data-active-panel="contacts"] .chat-top-bar,
+.chat-app[data-active-panel="moments"] .chat-top-bar,
+.chat-app[data-active-panel="profile"] .chat-top-bar {
+  padding-top: 26px;
+  padding-bottom: 12px;
+}
+
 /* [区域标注] 花体字标题按钮 — 点击标题区域返回桌面 */
 .chat-top-bar__title {
   position: absolute;
@@ -1512,9 +1524,17 @@
 }
 
 .chat-sub-page__title {
-  font-size: 18px;
+  /* ========================================================================
+     [区域标注·本次需求3] 钱包/表情包/聊天天数详情标题样式
+     说明：独立子页面标题统一为聊天列表顶部标题栏的字体、大小和字重。
+     ======================================================================== */
+  font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 24px;
   font-weight: 700;
   color: #4A342A;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
 }
 
 .chat-sub-page__title--button {
