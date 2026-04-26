@@ -67,9 +67,11 @@ function getExternalContext(enabled) {
 }
 
 /* =========================================================
- * 构建系统提示词
+ * 【区域标记：闲谈应用启动修复区】
+ * conversation.js 需要导入 buildSystemPrompt。
+ * 必须显式 export，否则闲谈入口模块会在导入阶段报错，导致点击应用无响应。
  * ========================================================= */
-function buildSystemPrompt({
+export function buildSystemPrompt({
   worldbookData,
   characters,
   mask,

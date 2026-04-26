@@ -6,6 +6,37 @@
 import { esc, saveChatData } from './index.js';
 import { buildSystemPrompt } from './prompt.js';
 
+/* =========================================================
+ * 【区域标记：闲谈应用启动修复区】
+ * index.js 会导入 renderConversation 作为对话页渲染入口。
+ * 必须显式提供该导出，否则闲谈入口模块会在导入阶段报错，导致点击应用无响应。
+ * ========================================================= */
+export async function renderConversation(ctx) {
+  const { container, rootEl, state, showToast } = ctx;
+  const maskId = state.activeMaskId;
+  const conversations = state.chatData?.value?.conversationsByMask?.[maskId] || [];
+  const conversation = conversations.find(c => c.id === state.activeConversationId);
+
+  if (!conversation) {
+    container.innerHTML = `
+      <div style="padding: 50px 20px; text-align: center; color: #999;">
+        <h2>未找到对话</h2>
+        <p>请返回聊天列表后重新选择。</p>
+      </div>
+    `;
+    showToast?.('未找到对话，请重新选择', 'error');
+    return;
+  }
+
+  await openConversation(
+    {
+      ...ctx,
+      getAppContainer: () => rootEl || container
+    },
+    conversation
+  );
+}
+
 export async function openConversation(ctx, conversation) {
   const { container, state, ICONS, showToast, db, appId, getAppContainer } = ctx;
   const maskId = state.activeMaskId;
