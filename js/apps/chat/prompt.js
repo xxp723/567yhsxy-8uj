@@ -5,7 +5,7 @@
  * 1. 本模块只读取项目 Settings/DB.js（IndexedDB）中的设置与聊天上下文。
  * 2. 禁止使用浏览器同步键值存储，也不写双份存储兜底逻辑。
  * 3. 所有提示词区域均用明显注释分隔，便于后续针对性修改。
- * 4. 当前阶段大部分上下文函数按需求返回空字符串，并保留 TODO。
+ * 4. 提示词函数会把已传入/已从 IndexedDB 读取到的有效信息整理成 AI 可读文本。
  */
 
 /* ==========================================================================
@@ -18,6 +18,23 @@ const PROVIDER_DEFAULT_BASE_URL = {
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
   claude: 'https://api.anthropic.com/v1'
 };
+
+/* ==========================================================================
+   [区域标注] IndexedDB 数据键
+   说明：只读取 DB.js 暴露的 IndexedDB 数据，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+const STORE_NAME = 'appsData';
+const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
+const WORLDBOOK_DB_RECORD_ID = 'worldbook::all-books';
+
+/* ==========================================================================
+   [区域标注] 世界书递归扫描规则
+   说明：
+   1. 这里的深度是“递归触发扫描深度”，不是发送给 AI 的文字。
+   2. 深度 2 = 用户本次输入触发第 1 层；第 1 层正文继续触发第 2 层；不再扫描第 3 层。
+   3. 世界书名称、条目名称、关键词、顺序、递归设置只给代码使用，不发送给 AI。
+   ========================================================================== */
+const WORLDBOOK_MAX_RECURSION_DEPTH = 2;
 
 /* ==========================================================================
    [区域标注] 通用工具函数
@@ -49,6 +66,242 @@ function normalizeMessages(messages) {
     : [];
 }
 
+function normalizePlainText(value) {
+  return String(value ?? '').replace(/\r\n/g, '\n').trim();
+}
+
+function hasReadableValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.some(hasReadableValue);
+  if (typeof value === 'object') return Object.values(value).some(hasReadableValue);
+  return false;
+}
+
+function isLikelyLargeMediaField(key, value) {
+  const safeKey = String(key || '').toLowerCase();
+  const safeValue = String(value || '');
+  return (
+    ['avatar', 'cover', 'image', 'img', 'photo', 'base64', 'file', 'blob'].some(token => safeKey.includes(token)) ||
+    safeValue.startsWith('data:image/') ||
+    safeValue.length > 1200
+  );
+}
+
+function labelizeKey(key) {
+  const labels = {
+    id: 'ID',
+    name: '名称',
+    nickname: '昵称',
+    signature: '签名',
+    description: '描述',
+    basicSetting: '基础设定',
+    personality: '性格',
+    firstMessage: '开场白',
+    scenario: '场景',
+    contact: '联系方式',
+    gender: '性别',
+    age: '年龄',
+    roleId: '角色ID',
+    groupId: '分组ID',
+    type: '类型',
+    content: '内容',
+    notes: '备注',
+    remark: '备注',
+    relationship: '关系',
+    currentCommand: '当前指令',
+    customThinkingInstruction: '自定义思维链',
+    externalContextEnabled: '外部上下文注入'
+  };
+  return labels[key] || key;
+}
+
+/* ==========================================================================
+   [区域标注] AI 可读文本格式化工具
+   说明：避免 [object Object]，并跳过头像/图片/base64 等不可读大字段。
+   ========================================================================== */
+function formatReadableValue(value, indent = 0) {
+  const pad = '  '.repeat(indent);
+
+  if (!hasReadableValue(value)) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return `${value}`.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        const formatted = formatReadableValue(item, indent + 1);
+        return formatted ? `${pad}${index + 1}. ${formatted}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([key, val]) => hasReadableValue(val) && !isLikelyLargeMediaField(key, val))
+      .map(([key, val]) => {
+        const formatted = formatReadableValue(val, indent + 1);
+        if (!formatted) return '';
+        const label = labelizeKey(key);
+        return typeof val === 'object'
+          ? `${pad}${label}：\n${formatted}`
+          : `${pad}${label}：${formatted}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return '';
+}
+
+function createPromptSection(title, content) {
+  const text = normalizePlainText(content);
+  return text ? `【${title}】\n${text}` : '';
+}
+
+function formatNamedObject(title, source, preferredKeys = []) {
+  if (!source || typeof source !== 'object') return '';
+
+  const lines = [];
+  preferredKeys.forEach(key => {
+    if (Object.prototype.hasOwnProperty.call(source, key) && hasReadableValue(source[key]) && !isLikelyLargeMediaField(key, source[key])) {
+      const value = formatReadableValue(source[key]);
+      if (value) lines.push(`${labelizeKey(key)}：${value}`);
+    }
+  });
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (preferredKeys.includes(key)) return;
+    if (!hasReadableValue(value) || isLikelyLargeMediaField(key, value)) return;
+    const formatted = formatReadableValue(value);
+    if (formatted) lines.push(`${labelizeKey(key)}：${formatted}`);
+  });
+
+  return createPromptSection(title, lines.join('\n'));
+}
+
+async function readDbRecordValue(db, id) {
+  if (!db || typeof db.get !== 'function') return null;
+  try {
+    const record = await db.get(STORE_NAME, id);
+    return record ? (record.value ?? record.data ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWorldBooks(rawBooks) {
+  return Array.isArray(rawBooks) ? rawBooks : [];
+}
+
+function normalizeArchiveData(rawArchive) {
+  const archive = rawArchive && typeof rawArchive === 'object' ? rawArchive : {};
+  return {
+    ...archive,
+    masks: Array.isArray(archive.masks) ? archive.masks : [],
+    characters: Array.isArray(archive.characters) ? archive.characters : [],
+    activeMaskId: archive.activeMaskId || ''
+  };
+}
+
+function getWorldBookKeywordMatchText(sourceText = '') {
+  return String(sourceText || '').toLowerCase();
+}
+
+function getWorldBookEntryKeywords(entry) {
+  return Array.isArray(entry?.keywords)
+    ? entry.keywords.map(item => String(item || '').trim()).filter(Boolean)
+    : [];
+}
+
+function isWorldBookEntryKeywordMatched(entry, sourceText = '') {
+  const keywords = getWorldBookEntryKeywords(entry);
+
+  /* [世界书触发规则] 关键词触发但没有关键词时不发送，避免空关键词条目被误注入。 */
+  if (!keywords.length) return false;
+
+  const haystack = getWorldBookKeywordMatchText(sourceText);
+  return keywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+}
+
+function canWorldBookEntryActivate(entry, sourceText = '', { allowAlways = true } = {}) {
+  if (!entry || entry.enabled === false) return false;
+  if (entry.triggerType === 'always') return allowAlways;
+  return isWorldBookEntryKeywordMatched(entry, sourceText);
+}
+
+function isWorldBookAvailableForCharacter(book, characterId) {
+  if (!book || book.enabled === false) return false;
+  if (book.type === 'global') return true;
+
+  const boundIds = Array.isArray(book.boundCharacterIds)
+    ? book.boundCharacterIds.map(String)
+    : (book.boundCharacterId ? [String(book.boundCharacterId)] : []);
+
+  return Boolean(characterId && boundIds.includes(String(characterId)));
+}
+
+function getCurrentCharacterId(context = {}) {
+  const session = context.currentSession || {};
+  const contact = context.currentContact || {};
+  return String(session.roleId || session.id || contact.roleId || contact.id || context.currentCharacterId || '').trim();
+}
+
+function getCurrentCharacter(context = {}) {
+  const characterId = getCurrentCharacterId(context);
+  const characters = Array.isArray(context.archiveData?.characters) ? context.archiveData.characters : [];
+  return characters.find(item => String(item?.id || '') === characterId) || context.currentCharacter || null;
+}
+
+function getCurrentMask(context = {}) {
+  const activeMaskId = context.activeMaskId || context.archiveData?.activeMaskId || '';
+  const masks = Array.isArray(context.archiveData?.masks) ? context.archiveData.masks : [];
+  return masks.find(item => String(item?.id || '') === String(activeMaskId)) || context.currentMask || null;
+}
+
+async function collectPromptRuntimeContext({
+  db,
+  activeMaskId = '',
+  currentSession = null,
+  currentContact = null,
+  archiveData = null,
+  worldBooks = null,
+  userInput = '',
+  history = [],
+  settings = {}
+} = {}) {
+  const [archiveRecord, worldBookRecord] = await Promise.all([
+    archiveData ? Promise.resolve(archiveData) : readDbRecordValue(db, ARCHIVE_DB_RECORD_ID),
+    worldBooks ? Promise.resolve(worldBooks) : readDbRecordValue(db, WORLDBOOK_DB_RECORD_ID)
+  ]);
+
+  const normalizedArchive = normalizeArchiveData(archiveRecord);
+  const normalizedWorldBooks = normalizeWorldBooks(worldBookRecord);
+  const safeActiveMaskId = activeMaskId || normalizedArchive.activeMaskId || '';
+
+  const context = {
+    db,
+    activeMaskId: safeActiveMaskId,
+    currentSession,
+    currentContact,
+    archiveData: normalizedArchive,
+    worldBooks: normalizedWorldBooks,
+    userInput,
+    history,
+    settings
+  };
+
+  return {
+    ...context,
+    currentCharacterId: getCurrentCharacterId(context),
+    currentCharacter: getCurrentCharacter(context),
+    currentMask: getCurrentMask(context)
+  };
+}
+
 /* ==========================================================================
    [区域标注] 聊天设置默认值
    说明：设置页写入 IndexedDB 后会覆盖这些默认值。
@@ -77,55 +330,171 @@ export function normalizeChatPromptSettings(rawSettings) {
 /* ==========================================================================
    [提示词区域 1] 世界书置顶条目
    说明：包括全局世界书和角色绑定世界书中已开启/激活且位置为“置顶”的条目。
-   TODO：后续从世界书应用 IndexedDB 数据中读取并按激活规则筛选。
    ========================================================================== */
-export function getWorldBookTop() {
-  return '';
+export function getWorldBookTop(context = {}) {
+  return formatWorldBookEntriesByPosition('top', context);
 }
 
 /* ==========================================================================
    [提示词区域 2] 世界书角色前条目
    说明：包括全局世界书和角色绑定世界书中已开启/激活且位置为“角色前”的条目。
-   TODO：后续从世界书应用 IndexedDB 数据中读取并按激活规则筛选。
    ========================================================================== */
-export function getWorldBookBeforeChar() {
-  return '';
+export function getWorldBookBeforeChar(context = {}) {
+  return formatWorldBookEntriesByPosition('beforeChar', context);
 }
 
 /* ==========================================================================
    [提示词区域 3] 角色卡人设
    说明：角色卡具体人设以及所绑定的关系网络信息。
-   TODO：后续从档案应用角色数据中读取当前聊天对象绑定的角色卡与关系网络。
    ========================================================================== */
-export function getCharacterCard() {
-  return '';
+export function getCharacterCard(context = {}) {
+  const character = context.currentCharacter || getCurrentCharacter(context);
+  return formatNamedObject('角色卡人设', character, [
+    'name',
+    'gender',
+    'age',
+    'signature',
+    'description',
+    'basicSetting',
+    'personality',
+    'scenario',
+    'firstMessage',
+    'relationship',
+    'contact'
+  ]);
 }
 
 /* ==========================================================================
    [提示词区域 4] 用户面具身份
    说明：角色卡所绑定的用户面具身份。
-   TODO：后续从档案应用当前激活用户面具与角色绑定关系中读取。
    ========================================================================== */
-export function getUserPersona() {
-  return '';
+export function getUserPersona(context = {}) {
+  const mask = context.currentMask || getCurrentMask(context);
+  return formatNamedObject('用户面具身份', mask, [
+    'name',
+    'nickname',
+    'signature',
+    'description',
+    'basicSetting',
+    'personality'
+  ]);
 }
 
 /* ==========================================================================
    [提示词区域 5] 角色记忆
-   说明：预留给之后“旧事”应用注入角色记忆。
-   TODO：后续从旧事/记忆相关 IndexedDB 数据中读取当前角色记忆。
+   说明：把当前会话、联系人备注等可读信息整理给 AI。
    ========================================================================== */
-export function getMemories() {
-  return '';
+export function getMemories(context = {}) {
+  const lines = [];
+  const session = context.currentSession || {};
+  const contact = context.currentContact || {};
+
+  if (hasReadableValue(session)) {
+    const sessionText = formatReadableValue({
+      会话名称: session.name,
+      会话类型: session.type,
+      最近消息: session.lastMessage
+    });
+    if (sessionText) lines.push(`当前会话：\n${sessionText}`);
+  }
+
+  if (hasReadableValue(contact)) {
+    const contactText = formatReadableValue({
+      联系人名称: contact.name,
+      联系人签名: contact.signature,
+      联系方式: contact.contact,
+      备注: contact.remark || contact.notes
+    });
+    if (contactText) lines.push(`联系人资料：\n${contactText}`);
+  }
+
+  return createPromptSection('角色记忆与当前关系资料', lines.join('\n\n'));
 }
 
 /* ==========================================================================
    [提示词区域 6] 世界书角色后条目
    说明：包括全局世界书和角色绑定世界书中已开启/激活且位置为“角色后”的条目。
-   TODO：后续从世界书应用 IndexedDB 数据中读取并按激活规则筛选。
    ========================================================================== */
-export function getWorldBookAfterChar() {
-  return '';
+export function getWorldBookAfterChar(context = {}) {
+  return formatWorldBookEntriesByPosition('afterChar', context);
+}
+
+/* ==========================================================================
+   [提示词区域 6-A] 世界书条目格式化
+   说明：
+   1. 按位置、启用状态、绑定角色、关键词触发规则筛选世界书。
+   2. 关键词触发只匹配“用户本次输入”；历史消息不参与触发。
+   3. 支持最多 2 层递归扫描；递归控制字段只由代码使用。
+   4. 最终只发送条目正文给 AI，不发送世界书名称、条目名称或触发元信息。
+   ========================================================================== */
+function getWorldBookCandidateEntriesByPosition(position, context = {}) {
+  const books = Array.isArray(context.worldBooks) ? context.worldBooks : [];
+  const characterId = context.currentCharacterId || getCurrentCharacterId(context);
+
+  return books
+    .filter(book => isWorldBookAvailableForCharacter(book, characterId))
+    .flatMap(book => {
+      const entries = Array.isArray(book.entries) ? book.entries : [];
+      return entries
+        .filter(entry => entry?.position === position && entry.enabled !== false)
+        .map(entry => ({ ...entry, __worldBookId: book.id || '' }));
+    })
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+}
+
+function collectActivatedWorldBookEntries(position, context = {}) {
+  const candidates = getWorldBookCandidateEntriesByPosition(position, context);
+  const activated = [];
+  const activatedIds = new Set();
+  const initialSourceText = String(context.userInput || '');
+  let scanSources = [initialSourceText];
+  let stopFurtherRecursion = false;
+
+  for (let depth = 1; depth <= WORLDBOOK_MAX_RECURSION_DEPTH && scanSources.length && !stopFurtherRecursion; depth += 1) {
+    const nextScanSources = [];
+    const allowAlways = depth === 1;
+
+    candidates.forEach((entry, index) => {
+      const entryKey = String(entry.id || `${entry.__worldBookId || 'book'}::${position}::${index}`);
+      if (activatedIds.has(entryKey)) return;
+
+      const matched = scanSources.some(sourceText => canWorldBookEntryActivate(entry, sourceText, { allowAlways }));
+      if (!matched) return;
+
+      const content = normalizePlainText(entry.content);
+      if (!content) return;
+
+      activatedIds.add(entryKey);
+      activated.push(entry);
+
+      if (entry.preventFurtherRecursion) {
+        stopFurtherRecursion = true;
+        return;
+      }
+
+      if (!entry.disableRecursion) {
+        nextScanSources.push(content);
+      }
+    });
+
+    scanSources = nextScanSources;
+  }
+
+  return activated.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+}
+
+function formatWorldBookEntriesByPosition(position, context = {}) {
+  const chunks = collectActivatedWorldBookEntries(position, context)
+    .map(entry => normalizePlainText(entry.content))
+    .filter(Boolean);
+
+  const sectionTitleMap = {
+    top: '世界书置顶条目',
+    beforeChar: '世界书角色前条目',
+    afterChar: '世界书角色后条目'
+  };
+
+  return createPromptSection(sectionTitleMap[position] || '世界书条目', chunks.join('\n\n'));
 }
 
 /* ==========================================================================
@@ -145,8 +514,8 @@ export function getFeaturePrompts() {
 除非指令自己明确要求使用或禁止某种特定格式。`,
 
     /* --------------------------------------------------------------------------
-       [功能规则·TODO] 可用聊天动作格式
-       TODO：以后在这里追加表情包、转账、动作等聊天功能格式要求。
+       [功能规则·可用聊天动作格式]
+       说明：以后在这里追加表情包、转账、动作等聊天功能格式要求。
        -------------------------------------------------------------------------- */
     ''
   ].filter(Boolean).join('\n\n');
@@ -155,11 +524,20 @@ export function getFeaturePrompts() {
 /* ==========================================================================
    [提示词区域 8] 外部应用上下文
    说明：只在聊天设置中开启“外部应用消息注入”时注入。
-   TODO：后续从其它应用的 IndexedDB 数据或全局上下文中读取。
    ========================================================================== */
-export function getExternalContext({ enabled = false } = {}) {
+export function getExternalContext({ enabled = false, context = {} } = {}) {
   if (!enabled) return '';
-  return '';
+
+  const archive = context.archiveData || {};
+  const characterCount = Array.isArray(archive.characters) ? archive.characters.length : 0;
+  const maskCount = Array.isArray(archive.masks) ? archive.masks.length : 0;
+  const worldBookCount = Array.isArray(context.worldBooks) ? context.worldBooks.length : 0;
+
+  return createPromptSection('外部应用上下文', [
+    `当前激活面具ID：${context.activeMaskId || '未设置'}`,
+    `档案应用：${maskCount} 个用户面具，${characterCount} 个角色档案。`,
+    `世情应用：${worldBookCount} 本世界书可供筛选。`
+  ].join('\n'));
 }
 
 /* ==========================================================================
@@ -192,18 +570,19 @@ export function getThinkingInstruction({ settings = {} } = {}) {
    [核心函数] buildSystemPrompt
    说明：按用户指定顺序拼接所有系统级设定，作为 messages[0] 的 system 内容。
    ========================================================================== */
-export function buildSystemPrompt({ settings = {} } = {}) {
+export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
+  const runtimeContext = { ...context, settings: normalizedSettings };
 
   return [
-    getWorldBookTop(),
-    getWorldBookBeforeChar(),
-    getCharacterCard(),
-    getUserPersona(),
-    getMemories(),
-    getWorldBookAfterChar(),
+    getWorldBookTop(runtimeContext),
+    getWorldBookBeforeChar(runtimeContext),
+    getCharacterCard(runtimeContext),
+    getUserPersona(runtimeContext),
+    getMemories(runtimeContext),
+    getWorldBookAfterChar(runtimeContext),
     getFeaturePrompts(),
-    getExternalContext({ enabled: normalizedSettings.externalContextEnabled }),
+    getExternalContext({ enabled: normalizedSettings.externalContextEnabled, context: runtimeContext }),
     getThinkingInstruction({ settings: normalizedSettings })
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
 }
@@ -215,9 +594,9 @@ export function buildSystemPrompt({ settings = {} } = {}) {
    2. 追加历史对话。
    3. 最后一条 user 消息由“当前指令 + 用户输入”组成。
    ========================================================================== */
-export function buildChatMessages({ userInput, history = [], settings = {} } = {}) {
+export function buildChatMessages({ userInput, history = [], settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
-  const systemPrompt = buildSystemPrompt({ settings: normalizedSettings });
+  const systemPrompt = buildSystemPrompt({ settings: normalizedSettings, context: { ...context, userInput, history } });
   const messages = [];
 
   if (systemPrompt) {
@@ -355,18 +734,37 @@ async function requestClaude(profile, messages) {
 
 /* ==========================================================================
    [核心函数] chat
-   说明：构建 messages 后调用设置应用“主 API”，并返回 AI 最终回复文本。
+   说明：读取 IndexedDB 上下文，构建 messages 后调用设置应用“主 API”，并返回 AI 最终回复文本。
    ========================================================================== */
 export async function chat({
   userInput,
   history = [],
   chatSettings = {},
-  settingsManager
+  settingsManager,
+  db,
+  activeMaskId = '',
+  currentSession = null,
+  currentContact = null,
+  archiveData = null,
+  worldBooks = null
 } = {}) {
-  const messages = buildChatMessages({
+  const promptContext = await collectPromptRuntimeContext({
+    db,
+    activeMaskId,
+    currentSession,
+    currentContact,
+    archiveData,
+    worldBooks,
     userInput,
     history,
     settings: chatSettings
+  });
+
+  const messages = buildChatMessages({
+    userInput,
+    history,
+    settings: chatSettings,
+    context: promptContext
   });
 
   const profile = await getPrimaryApiConfig(settingsManager);

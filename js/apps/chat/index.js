@@ -602,7 +602,17 @@ async function sendMessage(container, state, db, content, settingsManager, optio
       userInput: userText,
       history,
       chatSettings: state.chatPromptSettings,
-      settingsManager
+      settingsManager,
+      /* [区域标注·本次需求] 提示词真实上下文：把当前会话/联系人/面具/档案/DB 传给 prompt.js，供 AI 读取有效信息 */
+      db,
+      activeMaskId: state.activeMaskId,
+      currentSession: session,
+      currentContact: state.contacts.find(contact => String(contact.id) === String(session.id)) || null,
+      archiveData: {
+        activeMaskId: state.activeMaskId,
+        masks: state.archiveMasks,
+        characters: state.archiveCharacters
+      }
     });
 
     const aiText = String(result?.text || '').trim() || '（AI 没有返回内容）';
