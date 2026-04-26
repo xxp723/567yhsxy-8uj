@@ -706,34 +706,21 @@
   display: none;
 }
 
-/* [区域标注] 用户主页封面区域 */
-.profile-cover {
-  width: 100%;
-  height: 200px;
-  background: linear-gradient(135deg, #e8ddd2 0%, #c9b9a6 60%, #d4c4b2 100%);
-  position: relative;
-  overflow: hidden;
-  background-size: cover;
-  background-position: center;
-}
+/* ==========================================================================
+   [区域标注·修改1] 封面区域已移除 — 以下样式保留但不再使用
+   ========================================================================== */
 
-/* [区域标注] 封面区域 — 可点击上传（替代原"Change Cover"按钮和右上角菜单按钮） */
-.profile-cover--clickable {
-  cursor: pointer;
-  transition: filter 0.2s ease;
-}
-
-.profile-cover--clickable:active {
-  filter: brightness(0.92);
-}
-
-/* [区域标注] 用户主页头像 — 覆盖在封面底部 */
+/* [区域标注·修改1] 用户主页头像 — 无封面模式，直接从顶部展示 */
 .profile-avatar-wrap {
   display: flex;
   justify-content: center;
-  margin-top: -45px;
   position: relative;
   z-index: 5;
+}
+
+/* [区域标注·修改1] 无封面模式下头像向上靠近顶部 */
+.profile-avatar-wrap--no-cover {
+  margin-top: 18px;
 }
 
 .profile-avatar {
@@ -752,16 +739,7 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
-/* [区域标注] 头像区域 — 可点击上传（替代原来静态头像） */
-.profile-avatar--clickable {
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.profile-avatar--clickable:active {
-  transform: scale(0.95);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
+/* [区域标注·修改3] 头像不可点击上传 — 已移除 clickable 样式 */
 
 .profile-avatar img {
   width: 100%;
@@ -837,9 +815,10 @@
 }
 
 /* ==========================================================================
-   [区域标注] 用户统计数据 — 三张方形圆角卡片
+   [区域标注·修改1·修改2] 用户统计数据 — 三张方形圆角卡片
    说明：好友数量、身份数量、聊天天数，三张大小一致的方形圆角卡片
-         每张卡片内从上到下依次显示：图标 → 数字 → 标签文字
+         每张卡片内从上到下依次显示：图标 → 数字（去除标签文字）
+         [修改2] 卡片居中展示，最大宽度限制防止右侧溢出
    ========================================================================== */
 .profile-stats-cards {
   display: grid;
@@ -847,6 +826,10 @@
   gap: 12px;
   padding: 18px 20px;
   margin-top: 10px;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
 }
 
 .profile-stat-card {
@@ -899,6 +882,308 @@
   color: rgba(74, 52, 42, 0.55);
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* ==========================================================================
+   [区域标注·修改1] 用户主页 — 钱包/表情包折叠栏
+   说明：参照图2设计，左侧图标+文字，右侧箭头，点击进入新独立界面
+   ========================================================================== */
+.profile-fold-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  margin: 0 20px 8px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 2px 8px rgba(74, 52, 42, 0.04);
+}
+
+.profile-fold-bar:first-of-type {
+  margin-top: 6px;
+}
+
+.profile-fold-bar:active {
+  background: rgba(74, 52, 42, 0.06);
+  transform: scale(0.98);
+}
+
+/* [区域标注] 折叠栏左侧图标 */
+.profile-fold-bar__icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4A342A;
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+
+.profile-fold-bar__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* [区域标注] 折叠栏文字标签 */
+.profile-fold-bar__label {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #4A342A;
+}
+
+/* [区域标注] 折叠栏右侧箭头 */
+.profile-fold-bar__arrow {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(74, 52, 42, 0.35);
+  flex-shrink: 0;
+}
+
+.profile-fold-bar__arrow svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   [区域标注·修改4] 面具身份切换弹窗中的面具列表项
+   ========================================================================== */
+.chat-mask-switch-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.chat-mask-switch-item:active {
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.chat-mask-switch-item.is-active {
+  background: rgba(74, 52, 42, 0.1);
+}
+
+.chat-mask-switch-item__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.chat-mask-switch-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.chat-mask-switch-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-mask-switch-item__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-mask-switch-item__sig {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-mask-switch-item__check {
+  width: 22px;
+  height: 22px;
+  color: #4A342A;
+  flex-shrink: 0;
+}
+
+.chat-mask-switch-item__check svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   [区域标注·修改4] 聊天天数详情界面
+   ========================================================================== */
+.chat-days-detail-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+}
+
+.chat-days-detail-page::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-days-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 10px 20px;
+}
+
+.chat-days-detail-header__back {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.chat-days-detail-header__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-days-detail-header__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.chat-days-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.chat-days-detail-item__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #4A342A;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.chat-days-detail-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.chat-days-detail-item__name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4A342A;
+}
+
+.chat-days-detail-item__days {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+/* ==========================================================================
+   [区域标注·修改1] 钱包/表情包新独立界面
+   ========================================================================== */
+.profile-sub-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.profile-sub-page__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 10px 20px;
+  flex-shrink: 0;
+}
+
+.profile-sub-page__back {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-sub-page__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-sub-page__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.profile-sub-page__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(74, 52, 42, 0.4);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* [区域标注] 用户主页整体页面（含滚动） */
+.profile-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 100px 0;
+  scrollbar-width: none;
+}
+
+.profile-page::-webkit-scrollbar {
+  display: none;
 }
 
 /* [区域标注] 用户主页功能入口列表 */
@@ -1206,4 +1491,101 @@
 .chat-upload-url-row .chat-modal-btn {
   flex-shrink: 0;
   padding: 10px 16px;
+}
+
+/* ==========================================================================
+   [区域标注·修改1·修改4] 子页面容器（钱包/表情包/聊天天数详情）
+   说明：从 index.js 的 renderSubPage 函数渲染，显示在 msg-page-wrap 内
+   ========================================================================== */
+.chat-sub-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8f4ef;
+  width: 100%;
+}
+
+.chat-sub-page__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 10px 16px;
+  background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
+  flex-shrink: 0;
+}
+
+.chat-sub-page__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.chat-sub-page__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  scrollbar-width: none;
+}
+
+.chat-sub-page__body::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-sub-page__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(74, 52, 42, 0.4);
+  text-align: center;
+  gap: 14px;
+}
+
+.chat-sub-page__empty svg {
+  opacity: 0.4;
+}
+
+.chat-sub-page__empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* [区域标注·修改4] 聊天天数详情 — 总计区域 */
+.chat-days-detail-total {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 0 24px 0;
+  border-bottom: 1px solid rgba(74, 52, 42, 0.08);
+  margin-bottom: 10px;
+}
+
+.chat-days-detail-total__num {
+  font-size: 36px;
+  font-weight: 800;
+  color: #4A342A;
+  line-height: 1;
+}
+
+.chat-days-detail-total__label {
+  font-size: 13px;
+  color: rgba(74, 52, 42, 0.5);
+  font-weight: 500;
+}
+
+/* [区域标注·修改4] 聊天天数详情 — 好友列表区 */
+.chat-days-detail-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-days-detail-item__info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
 }

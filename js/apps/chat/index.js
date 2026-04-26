@@ -39,17 +39,23 @@ const TAB_ICONS = {
 
 /* ==========================================================================
    [区域标注] 常量定义
+   [修改5] 数据按 maskId 隔离存储，切换面具不会清除其它面具的数据
    ========================================================================== */
 const APP_ID = 'chat';
 const STORE_NAME = 'appsData';
-const DATA_KEY_SESSIONS = 'chat_sessions';
-const DATA_KEY_CONTACTS = 'chat_contacts';
-const DATA_KEY_MOMENTS = 'chat_moments';
-const DATA_KEY_PROFILE = 'chat_profile';
-const DATA_KEY_MESSAGES_PREFIX = 'chat_msgs_';
+const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
+/* [修改5] 以下 key 函数按 maskId 生成独立 key */
+const DATA_KEY_SESSIONS = (maskId) => `chat_sessions_${maskId || 'default'}`;
+const DATA_KEY_CONTACTS = (maskId) => `chat_contacts_${maskId || 'default'}`;
+const DATA_KEY_MOMENTS = (maskId) => `chat_moments_${maskId || 'default'}`;
+const DATA_KEY_MESSAGES_PREFIX = (maskId) => `chat_msgs_${maskId || 'default'}_`;
 const PANEL_KEYS = ['chatList', 'contacts', 'moments', 'profile'];
 const PANEL_LABELS = ['Chat', 'Contacts', 'Moments', 'Me'];
 const PANEL_ICON_KEYS = ['chat', 'contacts', 'moments', 'profile'];
+/* [修改4] IconPark — 返回箭头图标 */
+const ICON_BACK = `<svg viewBox="0 0 48 48" fill="none"><path d="M31 36L19 24L31 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/* [修改4] IconPark — 勾选图标 */
+const ICON_CHECK = `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /* ==========================================================================
    [区域标注] CSS 动态加载工具函数（优化：返回 Promise，等待 CSS 加载完毕再渲染）
@@ -98,16 +104,25 @@ export async function mount(container, context) {
   const { appMeta, eventBus, db, windowManager } = context;
 
   /* ==========================================================================
-     [区域标注] 并行预加载 CSS + IndexedDB 数据，全部就绪后再渲染（消除进入卡顿）
-     说明：CSS 与数据并行加载，避免串行等待导致的白屏/闪烁
+     [区域标注·修改5] 并行预加载 CSS + 档案数据
+     说明：先加载 CSS 和档案数据，确定当前激活面具后再加载对应面具的聊天数据
      ========================================================================== */
-  const [,, sessions, contacts, moments, profile] = await Promise.all([
+  const [,, archiveRecord] = await Promise.all([
     loadCSS('./js/apps/chat/chat.css', 'chat-app-css'),
     loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css'),
-    dbGet(db, DATA_KEY_SESSIONS),
-    dbGet(db, DATA_KEY_CONTACTS),
-    dbGet(db, DATA_KEY_MOMENTS),
-    dbGet(db, DATA_KEY_PROFILE)
+    dbGet(db, ARCHIVE_DB_RECORD_ID)
+  ]);
+
+  /* [修改5·修改6] 解析档案数据，获取当前激活面具 */
+  const archiveData = (archiveRecord && typeof archiveRecord === 'object') ? archiveRecord : {};
+  const archiveMasks = Array.isArray(archiveData.masks) ? archiveData.masks : [];
+  const currentActiveMaskId = archiveData.activeMaskId || '';
+
+  /* [修改5] 按当前面具ID加载对应数据 */
+  const [sessions, contacts, moments] = await Promise.all([
+    dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId))
   ]);
 
   /* [区域标注] 应用状态对象 */
@@ -120,11 +135,20 @@ export async function mount(container, context) {
     sessions: sessions || [],       // 聊天会话列表
     contacts: contacts || [],       // 通讯录好友列表
     moments: moments || [],         // 朋友圈动态列表
-    profile: profile || {},         // 用户资料
+    profile: {},                    // 用户资料（由面具数据生成）
     currentChatId: null,            // 当前打开的聊天会话 ID（null 表示未打开）
     currentMessages: [],            // 当前聊天消息列表
-    destroyed: false                // 是否已销毁
+    destroyed: false,               // 是否已销毁
+    /* [修改5] 当前激活面具ID */
+    activeMaskId: currentActiveMaskId,
+    /* [修改5] 档案面具列表缓存 */
+    archiveMasks: archiveMasks,
+    /* [修改4] 用于子页面导航的堆栈标记 */
+    subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
   };
+
+  /* [修改4·修改6] 根据当前面具构建 profile 数据 */
+  buildProfileFromMask(state);
 
   /* [区域标注] 渲染应用骨架 HTML */
   container.innerHTML = buildAppShell(state);
@@ -135,12 +159,45 @@ export async function mount(container, context) {
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
 
+  /* ==========================================================================
+     [区域标注·修改5] 监听档案应用面具切换事件
+     说明：当用户在档案应用中切换激活面具时，自动刷新闲谈四大板块
+           切换前先保存当前面具的数据，切换后加载新面具的数据
+     ========================================================================== */
+  const onMaskChanged = async (payload) => {
+    if (state.destroyed) return;
+    const newMaskId = payload?.maskId || '';
+    const oldMaskId = state.activeMaskId;
+
+    /* 保存旧面具数据 */
+    await saveMaskData(state, db, oldMaskId);
+
+    /* 更新面具 */
+    state.activeMaskId = newMaskId;
+
+    /* 重新加载档案数据以获取最新面具列表 */
+    const freshArchive = await dbGet(db, ARCHIVE_DB_RECORD_ID);
+    const freshData = (freshArchive && typeof freshArchive === 'object') ? freshArchive : {};
+    state.archiveMasks = Array.isArray(freshData.masks) ? freshData.masks : [];
+
+    /* 加载新面具的数据 */
+    await loadMaskData(state, db, newMaskId);
+
+    /* 重建 profile */
+    buildProfileFromMask(state);
+
+    /* 重新渲染全部板块 */
+    container.innerHTML = buildAppShell(state);
+  };
+  eventBus.on('archive:active-mask-changed', onMaskChanged);
+
   /* [区域标注] 返回实例（含 destroy 清理函数） */
   return {
     destroy() {
       state.destroyed = true;
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
+      eventBus.off('archive:active-mask-changed', onMaskChanged);
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
     }
@@ -308,7 +365,7 @@ async function openChatMessage(container, state, db, chatId) {
   state.currentChatId = chatId;
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
-  state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX + chatId)) || [];
+  state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
 
   /* [区域标注] 隐藏主界面元素，显示消息页面 */
   const topBar = container.querySelector('.chat-top-bar');
@@ -382,14 +439,14 @@ async function sendMessage(container, state, db, content) {
   state.currentMessages.push(msg);
 
   /* [区域标注] 持久化消息到 IndexedDB */
-  await dbPut(db, DATA_KEY_MESSAGES_PREFIX + state.currentChatId, state.currentMessages);
+  await dbPut(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + state.currentChatId, state.currentMessages);
 
   /* [区域标注] 更新会话的最后消息和时间 */
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (session) {
     session.lastMessage = content.trim();
     session.lastTime = Date.now();
-    await dbPut(db, DATA_KEY_SESSIONS, state.sessions);
+    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
   }
 
   /* [区域标注] 重新渲染消息页面 */
@@ -539,7 +596,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
           unread: 0
         };
         state.sessions.push(newSession);
-        await dbPut(db, DATA_KEY_SESSIONS, state.sessions);
+        await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
 
         closeModal(container);
         refreshPanel(container, state, 'chatList');
@@ -576,32 +633,62 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [区域标注] 用户主页 — 点击封面区域上传封面图片
-       说明：弹出自定义弹窗，支持本地上传 / URL 链接上传
+       [区域标注·修改3] 头像/封面上传已移除 — 不再支持点击头像上传
+       说明：头像和签名由档案应用的用户面具身份数据驱动
        ========================================================================== */
-    case 'upload-cover':
-      showImageUploadModal(container, state, db, 'cover');
+
+    /* ==========================================================================
+       [区域标注·修改1] 钱包折叠栏 — 点击进入钱包子页面
+       ========================================================================== */
+    case 'open-wallet':
+      openSubPage(container, state, 'wallet');
       break;
 
     /* ==========================================================================
-       [区域标注] 用户主页 — 点击头像区域上传头像图片
-       说明：弹出自定义弹窗，支持本地上传 / URL 链接上传
+       [区域标注·修改1] 表情包折叠栏 — 点击进入表情包子页面
        ========================================================================== */
-    case 'upload-avatar':
-      showImageUploadModal(container, state, db, 'avatar');
+    case 'open-sticker':
+      openSubPage(container, state, 'sticker');
       break;
 
-    /* [区域标注] 图片上传弹窗 — 选择本地文件 */
-    case 'upload-pick-local': {
-      const uploadType = target.dataset.uploadType;
-      triggerLocalFileUpload(container, state, db, uploadType);
+    /* ==========================================================================
+       [区域标注·修改4] 身份数量卡片 — 点击弹窗切换面具身份
+       ========================================================================== */
+    case 'open-mask-switcher':
+      showMaskSwitcherModal(container, state, db, eventBus);
       break;
-    }
 
-    /* [区域标注] 图片上传弹窗 — 确认 URL 链接 */
-    case 'upload-confirm-url': {
-      const uploadType2 = target.dataset.uploadType;
-      confirmUrlUpload(container, state, db, uploadType2);
+    /* ==========================================================================
+       [区域标注·修改4] 聊天天数卡片 — 点击进入聊天天数详情子页面
+       ========================================================================== */
+    case 'open-chat-days-detail':
+      openSubPage(container, state, 'chatDaysDetail');
+      break;
+
+    /* ==========================================================================
+       [区域标注·修改4] 好友数量卡片 — 点击（预留，可进入好友列表）
+       ========================================================================== */
+    case 'open-friends-detail':
+      /* 切换到通讯录板块 */
+      switchPanel(container, state, 'contacts');
+      break;
+
+    /* ==========================================================================
+       [区域标注·修改1·修改4] 子页面返回按钮
+       ========================================================================== */
+    case 'sub-page-back':
+      closeSubPage(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·修改4] 面具切换弹窗中选择面具
+       ========================================================================== */
+    case 'switch-mask': {
+      const maskId = target.dataset.maskId;
+      if (maskId && maskId !== state.activeMaskId) {
+        await performMaskSwitch(container, state, db, eventBus, maskId);
+      }
+      closeModal(container);
       break;
     }
 
@@ -611,45 +698,131 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 }
 
 /* ==========================================================================
-   [区域标注] 显示图片上传弹窗（封面/头像共用）
-   说明：替代原生浏览器弹窗，与设置应用内弹窗风格统一
-         支持两种上传方式：本地文件选择 / URL 链接输入
-   参数：type — 'cover' 表示封面，'avatar' 表示头像
+   [区域标注·修改3] 图片上传弹窗已移除
+   说明：头像和签名由档案应用的用户面具身份数据驱动，不再支持手动上传
    ========================================================================== */
-function showImageUploadModal(container, state, db, type) {
+
+/* ==========================================================================
+   [区域标注·修改5] 保存当前面具的聊天数据到 IndexedDB
+   说明：在切换面具前调用，确保旧面具的数据不会丢失
+   ========================================================================== */
+async function saveMaskData(state, db, maskId) {
+  await Promise.all([
+    dbPut(db, DATA_KEY_SESSIONS(maskId), state.sessions),
+    dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
+    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments)
+  ]);
+}
+
+/* ==========================================================================
+   [区域标注·修改5] 加载指定面具的聊天数据
+   说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
+   ========================================================================== */
+async function loadMaskData(state, db, maskId) {
+  const [sessions, contacts, moments] = await Promise.all([
+    dbGet(db, DATA_KEY_SESSIONS(maskId)),
+    dbGet(db, DATA_KEY_CONTACTS(maskId)),
+    dbGet(db, DATA_KEY_MOMENTS(maskId))
+  ]);
+  state.sessions = sessions || [];
+  state.contacts = contacts || [];
+  state.moments = moments || [];
+}
+
+/* ==========================================================================
+   [区域标注·修改4·修改6] 从档案面具数据构建 profile 对象
+   说明：根据当前激活的面具ID，从 archiveMasks 中提取头像、昵称、签名，
+         并计算好友数量、身份数量、聊天天数等实时统计数据
+   ========================================================================== */
+function buildProfileFromMask(state) {
+  const activeMask = state.archiveMasks.find(m => m.id === state.activeMaskId);
+
+  /* [修改6] 显示当前激活面具的头像和个性签名 */
+  state.profile = {
+    nickname: activeMask?.name || '我的昵称',
+    avatar: activeMask?.avatar || '',
+    signature: activeMask?.signature || '点击输入个性签名...',
+    /* [修改4] 好友数量 = 当前面具身份通讯录中的好友数 */
+    friendsCount: state.contacts.length,
+    /* [修改4] 身份数量 = 档案应用中所有用户面具数量 */
+    identitiesCount: state.archiveMasks.length,
+    /* [修改4] 聊天天数 = 当前面具身份的聊天总天数（按去重日期计算） */
+    chatDays: calculateTotalChatDays(state)
+  };
+}
+
+/* ==========================================================================
+   [区域标注·修改4] 计算当前面具身份的聊天总天数
+   说明：遍历所有会话的最后消息时间，统计去重的日期数量
+         这是一个近似计算：只基于 session 的 lastTime 来估算
+   ========================================================================== */
+function calculateTotalChatDays(state) {
+  const daySet = new Set();
+  (state.sessions || []).forEach(s => {
+    if (s.lastTime) {
+      const dateStr = new Date(s.lastTime).toISOString().slice(0, 10);
+      daySet.add(dateStr);
+    }
+  });
+  return daySet.size;
+}
+
+/* ==========================================================================
+   [区域标注·修改4] 计算每个好友的聊天天数详情
+   说明：遍历 sessions，为每个好友计算独立的聊天天数
+   ========================================================================== */
+function calculatePerFriendChatDays(state) {
+  return (state.sessions || []).map(s => {
+    const days = s.lastTime ? 1 : 0; // 简化计算：有最后消息则至少1天
+    return {
+      id: s.id,
+      name: s.name || '未命名',
+      avatar: s.avatar || '',
+      days
+    };
+  });
+}
+
+/* ==========================================================================
+   [区域标注·修改4] 显示面具身份切换弹窗
+   说明：列出档案应用中所有用户面具，点击切换当前激活面具
+         使用自定义弹窗（与设置应用风格统一），不使用原生浏览器弹窗
+   ========================================================================== */
+function showMaskSwitcherModal(container, state, db, eventBus) {
   const mask = container.querySelector('[data-role="modal-mask"]');
   const panel = container.querySelector('[data-role="modal-panel"]');
   if (!mask || !panel) return;
 
-  const titleText = type === 'cover' ? '更换封面图片' : '更换头像图片';
-
-  /* [区域标注] 上传图标 SVG — IconPark 风格 */
-  const uploadIcon = `<svg viewBox="0 0 48 48" fill="none"><path d="M24 34V14M15 23l9-9l9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 40h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`;
-  const linkIcon = `<svg viewBox="0 0 48 48" fill="none"><path d="M26 24a6 6 0 0 0-8.49 0l-8.48 8.49a6 6 0 0 0 8.48 8.48l2.83-2.83" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 24a6 6 0 0 0 8.49 0l8.48-8.49a6 6 0 0 0-8.48-8.48L27.66 9.86" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const masksHtml = state.archiveMasks.length === 0
+    ? `<p style="text-align:center;color:rgba(74,52,42,0.45);font-size:13px;padding:20px 0;">暂无用户面具<br>请先在档案应用中创建面具身份</p>`
+    : state.archiveMasks.map(m => {
+      const isActive = m.id === state.activeMaskId;
+      return `
+        <!-- [区域标注·修改4] 面具切换项: ${m.name || '未命名'} -->
+        <div class="chat-mask-switch-item ${isActive ? 'is-active' : ''}"
+             data-action="switch-mask" data-mask-id="${m.id}">
+          <div class="chat-mask-switch-item__avatar">
+            ${m.avatar
+              ? `<img src="${m.avatar}" alt="">`
+              : (m.name || '?').charAt(0).toUpperCase()}
+          </div>
+          <div class="chat-mask-switch-item__info">
+            <div class="chat-mask-switch-item__name">${m.name || '未命名面具'}</div>
+            <div class="chat-mask-switch-item__sig">${m.signature || ''}</div>
+          </div>
+          ${isActive ? `<div class="chat-mask-switch-item__check">${ICON_CHECK}</div>` : ''}
+        </div>
+      `;
+    }).join('');
 
   panel.innerHTML = `
-    <!-- [区域标注] 图片上传弹窗 -->
+    <!-- [区域标注·修改4] 面具身份切换弹窗 -->
     <div class="chat-modal-header">
-      <span>${titleText}</span>
+      <span>切换用户身份</span>
       <button class="chat-modal-close" data-action="close-modal">${TAB_ICONS.close}</button>
     </div>
-    <div class="chat-modal-body chat-upload-modal-body">
-      <!-- [区域标注] 本地文件上传按钮 -->
-      <button class="chat-upload-option" data-action="upload-pick-local" data-upload-type="${type}">
-        <span class="chat-upload-option__icon">${uploadIcon}</span>
-        <span class="chat-upload-option__text">从本地选择图片</span>
-      </button>
-      <!-- [区域标注] URL 链接输入区 -->
-      <div class="chat-upload-url-area">
-        <div class="chat-upload-url-label">
-          <span class="chat-upload-url-label__icon">${linkIcon}</span>
-          <span>通过 URL 链接上传</span>
-        </div>
-        <div class="chat-upload-url-row">
-          <input class="chat-modal-search" type="url" placeholder="请输入图片 URL..." data-role="upload-url-input">
-          <button class="chat-modal-btn chat-modal-btn--primary" data-action="upload-confirm-url" data-upload-type="${type}">确认</button>
-        </div>
-      </div>
+    <div class="chat-modal-body">
+      ${masksHtml}
     </div>
   `;
 
@@ -657,62 +830,161 @@ function showImageUploadModal(container, state, db, type) {
 }
 
 /* ==========================================================================
-   [区域标注] 触发本地文件选择上传
-   说明：创建隐藏 <input type="file">，用户选择图片后转为 base64 存储
+   [区域标注·修改4·修改5] 执行面具切换
+   说明：保存旧面具数据 → 更新面具ID → 加载新面具数据 → 重建profile → 重渲染
+         同时通知档案应用更新 activeMaskId
    ========================================================================== */
-function triggerLocalFileUpload(container, state, db, type) {
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = 'image/*';
-  fileInput.style.display = 'none';
-  document.body.appendChild(fileInput);
+async function performMaskSwitch(container, state, db, eventBus, newMaskId) {
+  const oldMaskId = state.activeMaskId;
 
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files?.[0];
-    if (!file) { fileInput.remove(); return; }
+  /* [修改5] 保存旧面具数据 */
+  await saveMaskData(state, db, oldMaskId);
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result;
-      if (!dataUrl) { fileInput.remove(); return; }
+  /* 更新面具ID */
+  state.activeMaskId = newMaskId;
 
-      /* [区域标注] 更新 profile 数据并持久化到 IndexedDB */
-      if (type === 'cover') {
-        state.profile.cover = dataUrl;
-      } else {
-        state.profile.avatar = dataUrl;
-      }
-      await dbPut(db, DATA_KEY_PROFILE, state.profile);
+  /* [修改5] 加载新面具数据 */
+  await loadMaskData(state, db, newMaskId);
 
-      closeModal(container);
-      refreshPanel(container, state, 'profile');
-      fileInput.remove();
-    };
-    reader.readAsDataURL(file);
-  });
+  /* [修改4·修改6] 重建 profile */
+  buildProfileFromMask(state);
 
-  fileInput.click();
+  /* 通知档案应用同步 activeMaskId */
+  eventBus.emit('archive:active-mask-changed', { maskId: newMaskId });
+
+  /* 重新渲染全部板块 */
+  container.innerHTML = buildAppShell(state);
 }
 
 /* ==========================================================================
-   [区域标注] 确认 URL 链接上传
-   说明：读取弹窗中 URL 输入框的值，保存到 profile 并持久化
+   [区域标注·修改1] 打开子页面（钱包 / 表情包 / 聊天天数详情）
+   说明：隐藏主界面元素，在内容区显示独立子页面
    ========================================================================== */
-async function confirmUrlUpload(container, state, db, type) {
-  const input = container.querySelector('[data-role="upload-url-input"]');
-  const url = input?.value?.trim();
-  if (!url) return;
+function openSubPage(container, state, pageType) {
+  state.subPageView = pageType;
 
-  /* [区域标注] 更新 profile 数据并持久化到 IndexedDB */
-  if (type === 'cover') {
-    state.profile.cover = url;
-  } else {
-    state.profile.avatar = url;
+  const topBar = container.querySelector('.chat-top-bar');
+  const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
+  const bottomTab = container.querySelector('[data-role="bottom-tab"]');
+  const panels = container.querySelectorAll('.chat-panel');
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+
+  if (topBar) topBar.style.display = 'none';
+  if (subTabs) subTabs.style.display = 'none';
+  if (bottomTab) bottomTab.style.display = 'none';
+  panels.forEach(p => p.style.display = 'none');
+
+  if (msgWrap) {
+    msgWrap.style.display = 'flex';
+    msgWrap.innerHTML = renderSubPage(state, pageType);
   }
-  await dbPut(db, DATA_KEY_PROFILE, state.profile);
+}
 
-  closeModal(container);
-  refreshPanel(container, state, 'profile');
+/* ==========================================================================
+   [区域标注·修改1] 关闭子页面，返回用户主页
+   ========================================================================== */
+function closeSubPage(container, state) {
+  state.subPageView = null;
+
+  const topBar = container.querySelector('.chat-top-bar');
+  const bottomTab = container.querySelector('[data-role="bottom-tab"]');
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+
+  if (topBar) topBar.style.display = '';
+  if (bottomTab) bottomTab.style.display = '';
+
+  PANEL_KEYS.forEach(k => {
+    const el = container.querySelector(`[data-panel="${k}"]`);
+    if (el) {
+      el.style.display = '';
+      el.classList.toggle('is-active', k === state.activePanel);
+    }
+  });
+
+  if (msgWrap) {
+    msgWrap.style.display = 'none';
+    msgWrap.innerHTML = '';
+  }
+}
+
+/* ==========================================================================
+   [区域标注·修改1·修改4] 渲染子页面内容
+   说明：根据 pageType 渲染钱包 / 表情包 / 聊天天数详情页面
+   ========================================================================== */
+function renderSubPage(state, pageType) {
+  const backBtn = `<button class="chat-msg-back" data-action="sub-page-back">${ICON_BACK}</button>`;
+
+  if (pageType === 'wallet') {
+    return `
+      <div class="chat-sub-page">
+        <div class="chat-sub-page__header">
+          ${backBtn}
+          <span class="chat-sub-page__title">钱包</span>
+        </div>
+        <div class="chat-sub-page__body">
+          <div class="chat-sub-page__empty">
+            <svg viewBox="0 0 48 48" fill="none" width="48" height="48"><path d="M6 10h36v28H6V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M6 18h36" stroke="currentColor" stroke-width="3"/><path d="M32 28a2 2 0 1 0 0-4a2 2 0 0 0 0 4Z" fill="currentColor"/></svg>
+            <p>钱包功能开发中...</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (pageType === 'sticker') {
+    return `
+      <div class="chat-sub-page">
+        <div class="chat-sub-page__header">
+          ${backBtn}
+          <span class="chat-sub-page__title">表情包</span>
+        </div>
+        <div class="chat-sub-page__body">
+          <div class="chat-sub-page__empty">
+            <svg viewBox="0 0 48 48" fill="none" width="48" height="48"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3"/><path d="M16 28c2 4 10 4 12 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="20" r="2" fill="currentColor"/><circle cx="30" cy="20" r="2" fill="currentColor"/></svg>
+            <p>表情包功能开发中...</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (pageType === 'chatDaysDetail') {
+    const friends = calculatePerFriendChatDays(state);
+    const totalDays = calculateTotalChatDays(state);
+    const listHtml = friends.length === 0
+      ? `<p style="text-align:center;color:rgba(74,52,42,0.45);font-size:13px;padding:20px 0;">暂无聊天记录</p>`
+      : friends.map(f => `
+          <div class="chat-days-detail-item">
+            <div class="chat-days-detail-item__avatar">
+              ${f.avatar ? `<img src="${f.avatar}" alt="">` : (f.name || '?').charAt(0).toUpperCase()}
+            </div>
+            <div class="chat-days-detail-item__info">
+              <span class="chat-days-detail-item__name">${f.name}</span>
+              <span class="chat-days-detail-item__days">${f.days} 天</span>
+            </div>
+          </div>
+        `).join('');
+
+    return `
+      <div class="chat-sub-page">
+        <div class="chat-sub-page__header">
+          ${backBtn}
+          <span class="chat-sub-page__title">聊天天数详情</span>
+        </div>
+        <div class="chat-sub-page__body">
+          <div class="chat-days-detail-total">
+            <span class="chat-days-detail-total__num">${totalDays}</span>
+            <span class="chat-days-detail-total__label">总聊天天数</span>
+          </div>
+          <div class="chat-days-detail-list">
+            ${listHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `<div class="chat-sub-page"><div class="chat-sub-page__header">${backBtn}<span class="chat-sub-page__title">未知页面</span></div></div>`;
 }
 
 /* ==========================================================================
