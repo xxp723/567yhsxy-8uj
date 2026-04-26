@@ -55,17 +55,20 @@ function renderContactGroupTabs(contactGroups, activeGroupId) {
                 data-action="switch-contact-group"
                 data-contact-group-id="all"
                 type="button">All</button>
+        ${groups.map(group => `
+          <!-- [区域标注·本次需求1] 通讯录自定义分组 TAB：长按可删除分组标签，联系人不会被删除 -->
+          <button class="chat-tab-btn contacts-group-tab-btn ${activeId === group.id ? 'is-active' : ''}"
+                  data-action="switch-contact-group"
+                  data-long-press-action="delete-contact-group"
+                  data-contact-group-id="${escapeHtml(group.id)}"
+                  data-contact-group-name="${escapeHtml(group.name)}"
+                  type="button">${escapeHtml(group.name)}</button>
+        `).join('')}
+        <!-- [区域标注·本次需求1] 新建分组按钮：始终跟随到最新（最右侧）分组右边 -->
         <button class="contacts-group-add-tab"
                 data-action="create-contact-group"
                 type="button"
                 aria-label="新建通讯录分组">${ICONS.plus}</button>
-        ${groups.map(group => `
-          <!-- [区域标注·本次需求1] 通讯录自定义分组 TAB：${escapeHtml(group.name)} -->
-          <button class="chat-tab-btn contacts-group-tab-btn ${activeId === group.id ? 'is-active' : ''}"
-                  data-action="switch-contact-group"
-                  data-contact-group-id="${escapeHtml(group.id)}"
-                  type="button">${escapeHtml(group.name)}</button>
-        `).join('')}
       </div>
     </div>
   `;

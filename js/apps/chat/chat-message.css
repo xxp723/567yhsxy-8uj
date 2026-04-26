@@ -6,24 +6,38 @@
  */
 
 /* ==========================================================================
-   [区域标注] 聊天消息页根容器
-   说明：全屏覆盖在聊天列表之上，独立的页面视图
+   [区域标注·本次需求5] 聊天消息页挂载容器
+   说明：index.js 中 data-role="msg-page-wrap" 的容器；显示消息页/子页面时占满闲谈应用。
    ========================================================================== */
-.chat-msg-page {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
+.chat-message-page-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求5] 聊天消息页根容器
+   说明：必须匹配 chat-message.js 实际渲染的 .msg-page 类名，修复样式不命中的根因。
+   ========================================================================== */
+.msg-page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
   background: #f8f4ef;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 /* ==========================================================================
-   [区域标注] 聊天消息页顶部栏
-   说明：参照图片3 — 左侧头像+好友名称+个性签名，右侧可放状态信息
+   [区域标注·本次需求5] 聊天消息页顶部栏
+   说明：匹配 chat-message.js 的 .msg-top-bar / .msg-top-bar__* 类名。
    ========================================================================== */
-.chat-msg-header {
+.msg-top-bar {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -34,8 +48,8 @@
   z-index: 10;
 }
 
-/* [区域标注] 消息页返回按钮 */
-.chat-msg-header__back {
+/* [区域标注·本次需求5] 消息页返回按钮 */
+.msg-top-bar__back {
   width: 36px;
   height: 36px;
   border: none;
@@ -50,13 +64,27 @@
   flex-shrink: 0;
 }
 
-.chat-msg-header__back:active {
+.msg-top-bar__back:active {
   background: rgba(74, 52, 42, 0.18);
   transform: scale(0.92);
 }
 
-/* [区域标注] 消息页好友头像 */
-.chat-msg-header__avatar {
+.msg-top-bar__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* [区域标注·本次需求5] 消息页好友信息区域 */
+.msg-top-bar__user {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* [区域标注·本次需求5] 消息页好友头像 */
+.msg-top-bar__avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -72,19 +100,22 @@
   border: 2px solid rgba(74, 52, 42, 0.1);
 }
 
-.chat-msg-header__avatar img {
+.msg-top-bar__avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* [区域标注] 消息页好友信息（名字+签名） */
-.chat-msg-header__info {
+/* [区域标注·本次需求5] 消息页好友名称与状态 */
+.msg-top-bar__info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.chat-msg-header__name {
+.msg-top-bar__name {
   font-size: 15px;
   font-weight: 600;
   color: #4A342A;
@@ -93,7 +124,7 @@
   white-space: nowrap;
 }
 
-.chat-msg-header__status {
+.msg-top-bar__status {
   font-size: 11px;
   color: rgba(74, 52, 42, 0.45);
   overflow: hidden;
@@ -101,15 +132,8 @@
   white-space: nowrap;
 }
 
-/* [区域标注] 消息页右侧操作按钮区 */
-.chat-msg-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.chat-msg-header__action-btn {
+/* [区域标注·本次需求5] 消息页更多按钮 */
+.msg-top-bar__more {
   width: 34px;
   height: 34px;
   border: none;
@@ -120,24 +144,27 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
 }
 
-.chat-msg-header__action-btn:active {
+.msg-top-bar__more:active {
   background: rgba(74, 52, 42, 0.14);
+  transform: scale(0.94);
 }
 
-.chat-msg-header__action-btn svg {
+.msg-top-bar__more svg {
   width: 18px;
   height: 18px;
 }
 
 /* ==========================================================================
-   [区域标注] 消息流区域（可滚动的消息列表）
-   说明：展示所有消息气泡，自动滚动到最新消息
+   [区域标注·本次需求5] 消息流区域
+   说明：匹配 chat-message.js 的 .msg-list-area 和 data-role="msg-list"。
    ========================================================================== */
-.chat-msg-body {
+.msg-list-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 12px 90px 12px;
@@ -148,42 +175,60 @@
   -ms-overflow-style: none;
 }
 
-.chat-msg-body::-webkit-scrollbar {
+.msg-list-area::-webkit-scrollbar {
   display: none;
 }
 
-/* [区域标注] 消息时间分隔线 */
-.chat-msg-time-divider {
+/* ==========================================================================
+   [区域标注·本次需求5] 消息页空状态提示
+   ========================================================================== */
+.msg-empty {
+  flex: 1;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(74, 52, 42, 0.3);
   text-align: center;
-  font-size: 11px;
-  color: rgba(74, 52, 42, 0.38);
-  padding: 8px 0;
+  gap: 10px;
+  padding: 40px 20px;
+}
+
+.msg-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
+}
+
+.msg-empty p {
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* ==========================================================================
-   [区域标注] 单条消息行（包含头像+气泡）
-   说明：根据发送方向分为 left（对方） 和 right（自己）
+   [区域标注·本次需求5] 单条消息行（包含头像+气泡）
+   说明：匹配 .msg-bubble-row / .msg-bubble-row--left / .msg-bubble-row--right。
    ========================================================================== */
-.chat-msg-row {
+.msg-bubble-row {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   max-width: 85%;
 }
 
-/* [区域标注] 对方消息 — 左对齐 */
-.chat-msg-row--left {
+.msg-bubble-row--left {
   align-self: flex-start;
 }
 
-/* [区域标注] 自己消息 — 右对齐 */
-.chat-msg-row--right {
+.msg-bubble-row--right {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
 
-/* [区域标注] 消息头像（小尺寸） */
-.chat-msg-row__avatar {
+/* [区域标注·本次需求5] 消息头像 */
+.msg-bubble__avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -198,21 +243,26 @@
   overflow: hidden;
 }
 
-.chat-msg-row__avatar img {
+.msg-bubble__avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* [区域标注] 消息气泡容器 */
-.chat-msg-bubble-wrap {
+.msg-bubble__avatar--user {
+  background: #4A342A;
+  color: #f8f4ef;
+}
+
+/* [区域标注·本次需求5] 消息气泡容器 */
+.msg-bubble-content {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-/* [区域标注] 消息气泡 — 对方（左侧浅色） */
-.chat-msg-bubble {
+/* [区域标注·本次需求5] 消息气泡基础样式 */
+.msg-bubble {
   padding: 10px 14px;
   border-radius: 18px;
   font-size: 14px;
@@ -223,41 +273,39 @@
   position: relative;
 }
 
-.chat-msg-row--left .chat-msg-bubble {
+/* [区域标注·本次需求5] 对方消息气泡 */
+.msg-bubble--other {
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(74, 52, 42, 0.06);
   border-bottom-left-radius: 6px;
 }
 
-/* [区域标注] 消息气泡 — 自己（右侧深色） */
-.chat-msg-row--right .chat-msg-bubble {
+/* [区域标注·本次需求5] 用户消息气泡 */
+.msg-bubble--user {
   background: rgba(200, 184, 154, 0.45);
   border: 1px solid rgba(74, 52, 42, 0.08);
   border-bottom-right-radius: 6px;
 }
 
-/* [区域标注] 消息时间戳 */
-.chat-msg-bubble__time {
+/* [区域标注·本次需求5] 消息时间戳 */
+.msg-bubble__time {
   font-size: 10px;
   color: rgba(74, 52, 42, 0.38);
 }
 
-.chat-msg-row--left .chat-msg-bubble__time {
+.msg-bubble-row--left .msg-bubble__time {
   text-align: left;
 }
 
-.chat-msg-row--right .chat-msg-bubble__time {
+.msg-bubble-row--right .msg-bubble__time {
   text-align: right;
 }
 
 /* ==========================================================================
-   [区域标注] 底部悬浮输入栏
-   说明：参照图片3的布局设计
-         最左侧：圆形"咖啡"图标按钮
-         中间：输入框
-         右侧：圆形"魔术棒"图标按钮 + 圆形"纸飞机"图标按钮
+   [区域标注·本次需求5] 底部悬浮输入栏
+   说明：匹配 chat-message.js 的 .msg-input-bar / .msg-input-bar__* 类名。
    ========================================================================== */
-.chat-msg-input-bar {
+.msg-input-bar {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -273,8 +321,8 @@
   border-top: 1px solid rgba(74, 52, 42, 0.06);
 }
 
-/* [区域标注] 咖啡图标按钮（最左侧） */
-.chat-msg-input-bar__coffee {
+/* [区域标注·本次需求5] 输入栏 IconPark 圆形图标按钮 */
+.msg-input-bar__icon-btn {
   width: 40px;
   height: 40px;
   border: none;
@@ -289,18 +337,18 @@
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
-.chat-msg-input-bar__coffee:active {
+.msg-input-bar__icon-btn:active {
   background: rgba(74, 52, 42, 0.18);
   transform: scale(0.92);
 }
 
-.chat-msg-input-bar__coffee svg {
+.msg-input-bar__icon-btn svg {
   width: 20px;
   height: 20px;
 }
 
-/* [区域标注] 文字输入框（中间，自适应宽度） */
-.chat-msg-input-bar__input {
+/* [区域标注·本次需求5] 文字输入框 */
+.msg-input-bar__input {
   flex: 1;
   min-width: 0;
   padding: 9px 14px;
@@ -311,93 +359,24 @@
   color: #4A342A;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.chat-msg-input-bar__input:focus {
+.msg-input-bar__input:focus {
   border-color: rgba(74, 52, 42, 0.28);
   background: rgba(255, 255, 255, 0.9);
 }
 
-.chat-msg-input-bar__input::placeholder {
+.msg-input-bar__input::placeholder {
   color: rgba(74, 52, 42, 0.35);
 }
 
-/* [区域标注] 魔术棒图标按钮（纸飞机左侧） */
-.chat-msg-input-bar__magic {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(74, 52, 42, 0.08);
-  color: #4A342A;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.chat-msg-input-bar__magic:active {
-  background: rgba(74, 52, 42, 0.18);
-  transform: scale(0.92);
-}
-
-.chat-msg-input-bar__magic svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* [区域标注] 纸飞机发送按钮（最右侧） */
-.chat-msg-input-bar__send {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
+/* [区域标注·本次需求5] 纸飞机发送按钮 */
+.msg-input-bar__send-btn {
   background: #4A342A;
   color: #f8f4ef;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease, transform 0.1s ease;
 }
 
-.chat-msg-input-bar__send:active {
+.msg-input-bar__send-btn:active {
   background: #3a2618;
-  transform: scale(0.92);
-}
-
-.chat-msg-input-bar__send svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* ==========================================================================
-   [区域标注] 消息页空状态提示
-   说明：当还没有任何消息时显示的占位提示
-   ========================================================================== */
-.chat-msg-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: rgba(74, 52, 42, 0.3);
-  text-align: center;
-  gap: 10px;
-  padding: 40px 20px;
-}
-
-.chat-msg-empty svg {
-  width: 48px;
-  height: 48px;
-  opacity: 0.3;
-}
-
-.chat-msg-empty p {
-  font-size: 14px;
-  margin: 0;
 }

@@ -188,8 +188,11 @@ export async function mount(container, context) {
      [区域标注·修改5] 并行预加载 CSS + 档案数据
      说明：先加载 CSS 和档案数据，确定当前激活面具后再加载对应面具的聊天数据
      ========================================================================== */
-  await loadCSS('./js/apps/chat/chat.css', 'chat-app-css');
-  void loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css');
+  await Promise.all([
+    loadCSS('./js/apps/chat/chat.css', 'chat-app-css'),
+    /* [区域标注·本次需求5] 等待聊天消息页 CSS 加载完成，避免首次进入消息页时未样式化 */
+    loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css')
+  ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
 
@@ -243,8 +246,15 @@ export async function mount(container, context) {
   /* [区域标注] 绑定全局事件代理 */
   const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta);
   const inputHandler = (e) => handleInput(e, state, container, db);
+  /* [区域标注·本次需求1] 通讯录分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
+  const contactGroupLongPressHandlers = createContactGroupLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
+  container.addEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
 
   /* ==========================================================================
      [区域标注·修改5] 监听档案应用面具切换事件
@@ -286,6 +296,11 @@ export async function mount(container, context) {
       state.destroyed = true;
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
+      container.removeEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
       eventBus.off('archive:active-mask-changed', onMaskChanged);
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
@@ -317,8 +332,11 @@ function buildAppShell(state) {
            说明：左上角">"返回桌面，中间花体字"Chat"，右上角"+"添加
            ================================================================ -->
       <div class="chat-top-bar">
-        <button class="chat-top-bar__title" data-action="go-home" type="button">Chat</button>
-        <button class="chat-top-bar__add" data-action="add-chat">${TAB_ICONS.plus}</button>
+        <!-- [区域标注·本次需求4] Chat/Contacts 标题组：右侧紧跟缩小后的 IconPark "+" 按钮 -->
+        <div class="chat-top-bar__title-wrap">
+          <button class="chat-top-bar__title" data-action="go-home" type="button">Chat</button>
+          <button class="chat-top-bar__add" data-action="add-chat" type="button" aria-label="添加">${TAB_ICONS.plus}</button>
+        </div>
       </div>
 
       <!-- ================================================================
@@ -802,6 +820,84 @@ function closeModal(container) {
 }
 
 /* ==========================================================================
+   [区域标注·本次需求1] 通讯录分组长按删除处理器
+   说明：仅除 All 以外的自定义分组可长按删除；删除标签不删除联系人。
+   ========================================================================== */
+function createContactGroupLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const openDeleteModal = () => {
+    const target = pressedTarget;
+    if (!target) return;
+
+    const groupId = target.dataset.contactGroupId || '';
+    const exists = groupId && groupId !== 'all' && state.contactGroups.some(group => group.id === groupId);
+    if (!exists) return;
+
+    target.dataset.longPressTriggered = '1';
+    showDeleteContactGroupModal(container, state, groupId);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="delete-contact-group"]');
+      if (!target) return;
+
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(openDeleteModal, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="delete-contact-group"]')) {
+        e.preventDefault();
+      }
+    }
+  };
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1] 删除通讯录分组确认弹窗
+   说明：应用内弹窗替代原生 confirm；只删除分组标签，联系人保留并回到 All。
+   ========================================================================== */
+function showDeleteContactGroupModal(container, state, groupId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const group = state.contactGroups.find(item => item.id === groupId);
+  if (!mask || !panel || !group) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求1] 删除通讯录分组确认弹窗 -->
+    <div class="chat-modal-header">
+      <span>删除分组标签</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否删除“${escapeHtml(group.name)}”分组标签？<br>分组内联系人不会被删除，之后只会在 All 中显示。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-contact-group" data-contact-group-id="${escapeHtml(group.id)}" type="button">删除</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
    [区域标注] 点击事件代理处理器
    说明：统一处理应用内所有按钮/列表项的点击事件
    ========================================================================== */
@@ -903,6 +999,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        [区域标注·本次需求1] 通讯录分组 TAB 切换
        ========================================================================== */
     case 'switch-contact-group': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        break;
+      }
       const groupId = target.dataset.contactGroupId || 'all';
       const exists = groupId === 'all' || state.contactGroups.some(group => group.id === groupId);
       state.activeContactGroupId = exists ? groupId : 'all';
@@ -931,6 +1031,31 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.contactGroups.push(group);
       state.activeContactGroupId = group.id;
       await dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups);
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求1] 确认删除通讯录分组标签
+       说明：只删除分组标签；该分组下联系人 groupId 清空，联系人继续保留在 All。
+       ========================================================================== */
+    case 'confirm-delete-contact-group': {
+      const groupId = target.dataset.contactGroupId || '';
+      const exists = groupId && state.contactGroups.some(group => group.id === groupId);
+      if (!exists) break;
+
+      state.contactGroups = state.contactGroups.filter(group => group.id !== groupId);
+      state.contacts = state.contacts.map(contact => (
+        contact.groupId === groupId ? { ...contact, groupId: '' } : contact
+      ));
+      if (state.activeContactGroupId === groupId) state.activeContactGroupId = 'all';
+
+      await Promise.all([
+        dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups),
+        dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts)
+      ]);
+
       closeModal(container);
       refreshPanel(container, state, 'contacts');
       break;

@@ -44,8 +44,12 @@
 .chat-top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px 10px 16px;
+  justify-content: center;
+  /* ==========================================================================
+     [区域标注·本次需求2] Chat/Contacts/Moments/Me 标题栏顶部间距统一
+     说明：四个主板块标题栏全部参照 Contacts 的顶部距离，不影响聊天消息页。
+     ========================================================================== */
+  padding: 26px 16px 12px 16px;
   background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
   flex-shrink: 0;
   position: relative;
@@ -53,22 +57,19 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求2] 通讯录/朋友圈/用户主页标题栏顶部间距
-   说明：仅对这三个板块增加顶部留白，参考聊天界面标题栏的视觉间距；
-         不影响聊天列表、聊天消息页和其它应用。
+   [区域标注·本次需求4] Chat/Contacts 标题组
+   说明："+" 按钮跟随在标题文字最右侧；Moments/Me 时由 JS 隐藏该按钮。
    ========================================================================== */
-.chat-app[data-active-panel="contacts"] .chat-top-bar,
-.chat-app[data-active-panel="moments"] .chat-top-bar,
-.chat-app[data-active-panel="profile"] .chat-top-bar {
-  padding-top: 26px;
-  padding-bottom: 12px;
+.chat-top-bar__title-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
 }
 
 /* [区域标注] 花体字标题按钮 — 点击标题区域返回桌面 */
 .chat-top-bar__title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   min-width: 120px;
   padding: 4px 16px;
   border: none;
@@ -88,13 +89,13 @@
 
 .chat-top-bar__title:active {
   background: rgba(74, 52, 42, 0.08);
-  transform: translateX(-50%) scale(0.98);
+  transform: scale(0.98);
 }
 
-/* [区域标注] 右上角"+"添加按钮 */
+/* [区域标注·本次需求4] 标题文字右侧缩小版 "+" 添加按钮 */
 .chat-top-bar__add {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: rgba(74, 52, 42, 0.08);
@@ -110,6 +111,11 @@
 .chat-top-bar__add:active {
   background: rgba(74, 52, 42, 0.18);
   transform: scale(0.92);
+}
+
+.chat-top-bar__add svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* ==========================================================================
@@ -1862,7 +1868,7 @@
 .chat-sub-page__title {
   /* ========================================================================
      [区域标注·本次需求3] 钱包/表情包/聊天天数详情标题样式
-     说明：独立子页面标题统一为聊天列表顶部标题栏的字体、大小和字重。
+     说明：这三个用户主页独立子页面标题统一使用 Chat/Contacts/Me 顶部标题的字体、大小和字重。
      ======================================================================== */
   font-family: "Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
   font-style: italic;
