@@ -206,6 +206,9 @@ export async function mount(container, context) {
   const archiveMasks = Array.isArray(archiveData.masks) ? archiveData.masks : [];
   /* [区域标注·本次需求2] 缓存角色档案，用于通过绑定角色联系方式搜索添加通讯录 */
   const archiveCharacters = Array.isArray(archiveData.characters) ? archiveData.characters : [];
+  /* [区域标注·本次修改4] 缓存档案关系网络，供 prompt.js 注入用户面具身份绑定关系 */
+  const archiveSupportingRoles = Array.isArray(archiveData.supportingRoles) ? archiveData.supportingRoles : [];
+  const archiveRelations = Array.isArray(archiveData.relations) ? archiveData.relations : [];
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
@@ -242,6 +245,9 @@ export async function mount(container, context) {
     archiveMasks: archiveMasks,
     /* [区域标注·本次需求2] 档案角色列表缓存，用于通讯录搜索 */
     archiveCharacters: archiveCharacters,
+    /* [区域标注·本次修改4] 档案配角与关系网络缓存，用于提示词用户面具身份关系网络 */
+    archiveSupportingRoles: archiveSupportingRoles,
+    archiveRelations: archiveRelations,
     /* [区域标注·本次需求] 聊天提示词设置：从 IndexedDB 读取，禁止浏览器同步键值存储 */
     chatPromptSettings: normalizeChatPromptSettings(chatPromptSettings),
     /* [区域标注·本次需求] 聊天 API 调用状态 */
@@ -300,6 +306,9 @@ export async function mount(container, context) {
     state.archiveMasks = Array.isArray(freshData.masks) ? freshData.masks : [];
     /* [区域标注·本次需求2] 面具切换时同步角色档案缓存 */
     state.archiveCharacters = Array.isArray(freshData.characters) ? freshData.characters : [];
+    /* [区域标注·本次修改4] 面具切换时同步档案关系网络缓存 */
+    state.archiveSupportingRoles = Array.isArray(freshData.supportingRoles) ? freshData.supportingRoles : [];
+    state.archiveRelations = Array.isArray(freshData.relations) ? freshData.relations : [];
 
     /* 加载新面具的数据 */
     await loadMaskData(state, db, newMaskId);
@@ -562,6 +571,19 @@ function closeChatMessage(container, state) {
 }
 
 /* ==========================================================================
+   [区域标注·本次修改1] AI 回复气泡延迟工具
+   说明：让 AI 同一轮拆分后的消息气泡按真人打字节奏逐条出现。
+   ========================================================================== */
+function sleep(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+function getAiBubbleDelayMs(bubbleText, index) {
+  const length = String(bubbleText || '').length;
+  return Math.min(1300, Math.max(420, 260 + length * 24 + index * 80));
+}
+
+/* ==========================================================================
    [区域标注] 发送消息
    说明：将用户输入的消息添加到当前会话的消息列表并持久化
    ========================================================================== */
@@ -597,8 +619,16 @@ async function sendMessage(container, state, db, content, settingsManager, optio
   if (!triggerAi) return;
   /* ===== 闲谈应用：回车只发送用户消息 END ===== */
 
+  /* ==========================================================================
+     [区域标注·本次修改2] 修复纸飞机发送后闪屏
+     说明：问题出在发送后连续两次整页重绘聊天消息页：
+           第一次渲染用户消息，第二次仅为了显示“正在回复...”又重建整个 msgWrap。
+           这里改为只更新发送状态相关 DOM，不重建聊天页面，避免点击纸飞机后闪屏。
+     ========================================================================== */
   state.isAiSending = true;
-  renderCurrentChatMessage(container, state);
+  updateCurrentChatSendingUi(container, state);
+
+  let hasRenderedAiBubble = false;
 
   try {
     /* ===== 闲谈应用：短期记忆与最新一轮消息 START ===== */
@@ -619,22 +649,35 @@ async function sendMessage(container, state, db, content, settingsManager, optio
       archiveData: {
         activeMaskId: state.activeMaskId,
         masks: state.archiveMasks,
-        characters: state.archiveCharacters
+        characters: state.archiveCharacters,
+        /* [区域标注·本次修改4] 注入档案应用显示的用户面具关系网络 */
+        supportingRoles: state.archiveSupportingRoles,
+        relations: state.archiveRelations
       }
     });
 
     const aiText = String(result?.text || '').trim() || '（AI 没有返回内容）';
 
-    /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
+    /* ==========================================================================
+       [区域标注·本次修改1] AI 回复拆分为多个气泡并逐条延迟显示
+       说明：不再把本轮所有 AI 气泡一次性 push 到界面；每个气泡入列后单独渲染。
+       ========================================================================== */
     const aiBubbles = splitAiReplyIntoBubbles(aiText, state.chatPromptSettings);
-    aiBubbles.forEach((bubbleText, index) => {
+    for (let index = 0; index < aiBubbles.length; index += 1) {
+      if (index > 0) await sleep(getAiBubbleDelayMs(aiBubbles[index], index));
       state.currentMessages.push({
         id: `ai_${Date.now()}_${index}`,
         role: 'assistant',
-        content: bubbleText,
+        content: aiBubbles[index],
         timestamp: Date.now() + index
       });
-    });
+      hasRenderedAiBubble = true;
+      session.lastMessage = aiBubbles[index] || aiText;
+      session.lastTime = Date.now();
+      await persistCurrentMessages(state, db);
+      await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+      renderCurrentChatMessage(container, state);
+    }
     /* ===== 闲谈应用：AI回复拆分为多个气泡 END ===== */
 
     session.lastMessage = aiBubbles[aiBubbles.length - 1] || aiText;
@@ -650,7 +693,11 @@ async function sendMessage(container, state, db, content, settingsManager, optio
     state.isAiSending = false;
     await persistCurrentMessages(state, db);
     await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
-    renderCurrentChatMessage(container, state);
+    if (hasRenderedAiBubble) {
+      updateCurrentChatSendingUi(container, state);
+    } else {
+      renderCurrentChatMessage(container, state);
+    }
   }
 }
 
@@ -683,6 +730,22 @@ function renderCurrentChatMessage(container, state) {
     const listArea = msgWrap.querySelector('[data-role="msg-list"]');
     if (listArea) listArea.scrollTop = listArea.scrollHeight;
   }, 30);
+}
+
+/* ==========================================================================
+   [区域标注·本次修改2] 局部更新聊天发送中状态
+   说明：只改顶部状态文字和输入按钮禁用态，不重建消息页，避免纸飞机点击闪屏。
+   ========================================================================== */
+function updateCurrentChatSendingUi(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (!msgWrap) return;
+
+  const statusEl = msgWrap.querySelector('.msg-top-bar__status');
+  if (statusEl) statusEl.textContent = state.isAiSending ? '正在回复...' : '在线';
+
+  msgWrap.querySelectorAll('[data-role="msg-input"], [data-action="msg-magic"], [data-action="msg-send"]').forEach(el => {
+    el.toggleAttribute('disabled', Boolean(state.isAiSending));
+  });
 }
 
 /* ==========================================================================
@@ -759,31 +822,31 @@ function splitAiReplyIntoBubbles(text, chatSettings = {}) {
   const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
   const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
 
-  let parts = raw
-    .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
-    .map(item => item.trim())
+  /* ==========================================================================
+     [区域标注·本次修改3] 严格拆分文字消息与问号气泡
+     说明：
+     1. 优先识别 prompt.js 新增的 [[TEXT_MESSAGE]]文字消息内容 格式。
+     2. 无论 AI 是否按格式输出，只要同一段里出现多个问句/感叹句/句号句，就强制拆开。
+     3. 之前“问号后有空格”不会被 (?=\S) 命中，所以会把两个问句留在同一气泡；这里已修复。
+     ========================================================================== */
+  const textMessageMatches = [...raw.matchAll(/\[\[TEXT_MESSAGE\]\]\s*([\s\S]*?)(?=\[\[TEXT_MESSAGE\]\]|$)/g)]
+    .map(match => match[1].trim())
     .filter(Boolean);
 
-  if (parts.length <= 1) {
-    parts = raw
-      .replace(/([。！？!?]+)(?=\S)/g, '$1\n')
-      .replace(/([…]{2,}|[.。]{3,}|、、、)(?=\S)/g, '$1\n')
-      .split(/\n+/)
-      .map(item => item.trim())
-      .filter(Boolean);
-  }
+  let parts = textMessageMatches.length
+    ? textMessageMatches
+    : raw
+        .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
+        .map(item => item.trim())
+        .filter(Boolean);
+
+  parts = parts.flatMap(part => splitStrictSentenceBubbles(part));
 
   if (parts.length <= 1 && raw.length > 28) {
     parts = raw
       .split(/(?<=[，,、；;])\s*/)
       .map(item => item.trim())
       .filter(Boolean);
-  }
-
-  if (parts.length > max) {
-    const head = parts.slice(0, max - 1);
-    const tail = parts.slice(max - 1).join('');
-    parts = [...head, tail].filter(Boolean);
   }
 
   while (parts.length < min && parts.some(item => item.length > 12)) {
@@ -793,7 +856,24 @@ function splitAiReplyIntoBubbles(text, chatSettings = {}) {
     parts.splice(index, 1, item.slice(0, splitAt).trim(), item.slice(splitAt).trim());
   }
 
-  return parts.slice(0, max).map(item => item.trim()).filter(Boolean);
+  const cleaned = parts.map(item => item.trim()).filter(Boolean);
+  return cleaned.length ? cleaned.slice(0, Math.max(max, min)) : ['（AI 没有返回内容）'];
+}
+
+function splitStrictSentenceBubbles(text) {
+  const normalized = String(text || '')
+    .replace(/\[\[TEXT_MESSAGE\]\]/g, '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+
+  if (!normalized) return [];
+
+  return normalized
+    .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
+    .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
+    .split(/\n+/)
+    .map(item => item.trim())
+    .filter(Boolean);
 }
 /* ===== 闲谈应用：AI回复拆分为多个气泡 END ===== */
 

@@ -262,6 +262,58 @@ function getCurrentMask(context = {}) {
   return masks.find(item => String(item?.id || '') === String(activeMaskId)) || context.currentMask || null;
 }
 
+/* ==========================================================================
+   [区域标注·本次修改4] 用户面具身份绑定关系网络格式化
+   说明：读取档案应用写入 IndexedDB 的 relations，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function getArchiveEntityListByType(context = {}, type = '') {
+  const archive = context.archiveData || {};
+  if (type === 'mask') return Array.isArray(archive.masks) ? archive.masks : [];
+  if (type === 'character') return Array.isArray(archive.characters) ? archive.characters : [];
+  if (type === 'supporting') return Array.isArray(archive.supportingRoles) ? archive.supportingRoles : [];
+  return [];
+}
+
+function getArchiveEntityName(context = {}, type = '', id = '') {
+  const entity = getArchiveEntityListByType(context, type).find(item => String(item?.id || '') === String(id || ''));
+  return entity?.name || entity?.nickname || '未命名';
+}
+
+function getRelationDisplayText(type = '', custom = '') {
+  const safeType = String(type || '').trim();
+  const safeCustom = String(custom || '').trim();
+  if (safeType === '自定义') return safeCustom || '自定义关系';
+  return safeType || safeCustom || '未设定';
+}
+
+function formatUserPersonaRelationNetwork(context = {}, mask = null) {
+  const maskId = String(mask?.id || context.activeMaskId || '').trim();
+  const relations = Array.isArray(context.archiveData?.relations) ? context.archiveData.relations : [];
+  if (!maskId || !relations.length) return '';
+
+  const lines = relations
+    .map(item => {
+      const isOwnerSide = item?.ownerType === 'mask' && String(item?.ownerId || '') === maskId;
+      const isTargetSide = item?.targetType === 'mask' && String(item?.targetId || '') === maskId;
+      if (!isOwnerSide && !isTargetSide) return '';
+
+      const counterpartType = isOwnerSide ? item.targetType : item.ownerType;
+      const counterpartId = isOwnerSide ? item.targetId : item.ownerId;
+      const counterpartName = getArchiveEntityName(context, counterpartType, counterpartId);
+      const relationLabel = isOwnerSide
+        ? getRelationDisplayText(item.ownerRelationType, item.ownerRelationCustom)
+        : getRelationDisplayText(item.targetRelationType, item.targetRelationCustom);
+      const note = normalizePlainText(isOwnerSide ? item.ownerNote : item.targetNote);
+
+      return `- 用户面具对「${counterpartName}」的关系：${relationLabel}${note ? `；备注：${note}` : ''}`;
+    })
+    .filter(Boolean);
+
+  return lines.length
+    ? `用户面具身份绑定的关系网络：\n${lines.join('\n')}`
+    : '';
+}
+
 async function collectPromptRuntimeContext({
   db,
   activeMaskId = '',
@@ -388,8 +440,8 @@ export function getCharacterCard(context = {}) {
 4. 本角色卡中的所有资料、关系资料、记忆与世界书内容都只能内化成角色本人的认知，不得原样复述为资料说明。
 
 ## 线上聊天风格
-1. 每一句回复都必须像角色本人正在手机聊天，语气自然、口语化、不生硬、不人机。
-2. 回复要短，符合当前情境，不生硬，不写长段落、不说教、不做报告式总结。
+1. 线上聊天每一句回复都必须像角色本人正在手机聊天，语气自然、口语化、不生硬、不人机。
+2. 回复要短，符合当前情境，不生硬，不戏剧化，不写长段落、不说教、不做报告式总结。
 3. 不使用书面化、客服式、百科式、公告式语气。
 4. 不使用动作描写、神态描写、舞台说明，不写星号动作，不写旁白。
 5. 不直接堆砌设定信息；只有当对话自然需要时，才以角色本人的口吻提及相关内容。
@@ -429,18 +481,26 @@ export function getCharacterCard(context = {}) {
 
 /* ==========================================================================
    [提示词区域 4] 用户面具身份
-   说明：角色卡所绑定的用户面具身份。
+   说明：角色卡所绑定的用户面具身份，以及档案应用中该用户面具显示的关系网络。
    ========================================================================== */
 export function getUserPersona(context = {}) {
   const mask = context.currentMask || getCurrentMask(context);
-  return formatNamedObject('用户面具身份', mask, [
+  const personaText = formatNamedObject('用户面具身份', mask, [
     'name',
     'nickname',
     'signature',
     'description',
     'basicSetting',
     'personality'
-  ]);
+  ]).replace(/^【用户面具身份】\n/, '');
+
+  /* [区域标注·本次修改4] 用户面具身份绑定的档案关系网络 */
+  const relationNetworkText = formatUserPersonaRelationNetwork(context, mask);
+
+  return createPromptSection('用户面具身份', [
+    personaText,
+    relationNetworkText
+  ].filter(Boolean).join('\n\n'));
 }
 
 /* ==========================================================================
@@ -585,52 +645,46 @@ export function getFeaturePrompts({ settings = {} } = {}) {
        说明：下次如需修改 AI 每轮回复气泡数量、标点、错字、手机聊天节奏，优先改这里。
        -------------------------------------------------------------------------- */
     `# 线上聊天输出硬性规则（必须严格遵守）
-你正在进行线上聊天，不是在写文章。
+
+## 当前交互环境认知
+1. 当前交互环境是手机、电脑、平板等可以进行网络社交的电子平台。
+2. 你正在通过电子平台上的社交软件进行社交和交流，必须始终牢记：当前是线上聊天，不是面对面交流。
+3. 线上聊天无法做到和用户/对方面对面交流，所有交流都只能通过“发送消息”的方式完成。
+4. 对方只能看到你发出的消息气泡，所以回复内容必须像真实社交软件里的聊天消息。
+
+## 线上聊天禁止物理接触和同空间动作描写
+1. 严禁在线上聊天中出现涉及物理接触的动作描述，例如：“看着你笑了”、“伸手触碰你”、“抱住你的身体”等。
+2. 如果角色和用户在现实生活中的实际距离有所缩短，例如：“我快到了”、“我看到你了”、“你回个头”，可以根据实际距离缩短调整回复语境。
+3. 即使现实距离缩短，也严禁写出角色和用户身处同一物理空间的动作描述，例如：“凑到你耳边说悄悄话”、“摸摸你的头”、“走到你身后”。
+4. 允许通过发送语音、照片、表情包、视频通话等电子平台功能互动，但必须遵守并使用对应的格式标记。
+5. 你需要根据角色卡人设自行判断你和用户是否曾经在线下真实见面、接触或交流；如果判断为有，这段记忆就是真实且需要记住的。
+6. 即使存在真实线下记忆，也必须清楚认识到：当前交流方式是线上，是通过电子平台、社交软件和屏幕完成的。
 
 ## 每轮回复气泡数量
 1. 本轮回复必须拆成 ${minBubble} 到 ${maxBubble} 个消息气泡。
 2. 除非用户在当前这一轮明确说“这次可以少发/多发/不限数量/只回一句”等同义要求，否则绝对不能低于 ${minBubble} 个气泡，也绝对不能超过 ${maxBubble} 个气泡。
 3. 每个气泡只能有一句话；多句话必须拆成多个气泡。
-4. 你输出时用独立换行分隔不同气泡；每一行视为一个气泡。
+4. 每个文字消息气泡都必须使用格式：[[TEXT_MESSAGE]]文字消息内容。
 5. 禁止把多个句子合并成大段，禁止用长段落规避气泡数量限制。
 
-## 标点习惯
-1. 禁止每句话都以标准句号（。）或逗号（，）整齐收尾；这种机械统一很像 AI。
-2. 禁止频繁使用省略号（……）；偶尔可用，但不能形成习惯。
-3. 允许并鼓励根据情绪自然使用不规范标点组合：
-   - 。。。：无语、沉默、不知道说什么
-   - 。？：无语中带疑问，像“这什么操作？”
-   - ？。：反问后的沉默或无语
-   - ？！：惊讶、难以置信
-   - ！！：强调、激动
-   - ？？：难以置信、连续反问
-   - ！？：激动后的疑惑
-   - 、、、：停顿、犹豫、整理思路
-   - ……？：迟疑的疑问
-4. 有时可以完全不加句尾标点，直接结束。
-5. 不需要每句话都有标点，允许自然的裸奔结尾。
+## 线上聊天标点符号规范
+1. 必须正确使用标点符号，每个消息气泡里的内容都必须正确使用句号、逗号、顿号、感叹号、省略号、问号等。
+2. 不准使用空格代替逗号，不准省略必要标点符号，否则消息会显得费劲且不自然。
+3. 可以适当地发送一个字、两个字，或者单独发送“？”、“……”，这两种符号可以只占一个消息气泡，更贴近真人聊天打字。
+4. 如果是字数更长一点的口语化表达，就必须使用标点符号，例如：“好，我马上到”、“啊，这人咋这样”、“想你了，宝宝”。
+5. 标点符号是语言表达、情绪表达、线上交流的重要组成部分。
+6. 随性的线上聊天中允许每句话末尾不加句号，但在情绪激动或有较大情绪波动时，必须使用“？”、“！”、“……”、“——”作为每句话或每个消息气泡的结尾。
+7. 线上聊天风格示例：“你昨天干嘛去了？”、“有一说一，我觉得他说得挺对的”、“今天晚上吃啥？”、“好困啊，我今天懒得动，你找其他人陪你逛街吧……”、“快快快，速速打开你的微博，娱乐圈又爆瓜了！”、“哈哈哈哈哈太搞笑了吧”。`,
 
-## 打字习惯
-1. 情绪激动或打字较快时，可以少量出现真人式错别字，例如“的得地”混用、形近字打错、拼音联想错、漏字、重复字。
-2. 打错后可以下一条直接用“*xxx”“哦不对是xxx”“说错了”纠正，也可以等用户指出后再略带不好意思地纠正。
-3. 错字必须少量、自然、符合情绪，不能影响理解，不能每轮都刻意出错。
-
-## 消息长度与节奏
-1. 一次回复可以是一个字、一个词或很短的句子。
-2. 不要把所有内容写成一大段；真人会分多条短消息发。
-3. 有时可以先发“？”“啊”“嗯？”之类短反应，再接下一条。
-4. 口语化优先，不追求书面语完整句式。
-5. 模拟真人在手机上随手打字：有时很快，有时停顿，真实比规范更重要。
-
-## 语气词
-可以自然使用“啊、哦、嗯、哈、哇、诶、唉、呀、哎”，但不要每条都用；情绪激动时可叠用“啊啊啊”“哦哦哦”“？？？”“！！！”。`,
     /* ===== 闲谈应用：线上聊天气泡数量与节奏规则 END ===== */
 
     /* --------------------------------------------------------------------------
        [功能规则·可用聊天动作格式]
        说明：以后在这里追加表情包、转账、动作等聊天功能格式要求。
        -------------------------------------------------------------------------- */
-    ''
+    `# 可用聊天动作格式
+## 文字消息格式
+文字消息必须使用：[[TEXT_MESSAGE]]文字消息内容`
   ].filter(Boolean).join('\n\n');
 }
 
