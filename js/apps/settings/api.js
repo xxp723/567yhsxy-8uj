@@ -1758,6 +1758,65 @@ export function bindApiEvents(container, { settings }) {
     return nextApi;
   };
 
+  /* ===== 设置：全局模型参数持久化与应用 START =====
+     说明：
+     1. “全局模型参数”里的 temperature / maxTokens / 默认响应通道改动后立即保存到 SettingsStore。
+     2. SettingsStore 底层使用项目 DB.js / IndexedDB；这里不使用 localStorage/sessionStorage。
+     3. 闲谈主 API 调用会从 prompt.js 的 getPrimaryApiConfig() 读取 api.global.temperature/maxTokens。
+     4. 这里修复 maxTokens 修改后退出设置再进入又回到 2048 的问题：之前只有点击“保存主/副API”才会写入全局参数。
+     ===== 设置：全局模型参数持久化与应用 END ===== */
+  let globalSettingsSaveTimer = null;
+  const scheduleGlobalSettingsSave = (saveNote = '全局模型参数已保存') => {
+    if (globalSettingsSaveTimer) window.clearTimeout(globalSettingsSaveTimer);
+    globalSettingsSaveTimer = window.setTimeout(async () => {
+      try {
+        await saveAllApiSettings(saveNote);
+      } catch (error) {
+        Logger.error('全局模型参数保存失败', error);
+      }
+    }, 260);
+  };
+
+  const syncActiveProfileLabel = () => {
+    const input = container.querySelector('#api-default-primary');
+    const label = input?.closest?.('.api-section-card')?.querySelector('.api-row-between .api-inline-value');
+    if (label) label.textContent = input?.checked ? '主API' : '副API';
+  };
+
+  const globalTemperatureInput = container.querySelector('#api-global-temperature');
+  const globalMaxTokensInput = container.querySelector('#api-global-max-tokens');
+  const defaultPrimaryInput = container.querySelector('#api-default-primary');
+
+  globalTemperatureInput?.addEventListener('input', () => {
+    scheduleGlobalSettingsSave('全局 Temperature 已保存');
+  });
+
+  globalMaxTokensInput?.addEventListener('input', () => {
+    scheduleGlobalSettingsSave('全局 maxTokens 已保存');
+  });
+
+  globalMaxTokensInput?.addEventListener('change', () => {
+    const fallback = currentApiCache || normalizeApiSettings({});
+    const normalized = clampInt(
+      globalMaxTokensInput.value,
+      1,
+      32768,
+      normalizeApiSettings(fallback).global.maxTokens
+    );
+    globalMaxTokensInput.value = String(normalized);
+    scheduleGlobalSettingsSave('全局 maxTokens 已保存');
+  });
+
+  defaultPrimaryInput?.addEventListener('change', async () => {
+    syncActiveProfileLabel();
+    try {
+      await saveAllApiSettings('默认响应通道已保存');
+    } catch (error) {
+      Logger.error('默认响应通道保存失败', error);
+    }
+  });
+  syncActiveProfileLabel();
+
   ['primary', 'secondary'].forEach((profileKey) => {
     const trigger = container.querySelector(`#api-${profileKey}-provider-trigger`);
     const urlInput = container.querySelector(`#api-${profileKey}-url`);

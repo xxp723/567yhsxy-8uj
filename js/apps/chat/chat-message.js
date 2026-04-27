@@ -61,12 +61,18 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const selectedMessageId = String(options.selectedMessageId || '');
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
   const multiSelectMode = Boolean(options.multiSelectMode);
+  /* ===== 闲谈：删除消息二次确认 START ===== */
+  const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
+  /* ===== 闲谈：删除消息二次确认 END ===== */
 
   const messageId = String(msg?.id || '');
   const isUser = msg?.role === 'user';
   const isAssistant = msg?.role === 'assistant' || msg?.role === 'other';
   const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId;
   const isSelected = selectedMessageIds.includes(messageId);
+  /* ===== 闲谈：删除消息二次确认 START ===== */
+  const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
+  /* ===== 闲谈：删除消息二次确认 END ===== */
 
   return `
     <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
@@ -78,9 +84,16 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         ${isToolbarOpen ? `
           <!-- [区域标注·本次需求5] 消息气泡上方浮现功能栏 -->
           <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
-            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.delete}<span>删除</span>
+            <!-- ===== 闲谈：删除消息二次确认 START ===== -->
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
             </button>
+            ${isDeleteConfirming ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-delete" data-action="msg-bubble-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认删除</span>
+              </button>
+            ` : ''}
+            <!-- ===== 闲谈：删除消息二次确认 END ===== -->
             <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.multiSelect}<span>多选</span>
             </button>
@@ -120,6 +133,9 @@ export function renderChatMessage(chatSession, messages, options = {}) {
      [区域标注·本次需求5] 消息选择状态
      说明：由 index.js 管理，只影响消息工具栏/多选栏显示。
      ======================================================================== */
+  /* ===== 闲谈：删除消息二次确认 START ===== */
+  const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
+  /* ===== 闲谈：删除消息二次确认 END ===== */
   const multiSelectMode = Boolean(options.multiSelectMode);
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
   const selectedCount = selectedMessageIds.length;

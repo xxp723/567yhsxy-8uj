@@ -261,6 +261,9 @@ export async function mount(container, context) {
     selectedMessageId: '',
     multiSelectMode: false,
     selectedMessageIds: [],
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    deleteConfirmMessageId: '',
+    /* ===== 闲谈：删除消息二次确认 END ===== */
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
   };
@@ -607,14 +610,18 @@ async function sendMessage(container, state, db, content, settingsManager, optio
   if (!session) return;
 
   /* [区域标注·本次需求] 用户消息入列并写入 IndexedDB */
+  /* ===== 闲谈：发送消息去重 START ===== */
+  let appendedUserMessage = null;
   if (!options.skipAppendUser) {
-    state.currentMessages.push({
-      id: Date.now().toString(),
+    appendedUserMessage = {
+      id: `user_${Date.now()}_${Math.random().toString(16).slice(2)}`,
       role: 'user',
       content: userText,
       timestamp: Date.now()
-    });
+    };
+    state.currentMessages.push(appendedUserMessage);
   }
+  /* ===== 闲谈：发送消息去重 END ===== */
 
   await persistCurrentMessages(state, db);
 
@@ -624,7 +631,11 @@ async function sendMessage(container, state, db, content, settingsManager, optio
     await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
   }
 
-  appendCurrentMessageBubble(container, state, state.currentMessages[state.currentMessages.length - 1]);
+  /* ===== 闲谈：发送消息去重 START ===== */
+  if (appendedUserMessage) {
+    appendCurrentMessageBubble(container, state, appendedUserMessage);
+  }
+  /* ===== 闲谈：发送消息去重 END ===== */
 
   /* ===== 闲谈应用：回车只发送用户消息 START ===== */
   if (!triggerAi) return;
@@ -724,10 +735,16 @@ async function persistCurrentMessages(state, db) {
 /* ==========================================================================
    [区域标注·本次需求] 重新渲染当前聊天消息页
    ========================================================================== */
-function renderCurrentChatMessage(container, state) {
+function renderCurrentChatMessage(container, state, options = {}) {
   const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!msgWrap || !session) return;
+
+  /* ===== 闲谈：多选模式滚动锁定 START ===== */
+  const listBefore = msgWrap.querySelector('[data-role="msg-list"]');
+  const shouldKeepScroll = Boolean(options.keepScroll);
+  const previousScrollTop = listBefore ? listBefore.scrollTop : 0;
+  /* ===== 闲谈：多选模式滚动锁定 END ===== */
 
   msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
     chatSettings: state.chatPromptSettings,
@@ -739,12 +756,22 @@ function renderCurrentChatMessage(container, state) {
     /* [区域标注·本次需求5] 消息气泡功能栏与多选状态 */
     selectedMessageId: state.selectedMessageId,
     multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds
+    selectedMessageIds: state.selectedMessageIds,
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    deleteConfirmMessageId: state.deleteConfirmMessageId
+    /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 
   setTimeout(() => {
     const listArea = msgWrap.querySelector('[data-role="msg-list"]');
-    if (listArea) listArea.scrollTop = listArea.scrollHeight;
+    if (!listArea) return;
+    /* ===== 闲谈：多选模式滚动锁定 START ===== */
+    if (shouldKeepScroll) {
+      listArea.scrollTop = previousScrollTop;
+      return;
+    }
+    /* ===== 闲谈：多选模式滚动锁定 END ===== */
+    listArea.scrollTop = listArea.scrollHeight;
   }, 30);
 }
 
@@ -772,10 +799,67 @@ function appendCurrentMessageBubble(container, state, message) {
     userProfile: state.profile,
     selectedMessageId: state.selectedMessageId,
     multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds
+    selectedMessageIds: state.selectedMessageIds,
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    deleteConfirmMessageId: state.deleteConfirmMessageId
+    /* ===== 闲谈：删除消息二次确认 END ===== */
   }));
   listArea.scrollTop = listArea.scrollHeight;
 }
+
+/* ========================================================================== 
+   ===== 闲谈：气泡功能区局部刷新防闪屏 START =====
+   说明：
+   1. 点击消息气泡、删除、取消删除确认等只影响少数气泡工具区。
+   2. 禁止因此重建整个聊天消息页，避免页面闪烁和输入栏/顶部栏抖动。
+   3. 真正删除消息时才更新消息列表，并保持用户当前滚动位置。
+   ========================================================================== */
+function refreshMessageBubbleRows(container, state, messageIds = []) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) return false;
+
+  const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
+  uniqueIds.forEach(messageId => {
+    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"]`);
+    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+    if (!row || !message) return;
+
+    row.outerHTML = renderMessageBubble(message, session, {
+      userProfile: state.profile,
+      selectedMessageId: state.selectedMessageId,
+      multiSelectMode: state.multiSelectMode,
+      selectedMessageIds: state.selectedMessageIds,
+      deleteConfirmMessageId: state.deleteConfirmMessageId
+    });
+  });
+
+  return true;
+}
+
+function refreshCurrentMessageListOnly(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const previousScrollTop = listArea.scrollTop;
+  listArea.innerHTML = (state.currentMessages || []).length
+    ? state.currentMessages.map(message => renderMessageBubble(message, session, {
+        userProfile: state.profile,
+        selectedMessageId: state.selectedMessageId,
+        multiSelectMode: state.multiSelectMode,
+        selectedMessageIds: state.selectedMessageIds,
+        deleteConfirmMessageId: state.deleteConfirmMessageId
+      })).join('')
+    : `<div class="msg-empty"></div>`;
+  listArea.scrollTop = previousScrollTop;
+}
+/* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
 
 /* ==========================================================================
    [区域标注·本次需求5] 消息气泡选择状态工具
@@ -784,6 +868,9 @@ function resetMessageSelectionState(state) {
   state.selectedMessageId = '';
   state.multiSelectMode = false;
   state.selectedMessageIds = [];
+  /* ===== 闲谈：删除消息二次确认 START ===== */
+  state.deleteConfirmMessageId = '';
+  /* ===== 闲谈：删除消息二次确认 END ===== */
 }
 
 function getSelectedMessages(state) {
@@ -900,17 +987,27 @@ async function retryLatestAiReply(container, state, db, settingsManager) {
     break;
   }
 
-  const latestUser = [...state.currentMessages].reverse().find(item => item?.role === 'user');
-  if (!latestUser?.content) {
+  /* ===== 闲谈：用户最新一轮消息触发AI START =====
+     说明：魔法棒重新回复使用“用户最新一轮消息”触发。
+     sendMessage(skipAppendUser) 会基于 state.currentMessages 调用 buildPromptPayloadForLatestUserRound，
+     自动把末尾连续 user 消息合并为“用户最新一轮消息”。 */
+  const latestUserRound = [];
+  for (let i = state.currentMessages.length - 1; i >= 0; i -= 1) {
+    const item = state.currentMessages[i];
+    if (item?.role !== 'user') break;
+    if (String(item.content || '').trim()) latestUserRound.unshift(item);
+  }
+  if (!latestUserRound.length) {
     renderCurrentChatMessage(container, state);
     return;
   }
 
   await persistCurrentMessages(state, db);
-  await sendMessage(container, state, db, latestUser.content, settingsManager, { skipAppendUser: true, triggerAi: true });
+  await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
+  /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
 }
 
-/* ===== 闲谈应用：短期记忆与最新一轮消息 START ===== */
+/* ===== 闲谈：用户最新一轮消息触发AI START ===== */
 function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRounds = 8) {
   const normalized = Array.isArray(messages)
     ? messages.filter(item => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
@@ -926,8 +1023,12 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
     break;
   }
 
+  /* 用户最新一轮消息 = 消息末尾往前连续的 user 消息组，而不是最后一条 user 消息 */
   const currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
-  const userInput = currentRoundMessages.map(item => item.content).join('\n');
+  const userInput = currentRoundMessages.map((item, index) => {
+    const content = String(item.content || '').trim();
+    return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
+  }).join('\n');
 
   const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
   const previous = latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized;
@@ -949,9 +1050,32 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
     history: rounds.slice(-roundLimit).flat()
   };
 }
-/* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
+/* ===== 闲谈：用户最新一轮消息触发AI END ===== */
 
 /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
+/* ===== 闲谈：通用消息协议解析 START ===== */
+function extractProtocolReplyContents(text) {
+  const value = String(text || '');
+
+  /*
+   * 通用协议示例：**`[回复] 角色名：文字消息内容`**
+   * 说明：
+   * 1. 优先按完整加粗反引号协议块提取，降低 Markdown 掉格式对气泡拆分的影响。
+   * 2. 兼容模型偶发漏掉外层 ** 或反引号的情况，但仍只识别 [回复] 协议。
+   * 3. 这里只负责解析可见文本，不做任何持久化存储。
+   */
+  const strictMatches = [...value.matchAll(/\*\*`?\s*\[回复\]\s*([^：:\n`]+?)\s*[：:]\s*([\s\S]*?)`?\*\*(?=\s*\*\*`?\s*\[回复\]|$)/g)]
+    .map(match => String(match[2] || '').trim())
+    .filter(Boolean);
+
+  if (strictMatches.length) return strictMatches;
+
+  return [...value.matchAll(/(?:^|\n)\s*(?:\*\*)?`?\s*\[回复\]\s*([^：:\n`]+?)\s*[：:]\s*([^\n`*]+?)\s*`?(?:\*\*)?(?=\n|$)/g)]
+    .map(match => String(match[2] || '').trim())
+    .filter(Boolean);
+}
+/* ===== 闲谈：通用消息协议解析 END ===== */
+
 function splitAiReplyIntoBubbles(text, chatSettings = {}) {
   const raw = sanitizeAiVisibleReply(text);
   if (!raw) return ['（AI 没有返回内容）'];
@@ -960,18 +1084,16 @@ function splitAiReplyIntoBubbles(text, chatSettings = {}) {
   const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
 
   /* ==========================================================================
-     [区域标注·本次修改3] 严格拆分文字消息与问号气泡
+     [区域标注·本次修改3] 严格拆分通用消息协议与问号气泡
      说明：
-     1. 优先识别 prompt.js 新增的 [[TEXT_MESSAGE]]文字消息内容 格式。
+     1. 只识别 prompt.js 的 **`[回复] 角色名：文字消息内容`** 通用协议。
      2. 无论 AI 是否按格式输出，只要同一段里出现多个问句/感叹句/句号句，就强制拆开。
      3. 之前“问号后有空格”不会被 (?=\S) 命中，所以会把两个问句留在同一气泡；这里已修复。
      ========================================================================== */
-  const textMessageMatches = [...raw.matchAll(/\[\[TEXT_MESSAGE\]\]\s*([\s\S]*?)(?=\[\[TEXT_MESSAGE\]\]|$)/g)]
-    .map(match => match[1].trim())
-    .filter(Boolean);
+  const protocolReplyMatches = extractProtocolReplyContents(raw);
 
-  let parts = textMessageMatches.length
-    ? textMessageMatches
+  let parts = protocolReplyMatches.length
+    ? protocolReplyMatches
     : raw
         .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
         .map(item => item.trim())
@@ -1007,13 +1129,12 @@ function sanitizeAiVisibleReply(text) {
     .replace(/<\/?think>/gi, '')
     .trim();
 
-  const textMessageMatches = [...value.matchAll(/\[\[TEXT_MESSAGE\]\]\s*([\s\S]*?)(?=\[\[TEXT_MESSAGE\]\]|$)/g)]
-    .map(match => match[1].trim())
-    .filter(Boolean);
-
-  if (textMessageMatches.length) {
-    value = textMessageMatches.join('\n');
+  /* ===== 闲谈：通用消息协议解析 START ===== */
+  const protocolReplyMatches = extractProtocolReplyContents(value);
+  if (protocolReplyMatches.length) {
+    value = protocolReplyMatches.join('\n');
   }
+  /* ===== 闲谈：通用消息协议解析 END ===== */
 
   return value
     .split(/\n+/)
@@ -1027,7 +1148,10 @@ function sanitizeAiVisibleReply(text) {
 
 function splitStrictSentenceBubbles(text) {
   const normalized = String(text || '')
-    .replace(/\[\[TEXT_MESSAGE\]\]/g, '')
+    /* ===== 闲谈：通用消息协议解析 START ===== */
+    .replace(/\*\*`?\s*\[回复\]\s*[^：:\n`]+?\s*[：:]\s*/g, '')
+    .replace(/`?\*\*/g, '')
+    /* ===== 闲谈：通用消息协议解析 END ===== */
     .replace(/\r\n/g, '\n')
     .trim();
 
@@ -1090,9 +1214,6 @@ function showAddChatModal(container, state) {
   mask.classList.remove('is-hidden');
 }
 
-/* ==========================================================================
-   [区域标注] 关闭弹窗
-   ========================================================================== */
 /* ==========================================================================
    [区域标注·本次需求2] 显示"搜索添加联系人"弹窗
    说明：右上角 + 在通讯录板块触发；只搜索当前用户面具绑定角色的 11 位联系方式
@@ -1780,10 +1901,15 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-select': {
       const messageId = String(target.dataset.messageId || '');
       if (!messageId) break;
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
       state.multiSelectMode = false;
       state.selectedMessageIds = [];
       state.selectedMessageId = state.selectedMessageId === messageId ? '' : messageId;
-      renderCurrentChatMessage(container, state);
+      state.deleteConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
       break;
     }
 
@@ -1793,6 +1919,20 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-delete': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (!messageId) break;
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      state.deleteConfirmMessageId = state.deleteConfirmMessageId === messageId ? '' : messageId;
+      state.selectedMessageId = messageId;
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
+      break;
+    }
+
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    case 'msg-bubble-confirm-delete': {
+      const messageId = String(target.dataset.messageId || state.deleteConfirmMessageId || state.selectedMessageId || '');
+      if (!messageId || state.deleteConfirmMessageId !== messageId) break;
       state.currentMessages = (state.currentMessages || []).filter(message => String(message.id) !== messageId);
       resetMessageSelectionState(state);
       refreshCurrentSessionLastMessage(state);
@@ -1800,9 +1940,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         persistCurrentMessages(state, db),
         dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
       ]);
-      renderCurrentChatMessage(container, state);
+      refreshCurrentMessageListOnly(container, state);
       break;
     }
+    /* ===== 闲谈：删除消息二次确认 END ===== */
 
     /* ==========================================================================
        [区域标注·本次需求5] 消息气泡功能栏 — 进入多选模式
@@ -1810,10 +1951,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-multi': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (!messageId) break;
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
       state.selectedMessageId = '';
+      state.deleteConfirmMessageId = '';
       state.multiSelectMode = true;
       state.selectedMessageIds = [messageId];
-      renderCurrentChatMessage(container, state);
+      refreshCurrentMessageListOnly(container, state);
+      /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
       break;
     }
 
@@ -1830,14 +1974,14 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         selectedSet.add(messageId);
       }
       state.selectedMessageIds = Array.from(selectedSet);
-      renderCurrentChatMessage(container, state);
+      renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
     }
 
     /* [区域标注·本次需求5] 多选模式 — 取消 */
     case 'msg-multi-cancel':
       resetMessageSelectionState(state);
-      renderCurrentChatMessage(container, state);
+      renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
 
     /* ==========================================================================
@@ -1913,11 +2057,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [区域标注·修改3] 头像/封面上传已移除 — 不再支持点击头像上传
-       说明：头像和签名由档案应用的用户面具身份数据驱动
-       ========================================================================== */
-
-    /* ==========================================================================
        [区域标注·修改1] 钱包折叠栏 — 点击进入钱包子页面
        ========================================================================== */
     case 'open-wallet':
@@ -1976,11 +2115,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
   }
 }
-
-/* ==========================================================================
-   [区域标注·修改3] 图片上传弹窗已移除
-   说明：头像和签名由档案应用的用户面具身份数据驱动，不再支持手动上传
-   ========================================================================== */
 
 /* ==========================================================================
    [区域标注·修改5] 保存当前面具的聊天数据到 IndexedDB
