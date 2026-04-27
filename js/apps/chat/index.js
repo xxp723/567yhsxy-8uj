@@ -37,7 +37,15 @@ const TAB_ICONS = {
   /* [区域标注] 关闭弹窗 X 图标 */
   close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注·本次需求5] IconPark — 多选转发图标 */
-  forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+
+  /* ========================================================================
+     [区域标注·本次需求3] 用户主页表情包页 IconPark 图标
+     说明：表情包分组、上传、URL 导入等按键图案统一使用 IconPark 风格 SVG。
+     ======================================================================== */
+  sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
+  upload: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 16L24 6l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v8h32v-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 14l3-3a10 10 0 0 1 14 14l-3 3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 34l-3 3a10 10 0 0 1-14-14l3-3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -58,6 +66,11 @@ const DATA_KEY_MOMENTS = (maskId) => `chat_moments_${maskId || 'default'}`;
 const DATA_KEY_MESSAGES_PREFIX = (maskId) => `chat_msgs_${maskId || 'default'}_`;
 /* [区域标注·本次需求] 聊天消息页设置：当前指令/外部上下文注入/自定义思维链，统一写入 DB.js(IndexedDB) */
 const DATA_KEY_CHAT_PROMPT_SETTINGS = (maskId) => `chat_prompt_settings_${maskId || 'default'}`;
+/* ========================================================================
+   [区域标注·本次需求3] 用户主页表情包数据键
+   说明：表情包分组与表情包条目按当前面具身份隔离，统一写入 DB.js / IndexedDB。
+   ======================================================================== */
+const DATA_KEY_STICKERS = (maskId) => `chat_stickers_${maskId || 'default'}`;
 const PANEL_KEYS = ['chatList', 'contacts', 'moments', 'profile'];
 const PANEL_LABELS = ['Chat', 'Contacts', 'Moments', 'Me'];
 const PANEL_ICON_KEYS = ['chat', 'contacts', 'moments', 'profile'];
@@ -152,6 +165,39 @@ function normalizeContacts(contacts) {
     : [];
 }
 
+/* ========================================================================
+   [区域标注·本次需求3] 表情包数据规范化
+   说明：All 是固定默认分组，不写入 groups；表情包条目与分组数据只来自 IndexedDB。
+   ======================================================================== */
+function normalizeStickerData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const groups = Array.isArray(source.groups)
+    ? source.groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  const rawItems = Array.isArray(source.items)
+    ? source.items
+    : (Array.isArray(source.stickers) ? source.stickers : []);
+  const items = rawItems
+    .map(item => ({
+      id: String(item?.id || '').trim(),
+      groupId: validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all',
+      name: String(item?.name || '').trim(),
+      url: String(item?.url || '').trim(),
+      source: String(item?.source || 'url'),
+      createdAt: Number(item?.createdAt || Date.now())
+    }))
+    .filter(item => item.id && item.name && item.url);
+  const activeGroupId = validGroupIds.has(String(source.activeGroupId || 'all')) ? String(source.activeGroupId || 'all') : 'all';
+
+  return { activeGroupId, groups, items };
+}
+
 function createUid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
@@ -214,13 +260,14 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings, stickerData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
-    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(currentActiveMaskId))
+    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(currentActiveMaskId)),
+    dbGet(db, DATA_KEY_STICKERS(currentActiveMaskId))
   ]);
 
   /* [区域标注] 应用状态对象 */
@@ -252,6 +299,8 @@ export async function mount(container, context) {
     archiveRelations: archiveRelations,
     /* [区域标注·本次需求] 聊天提示词设置：从 IndexedDB 读取，禁止浏览器同步键值存储 */
     chatPromptSettings: normalizeChatPromptSettings(chatPromptSettings),
+    /* [区域标注·本次需求3] 表情包分组与条目：从 IndexedDB 读取，禁止 localStorage/sessionStorage */
+    stickerData: normalizeStickerData(stickerData),
     /* [区域标注·本次需求] 聊天 API 调用状态 */
     isAiSending: false,
     /* ==========================================================================
@@ -265,7 +314,9 @@ export async function mount(container, context) {
     deleteConfirmMessageId: '',
     /* ===== 闲谈：删除消息二次确认 END ===== */
     /* [修改4] 用于子页面导航的堆栈标记 */
-    subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
+    subPageView: null,              // null | 'wallet' | 'sticker' | 'chatDaysDetail'
+    /* [区域标注·本次需求3] 表情包本地上传临时预览，不持久化；确认后才写入 IndexedDB */
+    pendingStickerLocalFile: null
   };
 
   /* [修改4·修改6] 根据当前面具构建 profile 数据 */
@@ -278,18 +329,28 @@ export async function mount(container, context) {
   const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta, settings);
   const inputHandler = (e) => handleInput(e, state, container, db);
   const keydownHandler = (e) => handleKeydown(e, state, container, db, settings);
+  /* [区域标注·本次需求3] 表情包本地上传文件选择事件 */
+  const changeHandler = (e) => handleChange(e, state, container, db);
   /* [区域标注·本次需求1] 通讯录分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
   const contactGroupLongPressHandlers = createContactGroupLongPressHandlers(state, container);
+  /* [区域标注·本次需求3] 表情包分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
+  const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
   container.addEventListener('keydown', keydownHandler);
+  container.addEventListener('change', changeHandler);
   container.addEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', stickerGroupLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', stickerGroupLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', stickerGroupLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', stickerGroupLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', stickerGroupLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -340,11 +401,17 @@ export async function mount(container, context) {
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
       container.removeEventListener('keydown', keydownHandler);
+      container.removeEventListener('change', changeHandler);
       container.removeEventListener('pointerdown', contactGroupLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', contactGroupLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', contactGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', contactGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', contactGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', stickerGroupLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', stickerGroupLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', stickerGroupLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', stickerGroupLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', stickerGroupLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -858,6 +925,17 @@ function refreshCurrentMessageListOnly(container, state) {
       })).join('')
     : `<div class="msg-empty"></div>`;
   listArea.scrollTop = previousScrollTop;
+}
+
+function updateMultiSelectActionBar(container, state) {
+  const bar = container.querySelector('[data-role="msg-multi-action-bar"]');
+  if (!bar) return;
+  const count = (state.selectedMessageIds || []).length;
+  const countEl = bar.querySelector('.msg-multi-action-bar__count');
+  if (countEl) countEl.textContent = `已选 ${count} 条`;
+  bar.querySelectorAll('[data-action="msg-multi-delete-selected"], [data-action="msg-multi-forward"]').forEach(btn => {
+    btn.toggleAttribute('disabled', count <= 0);
+  });
 }
 /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
 
@@ -1974,7 +2052,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         selectedSet.add(messageId);
       }
       state.selectedMessageIds = Array.from(selectedSet);
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      /* ===== 闲谈：多选勾选局部刷新防闪屏 START ===== */
+      refreshMessageBubbleRows(container, state, [messageId]);
+      updateMultiSelectActionBar(container, state);
+      /* ===== 闲谈：多选勾选局部刷新防闪屏 END ===== */
       break;
     }
 
@@ -2052,6 +2133,14 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       target.classList.toggle('is-on', state.chatPromptSettings.externalContextEnabled);
       break;
 
+    /* ===== 闲谈应用：时间感知设置开关 START ===== */
+    case 'toggle-time-awareness':
+      state.chatPromptSettings.timeAwarenessEnabled = !state.chatPromptSettings.timeAwarenessEnabled;
+      await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+      target.classList.toggle('is-on', state.chatPromptSettings.timeAwarenessEnabled);
+      break;
+    /* ===== 闲谈应用：时间感知设置开关 END ===== */
+
     /* [区域标注·本次需求] 功能区占位按钮：当前不弹窗、不调用原生 alert */
     case 'msg-feature-placeholder':
       break;
@@ -2100,6 +2189,136 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
+       [区域标注·本次需求3] 表情包独立页面：分组切换、新建分组、添加表情包
+       ========================================================================== */
+    case 'switch-sticker-group': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        break;
+      }
+      const groupId = target.dataset.stickerGroupId || 'all';
+      const data = normalizeStickerData(state.stickerData);
+      const exists = groupId === 'all' || data.groups.some(group => group.id === groupId);
+      state.stickerData = { ...data, activeGroupId: exists ? groupId : 'all' };
+      await dbPut(db, DATA_KEY_STICKERS(state.activeMaskId), state.stickerData);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'create-sticker-group':
+      showCreateStickerGroupModal(container);
+      break;
+
+    case 'confirm-create-sticker-group': {
+      const input = container.querySelector('[data-role="sticker-group-name-input"]');
+      const name = String(input?.value || '').trim();
+      if (!name) {
+        renderModalNotice(container, '请输入分组名称');
+        break;
+      }
+
+      const data = normalizeStickerData(state.stickerData);
+      const group = { id: createUid('sticker_group'), name };
+      state.stickerData = {
+        ...data,
+        groups: [...data.groups, group],
+        activeGroupId: group.id
+      };
+      await dbPut(db, DATA_KEY_STICKERS(state.activeMaskId), state.stickerData);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'open-sticker-upload-modal':
+      showStickerUploadModal(container, state);
+      break;
+
+    case 'confirm-add-local-sticker': {
+      const pending = state.pendingStickerLocalFile;
+      const nameInput = container.querySelector('[data-role="sticker-local-name-input"]');
+      const name = String(nameInput?.value || pending?.name || '').trim();
+      if (!pending?.url) {
+        renderModalNotice(container, '请先选择本地表情包文件');
+        break;
+      }
+      if (!name) {
+        renderModalNotice(container, '请给这个表情包命名');
+        break;
+      }
+
+      const data = normalizeStickerData(state.stickerData);
+      const now = Date.now();
+      state.stickerData = {
+        ...data,
+        items: [
+          ...data.items,
+          {
+            id: createUid('sticker'),
+            groupId: getStickerTargetGroupId(state),
+            name,
+            url: pending.url,
+            source: 'local',
+            createdAt: now
+          }
+        ]
+      };
+      state.pendingStickerLocalFile = null;
+      await dbPut(db, DATA_KEY_STICKERS(state.activeMaskId), state.stickerData);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'confirm-add-url-stickers': {
+      const textarea = container.querySelector('[data-role="sticker-url-import-input"]');
+      const parsed = parseStickerUrlImportText(textarea?.value || '');
+      if (!parsed.length) {
+        renderModalNotice(container, '请输入 jpg、png、gif 格式的有效 URL；支持“描述：url”“描述 url”或完整 URL');
+        break;
+      }
+
+      const data = normalizeStickerData(state.stickerData);
+      const targetGroupId = getStickerTargetGroupId(state);
+      const now = Date.now();
+      const newItems = parsed.map((item, index) => ({
+        id: createUid('sticker'),
+        groupId: targetGroupId,
+        name: item.name,
+        url: item.url,
+        source: 'url',
+        createdAt: now + index
+      }));
+
+      state.stickerData = {
+        ...data,
+        items: [...data.items, ...newItems]
+      };
+      await dbPut(db, DATA_KEY_STICKERS(state.activeMaskId), state.stickerData);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'confirm-delete-sticker-group': {
+      const groupId = target.dataset.stickerGroupId || '';
+      const data = normalizeStickerData(state.stickerData);
+      const exists = groupId && data.groups.some(group => group.id === groupId);
+      if (!exists) break;
+
+      state.stickerData = {
+        ...data,
+        groups: data.groups.filter(group => group.id !== groupId),
+        items: data.items.map(item => item.groupId === groupId ? { ...item, groupId: 'all' } : item),
+        activeGroupId: data.activeGroupId === groupId ? 'all' : data.activeGroupId
+      };
+      await dbPut(db, DATA_KEY_STICKERS(state.activeMaskId), state.stickerData);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·修改4] 面具切换弹窗中选择面具
        ========================================================================== */
     case 'switch-mask': {
@@ -2129,7 +2348,8 @@ async function saveMaskData(state, db, maskId) {
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
     dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments),
-    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId), state.chatPromptSettings)
+    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId), state.chatPromptSettings),
+    dbPut(db, DATA_KEY_STICKERS(maskId), normalizeStickerData(state.stickerData))
   ]);
 }
 
@@ -2138,13 +2358,14 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings, stickerData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
     dbGet(db, DATA_KEY_MOMENTS(maskId)),
-    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId))
+    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId)),
+    dbGet(db, DATA_KEY_STICKERS(maskId))
   ]);
   state.sessions = sessions || [];
   /* === [本次修改] 聊天列表长按删除联系人：切换面具时恢复对应隐藏状态 === */
@@ -2155,6 +2376,8 @@ async function loadMaskData(state, db, maskId) {
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
   state.chatPromptSettings = normalizeChatPromptSettings(chatPromptSettings);
+  state.stickerData = normalizeStickerData(stickerData);
+  state.pendingStickerLocalFile = null;
 }
 
 /* ==========================================================================
@@ -2336,6 +2559,281 @@ function closeSubPage(container, state) {
 }
 
 /* ==========================================================================
+   [区域标注·本次需求3] 用户主页表情包独立页面工具函数
+   说明：
+   1. All 为固定默认分组；自定义分组横向滑动，右侧跟随 IconPark “+”。
+   2. 表情包列表一行四个，列表区域可纵向滚动且隐藏滚动条。
+   3. 持久化统一走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function getStickerGroupsWithAll(state) {
+  const data = normalizeStickerData(state.stickerData);
+  return [{ id: 'all', name: 'All' }, ...data.groups];
+}
+
+function getStickerTargetGroupId(state) {
+  const data = normalizeStickerData(state.stickerData);
+  return data.activeGroupId && data.activeGroupId !== 'all'
+    ? data.activeGroupId
+    : 'all';
+}
+
+function getVisibleStickers(state) {
+  const data = normalizeStickerData(state.stickerData);
+  if (data.activeGroupId === 'all') return data.items;
+  return data.items.filter(item => item.groupId === data.activeGroupId);
+}
+
+function rerenderCurrentSubPage(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (msgWrap && state.subPageView) {
+    msgWrap.innerHTML = renderSubPage(state, state.subPageView);
+  }
+}
+
+function renderStickerSubPage(state) {
+  const data = normalizeStickerData(state.stickerData);
+  const groups = getStickerGroupsWithAll(state);
+  const visibleStickers = getVisibleStickers(state);
+
+  const groupTabsHtml = groups.map(group => `
+    <!-- [区域标注·本次需求3] 表情包分组：${escapeHtml(group.name)} -->
+    <button class="chat-tab-btn sticker-group-tab-btn ${data.activeGroupId === group.id ? 'is-active' : ''}"
+            data-action="switch-sticker-group"
+            data-sticker-group-id="${escapeHtml(group.id)}"
+            ${group.id !== 'all' ? 'data-long-press-action="delete-sticker-group"' : ''}
+            type="button">
+      ${escapeHtml(group.name)}
+    </button>
+  `).join('');
+
+  const stickerGridHtml = visibleStickers.length
+    ? visibleStickers.map(item => `
+        <!-- [区域标注·本次需求3] 表情包预览项：${escapeHtml(item.name)} -->
+        <div class="sticker-grid-item" title="${escapeHtml(item.name)}">
+          <div class="sticker-grid-item__thumb">
+            <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+          </div>
+          <div class="sticker-grid-item__name">${escapeHtml(item.name)}</div>
+        </div>
+      `).join('')
+    : `<div class="sticker-empty">${TAB_ICONS.sticker}<p>当前分组还没有表情包<br>点击右上角 + 添加</p></div>`;
+
+  return `
+    <div class="chat-sub-page sticker-sub-page">
+      <!-- ===== 用户主页表情包独立页面：标题栏 START ===== -->
+      <div class="chat-sub-page__header chat-sub-page__header--center sticker-sub-page__header">
+        <button class="chat-sub-page__title chat-sub-page__title--button chat-sub-page__title--center" data-action="go-profile" type="button">表情包</button>
+        <button class="sticker-page-add-btn" data-action="open-sticker-upload-modal" type="button" aria-label="添加表情包">${TAB_ICONS.plus}</button>
+      </div>
+      <!-- ===== 用户主页表情包独立页面：标题栏 END ===== -->
+
+      <!-- ===== 用户主页表情包独立页面：固定分组栏 START ===== -->
+      <div class="sticker-group-tabs">
+        <div class="sticker-group-tabs__scroller">
+          ${groupTabsHtml}
+          <button class="sticker-group-add-tab" data-action="create-sticker-group" type="button" aria-label="新建表情包分组">${TAB_ICONS.plus}</button>
+        </div>
+      </div>
+      <!-- ===== 用户主页表情包独立页面：固定分组栏 END ===== -->
+
+      <!-- ===== 用户主页表情包独立页面：可滚动表情包列表 START ===== -->
+      <div class="sticker-list-scroll">
+        <div class="sticker-grid">
+          ${stickerGridHtml}
+        </div>
+      </div>
+      <!-- ===== 用户主页表情包独立页面：可滚动表情包列表 END ===== -->
+    </div>
+  `;
+}
+
+function showCreateStickerGroupModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求3] 新建表情包分组弹窗 -->
+    <div class="chat-modal-header">
+      <span>新建表情包分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search"
+           type="text"
+           maxlength="12"
+           placeholder="输入分组名称"
+           data-role="sticker-group-name-input">
+    <div class="chat-modal-notice" data-role="modal-notice"></div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-create-sticker-group" type="button">完成</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => {
+    const input = panel.querySelector('[data-role="sticker-group-name-input"]');
+    if (input) input.focus();
+  }, 30);
+}
+
+function showStickerUploadModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  state.pendingStickerLocalFile = null;
+  const activeGroup = getStickerGroupsWithAll(state).find(group => group.id === getStickerTargetGroupId(state));
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求3] 添加表情包弹窗 -->
+    <div class="chat-modal-header">
+      <span>添加表情包到 ${escapeHtml(activeGroup?.name || 'All')}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body chat-upload-modal-body sticker-upload-modal-body">
+      <label class="chat-upload-option">
+        <span class="chat-upload-option__icon">${TAB_ICONS.upload}</span>
+        <span class="chat-upload-option__text">本地上传 jpg / png / gif</span>
+        <input class="sticker-local-file-input" data-role="sticker-local-file-input" type="file" accept="image/jpeg,image/png,image/gif" hidden>
+      </label>
+      <input class="chat-modal-search" data-role="sticker-local-name-input" type="text" maxlength="24" placeholder="本地表情包名称">
+      <div class="sticker-local-preview" data-role="sticker-local-preview"></div>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-add-local-sticker" type="button">添加本地表情包</button>
+
+      <div class="sticker-import-divider"></div>
+
+      <label class="chat-upload-url-label">
+        <span class="chat-upload-url-label__icon">${TAB_ICONS.link}</span>
+        <span>URL 链接导入（支持单个 / 批量，一行一个）</span>
+      </label>
+      <textarea class="sticker-url-import-input"
+                data-role="sticker-url-import-input"
+                placeholder="开心：https://e.com/happy.jpg&#10;伤心：https://o.com/sad.jpg&#10;https://e.com/cute.gif"></textarea>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-add-url-stickers" type="button">导入 URL</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+function normalizeStickerUrl(url) {
+  return String(url || '').trim().replace(/,(jpg|jpeg|png|gif)(?=([?#]|$))/i, '.$1');
+}
+
+function isAllowedStickerUrl(url) {
+  return /^https?:\/\/.+\.(jpg|jpeg|png|gif)(?:[?#].*)?$/i.test(normalizeStickerUrl(url));
+}
+
+function extractStickerNameFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const fileName = decodeURIComponent((parsed.pathname.split('/').pop() || '表情包').replace(/\.(jpg|jpeg|png|gif)$/i, ''));
+    return fileName || '表情包';
+  } catch {
+    return '表情包';
+  }
+}
+
+function parseStickerUrlImportText(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      /* [区域标注·本次需求3] URL 解析：同时兼容 .jpg 与用户示例里的 ,jpg 写法 */
+      const urlMatch = line.match(/https?:\/\/\S+[\.,](?:jpg|jpeg|png|gif)(?:[?#]\S*)?/i);
+      if (!urlMatch) return null;
+      const url = normalizeStickerUrl(urlMatch[0].replace(/[，,。；;）)]$/, ''));
+      if (!isAllowedStickerUrl(url)) return null;
+
+      const beforeUrl = line.slice(0, urlMatch.index).trim();
+      const name = beforeUrl
+        .replace(/[：:]\s*$/, '')
+        .trim() || extractStickerNameFromUrl(url);
+
+      return { name, url };
+    })
+    .filter(Boolean);
+}
+
+function showDeleteStickerGroupModal(container, state, groupId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const data = normalizeStickerData(state.stickerData);
+  const group = data.groups.find(item => item.id === groupId);
+  if (!mask || !panel || !group) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求3] 删除表情包分组确认弹窗 -->
+    <div class="chat-modal-header">
+      <span>删除表情包分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否删除“${escapeHtml(group.name)}”分组？<br>分组内表情包不会删除，会移动到 All。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-sticker-group" data-sticker-group-id="${escapeHtml(group.id)}" type="button">删除</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+function createStickerGroupLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const openDeleteModal = () => {
+    const target = pressedTarget;
+    if (!target) return;
+
+    const groupId = target.dataset.stickerGroupId || '';
+    const data = normalizeStickerData(state.stickerData);
+    const exists = groupId && groupId !== 'all' && data.groups.some(group => group.id === groupId);
+    if (!exists) return;
+
+    target.dataset.longPressTriggered = '1';
+    showDeleteStickerGroupModal(container, state, groupId);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="delete-sticker-group"]');
+      if (!target) return;
+
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(openDeleteModal, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="delete-sticker-group"]')) {
+        e.preventDefault();
+      }
+    }
+  };
+}
+
+/* ==========================================================================
    [区域标注·修改1·修改4] 渲染子页面内容
    说明：根据 pageType 渲染钱包 / 表情包 / 聊天天数详情页面
    ========================================================================== */
@@ -2357,19 +2855,7 @@ function renderSubPage(state, pageType) {
   }
 
   if (pageType === 'sticker') {
-    return `
-      <div class="chat-sub-page">
-        <div class="chat-sub-page__header chat-sub-page__header--center">
-          <button class="chat-sub-page__title chat-sub-page__title--button chat-sub-page__title--center" data-action="go-profile" type="button">表情包</button>
-        </div>
-        <div class="chat-sub-page__body">
-          <div class="chat-sub-page__empty">
-            <svg viewBox="0 0 48 48" fill="none" width="48" height="48"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3"/><path d="M16 28c2 4 10 4 12 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="20" r="2" fill="currentColor"/><circle cx="30" cy="20" r="2" fill="currentColor"/></svg>
-            <p>表情包功能开发中...</p>
-          </div>
-        </div>
-      </div>
-    `;
+    return renderStickerSubPage(state);
   }
 
   if (pageType === 'chatDaysDetail') {
@@ -2484,6 +2970,47 @@ function handleInput(e, state, container, db) {
     return;
   }
   /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
+}
+
+/* ==========================================================================
+   [区域标注·本次需求3] 表情包本地上传 change 处理
+   说明：读取为 data URL 后仅暂存在运行时，用户点击确认才写入 IndexedDB。
+   ========================================================================== */
+function handleChange(e, state, container, db) {
+  const target = e.target;
+  if (!target?.matches?.('[data-role="sticker-local-file-input"]')) return;
+
+  const file = target.files?.[0];
+  if (!file) return;
+
+  if (!/^image\/(jpeg|png|gif)$/i.test(file.type || '')) {
+    renderModalNotice(container, '本地上传仅支持 jpg、png、gif 格式');
+    target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const url = String(reader.result || '');
+    state.pendingStickerLocalFile = {
+      name: file.name.replace(/\.(jpg|jpeg|png|gif)$/i, ''),
+      url
+    };
+
+    const nameInput = container.querySelector('[data-role="sticker-local-name-input"]');
+    if (nameInput && !String(nameInput.value || '').trim()) {
+      nameInput.value = state.pendingStickerLocalFile.name;
+    }
+
+    const preview = container.querySelector('[data-role="sticker-local-preview"]');
+    if (preview) {
+      preview.innerHTML = `
+        <img src="${escapeHtml(url)}" alt="${escapeHtml(state.pendingStickerLocalFile.name)}">
+        <span>${escapeHtml(state.pendingStickerLocalFile.name)}</span>
+      `;
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 /* ==========================================================================

@@ -238,6 +238,18 @@ export function renderChatMessage(chatSession, messages, options = {}) {
             <button class="msg-ios-switch ${chatSettings.externalContextEnabled ? 'is-on' : ''}" data-action="toggle-external-context" type="button" aria-label="外部应用消息注入"></button>
           </div>
         </section>
+
+        <!-- ===== 闲谈应用：时间感知设置 START ===== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-row">
+            <div>
+              <div class="msg-settings-card__title">时间感知</div>
+              <div class="msg-settings-card__desc">开启后会向 AI 注入当前真实时间，并让角色按早中晚深夜自然聊天。</div>
+            </div>
+            <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
+          </div>
+        </section>
+        <!-- ===== 闲谈应用：时间感知设置 END ===== -->
         <section class="msg-settings-card">
           <div class="msg-settings-card__title">自定义思维链</div>
           <div class="msg-settings-card__desc">留空时使用默认思维链；回复里的 think 内容会在聊天界面隐藏。</div>

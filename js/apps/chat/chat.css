@@ -1972,3 +1972,245 @@
   justify-content: space-between;
   min-width: 0;
 }
+
+/* ==========================================================================
+   [区域标注·本次需求3] 用户主页表情包独立页面
+   说明：
+   1. 分组区域固定在标题栏下方，仅分组自身横向滑动。
+   2. 表情包列表区域纵向滚动，一行四个预览，隐藏滚动条。
+   3. 弹窗沿用闲谈应用内自定义弹窗风格，不使用原生浏览器弹窗。
+   ========================================================================== */
+.sticker-sub-page {
+  height: 100%;
+  min-height: 0;
+}
+
+.sticker-sub-page__header {
+  position: relative;
+}
+
+.sticker-page-add-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.sticker-page-add-btn:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: translateY(-50%) scale(0.92);
+}
+
+.sticker-page-add-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sticker-group-tabs {
+  flex-shrink: 0;
+  width: 100%;
+  background: #f8f4ef;
+  padding: 6px 0 10px 0;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.sticker-group-tabs__scroller {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sticker-group-tabs__scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.sticker-group-tab-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.sticker-group-add-tab {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.sticker-group-add-tab:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: scale(0.92);
+}
+
+.sticker-group-add-tab svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sticker-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 24px 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sticker-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 10px;
+}
+
+.sticker-grid-item {
+  min-width: 0;
+  border-radius: 14px;
+  padding: 7px 5px 6px 5px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(74, 52, 42, 0.07);
+  box-shadow: 0 2px 8px rgba(74, 52, 42, 0.035);
+}
+
+.sticker-grid-item__thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(74, 52, 42, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-grid-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sticker-grid-item__name {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.25;
+  color: rgba(74, 52, 42, 0.68);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sticker-empty {
+  grid-column: 1 / -1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(74, 52, 42, 0.38);
+  text-align: center;
+}
+
+.sticker-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.45;
+}
+
+.sticker-empty p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.sticker-upload-modal-body {
+  max-height: 360px;
+}
+
+.sticker-import-divider {
+  height: 1px;
+  background: rgba(74, 52, 42, 0.08);
+  margin: 2px 0;
+}
+
+.sticker-url-import-input {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid rgba(74, 52, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #4A342A;
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+  font-family: inherit;
+}
+
+.sticker-url-import-input:focus {
+  border-color: rgba(74, 52, 42, 0.3);
+}
+
+.sticker-local-preview {
+  min-height: 0;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.06);
+}
+
+.sticker-local-preview:has(img) {
+  display: flex;
+}
+
+.sticker-local-preview img {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.sticker-local-preview span {
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
