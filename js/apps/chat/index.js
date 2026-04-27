@@ -568,7 +568,7 @@ function closeChatMessage(container, state) {
 async function sendMessage(container, state, db, content, settingsManager, options = {}) {
   const userText = String(content || '').trim();
   const triggerAi = options.triggerAi !== false;
-  if (!userText || !state.currentChatId || (triggerAi && state.isAiSending)) return;
+  if ((!userText && !options.skipAppendUser) || !state.currentChatId || (triggerAi && state.isAiSending)) return;
 
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!session) return;
@@ -585,9 +585,11 @@ async function sendMessage(container, state, db, content, settingsManager, optio
 
   await persistCurrentMessages(state, db);
 
-  session.lastMessage = userText;
-  session.lastTime = Date.now();
-  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+  if (userText) {
+    session.lastMessage = userText;
+    session.lastTime = Date.now();
+    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+  }
 
   renderCurrentChatMessage(container, state);
 
@@ -622,14 +624,20 @@ async function sendMessage(container, state, db, content, settingsManager, optio
     });
 
     const aiText = String(result?.text || '').trim() || '（AI 没有返回内容）';
-    state.currentMessages.push({
-      id: `ai_${Date.now()}`,
-      role: 'assistant',
-      content: aiText,
-      timestamp: Date.now()
-    });
 
-    session.lastMessage = aiText;
+    /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
+    const aiBubbles = splitAiReplyIntoBubbles(aiText, state.chatPromptSettings);
+    aiBubbles.forEach((bubbleText, index) => {
+      state.currentMessages.push({
+        id: `ai_${Date.now()}_${index}`,
+        role: 'assistant',
+        content: bubbleText,
+        timestamp: Date.now() + index
+      });
+    });
+    /* ===== 闲谈应用：AI回复拆分为多个气泡 END ===== */
+
+    session.lastMessage = aiBubbles[aiBubbles.length - 1] || aiText;
     session.lastTime = Date.now();
   } catch (error) {
     state.currentMessages.push({
@@ -687,8 +695,9 @@ async function retryLatestAiReply(container, state, db, settingsManager) {
   for (let i = state.currentMessages.length - 1; i >= 0; i -= 1) {
     if (state.currentMessages[i]?.role === 'assistant') {
       state.currentMessages.splice(i, 1);
-      break;
+      continue;
     }
+    break;
   }
 
   const latestUser = [...state.currentMessages].reverse().find(item => item?.role === 'user');
@@ -741,6 +750,52 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
   };
 }
 /* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
+
+/* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
+function splitAiReplyIntoBubbles(text, chatSettings = {}) {
+  const raw = String(text || '').trim();
+  if (!raw) return ['（AI 没有返回内容）'];
+
+  const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
+  const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
+
+  let parts = raw
+    .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) {
+    parts = raw
+      .replace(/([。！？!?]+)(?=\S)/g, '$1\n')
+      .replace(/([…]{2,}|[.。]{3,}|、、、)(?=\S)/g, '$1\n')
+      .split(/\n+/)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  if (parts.length <= 1 && raw.length > 28) {
+    parts = raw
+      .split(/(?<=[，,、；;])\s*/)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  if (parts.length > max) {
+    const head = parts.slice(0, max - 1);
+    const tail = parts.slice(max - 1).join('');
+    parts = [...head, tail].filter(Boolean);
+  }
+
+  while (parts.length < min && parts.some(item => item.length > 12)) {
+    const index = parts.findIndex(item => item.length > 12);
+    const item = parts[index];
+    const splitAt = Math.ceil(item.length / 2);
+    parts.splice(index, 1, item.slice(0, splitAt).trim(), item.slice(splitAt).trim());
+  }
+
+  return parts.slice(0, max).map(item => item.trim()).filter(Boolean);
+}
+/* ===== 闲谈应用：AI回复拆分为多个气泡 END ===== */
 
 /* ==========================================================================
    [区域标注] 显示"添加聊天"弹窗
@@ -1413,11 +1468,16 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     /* [区域标注] 聊天消息页面 — 发送按钮 */
     case 'msg-send': {
       const input = container.querySelector('[data-role="msg-input"]');
-      if (input && input.value.trim()) {
-        const value = input.value;
-        input.value = '';
+      const value = String(input?.value || '').trim();
+      if (input) input.value = '';
+
+      /* ===== 闲谈应用：纸飞机触发AI回复 START ===== */
+      if (value) {
         await sendMessage(container, state, db, value, settingsManager, { triggerAi: true });
+      } else {
+        await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
       }
+      /* ===== 闲谈应用：纸飞机触发AI回复 END ===== */
       break;
     }
 
