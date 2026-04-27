@@ -15,7 +15,7 @@ import { renderChatList } from './chat-list.js';
 import { renderContacts } from './contacts.js';
 import { renderMoments } from './moments.js';
 import { renderProfile } from './profile.js';
-import { renderChatMessage } from './chat-message.js';
+import { renderChatMessage, renderMessageBubble } from './chat-message.js';
 import { chat, normalizeChatPromptSettings } from './prompt.js';
 
 /* ==========================================================================
@@ -35,7 +35,9 @@ const TAB_ICONS = {
   /* [区域标注] 用户主页 TAB 图标（人物） */
   profile: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 24a10 10 0 1 0 0-20a10 10 0 0 0 0 20Z" stroke="currentColor" stroke-width="3"/><path d="M8 42a16 16 0 0 1 32 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注] 关闭弹窗 X 图标 */
-  close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·本次需求5] IconPark — 多选转发图标 */
+  forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -252,6 +254,13 @@ export async function mount(container, context) {
     chatPromptSettings: normalizeChatPromptSettings(chatPromptSettings),
     /* [区域标注·本次需求] 聊天 API 调用状态 */
     isAiSending: false,
+    /* ==========================================================================
+       [区域标注·本次需求5] 消息气泡选择状态
+       说明：仅保存在运行时；消息持久化仍只写 DB.js / IndexedDB。
+       ========================================================================== */
+    selectedMessageId: '',
+    multiSelectMode: false,
+    selectedMessageIds: [],
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null               // null | 'wallet' | 'sticker' | 'chatDaysDetail'
   };
@@ -511,6 +520,7 @@ async function openChatMessage(container, state, db, chatId) {
   if (!session) return;
 
   state.currentChatId = chatId;
+  resetMessageSelectionState(state);
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
@@ -545,6 +555,7 @@ async function openChatMessage(container, state, db, chatId) {
 function closeChatMessage(container, state) {
   state.currentChatId = null;
   state.currentMessages = [];
+  resetMessageSelectionState(state);
 
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -613,7 +624,7 @@ async function sendMessage(container, state, db, content, settingsManager, optio
     await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
   }
 
-  renderCurrentChatMessage(container, state);
+  appendCurrentMessageBubble(container, state, state.currentMessages[state.currentMessages.length - 1]);
 
   /* ===== 闲谈应用：回车只发送用户消息 START ===== */
   if (!triggerAi) return;
@@ -676,7 +687,7 @@ async function sendMessage(container, state, db, content, settingsManager, optio
       session.lastTime = Date.now();
       await persistCurrentMessages(state, db);
       await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
-      renderCurrentChatMessage(container, state);
+      appendCurrentMessageBubble(container, state, state.currentMessages[state.currentMessages.length - 1]);
     }
     /* ===== 闲谈应用：AI回复拆分为多个气泡 END ===== */
 
@@ -722,14 +733,140 @@ function renderCurrentChatMessage(container, state) {
     chatSettings: state.chatPromptSettings,
     isSending: state.isAiSending,
     /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
-    userProfile: state.profile
+    userProfile: state.profile,
     /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
+
+    /* [区域标注·本次需求5] 消息气泡功能栏与多选状态 */
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds
   });
 
   setTimeout(() => {
     const listArea = msgWrap.querySelector('[data-role="msg-list"]');
     if (listArea) listArea.scrollTop = listArea.scrollHeight;
   }, 30);
+}
+
+/* ==========================================================================
+   [区域标注·本次需求1/5] 增量追加聊天气泡
+   说明：
+   1. AI 逐条输出气泡时只向 msg-list 追加 DOM，不重建整个消息页，修复闪屏。
+   2. 用户点击纸飞机后也优先追加气泡，避免输入栏/顶部栏反复销毁重建。
+   ========================================================================== */
+function appendCurrentMessageBubble(container, state, message) {
+  if (!message || !state.currentChatId) return;
+
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !listArea || !session) {
+    renderCurrentChatMessage(container, state);
+    return;
+  }
+
+  const emptyEl = listArea.querySelector('.msg-empty');
+  if (emptyEl) emptyEl.remove();
+
+  listArea.insertAdjacentHTML('beforeend', renderMessageBubble(message, session, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds
+  }));
+  listArea.scrollTop = listArea.scrollHeight;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求5] 消息气泡选择状态工具
+   ========================================================================== */
+function resetMessageSelectionState(state) {
+  state.selectedMessageId = '';
+  state.multiSelectMode = false;
+  state.selectedMessageIds = [];
+}
+
+function getSelectedMessages(state) {
+  const selectedSet = new Set((state.selectedMessageIds || []).map(String));
+  return (state.currentMessages || []).filter(message => selectedSet.has(String(message.id)));
+}
+
+function refreshCurrentSessionLastMessage(state) {
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!session) return;
+
+  const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
+  session.lastMessage = latest?.content || '';
+  session.lastTime = latest?.timestamp || Date.now();
+}
+
+/* ==========================================================================
+   [区域标注·本次需求4] 清空当前聊天全部记录确认弹窗
+   说明：从聊天消息页右上角“设置”进入；使用应用内弹窗，不使用原生 confirm/alert。
+   ========================================================================== */
+function showClearAllMessagesModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  if (!mask || !panel || !session) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求4] 清空全部聊天记录确认弹窗 -->
+    <div class="chat-modal-header">
+      <span>清空聊天记录</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否清空与“${escapeHtml(session.name || '未命名')}”的全部聊天记录？<br>此操作只清空当前聊天界面的消息，不删除联系人。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-clear-all-messages" type="button">清空</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注·本次需求5] 多选转发联系人选择弹窗
+   说明：把选中的多条消息转发到聊天列表中其它联系人聊天界面；持久化统一写 IndexedDB。
+   ========================================================================== */
+function showForwardMessagesModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const selectedMessages = getSelectedMessages(state);
+  const targets = getVisibleChatSessions(state).filter(session => String(session.id) !== String(state.currentChatId));
+
+  const targetHtml = targets.length
+    ? targets.map(session => `
+        <!-- [区域标注·本次需求5] 可转发联系人：${escapeHtml(session.name || '未命名')} -->
+        <button class="chat-forward-target" data-action="confirm-forward-messages" data-chat-id="${escapeHtml(session.id)}" type="button">
+          <span class="chat-forward-target__avatar">
+            ${session.avatar
+              ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(session.name || '')}">`
+              : escapeHtml((session.name || '?').charAt(0).toUpperCase())}
+          </span>
+          <span class="chat-forward-target__name">${escapeHtml(session.name || '未命名')}</span>
+          <span class="chat-forward-target__icon">${TAB_ICONS.forward}</span>
+        </button>
+      `).join('')
+    : `<div class="chat-modal-hint">暂无其它可转发的聊天联系人。</div>`;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求5] 多选消息转发弹窗 -->
+    <div class="chat-modal-header">
+      <span>转发 ${selectedMessages.length} 条消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      ${targetHtml}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
 
 /* ==========================================================================
@@ -816,7 +953,7 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
 
 /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
 function splitAiReplyIntoBubbles(text, chatSettings = {}) {
-  const raw = String(text || '').trim();
+  const raw = sanitizeAiVisibleReply(text);
   if (!raw) return ['（AI 没有返回内容）'];
 
   const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
@@ -860,6 +997,34 @@ function splitAiReplyIntoBubbles(text, chatSettings = {}) {
   return cleaned.length ? cleaned.slice(0, Math.max(max, min)) : ['（AI 没有返回内容）'];
 }
 
+/* ==========================================================================
+   [区域标注·本次需求2] AI 可见回复清理
+   说明：进一步清理模型偶发输出的幕后审查文本，只保留聊天界面应该显示的内容。
+   ========================================================================== */
+function sanitizeAiVisibleReply(text) {
+  let value = String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim();
+
+  const textMessageMatches = [...value.matchAll(/\[\[TEXT_MESSAGE\]\]\s*([\s\S]*?)(?=\[\[TEXT_MESSAGE\]\]|$)/g)]
+    .map(match => match[1].trim())
+    .filter(Boolean);
+
+  if (textMessageMatches.length) {
+    value = textMessageMatches.join('\n');
+  }
+
+  return value
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(line => line && !/^(思考回复内容|思考内容|检查规则|审查规则|拟定句子|检查结果|最终输出|回复格式)\s*[：:]/.test(line))
+    .map(line => line.replace(/^气泡\s*\d+\s*[：:]\s*/i, '').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
 function splitStrictSentenceBubbles(text) {
   const normalized = String(text || '')
     .replace(/\[\[TEXT_MESSAGE\]\]/g, '')
@@ -890,7 +1055,11 @@ function showAddChatModal(container, state) {
   const contactsHtml = state.contacts.length === 0
     ? `<p style="text-align:center;color:rgba(74,52,42,0.45);font-size:13px;padding:20px 0;">暂无通讯录好友<br>请先在档案应用中添加角色</p>`
     : state.contacts.map(c => {
-      const alreadyAdded = state.sessions.some(s => s.id === c.id);
+      /* ==========================================================================
+         [区域标注·本次需求3] 删除后允许重新添加
+         说明：被 hiddenChatIds 隐藏的会话不再显示“已添加”，可再次点击恢复聊天列表。
+         ========================================================================== */
+      const alreadyAdded = state.sessions.some(s => s.id === c.id) && !state.hiddenChatIds.map(String).includes(String(c.id));
       return `
         <!-- [区域标注] 好友选择项: ${c.name || '未命名'} -->
         <div class="chat-modal-contact ${alreadyAdded ? '' : ''}" 
@@ -1579,6 +1748,151 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const settingsPage = container.querySelector('[data-role="msg-settings-page"]');
       if (conversation) conversation.style.display = 'none';
       if (settingsPage) settingsPage.style.display = 'flex';
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求4] 聊天设置页 — 打开清空全部聊天记录确认弹窗
+       ========================================================================== */
+    case 'open-clear-all-messages-modal':
+      showClearAllMessagesModal(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·本次需求4] 聊天设置页 — 确认清空当前聊天全部记录
+       ========================================================================== */
+    case 'confirm-clear-all-messages': {
+      state.currentMessages = [];
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 单击消息气泡 — 显示/隐藏气泡上方功能栏
+       ========================================================================== */
+    case 'msg-bubble-select': {
+      const messageId = String(target.dataset.messageId || '');
+      if (!messageId) break;
+      state.multiSelectMode = false;
+      state.selectedMessageIds = [];
+      state.selectedMessageId = state.selectedMessageId === messageId ? '' : messageId;
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 消息气泡功能栏 — 删除单条消息
+       ========================================================================== */
+    case 'msg-bubble-delete': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      state.currentMessages = (state.currentMessages || []).filter(message => String(message.id) !== messageId);
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 消息气泡功能栏 — 进入多选模式
+       ========================================================================== */
+    case 'msg-bubble-multi': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      state.selectedMessageId = '';
+      state.multiSelectMode = true;
+      state.selectedMessageIds = [messageId];
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 多选模式 — 勾选/取消勾选消息
+       ========================================================================== */
+    case 'msg-multi-toggle': {
+      const messageId = String(target.dataset.messageId || '');
+      if (!messageId) break;
+      const selectedSet = new Set((state.selectedMessageIds || []).map(String));
+      if (selectedSet.has(messageId)) {
+        selectedSet.delete(messageId);
+      } else {
+        selectedSet.add(messageId);
+      }
+      state.selectedMessageIds = Array.from(selectedSet);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* [区域标注·本次需求5] 多选模式 — 取消 */
+    case 'msg-multi-cancel':
+      resetMessageSelectionState(state);
+      renderCurrentChatMessage(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 多选模式 — 删除选中消息组
+       ========================================================================== */
+    case 'msg-multi-delete-selected': {
+      const selectedSet = new Set((state.selectedMessageIds || []).map(String));
+      if (!selectedSet.size) break;
+      state.currentMessages = (state.currentMessages || []).filter(message => !selectedSet.has(String(message.id)));
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* [区域标注·本次需求5] 多选模式 — 打开转发联系人弹窗 */
+    case 'msg-multi-forward':
+      if ((state.selectedMessageIds || []).length) showForwardMessagesModal(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·本次需求5] 多选模式 — 确认转发到其它聊天联系人
+       ========================================================================== */
+    case 'confirm-forward-messages': {
+      const targetChatId = String(target.dataset.chatId || '');
+      const targetSession = state.sessions.find(session => String(session.id) === targetChatId);
+      const selectedMessages = getSelectedMessages(state);
+      if (!targetSession || !selectedMessages.length) break;
+
+      const targetKey = DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + targetChatId;
+      const targetMessages = (await dbGet(db, targetKey)) || [];
+      const now = Date.now();
+      const forwardedMessages = selectedMessages.map((message, index) => ({
+        id: `forward_${now}_${index}`,
+        role: 'user',
+        content: String(message.content || ''),
+        timestamp: now + index
+      })).filter(message => message.content.trim());
+
+      targetMessages.push(...forwardedMessages);
+      targetSession.lastMessage = forwardedMessages[forwardedMessages.length - 1]?.content || targetSession.lastMessage || '';
+      targetSession.lastTime = now;
+
+      await Promise.all([
+        dbPut(db, targetKey, targetMessages),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      resetMessageSelectionState(state);
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
       break;
     }
 

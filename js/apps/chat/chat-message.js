@@ -18,14 +18,25 @@ const MSG_ICONS = {
   emptyChat: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`,
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
   wallet: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 14h36v28H6V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M10 14V8h26v6" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 28h10v8H32a4 4 0 0 1 0-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
-  bolt: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 4L10 28h14l-4 16l18-24H24l4-16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
+  bolt: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 4L10 28h14l-4 16l18-24H24l4-16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+
+  /* ==========================================================================
+     [区域标注·本次需求5] 消息气泡功能栏 IconPark 图标
+     说明：单击消息气泡后显示，含删除和多选。
+     ========================================================================== */
+  delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  multiSelect: `<svg viewBox="0 0 48 48" fill="none"><path d="M20 10h20v20H20V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 18v20h20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 20l4 4l7-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
    [区域标注] 工具函数
    ========================================================================== */
 function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const map = { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' };
   return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
 }
 
@@ -33,6 +44,62 @@ function formatMsgTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求5] 单条消息气泡渲染
+   说明：
+   1. 导出给 index.js 增量追加消息，避免 AI 每输出一个气泡都整页重绘造成闪屏。
+   2. 同时为每条消息补充 data-message-id，供单击功能栏、删除、多选使用。
+   ========================================================================== */
+export function renderMessageBubble(msg, chatSession, options = {}) {
+  const session = chatSession || {};
+  const name = session.name || '聊天';
+  const userProfile = options.userProfile || {};
+  const userAvatar = userProfile.avatar || '';
+  const userName = userProfile.nickname || '我';
+  const selectedMessageId = String(options.selectedMessageId || '');
+  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
+  const multiSelectMode = Boolean(options.multiSelectMode);
+
+  const messageId = String(msg?.id || '');
+  const isUser = msg?.role === 'user';
+  const isAssistant = msg?.role === 'assistant' || msg?.role === 'other';
+  const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId;
+  const isSelected = selectedMessageIds.includes(messageId);
+
+  return `
+    <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
+    <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'} ${multiSelectMode ? 'is-multi-selecting' : ''} ${isSelected ? 'is-selected' : ''}"
+         data-message-id="${escapeHtml(messageId)}"
+         data-action="${multiSelectMode ? 'msg-multi-toggle' : 'msg-bubble-select'}">
+      ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
+      <div class="msg-bubble-content">
+        ${isToolbarOpen ? `
+          <!-- [区域标注·本次需求5] 消息气泡上方浮现功能栏 -->
+          <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.delete}<span>删除</span>
+            </button>
+            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.multiSelect}<span>多选</span>
+            </button>
+          </div>
+        ` : ''}
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''}">
+          ${escapeHtml(msg?.content || '')}
+        </div>
+        <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
+      </div>
+      ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
+      ${multiSelectMode ? `
+        <!-- [区域标注·本次需求5] 多选勾选圆点 -->
+        <button class="msg-bubble-select-dot ${isSelected ? 'is-selected' : ''}" data-action="msg-multi-toggle" data-message-id="${escapeHtml(messageId)}" type="button" aria-label="选择消息">
+          ${isSelected ? MSG_ICONS.check : ''}
+        </button>
+      ` : ''}
+    </div>
+  `;
 }
 
 /* ==========================================================================
@@ -48,11 +115,14 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const msgs = messages || [];
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
-  /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
-  const userProfile = options.userProfile || {};
-  const userAvatar = userProfile.avatar || '';
-  const userName = userProfile.nickname || '我';
-  /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
+
+  /* ========================================================================
+     [区域标注·本次需求5] 消息选择状态
+     说明：由 index.js 管理，只影响消息工具栏/多选栏显示。
+     ======================================================================== */
+  const multiSelectMode = Boolean(options.multiSelectMode);
+  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
+  const selectedCount = selectedMessageIds.length;
 
   /* ==========================================================================
      [区域标注] 聊天顶部栏
@@ -79,22 +149,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
      ========================================================================== */
   const messagesHtml = msgs.length === 0
     ? `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`
-    : msgs.map(msg => {
-      const isUser = msg.role === 'user';
-      const isAssistant = msg.role === 'assistant' || msg.role === 'other';
-      return `
-        <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'}">
-          ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
-          <div class="msg-bubble-content">
-            <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg.pending ? 'is-pending' : ''}">
-              ${escapeHtml(msg.content || '')}
-            </div>
-            <span class="msg-bubble__time">${formatMsgTime(msg.timestamp)}</span>
-          </div>
-          ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
-        </div>
-      `;
-    }).join('');
+    : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
 
   /* ==========================================================================
      [区域标注] 咖啡按钮升起功能区
@@ -113,6 +168,19 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       </button>
     </div>
   `;
+
+  /* ==========================================================================
+     [区域标注·本次需求5] 多选底部操作栏
+     说明：多选模式下用户可删除选中消息或转发给聊天列表中的其他联系人。
+     ========================================================================== */
+  const multiSelectBarHtml = multiSelectMode ? `
+    <div class="msg-multi-action-bar" data-role="msg-multi-action-bar">
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-cancel" type="button">${MSG_ICONS.close}<span>取消</span></button>
+      <span class="msg-multi-action-bar__count">已选 ${selectedCount} 条</span>
+      <button class="msg-multi-action-bar__btn msg-multi-action-bar__btn--danger" data-action="msg-multi-delete-selected" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.delete}<span>删除</span></button>
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-forward" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.forward}<span>转发</span></button>
+    </div>
+  ` : '';
 
   /* ==========================================================================
      [区域标注] 悬浮底部输入栏
@@ -187,6 +255,20 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           </label>
         </section>
         <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
+
+        <!-- ==========================================================================
+             [区域标注·本次需求4] 清空全部聊天记录入口
+             说明：点击后由 index.js 打开应用内确认弹窗；不使用原生浏览器弹窗。
+             ========================================================================== -->
+        <section class="msg-settings-card msg-settings-danger-card">
+          <button class="msg-settings-danger-action" data-action="open-clear-all-messages-modal" type="button">
+            <span class="msg-settings-danger-action__icon">${MSG_ICONS.broom}</span>
+            <span class="msg-settings-danger-action__text">
+              <strong>清空全部聊天记录</strong>
+              <em>仅清空当前聊天界面的消息记录</em>
+            </span>
+          </button>
+        </section>
       </div>
     </div>
   `;
@@ -196,6 +278,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       <div class="msg-conversation" data-role="msg-conversation">
         ${topBarHtml}
         <div class="msg-list-area" data-role="msg-list">${messagesHtml}</div>
+        ${multiSelectBarHtml}
         ${inputBarHtml}
       </div>
       ${settingsPageHtml}
