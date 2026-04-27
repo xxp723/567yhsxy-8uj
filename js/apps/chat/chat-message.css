@@ -83,11 +83,12 @@
   gap: 10px;
 }
 
+/* ===== 闲谈应用：聊天头像正方形样式 START ===== */
 /* [区域标注·本次需求5] 消息页好友头像 */
 .msg-top-bar__avatar {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 12px;
   background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
   display: flex;
   align-items: center;
@@ -238,14 +239,14 @@
 
 .msg-bubble-row--right {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row;
 }
 
 /* [区域标注·本次需求5] 消息头像 */
 .msg-bubble__avatar {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: 10px;
   background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
   display: flex;
   align-items: center;
@@ -267,6 +268,7 @@
   background: #4A342A;
   color: #f8f4ef;
 }
+/* ===== 闲谈应用：聊天头像正方形样式 END ===== */
 
 /* [区域标注·本次需求5] 消息气泡容器 */
 .msg-bubble-content {
@@ -623,6 +625,46 @@
   border-color: rgba(74, 52, 42, 0.28);
   background: rgba(255, 255, 255, 0.94);
 }
+
+/* ===== 闲谈应用：聊天设置数字输入板块 START ===== */
+.msg-settings-number-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.msg-settings-number-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.62);
+}
+
+.msg-settings-number-field--full {
+  margin-top: 12px;
+}
+
+.msg-settings-number-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.86);
+  color: #4A342A;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  padding: 10px 12px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.msg-settings-number-input:focus {
+  border-color: rgba(74, 52, 42, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+/* ===== 闲谈应用：聊天设置数字输入板块 END ===== */
 
 /* ==========================================================================
    [区域标注·本次需求] 聊天消息页滚动条隐藏

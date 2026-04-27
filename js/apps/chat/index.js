@@ -567,7 +567,8 @@ function closeChatMessage(container, state) {
    ========================================================================== */
 async function sendMessage(container, state, db, content, settingsManager, options = {}) {
   const userText = String(content || '').trim();
-  if (!userText || !state.currentChatId || state.isAiSending) return;
+  const triggerAi = options.triggerAi !== false;
+  if (!userText || !state.currentChatId || (triggerAi && state.isAiSending)) return;
 
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!session) return;
@@ -588,19 +589,24 @@ async function sendMessage(container, state, db, content, settingsManager, optio
   session.lastTime = Date.now();
   await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
 
+  renderCurrentChatMessage(container, state);
+
+  /* ===== 闲谈应用：回车只发送用户消息 START ===== */
+  if (!triggerAi) return;
+  /* ===== 闲谈应用：回车只发送用户消息 END ===== */
+
   state.isAiSending = true;
   renderCurrentChatMessage(container, state);
 
   try {
-    /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
-    const history = state.currentMessages
-      .filter(item => item.role === 'user' || item.role === 'assistant')
-      .slice(0, -1)
-      .map(item => ({ role: item.role, content: item.content }));
+    /* ===== 闲谈应用：短期记忆与最新一轮消息 START ===== */
+    const promptPayload = buildPromptPayloadForLatestUserRound(state.currentMessages, state.chatPromptSettings.shortTermMemoryRounds);
+    /* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
 
+    /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
     const result = await chat({
-      userInput: userText,
-      history,
+      userInput: promptPayload.userInput,
+      history: promptPayload.history,
       chatSettings: state.chatPromptSettings,
       settingsManager,
       /* [区域标注·本次需求] 提示词真实上下文：把当前会话/联系人/面具/档案/DB 传给 prompt.js，供 AI 读取有效信息 */
@@ -659,7 +665,10 @@ function renderCurrentChatMessage(container, state) {
 
   msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
     chatSettings: state.chatPromptSettings,
-    isSending: state.isAiSending
+    isSending: state.isAiSending,
+    /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
+    userProfile: state.profile
+    /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
   });
 
   setTimeout(() => {
@@ -689,8 +698,49 @@ async function retryLatestAiReply(container, state, db, settingsManager) {
   }
 
   await persistCurrentMessages(state, db);
-  await sendMessage(container, state, db, latestUser.content, settingsManager, { skipAppendUser: true });
+  await sendMessage(container, state, db, latestUser.content, settingsManager, { skipAppendUser: true, triggerAi: true });
 }
+
+/* ===== 闲谈应用：短期记忆与最新一轮消息 START ===== */
+function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRounds = 8) {
+  const normalized = Array.isArray(messages)
+    ? messages.filter(item => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
+    : [];
+
+  let latestUserStart = -1;
+  for (let i = normalized.length - 1; i >= 0; i -= 1) {
+    if (normalized[i].role !== 'user') continue;
+    latestUserStart = i;
+    while (latestUserStart > 0 && normalized[latestUserStart - 1]?.role === 'user') {
+      latestUserStart -= 1;
+    }
+    break;
+  }
+
+  const currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
+  const userInput = currentRoundMessages.map(item => item.content).join('\n');
+
+  const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
+  const previous = latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized;
+  if (roundLimit <= 0) return { userInput, history: [] };
+
+  const rounds = [];
+  let current = [];
+  previous.forEach(item => {
+    if (item.role === 'user' && current.length) {
+      rounds.push(current);
+      current = [];
+    }
+    current.push({ role: item.role, content: item.content });
+  });
+  if (current.length) rounds.push(current);
+
+  return {
+    userInput,
+    history: rounds.slice(-roundLimit).flat()
+  };
+}
+/* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
 
 /* ==========================================================================
    [区域标注] 显示"添加聊天"弹窗
@@ -1366,7 +1416,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (input && input.value.trim()) {
         const value = input.value;
         input.value = '';
-        await sendMessage(container, state, db, value, settingsManager);
+        await sendMessage(container, state, db, value, settingsManager, { triggerAi: true });
       }
       break;
     }
@@ -1823,6 +1873,29 @@ function handleInput(e, state, container, db) {
     dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
     return;
   }
+
+  /* ===== 闲谈应用：AI每轮回复气泡数量设置 START ===== */
+  if (target.matches('[data-role="msg-reply-bubble-min"], [data-role="msg-reply-bubble-max"], [data-role="msg-short-term-memory-rounds"]')) {
+    const minInput = container.querySelector('[data-role="msg-reply-bubble-min"]');
+    const maxInput = container.querySelector('[data-role="msg-reply-bubble-max"]');
+    const memoryInput = container.querySelector('[data-role="msg-short-term-memory-rounds"]');
+
+    const min = Math.max(1, Math.floor(Number(minInput?.value || 1)) || 1);
+    const max = Math.max(min, Math.floor(Number(maxInput?.value || min)) || min);
+    const rounds = Math.max(0, Math.floor(Number(memoryInput?.value || 0)) || 0);
+
+    state.chatPromptSettings.replyBubbleMin = min;
+    state.chatPromptSettings.replyBubbleMax = max;
+    state.chatPromptSettings.shortTermMemoryRounds = rounds;
+
+    if (minInput && String(minInput.value) !== String(min)) minInput.value = String(min);
+    if (maxInput && String(maxInput.value) !== String(max)) maxInput.value = String(max);
+    if (memoryInput && String(memoryInput.value) !== String(rounds)) memoryInput.value = String(rounds);
+
+    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    return;
+  }
+  /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
 }
 
 /* ==========================================================================
@@ -1837,5 +1910,7 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   e.preventDefault();
   const value = target.value;
   target.value = '';
-  await sendMessage(container, state, db, value, settingsManager);
+  /* ===== 闲谈应用：回车只发送用户消息 START ===== */
+  await sendMessage(container, state, db, value, settingsManager, { triggerAi: false });
+  /* ===== 闲谈应用：回车只发送用户消息 END ===== */
 }

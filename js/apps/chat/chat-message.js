@@ -48,6 +48,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const msgs = messages || [];
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
+  /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
+  const userProfile = options.userProfile || {};
+  const userAvatar = userProfile.avatar || '';
+  const userName = userProfile.nickname || '我';
+  /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
 
   /* ==========================================================================
      [区域标注] 聊天顶部栏
@@ -86,7 +91,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
             </div>
             <span class="msg-bubble__time">${formatMsgTime(msg.timestamp)}</span>
           </div>
-          ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user"><span>我</span></div>` : ''}
+          ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -154,6 +159,34 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <div class="msg-settings-card__desc">留空时使用默认思维链；回复里的 think 内容会在聊天界面隐藏。</div>
           <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【回复格式】先输出<think>...</think>，再输出最终回复。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
         </section>
+
+        <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 START ===== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-card__title">每轮回复气泡数量</div>
+          <div class="msg-settings-card__desc">控制 AI 每一轮回复必须拆成多少个消息气泡；除非用户当轮明确允许突破，否则 AI 必须严格遵守。</div>
+          <div class="msg-settings-number-grid">
+            <label class="msg-settings-number-field">
+              <span>最低</span>
+              <input class="msg-settings-number-input" data-role="msg-reply-bubble-min" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMin || 1)}">
+            </label>
+            <label class="msg-settings-number-field">
+              <span>最高</span>
+              <input class="msg-settings-number-input" data-role="msg-reply-bubble-max" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMax || 3)}">
+            </label>
+          </div>
+        </section>
+        <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== -->
+
+        <!-- ===== 闲谈应用：短期记忆设置 START ===== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-card__title">短期记忆</div>
+          <div class="msg-settings-card__desc">控制下次请求 AI 时携带之前多少轮对话上文；0 表示不携带历史上文。</div>
+          <label class="msg-settings-number-field msg-settings-number-field--full">
+            <span>发送之前轮数</span>
+            <input class="msg-settings-number-input" data-role="msg-short-term-memory-rounds" type="number" min="0" step="1" value="${escapeHtml(chatSettings.shortTermMemoryRounds ?? 8)}">
+          </label>
+        </section>
+        <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
       </div>
     </div>
   `;
