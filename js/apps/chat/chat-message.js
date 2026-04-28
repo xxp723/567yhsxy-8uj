@@ -21,9 +21,10 @@ const MSG_ICONS = {
   bolt: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 4L10 28h14l-4 16l18-24H24l4-16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
 
   /* ==========================================================================
-     [区域标注·本次需求5] 消息气泡功能栏 IconPark 图标
-     说明：单击消息气泡后显示，含删除和多选。
+     [区域标注·本次修改3] 消息气泡功能栏 IconPark 图标
+     说明：单击消息气泡后显示，含修正、删除和多选；“修正”用于 AI 表情包格式补全。
      ========================================================================== */
+  fixFormat: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 36l4 4l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 6l4 8l8 4l-8 4l-4 8l-4-8l-8-4l8-4l4-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M36 30l2 4l4 2l-4 2l-2 4l-2-4l-4-2l4-2l2-4Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   multiSelect: `<svg viewBox="0 0 48 48" fill="none"><path d="M20 10h20v20H20V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 18v20h20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 20l4 4l7-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -131,8 +132,13 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
       ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
       <div class="msg-bubble-content">
         ${isToolbarOpen ? `
-          <!-- [区域标注·本次需求5] 消息气泡上方浮现功能栏 -->
+          <!-- [区域标注·本次修改3] 消息气泡上方浮现功能栏：AI 消息支持“修正”表情包残缺格式 -->
           <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
+            ${isAssistant ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--fix-format" data-action="msg-bubble-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.fixFormat}<span>修正</span>
+              </button>
+            ` : ''}
             <!-- ===== 闲谈：删除消息二次确认 START ===== -->
             <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>

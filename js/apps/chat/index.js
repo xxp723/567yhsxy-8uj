@@ -917,6 +917,78 @@ function resolveStickerProtocolTarget(token, state) {
   return null;
 }
 
+/* ==========================================================================
+   [区域标注·本次修改2/3] AI 表情包格式自动修正解析
+   说明：
+   1. 只使用当前 IndexedDB 读取到的全局表情包数据与当前面具挂载分组。
+   2. 不使用 localStorage/sessionStorage，也不做双份存储兜底。
+   3. 当 AI 漏写 **`[表情] 角色名：资源ID`** 完整协议时，尝试从资源ID/表情名/关键词补全为内部 sticker 消息。
+   ========================================================================== */
+function normalizeStickerLooseMatchText(value) {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/[`*_#"“”"'《》（）()\[\]【】{}]/g, '')
+    .replace(/(?:资源\s*ID|资源Id|表情名|名称|表情包|表情|贴纸|sticker|发送|发个|发一张|来个|给你|我发|刚才|点错了|没发出去|这回|看清楚|看看|吧|啊|呀|呢|了)/gi, '')
+    .replace(/[：:；;，,。.!！？?\s-]+/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function findLooseStickerTargetFromText(text, state) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  const exact = resolveStickerProtocolTarget(raw, state);
+  if (exact) return exact;
+
+  const mountedItems = getMountedStickerItems(state);
+  if (!mountedItems.length) return null;
+
+  const hasStickerIntent = /表情|表情包|贴纸|sticker_|资源\s*ID|资源Id|动图|发.*图|发.*包/i.test(raw);
+  const rawLower = raw.toLowerCase();
+
+  const byId = mountedItems.find(item => {
+    const id = String(item.id || '').trim();
+    return id && rawLower.includes(id.toLowerCase());
+  });
+  if (byId) return byId;
+
+  const rawLoose = normalizeStickerLooseMatchText(raw);
+  if (!rawLoose) return null;
+
+  const byName = mountedItems.find(item => {
+    const name = String(item.name || '').trim();
+    const nameLoose = normalizeStickerLooseMatchText(name);
+    return name && (
+      raw.includes(name) ||
+      (hasStickerIntent && nameLoose.length >= 2 && (rawLoose.includes(nameLoose) || nameLoose.includes(rawLoose)))
+    );
+  });
+
+  return byName || null;
+}
+
+function createStickerMessagePatchFromTarget(message, sticker) {
+  if (!message || !sticker) return null;
+  return {
+    ...message,
+    role: 'assistant',
+    type: 'sticker',
+    content: `[表情包] ${sticker.name}`,
+    stickerId: sticker.id,
+    stickerName: sticker.name,
+    stickerUrl: sticker.url
+  };
+}
+
+function repairAiMessageFormatIfPossible(message, state) {
+  if (!message || message.role !== 'assistant') return null;
+  if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) return null;
+
+  const sticker = findLooseStickerTargetFromText(message.content, state);
+  return sticker ? createStickerMessagePatchFromTarget(message, sticker) : null;
+}
+
 function cleanAiProtocolBlockContent(content) {
   return String(content || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -961,6 +1033,18 @@ function extractAiProtocolBlocks(rawText) {
 function buildAiReplyMessages(rawText, state) {
   const protocolBlocks = extractAiProtocolBlocks(rawText);
   if (!protocolBlocks.length) {
+    const repairedSticker = findLooseStickerTargetFromText(rawText, state);
+    if (repairedSticker) {
+      return [{
+        role: 'assistant',
+        type: 'sticker',
+        content: `[表情包] ${repairedSticker.name}`,
+        stickerId: repairedSticker.id,
+        stickerName: repairedSticker.name,
+        stickerUrl: repairedSticker.url
+      }];
+    }
+
     return splitAiReplyIntoBubbles(rawText, state.chatPromptSettings).map(content => ({
       role: 'assistant',
       content
@@ -970,7 +1054,7 @@ function buildAiReplyMessages(rawText, state) {
   const builtMessages = [];
   protocolBlocks.forEach(block => {
     if (block.type === '表情') {
-      const sticker = resolveStickerProtocolTarget(block.content, state);
+      const sticker = resolveStickerProtocolTarget(block.content, state) || findLooseStickerTargetFromText(block.content, state);
       if (sticker) {
         builtMessages.push({
           role: 'assistant',
@@ -981,7 +1065,7 @@ function buildAiReplyMessages(rawText, state) {
           stickerUrl: sticker.url
         });
       }
-      /* [区域标注·本次需求2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 以纯文本气泡露出 */
+      /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
       return;
     }
 
@@ -1245,6 +1329,32 @@ function showClearAllMessagesModal(container, state) {
 }
 
 /* ==========================================================================
+   [区域标注·本次修改3] AI 消息格式修正结果弹窗
+   说明：消息气泡“修正”按钮无法补全格式时使用应用内弹窗提示，不使用原生 alert/confirm。
+   ========================================================================== */
+function showAiFormatRepairResultModal(container, { success = false, title = '', message = '' } = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次修改3] AI 消息格式修正提示弹窗 -->
+    <div class="chat-modal-header">
+      <span>${escapeHtml(title || (success ? '修正完成' : '无法修正'))}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">${escapeHtml(message || (success ? '已将这条 AI 消息修正为表情包消息。' : '未识别到可匹配的已挂载表情包格式或关键词。'))}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
    [区域标注·本次需求5] 多选转发联系人选择弹窗
    说明：把选中的多条消息转发到聊天列表中其它联系人聊天界面；持久化统一写 IndexedDB。
    ========================================================================== */
@@ -1406,7 +1516,19 @@ async function retryLatestAiReply(container, state, db, settingsManager) {
     return;
   }
 
-  await persistCurrentMessages(state, db);
+  /* ========================================================================
+     [区域标注·本次修改1] 魔法棒重 roll 立即清空旧 AI 回复
+     说明：
+     1. 先删除最新一轮 AI 回复并立即写入 DB.js / IndexedDB。
+     2. 立刻刷新当前消息列表，让旧气泡马上从聊天界面消失。
+     3. 再调用 API 重新生成最新一轮回复，不保留旧 AI 气泡到返回列表后才消失。
+     ======================================================================== */
+  refreshCurrentSessionLastMessage(state);
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+  ]);
+  renderCurrentChatMessage(container, state, { keepScroll: true });
   await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
   /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
 }
@@ -2330,6 +2452,42 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.deleteConfirmMessageId = '';
       refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·本次修改3] 消息气泡功能栏 — 修正 AI 消息格式
+       说明：只修正 AI 消息中残缺的表情包格式，成功后原地替换并写入 DB.js / IndexedDB。
+       ========================================================================== */
+    case 'msg-bubble-fix-format': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const messageIndex = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
+      if (messageIndex < 0) break;
+
+      const repairedMessage = repairAiMessageFormatIfPossible(state.currentMessages[messageIndex], state);
+      if (!repairedMessage) {
+        showAiFormatRepairResultModal(container, {
+          success: false,
+          title: '无法修正',
+          message: '未识别到可匹配的已挂载表情包格式或关键词。请确认 AI 文本里包含表情包资源ID、完整表情名或明显表情关键词。'
+        });
+        break;
+      }
+
+      state.currentMessages[messageIndex] = repairedMessage;
+      state.deleteConfirmMessageId = '';
+      state.selectedMessageId = messageId;
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      refreshMessageBubbleRows(container, state, [messageId]);
+      showAiFormatRepairResultModal(container, {
+        success: true,
+        title: '修正完成',
+        message: `已将这条 AI 消息修正为表情包：“${repairedMessage.stickerName || '未命名表情包'}”。`
+      });
       break;
     }
 
