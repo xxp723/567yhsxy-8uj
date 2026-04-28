@@ -48,30 +48,35 @@
   z-index: 10;
 }
 
-/* [区域标注·本次需求5] 消息页返回按钮 */
+/* ==========================================================================
+   [区域标注·本次修改1] 消息页返回按钮尺寸统一
+   说明：参照 Chat 板块标题栏右侧 "+" 按钮，统一为 28px；
+         背景保持透明，界面只显示 IconPark 风格的 ">" 图标。
+   ========================================================================== */
 .msg-top-bar__back {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
-  background: rgba(74, 52, 42, 0.08);
+  background: transparent;
   color: #4A342A;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: transform 0.1s ease, opacity 0.15s ease;
   flex-shrink: 0;
 }
 
 .msg-top-bar__back:active {
-  background: rgba(74, 52, 42, 0.18);
+  background: transparent;
+  opacity: 0.72;
   transform: scale(0.92);
 }
 
 .msg-top-bar__back svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 /* [区域标注·本次需求5] 消息页好友信息区域 */
@@ -133,30 +138,35 @@
   white-space: nowrap;
 }
 
-/* [区域标注·本次需求5] 消息页更多按钮 */
+/* ==========================================================================
+   [区域标注·本次修改1] 消息页更多按钮尺寸统一
+   说明：参照 Chat 板块标题栏右侧 "+" 按钮，统一为 28px；
+         背景保持透明，界面只显示 IconPark 风格的 "···" 图标。
+   ========================================================================== */
 .msg-top-bar__more {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
-  background: rgba(74, 52, 42, 0.06);
+  background: transparent;
   color: #4A342A;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: transform 0.1s ease, opacity 0.15s ease;
   flex-shrink: 0;
 }
 
 .msg-top-bar__more:active {
-  background: rgba(74, 52, 42, 0.14);
+  background: transparent;
+  opacity: 0.72;
   transform: scale(0.94);
 }
 
 .msg-top-bar__more svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ==========================================================================
@@ -447,10 +457,13 @@
   box-shadow: 0 14px 34px rgba(74, 52, 42, 0.14);
 }
 
-/* [区域标注·本次需求5] 输入栏 IconPark 圆形图标按钮 */
+/* ==========================================================================
+   [区域标注·本次修改1] 输入栏 IconPark 圆形图标按钮尺寸统一
+   说明：咖啡、表情包、魔法棒、纸飞机按钮统一参照 Chat 标题栏右侧 "+" 按钮尺寸。
+   ========================================================================== */
 .msg-input-bar__icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: rgba(74, 52, 42, 0.08);
@@ -479,8 +492,8 @@
 }
 
 .msg-input-bar__icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
 }
 
 /* [区域标注·本次需求5] 文字输入框：保持原有圆角输入框风格 */
@@ -701,11 +714,16 @@
   color: #4A342A;
 }
 
+/* ==========================================================================
+   [区域标注·本次修改2] 聊天设置页滚动区域显示保障
+   说明：确保底部“清空全部聊天记录”入口可以完整滚动到可视区域，
+         不改动清空逻辑，持久化仍由 index.js 统一写入 DB.js / IndexedDB。
+   ========================================================================== */
 .msg-settings-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 14px 22px;
+  padding: 12px 14px 42px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -855,6 +873,7 @@
   padding: 0;
   overflow: hidden;
   background: rgba(255, 250, 246, 0.82);
+  flex-shrink: 0;
 }
 
 .msg-settings-danger-action {
