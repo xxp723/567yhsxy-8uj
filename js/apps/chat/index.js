@@ -45,7 +45,10 @@ const TAB_ICONS = {
      ======================================================================== */
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
   upload: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 16L24 6l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v8h32v-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 14l3-3a10 10 0 0 1 14 14l-3 3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 34l-3 3a10 10 0 0 1-14-14l3-3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 14l3-3a10 10 0 0 1 14 14l-3 3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 34l-3 3a10 10 0 0 1-14-14l3-3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* ===== 闲谈表情包本地文件导入：IconPark 文件图标 START ===== */
+  fileText: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 4h16l8 8v32H12V4Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M28 4v10h10" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 24h12M18 31h12M18 38h7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  /* ===== 闲谈表情包本地文件导入：IconPark 文件图标 END ===== */
 };
 
 /* ==========================================================================
@@ -201,6 +204,29 @@ function normalizeStickerData(rawData) {
   return { activeGroupId, groups, items };
 }
 
+/* ==========================================================================
+   ===== 闲谈表情包持久化修复：IndexedDB 专用读写 START =====
+   说明：
+   1. 表情包独立页所有表情包分组/条目统一走 DB.js / IndexedDB。
+   2. 读取兼容 IndexedDB 中既有 record.data 与历史 record.value 形态，避免刷新后被误判为空。
+   3. 禁止 localStorage/sessionStorage，且不写双份兜底存储。
+   ========================================================================== */
+async function loadStickerDataFromDb(db) {
+  try {
+    const record = await db.get(STORE_NAME, DATA_KEY_STICKERS);
+    return normalizeStickerData(record ? (record.data ?? record.value ?? null) : null);
+  } catch (error) {
+    console.error('[Chat] 表情包数据读取失败:', error);
+    return normalizeStickerData(null);
+  }
+}
+
+async function persistStickerData(state, db) {
+  state.stickerData = normalizeStickerData(state.stickerData);
+  await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+}
+/* ===== 闲谈表情包持久化修复：IndexedDB 专用读写 END ===== */
+
 function createUid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
@@ -270,7 +296,7 @@ export async function mount(container, context) {
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(currentActiveMaskId)),
-    dbGet(db, DATA_KEY_STICKERS)
+    loadStickerDataFromDb(db)
   ]);
 
   /* [区域标注] 应用状态对象 */
@@ -1209,6 +1235,81 @@ function updateCurrentChatSendingUi(container, state) {
 }
 
 /* ==========================================================================
+   ===== 闲谈聊天底栏防闪屏：功能区/表情包区局部刷新 START =====
+   说明：
+   1. 点击“咖啡”和“表情包”只切换现有 DOM 的 is-open / is-active 状态。
+   2. 不再重建整个聊天消息页，避免输入栏、消息列表和顶部栏闪屏。
+   3. 仅服务用户提到的聊天底栏功能区/表情包区，不影响其它页面。
+   ========================================================================== */
+function syncMessageDockOpenState(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (!msgWrap) return;
+
+  const coffeeDock = msgWrap.querySelector('[data-role="msg-feature-dock"]');
+  const stickerPanel = msgWrap.querySelector('[data-role="msg-sticker-panel"]');
+  const coffeeBtn = msgWrap.querySelector('[data-action="msg-coffee"]');
+  const stickerBtn = msgWrap.querySelector('[data-action="msg-sticker"]');
+
+  if (coffeeDock) coffeeDock.classList.toggle('is-open', Boolean(state.coffeeDockOpen));
+  if (stickerPanel) stickerPanel.classList.toggle('is-open', Boolean(state.stickerPanelOpen));
+  if (coffeeBtn) coffeeBtn.classList.toggle('is-active', Boolean(state.coffeeDockOpen));
+  if (stickerBtn) stickerBtn.classList.toggle('is-active', Boolean(state.stickerPanelOpen));
+}
+
+function renderMsgStickerPanelGrid(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const panel = msgWrap?.querySelector('[data-role="msg-sticker-panel"]');
+  const grid = panel?.querySelector('.msg-sticker-panel__grid');
+  if (!grid) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const data = normalizeStickerData(state.stickerData);
+  const groupId = String(state.stickerPanelGroupId || 'all');
+  const visibleItems = groupId === 'all'
+    ? data.items
+    : data.items.filter(item => String(item.groupId || 'all') === groupId);
+
+  panel.querySelectorAll('.msg-sticker-panel__group-btn').forEach(btn => {
+    btn.classList.toggle('is-active', String(btn.dataset.stickerGroupId || 'all') === groupId);
+  });
+
+  grid.innerHTML = visibleItems.length
+    ? visibleItems.map(item => `
+        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 START ===== -->
+        <button class="msg-sticker-panel__item"
+                data-action="send-msg-sticker"
+                data-sticker-id="${escapeHtml(item.id)}"
+                type="button"
+                title="${escapeHtml(item.name)}">
+          <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+          <span>${escapeHtml(item.name)}</span>
+        </button>
+        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 END ===== -->
+      `).join('')
+    : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`;
+}
+/* ===== 闲谈聊天底栏防闪屏：功能区/表情包区局部刷新 END ===== */
+
+/* ==========================================================================
+   ===== 闲谈聊天设置页表情包挂载：局部刷新 START =====
+   说明：选择挂载分组后只更新按钮选中态，页面继续停留在聊天设置页。
+   ========================================================================== */
+function syncMountedStickerGroupButtons(container, state) {
+  const selectedSet = new Set(
+    Array.isArray(state.chatPromptSettings?.mountedStickerGroupIds)
+      ? state.chatPromptSettings.mountedStickerGroupIds.map(String)
+      : []
+  );
+
+  container.querySelectorAll('[data-action="toggle-mounted-sticker-group"]').forEach(btn => {
+    btn.classList.toggle('is-active', selectedSet.has(String(btn.dataset.stickerGroupId || '')));
+  });
+}
+/* ===== 闲谈聊天设置页表情包挂载：局部刷新 END ===== */
+
+/* ==========================================================================
    [区域标注·本次需求] 魔法棒重新回复
    说明：删除最新一轮 AI 回复后，直接用用户最新消息重新调用 API。
    ========================================================================== */
@@ -2091,7 +2192,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-coffee':
       state.coffeeDockOpen = !state.coffeeDockOpen;
       if (state.coffeeDockOpen) state.stickerPanelOpen = false;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncMessageDockOpenState(container, state);
       break;
 
     /* ========================================================================
@@ -2103,12 +2204,12 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         state.coffeeDockOpen = false;
         state.stickerPanelGroupId = state.stickerPanelGroupId || normalizeStickerData(state.stickerData).activeGroupId || 'all';
       }
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncMessageDockOpenState(container, state);
       break;
 
     case 'switch-msg-sticker-group':
       state.stickerPanelGroupId = target.dataset.stickerGroupId || 'all';
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      renderMsgStickerPanelGrid(container, state);
       break;
 
     case 'send-msg-sticker':
@@ -2338,7 +2439,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       }
       state.chatPromptSettings.mountedStickerGroupIds = Array.from(current);
       await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncMountedStickerGroupButtons(container, state);
       break;
     }
 
@@ -2403,7 +2504,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.stickerData = { ...data, activeGroupId: exists ? groupId : 'all' };
       state.stickerMultiSelectMode = false;
       state.selectedStickerIds = [];
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       rerenderCurrentSubPage(container, state);
       break;
     }
@@ -2427,7 +2528,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         groups: [...data.groups, group],
         activeGroupId: group.id
       };
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       closeModal(container);
       rerenderCurrentSubPage(container, state);
       break;
@@ -2467,7 +2568,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         ]
       };
       state.pendingStickerLocalFile = null;
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       closeModal(container);
       rerenderCurrentSubPage(container, state);
       break;
@@ -2497,7 +2598,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         ...data,
         items: [...data.items, ...newItems]
       };
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       closeModal(container);
       rerenderCurrentSubPage(container, state);
       break;
@@ -2517,7 +2618,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
       state.stickerMultiSelectMode = false;
       state.selectedStickerIds = [];
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       closeModal(container);
       rerenderCurrentSubPage(container, state);
       break;
@@ -2567,7 +2668,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
       state.stickerMultiSelectMode = false;
       state.selectedStickerIds = [];
-      await dbPut(db, DATA_KEY_STICKERS, state.stickerData);
+      await persistStickerData(state, db);
       rerenderCurrentSubPage(container, state);
       break;
     }
@@ -2983,6 +3084,17 @@ function showStickerUploadModal(container, state) {
 
       <div class="sticker-import-divider"></div>
 
+      <!-- ===== 闲谈表情包本地文件导入：txt/docx 批量导入 START ===== -->
+      <label class="chat-upload-option">
+        <span class="chat-upload-option__icon">${TAB_ICONS.fileText}</span>
+        <span class="chat-upload-option__text">导入本地文件 txt / docx</span>
+        <input class="sticker-import-file-input" data-role="sticker-import-file-input" type="file" accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+      </label>
+      <div class="chat-modal-hint">文件内容支持“名称：图片URL”“名称 图片URL”或每行一个图片URL，导入后会自动加入当前分组。</div>
+      <!-- ===== 闲谈表情包本地文件导入：txt/docx 批量导入 END ===== -->
+
+      <div class="sticker-import-divider"></div>
+
       <label class="chat-upload-url-label">
         <span class="chat-upload-url-label__icon">${TAB_ICONS.link}</span>
         <span>URL 链接导入（支持单个 / 批量，一行一个）</span>
@@ -3040,6 +3152,120 @@ function parseStickerUrlImportText(text) {
     })
     .filter(Boolean);
 }
+
+/* ==========================================================================
+   ===== 闲谈表情包本地文件导入：txt/docx 解析 START =====
+   说明：
+   1. 只服务用户主页表情包独立页右上角“+”弹窗中的“导入本地文件”。
+   2. txt 直接读取文本；docx 只解析 word/document.xml 文本内容。
+   3. 批量导入结果统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+async function importStickerTextToCurrentGroup(container, state, db, text) {
+  const parsed = parseStickerUrlImportText(text);
+  if (!parsed.length) {
+    renderModalNotice(container, '未解析到有效表情包；请使用“名称：图片URL”或每行一个图片URL');
+    return;
+  }
+
+  const data = normalizeStickerData(state.stickerData);
+  const targetGroupId = getStickerTargetGroupId(state);
+  const now = Date.now();
+  const newItems = parsed.map((item, index) => ({
+    id: createUid('sticker'),
+    groupId: targetGroupId,
+    name: item.name,
+    url: item.url,
+    source: 'file-import',
+    createdAt: now + index
+  }));
+
+  state.stickerData = {
+    ...data,
+    items: [...data.items, ...newItems]
+  };
+  await persistStickerData(state, db);
+  closeModal(container);
+  rerenderCurrentSubPage(container, state);
+}
+
+function decodeXmlText(value) {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = String(value || '');
+  return textarea.value;
+}
+
+function parseDocxXmlText(xmlText) {
+  return String(xmlText || '')
+    .replace(/<w:tab\/>/g, '\t')
+    .replace(/<w:br\/>/g, '\n')
+    .replace(/<\/w:p>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .split(/\n+/)
+    .map(line => decodeXmlText(line).trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function findZipEntry(bytes, fileName) {
+  const decoder = new TextDecoder('utf-8');
+  for (let index = bytes.length - 22; index >= 0; index -= 1) {
+    if (bytes[index] !== 0x50 || bytes[index + 1] !== 0x4b || bytes[index + 2] !== 0x05 || bytes[index + 3] !== 0x06) continue;
+
+    const view = new DataView(bytes.buffer, bytes.byteOffset + index, 22);
+    const centralDirSize = view.getUint32(12, true);
+    const centralDirOffset = view.getUint32(16, true);
+    let offset = centralDirOffset;
+    const end = centralDirOffset + centralDirSize;
+
+    while (offset < end && bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b && bytes[offset + 2] === 0x01 && bytes[offset + 3] === 0x02) {
+      const entryView = new DataView(bytes.buffer, bytes.byteOffset + offset, 46);
+      const compression = entryView.getUint16(10, true);
+      const compressedSize = entryView.getUint32(20, true);
+      const fileNameLength = entryView.getUint16(28, true);
+      const extraLength = entryView.getUint16(30, true);
+      const commentLength = entryView.getUint16(32, true);
+      const localHeaderOffset = entryView.getUint32(42, true);
+      const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + fileNameLength));
+
+      if (name === fileName) {
+        const localView = new DataView(bytes.buffer, bytes.byteOffset + localHeaderOffset, 30);
+        const localNameLength = localView.getUint16(26, true);
+        const localExtraLength = localView.getUint16(28, true);
+        const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+        return {
+          compression,
+          data: bytes.slice(dataStart, dataStart + compressedSize)
+        };
+      }
+
+      offset += 46 + fileNameLength + extraLength + commentLength;
+    }
+    break;
+  }
+  return null;
+}
+
+async function inflateRawZipData(compressedData) {
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('当前浏览器不支持 docx 解压解析，请改用 txt 导入');
+  }
+
+  const stream = new Blob([compressedData]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function readDocxText(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entry = findZipEntry(bytes, 'word/document.xml');
+  if (!entry) throw new Error('未找到 docx 正文内容');
+
+  const xmlBytes = entry.compression === 0
+    ? entry.data
+    : await inflateRawZipData(entry.data);
+
+  return parseDocxXmlText(new TextDecoder('utf-8').decode(xmlBytes));
+}
+/* ===== 闲谈表情包本地文件导入：txt/docx 解析 END ===== */
 
 function showDeleteStickerGroupModal(container, state, groupId) {
   const mask = container.querySelector('[data-role="modal-mask"]');
@@ -3256,8 +3482,29 @@ function handleInput(e, state, container, db) {
    [区域标注·本次需求3] 表情包本地上传 change 处理
    说明：读取为 data URL 后仅暂存在运行时，用户点击确认才写入 IndexedDB。
    ========================================================================== */
-function handleChange(e, state, container, db) {
+async function handleChange(e, state, container, db) {
   const target = e.target;
+
+  /* ===== 闲谈表情包本地文件导入：txt/docx change 处理 START ===== */
+  if (target?.matches?.('[data-role="sticker-import-file-input"]')) {
+    const file = target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileName = String(file.name || '').toLowerCase();
+      const text = fileName.endsWith('.docx')
+        ? await readDocxText(file)
+        : await file.text();
+      await importStickerTextToCurrentGroup(container, state, db, text);
+    } catch (error) {
+      renderModalNotice(container, error?.message || '本地文件导入失败');
+    } finally {
+      target.value = '';
+    }
+    return;
+  }
+  /* ===== 闲谈表情包本地文件导入：txt/docx change 处理 END ===== */
+
   if (!target?.matches?.('[data-role="sticker-local-file-input"]')) return;
 
   const file = target.files?.[0];
