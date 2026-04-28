@@ -2342,3 +2342,47 @@
 .sticker-multi-action-bar__btn--danger:active:not(:disabled) {
   background: rgba(181, 67, 54, 0.16);
 }
+
+/* ==========================================================================
+   [区域标注·本次需求3] 表情包独立页单击放大预览弹窗
+   说明：
+   1. 复用闲谈应用内自定义弹窗层，不使用 alert/confirm/prompt 等原生浏览器弹窗。
+   2. 图片尺寸限制在手机屏幕可视范围内，保持完整图像比例。
+   3. 色彩、圆角、阴影与闲谈主题 UI 保持统一。
+   ========================================================================== */
+.sticker-preview-modal__header {
+  flex-shrink: 0;
+}
+
+.sticker-preview-modal__header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sticker-preview-modal__body {
+  width: 100%;
+  min-height: 220px;
+  max-height: min(68vh, 430px);
+  padding: 12px;
+  border-radius: 20px;
+  background: rgba(74, 52, 42, 0.045);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sticker-preview-modal__image {
+  display: block;
+  max-width: min(76vw, 300px);
+  max-height: min(58vh, 360px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(44, 32, 22, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+}

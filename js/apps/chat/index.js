@@ -352,7 +352,9 @@ export async function mount(container, context) {
     stickerMultiSelectMode: false,
     selectedStickerIds: [],
     /* [区域标注·本次需求3] 表情包本地上传临时预览，不持久化；确认后才写入 IndexedDB */
-    pendingStickerLocalFile: null
+    pendingStickerLocalFile: null,
+    /* [区域标注·本次需求3] 表情包独立页单击放大预览延迟计时器；仅运行时使用，不持久化 */
+    stickerPreviewClickTimer: 0
   };
 
   /* [修改4·修改6] 根据当前面具构建 profile 数据 */
@@ -862,40 +864,97 @@ function getMountedStickerItems(state) {
   return data.items.filter(item => mountedGroupIds.includes(String(item.groupId || 'all')));
 }
 
+function getStickerProtocolCandidates(token) {
+  const raw = String(token || '').trim();
+  if (!raw) return [];
+
+  /* ========================================================================
+     [区域标注·本次需求2] AI 表情包协议目标强力归一化
+     说明：
+     1. 兼容模型把“资源ID：xxx / 表情名：xxx / xxx”混写进 [表情] 内容。
+     2. 只在已挂载表情包中匹配；不编造、不兜底到其它存储。
+     3. 目标是防止 AI 表情包因轻微掉格式而在聊天界面显示成纯文本协议。
+     ======================================================================== */
+  const cleaned = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/[`*_]+/g, '')
+    .replace(/^["'“”]+|["'“”]+$/g, '')
+    .trim();
+
+  const candidates = [
+    cleaned,
+    cleaned.replace(/^(?:资源\s*ID|资源Id|ID|id|表情名|名称)\s*[：:]\s*/i, '').trim()
+  ];
+
+  [...cleaned.matchAll(/(?:资源\s*ID|资源Id|ID|id|表情名|名称)\s*[：:]\s*([^；;，,\n]+)/gi)]
+    .forEach(match => candidates.push(String(match[1] || '').trim()));
+
+  [...cleaned.matchAll(/sticker_[A-Za-z0-9_:-]+/g)]
+    .forEach(match => candidates.push(String(match[0] || '').trim()));
+
+  cleaned.split(/[；;，,\s]+/).forEach(part => candidates.push(part.trim()));
+
+  return Array.from(new Set(
+    candidates
+      .map(item => String(item || '').replace(/^["'“”]+|["'“”]+$/g, '').trim())
+      .filter(Boolean)
+  ));
+}
+
 function resolveStickerProtocolTarget(token, state) {
-  const normalizedToken = String(token || '').trim().replace(/^["'“”]+|["'“”]+$/g, '');
-  if (!normalizedToken) return null;
+  const candidates = getStickerProtocolCandidates(token);
+  if (!candidates.length) return null;
 
   const candidateItems = getMountedStickerItems(state);
-  const byId = candidateItems.find(item => String(item.id) === normalizedToken);
-  if (byId) return byId;
+  for (const normalizedToken of candidates) {
+    const byId = candidateItems.find(item => String(item.id) === normalizedToken);
+    if (byId) return byId;
 
-  const byName = candidateItems.find(item => String(item.name) === normalizedToken);
-  if (byName) return byName;
+    const byName = candidateItems.find(item => String(item.name) === normalizedToken);
+    if (byName) return byName;
+  }
 
   return null;
 }
 
+function cleanAiProtocolBlockContent(content) {
+  return String(content || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*(?:`|\*\*)+/g, '')
+    .replace(/(?:`|\*\*)+\s*$/g, '')
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    .trim();
+}
+
 function extractAiProtocolBlocks(rawText) {
-  const visibleText = String(rawText || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const visibleText = String(rawText || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim();
   if (!visibleText) return [];
 
-  const strictBlocks = [...visibleText.matchAll(/\*\*`?\s*\[(回复|表情)\]\s*([^：:\n`]+?)\s*[：:]\s*([\s\S]*?)`?\*\*(?=\s*\*\*`?\s*\[(?:回复|表情)\]|$)/g)]
-    .map(match => ({
-      type: String(match[1] || '').trim(),
-      roleName: String(match[2] || '').trim(),
-      content: String(match[3] || '').trim()
-    }))
-    .filter(item => item.type && item.content);
+  /* ========================================================================
+     [区域标注·本次需求2] AI 回复通用协议强力解析器
+     说明：
+     1. 优先寻找任意位置的 [回复]/[表情] 协议头，而不是要求整行完全规范。
+     2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
+     3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
+     ======================================================================== */
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const matches = [...visibleText.matchAll(markerRegex)];
+  if (!matches.length) return [];
 
-  if (strictBlocks.length) return strictBlocks;
-
-  return [...visibleText.matchAll(/(?:^|\n)\s*(?:\*\*)?`?\s*\[(回复|表情)\]\s*([^：:\n`]+?)\s*[：:]\s*([^\n`*]+?)\s*`?(?:\*\*)?(?=\n|$)/g)]
-    .map(match => ({
-      type: String(match[1] || '').trim(),
-      roleName: String(match[2] || '').trim(),
-      content: String(match[3] || '').trim()
-    }))
+  return matches
+    .map((match, index) => {
+      const nextMatch = matches[index + 1];
+      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
+      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+      return {
+        type: String(match[1] || '').trim(),
+        roleName: String(match[2] || '').trim(),
+        content: cleanAiProtocolBlockContent(visibleText.slice(contentStart, contentEnd))
+      };
+    })
     .filter(item => item.type && item.content);
 }
 
@@ -921,8 +980,9 @@ function buildAiReplyMessages(rawText, state) {
           stickerName: sticker.name,
           stickerUrl: sticker.url
         });
-        return;
       }
+      /* [区域标注·本次需求2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 以纯文本气泡露出 */
+      return;
     }
 
     splitStrictSentenceBubbles(block.content).forEach(content => {
@@ -970,7 +1030,14 @@ async function sendStickerMessage(container, state, db, stickerId, settingsManag
 
   renderCurrentChatMessage(container, state);
 
-  if (options.triggerAi !== false) {
+  /* ========================================================================
+     [区域标注·本次需求1] 发送表情包后禁止立即调用 API
+     说明：
+     1. 用户点选表情包只把表情包作为 user 消息入列并写入 IndexedDB。
+     2. 只有纸飞机按钮或魔法棒等显式触发点传入 triggerAi:true 时，才允许调用 API。
+     3. 不做双份存储兜底，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  if (options.triggerAi === true) {
     await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
   }
 }
@@ -1392,23 +1459,17 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
 /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
 /* ===== 闲谈：通用消息协议解析 START ===== */
 function extractProtocolReplyContents(text) {
-  const value = String(text || '');
-
   /*
-   * 通用协议示例：**`[回复] 角色名：文字消息内容`**
+   * ========================================================================
+   * [区域标注·本次需求2] 通用消息协议强力约束入口
    * 说明：
-   * 1. 优先按完整加粗反引号协议块提取，降低 Markdown 掉格式对气泡拆分的影响。
-   * 2. 兼容模型偶发漏掉外层 ** 或反引号的情况，但仍只识别 [回复] 协议。
+   * 1. 统一复用 extractAiProtocolBlocks，不再维护两套容易分叉的协议正则。
+   * 2. 只取 [回复] 内容，保证“回复文字消息”不再把协议头原样显示到聊天界面。
    * 3. 这里只负责解析可见文本，不做任何持久化存储。
-   */
-  const strictMatches = [...value.matchAll(/\*\*`?\s*\[回复\]\s*([^：:\n`]+?)\s*[：:]\s*([\s\S]*?)`?\*\*(?=\s*\*\*`?\s*\[回复\]|$)/g)]
-    .map(match => String(match[2] || '').trim())
-    .filter(Boolean);
-
-  if (strictMatches.length) return strictMatches;
-
-  return [...value.matchAll(/(?:^|\n)\s*(?:\*\*)?`?\s*\[回复\]\s*([^：:\n`]+?)\s*[：:]\s*([^\n`*]+?)\s*`?(?:\*\*)?(?=\n|$)/g)]
-    .map(match => String(match[2] || '').trim())
+   * ======================================================================== */
+  return extractAiProtocolBlocks(text)
+    .filter(block => block.type === '回复')
+    .map(block => String(block.content || '').trim())
     .filter(Boolean);
 }
 /* ===== 闲谈：通用消息协议解析 END ===== */
@@ -2213,7 +2274,8 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     case 'send-msg-sticker':
-      await sendStickerMessage(container, state, db, target.dataset.stickerId, settingsManager, { triggerAi: true });
+      /* [区域标注·本次需求1] 点选表情包只发送，不触发 AI；用户点击纸飞机后才调用 API */
+      await sendStickerMessage(container, state, db, target.dataset.stickerId, settingsManager, { triggerAi: false });
       break;
 
     /* [区域标注·本次需求] 聊天消息页面 — 魔法棒按钮：删除最新 AI 回复并重新回复 */
@@ -2625,6 +2687,24 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
+       [区域标注·本次需求3] 表情包独立页单击放大预览
+       说明：
+       1. 单击普通表情包时打开应用内预览弹窗，不使用原生浏览器弹窗。
+       2. 延迟 260ms 是为了给既有“双击进入多选删除”留出取消单击的时间。
+       ======================================================================== */
+    case 'open-sticker-preview': {
+      if (state.stickerMultiSelectMode) break;
+      const stickerId = String(target.dataset.stickerId || '').trim();
+      if (!stickerId) break;
+      if (state.stickerPreviewClickTimer) window.clearTimeout(state.stickerPreviewClickTimer);
+      state.stickerPreviewClickTimer = window.setTimeout(() => {
+        state.stickerPreviewClickTimer = 0;
+        showStickerPreviewModal(container, state, stickerId);
+      }, 260);
+      break;
+    }
+
+    /* ========================================================================
        [区域标注·本次需求2] 表情包独立页多选删除
        说明：双击任意表情包进入多选删除态；支持单选、多选、全选与批量删除。
        ======================================================================== */
@@ -2972,9 +3052,9 @@ function renderStickerSubPage(state) {
 
   const stickerGridHtml = visibleStickers.length
     ? visibleStickers.map(item => `
-        <!-- [区域标注·本次需求2] 表情包独立页可双击删除预览项：${escapeHtml(item.name)} -->
+        <!-- [区域标注·本次需求3] 表情包独立页单击放大预览项：${escapeHtml(item.name)} -->
         <button class="sticker-grid-item ${state.stickerMultiSelectMode ? 'is-multi-selecting' : ''} ${selectedStickerSet.has(String(item.id)) ? 'is-selected' : ''}"
-                data-action="toggle-sticker-multi-item"
+                data-action="${state.stickerMultiSelectMode ? 'toggle-sticker-multi-item' : 'open-sticker-preview'}"
                 data-sticker-id="${escapeHtml(item.id)}"
                 type="button"
                 title="${escapeHtml(item.name)}">
@@ -3056,6 +3136,26 @@ function showCreateStickerGroupModal(container) {
     const input = panel.querySelector('[data-role="sticker-group-name-input"]');
     if (input) input.focus();
   }, 30);
+}
+
+function showStickerPreviewModal(container, state, stickerId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const sticker = normalizeStickerData(state.stickerData).items.find(item => String(item.id) === String(stickerId));
+  if (!mask || !panel || !sticker) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求3] 表情包独立页单击放大预览弹窗 -->
+    <div class="chat-modal-header sticker-preview-modal__header">
+      <span>${escapeHtml(sticker.name || '表情包')}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="sticker-preview-modal__body">
+      <img class="sticker-preview-modal__image" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(sticker.name || '表情包')}">
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
 
 function showStickerUploadModal(container, state) {
@@ -3563,6 +3663,10 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    ========================================================================== */
 function handleDoubleClick(e, state, container) {
   if (state.subPageView !== 'sticker') return;
+  if (state.stickerPreviewClickTimer) {
+    window.clearTimeout(state.stickerPreviewClickTimer);
+    state.stickerPreviewClickTimer = 0;
+  }
   const target = e.target.closest('[data-sticker-id]');
   if (!target) return;
 
