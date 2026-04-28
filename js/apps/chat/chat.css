@@ -1935,6 +1935,287 @@
   margin: 0;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·收藏展示页样式]
+   说明：
+   1. 用户主页“收藏”折叠栏进入的独立收藏展示页面。
+   2. 顶部左右为搜索/筛选 IconPark 图标按钮；分组栏含固定 All 与 “+”。
+   3. 收藏卡片一行两个排列；双击卡片进入多选后显示悬浮底栏。
+   ========================================================================== */
+.favorite-sub-page {
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.favorite-sub-page__header {
+  position: relative;
+}
+
+.favorite-page-icon-btn {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.favorite-page-icon-btn:active {
+  background: rgba(74, 52, 42, 0.18);
+}
+
+.favorite-page-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.favorite-page-search-btn {
+  left: 16px;
+  transform: translateY(-50%);
+}
+
+.favorite-page-search-btn:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.favorite-page-filter-btn {
+  right: 16px;
+  transform: translateY(-50%);
+}
+
+.favorite-page-filter-btn:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.favorite-search-row {
+  flex-shrink: 0;
+  padding: 0 16px 10px 16px;
+  background: #f8f4ef;
+}
+
+.favorite-search-row.is-hidden {
+  display: none;
+}
+
+.favorite-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.88);
+  color: #4A342A;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  padding: 10px 13px;
+}
+
+.favorite-search-input:focus {
+  border-color: rgba(74, 52, 42, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.favorite-group-tabs {
+  flex-shrink: 0;
+  width: 100%;
+  background: #f8f4ef;
+  padding: 6px 0 10px 0;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.favorite-group-tabs__scroller {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.favorite-group-tabs__scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.favorite-group-tab-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.favorite-group-add-tab {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.favorite-group-add-tab:active {
+  background: rgba(74, 52, 42, 0.18);
+  transform: scale(0.92);
+}
+
+.favorite-group-add-tab svg {
+  width: 14px;
+  height: 14px;
+}
+
+.favorite-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 24px 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.favorite-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.favorite-list-scroll.is-multi-selecting {
+  padding-bottom: 96px;
+}
+
+.favorite-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.favorite-card {
+  min-width: 0;
+  min-height: 118px;
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #4A342A;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 6px 16px rgba(74, 52, 42, 0.055);
+  transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.favorite-card:active {
+  transform: scale(0.97);
+  background: rgba(255, 250, 244, 0.94);
+}
+
+.favorite-card.is-selected {
+  background: rgba(255, 250, 244, 0.96);
+  border-color: rgba(74, 52, 42, 0.3);
+  box-shadow: 0 0 0 2px rgba(74, 52, 42, 0.08);
+}
+
+.favorite-card__check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.9);
+  color: #fffaf4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.favorite-card__check svg {
+  width: 14px;
+  height: 14px;
+}
+
+.favorite-card__title {
+  padding-right: 24px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-card__meta {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.48);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-card__preview {
+  flex: 1;
+  min-height: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(74, 52, 42, 0.66);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.favorite-empty {
+  grid-column: 1 / -1;
+  min-height: 220px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px dashed rgba(74, 52, 42, 0.13);
+  color: rgba(74, 52, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.favorite-preview-message {
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.055);
+  color: #4A342A;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
+.favorite-preview-message__role {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(74, 52, 42, 0.48);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 /* [区域标注·修改4] 聊天天数详情 — 总计区域 */
 .chat-days-detail-total {
   display: flex;

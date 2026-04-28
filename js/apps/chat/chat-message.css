@@ -941,10 +941,10 @@
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
+  gap: 6px;
+  padding: 6px 7px;
   margin-bottom: 4px;
-  border-radius: 16px;
+  border-radius: 15px;
   background: rgba(255, 252, 247, 0.96);
   border: 1px solid rgba(74, 52, 42, 0.08);
   box-shadow: 0 10px 24px rgba(74, 52, 42, 0.14);
@@ -970,15 +970,15 @@
 
 .msg-bubble-toolbar__btn {
   border: none;
-  border-radius: 12px;
+  border-radius: 11px;
   background: rgba(74, 52, 42, 0.06);
   color: #4A342A;
-  padding: 7px 9px;
+  padding: 6px 7px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
@@ -990,8 +990,8 @@
 }
 
 .msg-bubble-toolbar__btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .msg-bubble-toolbar__btn--danger {

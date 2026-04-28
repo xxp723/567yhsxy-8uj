@@ -2,7 +2,7 @@
  * 文件名: js/apps/chat/profile.js
  * 用途: 闲谈应用 — 用户主页板块
  *       显示当前用户面具身份的头像、昵称、签名、
- *       统计数据（好友/身份/聊天天数）、钱包/表情包折叠栏。
+ *       统计数据（好友/身份/聊天天数）、钱包/收藏/表情包折叠栏。
  *       联动档案应用的用户面具身份数据。
  * 架构层: 应用层（闲谈子模块）
  */
@@ -19,6 +19,8 @@ const ICONS = {
   chatDays: `<svg viewBox="0 0 48 48" fill="none"><rect x="4" y="8" width="40" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M4 20h40M16 4v8M32 4v8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="30" r="2" fill="currentColor"/><circle cx="24" cy="30" r="2" fill="currentColor"/><circle cx="30" cy="30" r="2" fill="currentColor"/></svg>`,
   /* [区域标注] 钱包折叠栏图标（IconPark — Wallet / 钱包） */
   wallet: `<svg viewBox="0 0 48 48" fill="none"><rect x="6" y="10" width="36" height="28" rx="3" stroke="currentColor" stroke-width="3"/><path d="M6 18h36" stroke="currentColor" stroke-width="3"/><circle cx="34" cy="28" r="3" stroke="currentColor" stroke-width="3"/><path d="M14 10V8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="3"/></svg>`,
+  /* [区域标注·已完成·收藏折叠栏] 收藏折叠栏图标（IconPark — Star / 收藏） */
+  favorite: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l5.6 11.4L42 19.2l-9 8.8l2.1 12.4L24 34.5l-11.1 5.9L15 28l-9-8.8l12.4-1.8L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   /* [区域标注] 表情包折叠栏图标（IconPark — EmotionHappy / 笑脸） */
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3"/><path d="M16 28c2 4 6 6 8 6s6-2 8-6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="19" r="2" fill="currentColor"/><circle cx="31" cy="19" r="2" fill="currentColor"/></svg>`,
   /* [区域标注] 折叠栏右侧箭头图标（IconPark — ChevronRight） */
@@ -40,7 +42,7 @@ function escapeHtml(text) {
    说明：
      - [修改1] 去除了封面咖啡色区域，头像向上移动
      - [修改1] 去除了卡片中的说明性文字，只保留图标和数字
-     - [修改1] 新增钱包/表情包折叠栏
+     - [已完成·收藏折叠栏] 新增钱包/收藏/表情包折叠栏
      - [修改2] 卡片居中展示
      - [修改3] 去除头像点击上传弹窗（无 data-action="upload-avatar"）
      - [修改4] 卡片数据由外部实时传入（好友数量/身份数量/聊天天数）
@@ -119,6 +121,16 @@ export function renderProfile(userProfile) {
       <div class="profile-fold-bar" data-action="open-wallet">
         <span class="profile-fold-bar__icon">${ICONS.wallet}</span>
         <span class="profile-fold-bar__label">钱包</span>
+        <span class="profile-fold-bar__arrow">${ICONS.chevronRight}</span>
+      </div>
+
+      <!-- ================================================================
+           [区域标注·已完成·收藏折叠栏] 收藏折叠栏（点击进入独立收藏展示页面）
+           说明：位于“钱包”下方、“表情包”上方；样式沿用主页折叠栏。
+           ================================================================ -->
+      <div class="profile-fold-bar" data-action="open-favorite">
+        <span class="profile-fold-bar__icon">${ICONS.favorite}</span>
+        <span class="profile-fold-bar__label">收藏</span>
         <span class="profile-fold-bar__arrow">${ICONS.chevronRight}</span>
       </div>
 
