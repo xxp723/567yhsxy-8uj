@@ -1156,20 +1156,23 @@ function buildAiReplyMessages(rawText, state) {
   if (!protocolBlocks.length) {
     const repairedSticker = findLooseStickerTargetFromText(rawText, state);
     if (repairedSticker) {
-      return [{
+      return enforceAiReplyMessageCount([{
         role: 'assistant',
         type: 'sticker',
         content: `[表情包] ${repairedSticker.name}`,
         stickerId: repairedSticker.id,
         stickerName: repairedSticker.name,
         stickerUrl: repairedSticker.url
-      }];
+      }], state.chatPromptSettings);
     }
 
-    return splitAiReplyIntoBubbles(rawText, state.chatPromptSettings).map(content => ({
-      role: 'assistant',
-      content
-    }));
+    return enforceAiReplyMessageCount(
+      splitAiReplyIntoBubbles(rawText, state.chatPromptSettings).map(content => ({
+        role: 'assistant',
+        content
+      })),
+      state.chatPromptSettings
+    );
   }
 
   const builtMessages = [];
@@ -1190,7 +1193,7 @@ function buildAiReplyMessages(rawText, state) {
       return;
     }
 
-    splitStrictSentenceBubbles(block.content).forEach(content => {
+    splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach(content => {
       builtMessages.push({
         role: 'assistant',
         content
@@ -1198,9 +1201,12 @@ function buildAiReplyMessages(rawText, state) {
     });
   });
 
-  return builtMessages.length
-    ? builtMessages
-    : [{ role: 'assistant', content: '（AI 没有返回内容）' }];
+  return enforceAiReplyMessageCount(
+    builtMessages.length
+      ? builtMessages
+      : [{ role: 'assistant', content: '（AI 没有返回内容）' }],
+    state.chatPromptSettings
+  );
 }
 
 async function sendStickerMessage(container, state, db, stickerId, settingsManager, options = {}) {
@@ -1900,19 +1906,130 @@ function extractProtocolReplyContents(text) {
 }
 /* ===== 闲谈：通用消息协议解析 END ===== */
 
+function getReplyBubbleCountRange(chatSettings = {}) {
+  const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
+  const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
+  return { min, max };
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次需求3] AI 可见回复元信息清洗
+   说明：
+   1. 图片2里的“掉格式”根因之一，是模型把时间感知区的幕后元信息抄进了最终可见回复。
+   2. 这里统一清洗 `[消息发送时间：...]`、`本轮 API 实际请求时间`、分条编号、格式审查痕迹等内容。
+   3. 只作用于闲谈 AI 回复解析阶段，不改其它模块。
+   ========================================================================== */
+function cleanAiVisibleBubbleText(text) {
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !/^(思考回复内容|思考内容|检查规则|审查规则|拟定句子|检查结果|最终输出|回复格式|本轮 API 实际请求时间|最近一条已记录的用户消息发送时间|最近一条聊天记录时间|从最近一条用户消息到本轮实际请求已经过去|距上次聊天记录已经过去)\s*[：:]/.test(line))
+    .map(line => line.replace(/^(?:第\s*\d+\s*条|气泡\s*\d+|[0-9]+[.)、])\s*/i, '').trim())
+    .filter(line => !/^\d{4}年\d{1,2}月\d{1,2}日(?:星期[一二三四五六日天])?\s+\d{1,2}:\d{2}(?::\d{2})?\]$/.test(line))
+    .filter(Boolean)
+    .join('\n')
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    .trim();
+}
+
+function splitSingleBubbleForCount(text) {
+  const value = cleanAiVisibleBubbleText(text);
+  if (!value) return [];
+
+  const sentenceParts = splitStrictSentenceBubbles(value);
+  if (sentenceParts.length > 1) return sentenceParts;
+
+  const commaParts = value
+    .split(/(?<=[，,、；;])\s*/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  if (commaParts.length > 1) return commaParts;
+
+  const spaceParts = value
+    .split(/\s+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  if (spaceParts.length > 1) return spaceParts;
+
+  if (value.length <= 1) return [value];
+
+  const splitAt = Math.max(1, Math.ceil(value.length / 2));
+  return [
+    value.slice(0, splitAt).trim(),
+    value.slice(splitAt).trim()
+  ].filter(Boolean);
+}
+
+function enforceAiReplyMessageCount(messages, chatSettings = {}) {
+  const { min, max } = getReplyBubbleCountRange(chatSettings);
+  let normalizedMessages = Array.isArray(messages)
+    ? messages
+        .map(message => {
+          if (!message || message.role !== 'assistant') return null;
+          if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
+            return message;
+          }
+          const content = cleanAiVisibleBubbleText(message.content);
+          return content ? { ...message, content } : null;
+        })
+        .filter(Boolean)
+    : [];
+
+  while (normalizedMessages.length < min) {
+    let bestIndex = -1;
+    let bestParts = [];
+    let bestLength = 0;
+
+    normalizedMessages.forEach((message, index) => {
+      if (String(message.type || '') === 'sticker') return;
+      const parts = splitSingleBubbleForCount(message.content);
+      if (parts.length <= 1) return;
+      const currentLength = String(message.content || '').length;
+      if (currentLength > bestLength) {
+        bestIndex = index;
+        bestParts = parts;
+        bestLength = currentLength;
+      }
+    });
+
+    if (bestIndex < 0 || bestParts.length <= 1) break;
+
+    const baseMessage = normalizedMessages[bestIndex];
+    normalizedMessages.splice(
+      bestIndex,
+      1,
+      ...bestParts.map(content => ({
+        ...baseMessage,
+        content
+      }))
+    );
+  }
+
+  if (normalizedMessages.length > max) {
+    normalizedMessages = normalizedMessages.slice(0, max);
+  }
+
+  return normalizedMessages.length
+    ? normalizedMessages
+    : [{ role: 'assistant', content: '（AI 没有返回内容）' }];
+}
+
 function splitAiReplyIntoBubbles(text, chatSettings = {}) {
   const raw = sanitizeAiVisibleReply(text);
   if (!raw) return ['（AI 没有返回内容）'];
 
-  const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
-  const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
+  const { min, max } = getReplyBubbleCountRange(chatSettings);
 
   /* ==========================================================================
-     [区域标注·本次修改3] 严格拆分通用消息协议与问号气泡
+     [区域标注·已完成·本次需求2] 严格拆分通用消息协议与问号气泡
      说明：
      1. 只识别 prompt.js 的 **`[回复] 角色名：文字消息内容`** 通用协议。
      2. 无论 AI 是否按格式输出，只要同一段里出现多个问句/感叹句/句号句，就强制拆开。
-     3. 之前“问号后有空格”不会被 (?=\S) 命中，所以会把两个问句留在同一气泡；这里已修复。
+     3. 同时叠加最少/最多气泡数收口，避免设置页规则只停留在 prompt 层。
      ========================================================================== */
   const protocolReplyMatches = extractProtocolReplyContents(raw);
 
@@ -1923,48 +2040,61 @@ function splitAiReplyIntoBubbles(text, chatSettings = {}) {
         .map(item => item.trim())
         .filter(Boolean);
 
-  parts = parts.flatMap(part => splitStrictSentenceBubbles(part));
+  parts = parts
+    .map(part => cleanAiVisibleBubbleText(part))
+    .filter(Boolean)
+    .flatMap(part => splitStrictSentenceBubbles(part));
 
   if (parts.length <= 1 && raw.length > 28) {
     parts = raw
       .split(/(?<=[，,、；;])\s*/)
-      .map(item => item.trim())
+      .map(item => cleanAiVisibleBubbleText(item))
       .filter(Boolean);
   }
 
-  while (parts.length < min && parts.some(item => item.length > 12)) {
-    const index = parts.findIndex(item => item.length > 12);
-    const item = parts[index];
-    const splitAt = Math.ceil(item.length / 2);
-    parts.splice(index, 1, item.slice(0, splitAt).trim(), item.slice(splitAt).trim());
+  while (parts.length < min) {
+    let bestIndex = -1;
+    let bestParts = [];
+    let bestLength = 0;
+
+    parts.forEach((item, index) => {
+      const candidateParts = splitSingleBubbleForCount(item);
+      if (candidateParts.length <= 1) return;
+      if (String(item || '').length > bestLength) {
+        bestIndex = index;
+        bestParts = candidateParts;
+        bestLength = String(item || '').length;
+      }
+    });
+
+    if (bestIndex < 0 || bestParts.length <= 1) break;
+    parts.splice(bestIndex, 1, ...bestParts);
   }
 
-  const cleaned = parts.map(item => item.trim()).filter(Boolean);
-  return cleaned.length ? cleaned.slice(0, Math.max(max, min)) : ['（AI 没有返回内容）'];
+  const cleaned = parts.map(item => cleanAiVisibleBubbleText(item)).filter(Boolean);
+  return cleaned.length ? cleaned.slice(0, max) : ['（AI 没有返回内容）'];
 }
 
 /* ==========================================================================
-   [区域标注·本次需求2] AI 可见回复清理
+   [区域标注·已完成·本次需求2] AI 可见回复清理
    说明：进一步清理模型偶发输出的幕后审查文本，只保留聊天界面应该显示的内容。
    ========================================================================== */
 function sanitizeAiVisibleReply(text) {
-  let value = String(text || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<\/?think>/gi, '')
-    .trim();
+  let value = cleanAiVisibleBubbleText(text);
 
   /* ===== 闲谈：通用消息协议解析 START ===== */
   const protocolReplyMatches = extractProtocolReplyContents(value);
   if (protocolReplyMatches.length) {
-    value = protocolReplyMatches.join('\n');
+    value = protocolReplyMatches
+      .map(item => cleanAiVisibleBubbleText(item))
+      .filter(Boolean)
+      .join('\n');
   }
   /* ===== 闲谈：通用消息协议解析 END ===== */
 
   return value
     .split(/\n+/)
     .map(line => line.trim())
-    .filter(line => line && !/^(思考回复内容|思考内容|检查规则|审查规则|拟定句子|检查结果|最终输出|回复格式)\s*[：:]/.test(line))
-    .map(line => line.replace(/^气泡\s*\d+\s*[：:]\s*/i, '').trim())
     .filter(Boolean)
     .join('\n')
     .trim();

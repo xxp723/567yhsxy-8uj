@@ -2170,6 +2170,8 @@
   white-space: nowrap;
 }
 
+/* [区域标注·已完成] 收藏卡片预览文本截断兼容性修复
+   说明：已补充标准 line-clamp 属性，消除 chat.css 中该区域的 vendorPrefix 警告。 */
 .favorite-card__preview {
   flex: 1;
   min-height: 0;
@@ -2177,6 +2179,7 @@
   line-height: 1.55;
   color: rgba(74, 52, 42, 0.66);
   display: -webkit-box;
+  line-clamp: 3;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
