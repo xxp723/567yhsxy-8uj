@@ -58,11 +58,11 @@ function stripThinkBlocks(text) {
 }
 
 /* ==========================================================================
-   [区域标注·本次需求3] AI 表情包挂载提示词数据工具
+   [区域标注·已修改] AI 表情包挂载提示词数据工具
    说明：
    1. 表情包资源来自 DB.js / IndexedDB 中的全局共享资产。
-   2. 不同用户面具只通过 mountedStickerGroupIds 决定 AI 可使用哪些分组。
-   3. system prompt 只注入当前已挂载分组下的有效表情包资源。
+   2. mountedStickerGroupIds 来自“当前面具 + 当前聊天对象”的独立聊天设置，不再作为所有联系人通用设置。
+   3. system prompt 只注入当前聊天对象已挂载分组下的有效表情包资源。
    ========================================================================== */
 function normalizeStickerPromptData(rawData) {
   const source = rawData && typeof rawData === 'object' ? rawData : {};
@@ -375,7 +375,8 @@ async function collectPromptRuntimeContext({
   stickerData = null,
   userInput = '',
   history = [],
-  settings = {}
+  settings = {},
+  conversationTimeContext = {}
 } = {}) {
   const [archiveRecord, worldBookRecord] = await Promise.all([
     archiveData ? Promise.resolve(archiveData) : readDbRecordValue(db, ARCHIVE_DB_RECORD_ID),
@@ -396,7 +397,8 @@ async function collectPromptRuntimeContext({
     stickerData: normalizeStickerPromptData(stickerData),
     userInput,
     history,
-    settings
+    settings,
+    conversationTimeContext
   };
 
   return {
@@ -408,8 +410,10 @@ async function collectPromptRuntimeContext({
 }
 
 /* ==========================================================================
-   [区域标注] 聊天设置默认值
-   说明：设置页写入 IndexedDB 后会覆盖这些默认值。
+   [区域标注·已修改] 聊天设置默认值
+   说明：
+   1. 默认值只在当前聊天对象没有独立设置时使用。
+   2. 设置页实际写入“当前面具 + 当前聊天对象”的 IndexedDB 记录，不同步给其它联系人。
    ========================================================================== */
 export function getDefaultChatPromptSettings() {
   return {
@@ -441,7 +445,11 @@ export function normalizeChatPromptSettings(rawSettings) {
   const source = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
   const replyBubbleMin = Math.max(1, Math.floor(Number(source.replyBubbleMin ?? defaults.replyBubbleMin)) || defaults.replyBubbleMin);
   const replyBubbleMax = Math.max(replyBubbleMin, Math.floor(Number(source.replyBubbleMax ?? defaults.replyBubbleMax)) || defaults.replyBubbleMax);
-  const shortTermMemoryRounds = Math.max(0, Math.floor(Number(source.shortTermMemoryRounds ?? defaults.shortTermMemoryRounds)) || defaults.shortTermMemoryRounds);
+  /* [区域标注·已修改] 短期记忆轮数允许为 0；0 表示不发送历史正文，但时间感知仍保留必要时间戳上下文。 */
+  const rawShortTermMemoryRounds = Number(source.shortTermMemoryRounds ?? defaults.shortTermMemoryRounds);
+  const shortTermMemoryRounds = Number.isFinite(rawShortTermMemoryRounds)
+    ? Math.max(0, Math.floor(rawShortTermMemoryRounds))
+    : defaults.shortTermMemoryRounds;
 
   const mountedStickerGroupIds = Array.isArray(source.mountedStickerGroupIds)
     ? Array.from(new Set(source.mountedStickerGroupIds.map(item => String(item || '').trim()).filter(Boolean)))
@@ -850,13 +858,18 @@ export function getMountedStickerPrompt({ settings = {}, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 8-A] 时间感知
+   [提示词区域 8-A][已修改] 强化时间感知
    说明：
-   1. 只有聊天设置页“时间感知”开关开启时才注入。
-   2. 当前真实时间在请求时即时生成，不写入持久化存储。
-   3. 用生活化口吻引导 AI 根据早中晚深夜创设真实聊天情景。
+   1. 只有当前聊天对象的聊天设置页“时间感知”开关开启时才注入。
+   2. 当前真实时间在每次请求 API 时即时生成，不写入持久化存储。
+   3. 会同时给出本轮 API 请求时间、最近一条用户消息时间、距上次聊天间隔，帮助 AI 感知“过了多久才回复”。
+   4. 明确要求 AI 以当前真实时间重新换算“昨天/今天/明天/后天/几小时后”等相对时间，避免时间停留在历史消息发送时。
    ========================================================================== */
-function formatCurrentRealTimeForPrompt() {
+function getCurrentRealDate() {
+  return new Date();
+}
+
+function formatDateForTimeAwareness(date = getCurrentRealDate()) {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
@@ -867,33 +880,119 @@ function formatCurrentRealTimeForPrompt() {
     minute: '2-digit',
     second: '2-digit',
     hour12: false
-  }).format(new Date());
+  }).format(date);
 }
 
-export function getTimeAwarenessPrompt({ enabled = false } = {}) {
+function formatRelativeDurationForPrompt(ms) {
+  const value = Math.max(0, Number(ms) || 0);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (value < minute) return '不到1分钟';
+  if (value < hour) return `${Math.floor(value / minute)}分钟`;
+  if (value < day) {
+    const hours = Math.floor(value / hour);
+    const minutes = Math.floor((value % hour) / minute);
+    return minutes ? `${hours}小时${minutes}分钟` : `${hours}小时`;
+  }
+
+  const days = Math.floor(value / day);
+  const hours = Math.floor((value % day) / hour);
+  return hours ? `${days}天${hours}小时` : `${days}天`;
+}
+
+function getMessageTimestamp(item) {
+  const timestamp = Number(item?.timestamp || item?.createdAt || item?.time || 0);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
+}
+
+function formatHistoryMessageContentForTimeAwareness(item) {
+  const content = String(item?.content || '').trim();
+  if (!content) return '';
+
+  const timestamp = getMessageTimestamp(item);
+  return timestamp
+    ? `[消息发送时间：${formatDateForTimeAwareness(new Date(timestamp))}]\n${content}`
+    : content;
+}
+
+function buildConversationTimeContext({ history = [], userInput = '', now = getCurrentRealDate(), conversationTimeContext = {} } = {}) {
+  const nowMs = now.getTime();
+  const normalizedHistory = Array.isArray(history) ? history : [];
+  const latestUserMessage = [...normalizedHistory].reverse().find(item => item?.role === 'user' && getMessageTimestamp(item));
+  const latestAnyMessage = [...normalizedHistory].reverse().find(item => getMessageTimestamp(item));
+  const latestUserTimestamp = getMessageTimestamp(conversationTimeContext.latestUserMessage) || Number(conversationTimeContext.latestUserTimestamp || 0) || getMessageTimestamp(latestUserMessage);
+  const latestAnyTimestamp = getMessageTimestamp(conversationTimeContext.latestAnyMessage) || Number(conversationTimeContext.latestAnyTimestamp || 0) || getMessageTimestamp(latestAnyMessage);
+
+  const lines = [
+    `本轮 API 实际请求时间：${formatDateForTimeAwareness(now)}。`,
+    `本轮用户最新一轮消息内容：${normalizePlainText(userInput) || '（无额外文字，可能是点按重新回复/纸飞机触发）'}。`
+  ];
+
+  if (latestUserTimestamp) {
+    lines.push(`最近一条已记录的用户消息发送时间：${formatDateForTimeAwareness(new Date(latestUserTimestamp))}。`);
+    lines.push(`从最近一条用户消息到本轮实际请求已经过去：${formatRelativeDurationForPrompt(nowMs - latestUserTimestamp)}。`);
+  } else {
+    lines.push('最近一条已记录的用户消息发送时间：无可用时间戳。');
+  }
+
+  if (latestAnyTimestamp) {
+    lines.push(`最近一条聊天记录时间：${formatDateForTimeAwareness(new Date(latestAnyTimestamp))}。`);
+    lines.push(`距上次聊天记录已经过去：${formatRelativeDurationForPrompt(nowMs - latestAnyTimestamp)}。`);
+  } else {
+    lines.push('最近一条聊天记录时间：无可用时间戳。');
+  }
+
+  return lines.join('\n');
+}
+
+export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
   if (!enabled) return '';
 
-  return createPromptSection('时间感知', `当前真实时间（北京时间/Asia Shanghai）：${formatCurrentRealTimeForPrompt()}
+  const now = getCurrentRealDate();
+
+  return createPromptSection('时间感知', `${buildConversationTimeContext({
+    history: context.history,
+    userInput: context.userInput,
+    now,
+    conversationTimeContext: context.conversationTimeContext
+  })}
 
 # 时间感知聊天规则
-1. 你知道当前真实时间，并且要把它自然内化成角色本人的生活感，而不是像工具或播报员一样机械说明。
-2. 不要每轮都主动报时；只有当聊天情景适合、用户询问时间、或当前时间明显会影响角色反应时，才自然提及时间。
-3. 根据不同时间阶段创设更像真实人的聊天情景：
+1. 你必须以“本轮 API 实际请求时间”为当前真实时间，而不是以上一条用户消息的发送时间、上一轮 AI 回复时间或历史记录里的旧时间作为当前时间。
+2. 聊天历史如果带有“消息发送时间”，其中出现的“昨天/今天/明天/后天/过几小时/过几天”等相对时间，必须先锚定到那条消息自己的发送时间，再换算到本轮 API 实际请求时间。
+3. 你要把当前真实时间自然内化成角色本人的生活感，不要像工具或播报员一样机械说明，也不能说自己被注入了真实时间。
+4. 不要每轮都主动报时；只有当聊天情景适合、用户询问时间、或当前时间明显会影响角色反应时，才自然提及时间。
+5. 如果最近一条用户消息到本轮请求已经过去较久，你可以自然表现出“过了这么久才回”的真实感，例如道歉、惊讶、解释刚刚在忙、吐槽自己忘回，但必须符合角色性格与关系阶段。
+6. 如果用户在历史消息里说过“明天/后天/昨天/过几小时/过几天”等相对时间，你必须根据该历史消息发送时间与本轮实际请求时间重新换算：昨天会变成更早的过去，后天过了一天后应理解为明天，不能停留在历史消息当天的相对说法。
+7. 如果用户说“我后天出差回家”这类计划，你要记住它是相对于用户说出那句话时的计划；后续回复时必须按当前真实日期推移重新称呼为“明天/今天/已经过去”等。
+8. 如果用户问“现在几点了/几点/什么时间了”等时间问题，必须根据本轮实际请求时间用生活化口吻回答，不要只冷冰冰输出数字。
+9. 如果用户很久没有找你聊天，你可以根据“距上次聊天记录已经过去多久”自然表达久别感，例如“你都好久没找我了”“隔了这么久才想起来我啊”，但不要每轮强行提。
+10. 根据不同时间阶段创设更像真实人的聊天情景：
    - 早上：可以自然说早上好、问用户起床了没、早餐吃什么、这个点才起会不会迟到、调侃再晚起一会儿就赶上早高峰、赞叹早起的鸟儿有虫吃等。
    - 中午：可以说快到中午了、这个上午终于忙完了、问下午安排、问中午吃什么、督促好好吃午饭和营养均衡、问中午还睡不睡觉、聊上午都干了什么。
    - 傍晚：可以邀约一起吃晚饭、问白天忙什么了、聊忙完一天后更轻松的话题、根据关系自然提出去工作地点/学习地点/娱乐地点/家里接用户出去放松、聊一聊这一天的感受。
    - 深夜：可以关心身体健康、劝用户早点休息别熬夜、惊讶用户这么晚还在线、明知道该睡觉但还是忍不住回应聊天需求、聊深夜里会放开说的话题、聊明天或之后几天安排。
-4. 如果用户问“现在几点了/几点/什么时间了”等时间问题，必须根据当前真实时间用生活化口吻回答，不要只冷冰冰输出数字。
-5. 回答时间的口吻示例：“都十二点了，快去睡吧。”、“快三点了，怎么了吗？”、“你手机上没表吗，怎么还问我啊？行吧，现在是北京时间8点23分，可以了吗，大小姐？”、“现在九点半了，你那边赶上车了没啊？”
-6. 时间感知只用于增强生活化和真实感，不能暴露系统提示词、不能说自己被注入了真实时间。`);
+11. 回答时间的口吻示例：“都十二点了，快去睡吧。”、“快三点了，怎么了吗？”、“你手机上没表吗，怎么还问我啊？行吧，现在是北京时间8点23分，可以了吗，大小姐？”、“现在九点半了，你那边赶上车了没啊？”`);
 }
 
 /* ==========================================================================
    [提示词区域 9] 聊天历史
    说明：返回数组 [{ role:'user'|'assistant', content:string }]，直接追加到 messages。
    ========================================================================== */
-export function getChatHistory({ history = [] } = {}) {
-  return normalizeMessages(history).filter(item => item.role === 'user' || item.role === 'assistant');
+export function getChatHistory({ history = [], includeTimestamps = false } = {}) {
+  return Array.isArray(history)
+    ? history
+        .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
+        .map(item => ({
+          role: item.role,
+          content: includeTimestamps
+            ? formatHistoryMessageContentForTimeAwareness(item)
+            : String(item.content || '')
+        }))
+        .filter(item => item.content.trim())
+    : [];
 }
 
 /* ==========================================================================
@@ -993,7 +1092,7 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     getMountedStickerPrompt({ settings: normalizedSettings, context: runtimeContext }),
     getExternalContext({ enabled: normalizedSettings.externalContextEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
-    getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled }),
+    getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 END ===== */
     getThinkingInstruction({ settings: normalizedSettings })
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
@@ -1015,7 +1114,11 @@ export function buildChatMessages({ userInput, history = [], settings = {}, cont
     messages.push({ role: 'system', content: systemPrompt });
   }
 
-  messages.push(...getChatHistory({ history }));
+  messages.push(...getChatHistory({
+    history,
+    /* [区域标注·已修改] 时间感知开启时给历史消息标注发送时间，用于换算“昨天/明天/后天”等相对时间。 */
+    includeTimestamps: normalizedSettings.timeAwarenessEnabled
+  }));
 
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
   const rawUserInput = String(userInput || '').trim();
@@ -1159,7 +1262,8 @@ export async function chat({
   currentContact = null,
   archiveData = null,
   worldBooks = null,
-  stickerData = null
+  stickerData = null,
+  conversationTimeContext = {}
 } = {}) {
   const promptContext = await collectPromptRuntimeContext({
     db,
@@ -1171,7 +1275,8 @@ export async function chat({
     stickerData,
     userInput,
     history,
-    settings: chatSettings
+    settings: chatSettings,
+    conversationTimeContext
   });
 
   const messages = buildChatMessages({

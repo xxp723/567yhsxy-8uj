@@ -67,8 +67,18 @@ const DATA_KEY_CONTACTS = (maskId) => `chat_contacts_${maskId || 'default'}`;
 const DATA_KEY_CONTACT_GROUPS = (maskId) => `chat_contact_groups_${maskId || 'default'}`;
 const DATA_KEY_MOMENTS = (maskId) => `chat_moments_${maskId || 'default'}`;
 const DATA_KEY_MESSAGES_PREFIX = (maskId) => `chat_msgs_${maskId || 'default'}_`;
-/* [区域标注·本次需求] 聊天消息页设置：当前指令/外部上下文注入/自定义思维链，统一写入 DB.js(IndexedDB) */
-const DATA_KEY_CHAT_PROMPT_SETTINGS = (maskId) => `chat_prompt_settings_${maskId || 'default'}`;
+/* ========================================================================
+   ===== 闲谈聊天设置按联系人独立存储 START =====
+   说明：
+   1. 聊天消息页设置按“当前面具 + 当前聊天对象”写入 DB.js / IndexedDB。
+   2. 不同联系人可拥有不同的表情包挂载、时间感知、当前指令、思维链、气泡数量与短期记忆设置。
+   3. 禁止 localStorage/sessionStorage，且不写双份兜底存储。
+   ======================================================================== */
+const DATA_KEY_CHAT_PROMPT_SETTINGS = (maskId, chatId) => `chat_prompt_settings_${maskId || 'default'}_${chatId || 'default'}`;
+function getCurrentChatPromptSettingsKey(state) {
+  return DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, state.currentChatId || 'default');
+}
+/* ===== 闲谈聊天设置按联系人独立存储 END ===== */
 /* ========================================================================
    [区域标注·本次需求3] 用户主页表情包数据键
    说明：
@@ -289,13 +299,12 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings, stickerData] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, stickerData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
-    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(currentActiveMaskId)),
     loadStickerDataFromDb(db)
   ]);
 
@@ -326,8 +335,8 @@ export async function mount(container, context) {
     /* [区域标注·本次修改4] 档案配角与关系网络缓存，用于提示词用户面具身份关系网络 */
     archiveSupportingRoles: archiveSupportingRoles,
     archiveRelations: archiveRelations,
-    /* [区域标注·本次需求] 聊天提示词设置：从 IndexedDB 读取，禁止浏览器同步键值存储 */
-    chatPromptSettings: normalizeChatPromptSettings(chatPromptSettings),
+    /* [区域标注·已修改] 聊天提示词设置：打开具体聊天对象时按“当前面具 + 当前联系人”从 IndexedDB 读取 */
+    chatPromptSettings: normalizeChatPromptSettings(null),
     /* [区域标注·本次需求3] 表情包分组与条目：全局共享资产，只从 IndexedDB 读取 */
     stickerData: normalizeStickerData(stickerData),
     /* [区域标注·本次需求3] 聊天消息页表情包面板运行时状态 */
@@ -639,6 +648,9 @@ async function openChatMessage(container, state, db, chatId) {
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
+  /* ===== 闲谈聊天设置按联系人独立存储 START ===== */
+  state.chatPromptSettings = normalizeChatPromptSettings(await dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, chatId)));
+  /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
 
   /* [区域标注] 隐藏主界面元素，显示消息页面 */
   const topBar = container.querySelector('.chat-top-bar');
@@ -670,6 +682,9 @@ async function openChatMessage(container, state, db, chatId) {
 function closeChatMessage(container, state) {
   state.currentChatId = null;
   state.currentMessages = [];
+  /* ===== 闲谈聊天设置按联系人独立存储 START ===== */
+  state.chatPromptSettings = normalizeChatPromptSettings(null);
+  /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
   resetMessageSelectionState(state);
   state.stickerPanelOpen = false;
   state.stickerPanelGroupId = 'all';
@@ -777,6 +792,8 @@ async function sendMessage(container, state, db, content, settingsManager, optio
       userInput: promptPayload.userInput,
       history: promptPayload.history,
       chatSettings: state.chatPromptSettings,
+      /* [区域标注·已修改] 时间感知请求上下文：把最新用户消息时间与最近聊天时间传给 prompt.js，避免 AI 时间停在旧消息发送时 */
+      conversationTimeContext: promptPayload.conversationTimeContext,
       settingsManager,
       /* [区域标注·本次需求] 提示词真实上下文：把当前会话/联系人/面具/档案/DB 传给 prompt.js，供 AI 读取有效信息 */
       db,
@@ -1551,6 +1568,10 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
 
   /* 用户最新一轮消息 = 消息末尾往前连续的 user 消息组，而不是最后一条 user 消息 */
   const currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
+  const latestUserMessage = [...currentRoundMessages].reverse().find(item => Number(item?.timestamp || 0) > 0)
+    || [...normalized].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0)
+    || null;
+  const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
   const userInput = currentRoundMessages.map((item, index) => {
     const content = String(item.content || '').trim();
     return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
@@ -1558,7 +1579,18 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
 
   const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
   const previous = latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized;
-  if (roundLimit <= 0) return { userInput, history: [] };
+  /* [区域标注·已修改] 强化时间感知：即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。 */
+  const conversationTimeContext = {
+    latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
+    latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0
+  };
+  if (roundLimit <= 0) {
+    return {
+      userInput,
+      history: [],
+      conversationTimeContext
+    };
+  }
 
   const rounds = [];
   let current = [];
@@ -1567,13 +1599,19 @@ function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRoun
       rounds.push(current);
       current = [];
     }
-    current.push({ role: item.role, content: item.content });
+    current.push({
+      role: item.role,
+      content: item.content,
+      /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
+      timestamp: Number(item.timestamp || 0) || 0
+    });
   });
   if (current.length) rounds.push(current);
 
   return {
     userInput,
-    history: rounds.slice(-roundLimit).flat()
+    history: rounds.slice(-roundLimit).flat(),
+    conversationTimeContext
   };
 }
 /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
@@ -2627,14 +2665,14 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     /* [区域标注·本次需求] 聊天设置页 — iPhone 风格开关 */
     case 'toggle-external-context':
       state.chatPromptSettings.externalContextEnabled = !state.chatPromptSettings.externalContextEnabled;
-      await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.externalContextEnabled);
       break;
 
     /* ===== 闲谈应用：时间感知设置开关 START ===== */
     case 'toggle-time-awareness':
       state.chatPromptSettings.timeAwarenessEnabled = !state.chatPromptSettings.timeAwarenessEnabled;
-      await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.timeAwarenessEnabled);
       break;
     /* ===== 闲谈应用：时间感知设置开关 END ===== */
@@ -2658,7 +2696,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         }
       }
       state.chatPromptSettings.mountedStickerGroupIds = Array.from(current);
-      await dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       syncMountedStickerGroupButtons(container, state);
       break;
     }
@@ -2940,8 +2978,7 @@ async function saveMaskData(state, db, maskId) {
     dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
-    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments),
-    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId), state.chatPromptSettings)
+    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments)
   ]);
 }
 
@@ -2950,13 +2987,12 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, chatPromptSettings] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
-    dbGet(db, DATA_KEY_MOMENTS(maskId)),
-    dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(maskId))
+    dbGet(db, DATA_KEY_MOMENTS(maskId))
   ]);
   state.sessions = sessions || [];
   /* === [本次修改] 聊天列表长按删除联系人：切换面具时恢复对应隐藏状态 === */
@@ -2966,7 +3002,8 @@ async function loadMaskData(state, db, maskId) {
   state.contactGroups = normalizeContactGroups(contactGroups);
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
-  state.chatPromptSettings = normalizeChatPromptSettings(chatPromptSettings);
+  /* [区域标注·已修改] 聊天提示词设置已改为按“当前面具 + 当前聊天对象”独立读取；切换面具时不再加载面具级通用设置 */
+  state.chatPromptSettings = normalizeChatPromptSettings(null);
   state.pendingStickerLocalFile = null;
   state.stickerPanelOpen = false;
   state.stickerPanelGroupId = 'all';
@@ -3697,18 +3734,18 @@ function handleInput(e, state, container, db) {
   }
 
   /* ==========================================================================
-     [区域标注·本次需求] 聊天设置输入持久化
-     说明：当前指令、自定义思维链统一写入 DB.js / IndexedDB。
+     [区域标注·已修改] 聊天设置输入按联系人独立持久化
+     说明：当前指令、自定义思维链统一写入“当前面具 + 当前聊天对象”的 IndexedDB 记录。
      ========================================================================== */
   if (target.matches('[data-role="msg-current-command"]')) {
     state.chatPromptSettings.currentCommand = target.value || '';
-    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
     return;
   }
 
   if (target.matches('[data-role="msg-custom-thinking"]')) {
     state.chatPromptSettings.customThinkingInstruction = target.value || '';
-    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
     return;
   }
 
@@ -3730,7 +3767,7 @@ function handleInput(e, state, container, db) {
     if (maxInput && String(maxInput.value) !== String(max)) maxInput.value = String(max);
     if (memoryInput && String(memoryInput.value) !== String(rounds)) memoryInput.value = String(rounds);
 
-    dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId), state.chatPromptSettings);
+    dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
     return;
   }
   /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
