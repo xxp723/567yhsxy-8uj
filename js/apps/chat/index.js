@@ -38,6 +38,10 @@ const TAB_ICONS = {
   close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注·本次需求5] IconPark — 多选转发图标 */
   forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·收藏功能] IconPark — 收藏 / 搜索 / 筛选图标 */
+  favorite: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l5.6 11.4L42 19.2l-9 8.8l2.1 12.4L24 34.5l-11.1 5.9L15 28l-9-8.8l12.4-1.8L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  search: `<svg viewBox="0 0 48 48" fill="none"><circle cx="21" cy="21" r="13" stroke="currentColor" stroke-width="3"/><path d="M31 31l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  filter: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h36L28 26v12l-8 4V26L6 10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
 
   /* ========================================================================
      [区域标注·本次需求3] 用户主页表情包页 IconPark 图标
@@ -87,6 +91,12 @@ function getCurrentChatPromptSettingsKey(state) {
    3. 统一写入 DB.js / IndexedDB，禁止 localStorage/sessionStorage。
    ======================================================================== */
 const DATA_KEY_STICKERS = 'chat_stickers_global';
+/* ========================================================================
+   [区域标注·已完成·收藏持久化] 收藏数据键
+   说明：收藏分组与收藏卡片按当前面具隔离，统一写入 DB.js / IndexedDB；
+         禁止 localStorage/sessionStorage，也不做双份兜底存储。
+   ======================================================================== */
+const DATA_KEY_FAVORITES = (maskId) => `chat_favorites_${maskId || 'default'}`;
 const PANEL_KEYS = ['chatList', 'contacts', 'moments', 'profile'];
 const PANEL_LABELS = ['Chat', 'Contacts', 'Moments', 'Me'];
 const PANEL_ICON_KEYS = ['chat', 'contacts', 'moments', 'profile'];
@@ -215,6 +225,83 @@ function normalizeStickerData(rawData) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·收藏数据规范化]
+   说明：All 为固定默认大分组；收藏卡片可归属大分组/组内小分组。
+         此区域已完成，后续修改收藏数据结构可直接从这里开始。
+   ========================================================================== */
+function normalizeFavoriteData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const groups = Array.isArray(source.groups)
+    ? source.groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  const subGroups = Array.isArray(source.subGroups)
+    ? source.subGroups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          parentGroupId: validGroupIds.has(String(group?.parentGroupId || 'all')) ? String(group?.parentGroupId || 'all') : 'all',
+          name: String(group?.name || '').trim(),
+          createdAt: Number(group?.createdAt || Date.now())
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validSubGroupIds = new Set(subGroups.map(group => group.id));
+  const items = Array.isArray(source.items)
+    ? source.items
+        .map(item => {
+          const messages = Array.isArray(item?.messages)
+            ? item.messages
+                .map(message => ({
+                  id: String(message?.id || '').trim(),
+                  role: String(message?.role || 'user'),
+                  type: String(message?.type || ''),
+                  content: String(message?.content || ''),
+                  stickerName: String(message?.stickerName || ''),
+                  stickerUrl: String(message?.stickerUrl || ''),
+                  timestamp: Number(message?.timestamp || 0) || Date.now()
+                }))
+                .filter(message => message.id && message.content)
+            : [];
+          const groupId = validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all';
+          const subGroupId = validSubGroupIds.has(String(item?.subGroupId || '')) ? String(item?.subGroupId || '') : '';
+          return {
+            id: String(item?.id || '').trim(),
+            name: String(item?.name || '').trim(),
+            groupId,
+            subGroupId,
+            messages,
+            createdAt: Number(item?.createdAt || Date.now()),
+            updatedAt: Number(item?.updatedAt || item?.createdAt || Date.now()),
+            sourceChatId: String(item?.sourceChatId || '')
+          };
+        })
+        .filter(item => item.id && item.messages.length)
+    : [];
+  const activeGroupId = validGroupIds.has(String(source.activeGroupId || 'all')) ? String(source.activeGroupId || 'all') : 'all';
+  const sortMode = ['name', 'updatedAt', 'messageTime'].includes(String(source.sortMode || 'updatedAt')) ? String(source.sortMode || 'updatedAt') : 'updatedAt';
+
+  return {
+    activeGroupId,
+    groups,
+    subGroups,
+    items,
+    sortMode,
+    searchOpen: Boolean(source.searchOpen),
+    searchKeyword: String(source.searchKeyword || '')
+  };
+}
+
+async function persistFavoriteData(state, db) {
+  state.favoriteData = normalizeFavoriteData(state.favoriteData);
+  await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), state.favoriteData);
+}
+
+/* ==========================================================================
    ===== 闲谈表情包持久化修复：IndexedDB 专用读写 START =====
    说明：
    1. 表情包独立页所有表情包分组/条目统一走 DB.js / IndexedDB。
@@ -299,13 +386,14 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, stickerData] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, stickerData, favoriteData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
-    loadStickerDataFromDb(db)
+    loadStickerDataFromDb(db),
+    dbGet(db, DATA_KEY_FAVORITES(currentActiveMaskId))
   ]);
 
   /* [区域标注] 应用状态对象 */
@@ -339,6 +427,10 @@ export async function mount(container, context) {
     chatPromptSettings: normalizeChatPromptSettings(null),
     /* [区域标注·本次需求3] 表情包分组与条目：全局共享资产，只从 IndexedDB 读取 */
     stickerData: normalizeStickerData(stickerData),
+    /* [区域标注·已完成·收藏运行时状态] 收藏页数据与选择状态，持久化只走 DB.js / IndexedDB */
+    favoriteData: normalizeFavoriteData(favoriteData),
+    favoriteMultiSelectMode: false,
+    selectedFavoriteIds: [],
     /* [区域标注·本次需求3] 聊天消息页表情包面板运行时状态 */
     stickerPanelOpen: false,
     stickerPanelGroupId: normalizeStickerData(stickerData).activeGroupId || 'all',
@@ -384,6 +476,8 @@ export async function mount(container, context) {
   const contactGroupLongPressHandlers = createContactGroupLongPressHandlers(state, container);
   /* [区域标注·本次需求3] 表情包分组长按删除事件：使用自定义应用内弹窗，不使用原生 confirm */
   const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
+  /* [区域标注·已完成·收藏分组长按删除] 应用内确认弹窗，不使用原生 confirm */
+  const favoriteGroupLongPressHandlers = createFavoriteGroupLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
@@ -401,6 +495,11 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', stickerGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', stickerGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', stickerGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', favoriteGroupLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', favoriteGroupLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -463,6 +562,11 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', stickerGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', stickerGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', stickerGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', favoriteGroupLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', favoriteGroupLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -1283,7 +1387,7 @@ function updateMultiSelectActionBar(container, state) {
   const count = (state.selectedMessageIds || []).length;
   const countEl = bar.querySelector('.msg-multi-action-bar__count');
   if (countEl) countEl.textContent = `已选 ${count} 条`;
-  bar.querySelectorAll('[data-action="msg-multi-delete-selected"], [data-action="msg-multi-forward"]').forEach(btn => {
+  bar.querySelectorAll('[data-action="msg-multi-favorite-selected"], [data-action="msg-multi-delete-selected"], [data-action="msg-multi-forward"]').forEach(btn => {
     btn.toggleAttribute('disabled', count <= 0);
   });
 }
@@ -1368,6 +1472,168 @@ function showAiFormatRepairResultModal(container, { success = false, title = '',
     </div>
   `;
 
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·气泡编辑弹窗]
+   说明：编辑消息使用应用内弹窗；保存后改写当前消息数组并持久化，
+         下一轮发送给 AI 的 history 会从已编辑后的 state.currentMessages 读取。
+   ========================================================================== */
+function showEditMessageModal(container, state, messageId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const message = (state.currentMessages || []).find(item => String(item.id) === String(messageId));
+  if (!mask || !panel || !message) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·气泡编辑弹窗] 编辑聊天气泡文字，不使用原生弹窗 -->
+    <div class="chat-modal-header">
+      <span>编辑消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <textarea class="chat-modal-search" data-role="edit-message-content-input" maxlength="2000" style="min-height:108px;resize:none;">${escapeHtml(message.content || '')}</textarea>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-edit-message" data-message-id="${escapeHtml(messageId)}" type="button">保存</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="edit-message-content-input"]')?.focus(), 30);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·收藏弹窗]
+   说明：收藏成功/筛选/预览/分组命名均使用应用内弹窗，与闲谈主题统一。
+   ========================================================================== */
+function showFavoriteSavedModal(container, count) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>收藏完成</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body"><div class="chat-modal-hint">已收藏 ${Number(count || 0)} 条消息，可在用户主页“收藏”折叠栏中查看。</div></div>
+    <div class="chat-modal-footer"><button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button></div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+function showCreateFavoriteGroupModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏分组] 新建收藏大分组弹窗 -->
+    <div class="chat-modal-header">
+      <span>新建收藏分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search" type="text" maxlength="12" placeholder="输入分组名称" data-role="favorite-group-name-input">
+    <div class="chat-modal-notice" data-role="modal-notice"></div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-create-favorite-group" type="button">完成</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="favorite-group-name-input"]')?.focus(), 30);
+}
+
+function showCreateFavoriteSubGroupModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏再分组] 新建当前收藏页小分组弹窗 -->
+    <div class="chat-modal-header">
+      <span>收藏再分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search" type="text" maxlength="12" placeholder="输入小分组名称" data-role="favorite-sub-group-name-input">
+    <div class="chat-modal-notice" data-role="modal-notice"></div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-create-favorite-sub-group" type="button">完成</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="favorite-sub-group-name-input"]')?.focus(), 30);
+}
+
+function showFavoriteFilterModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+  const modes = [
+    { id: 'name', name: '名称' },
+    { id: 'updatedAt', name: '修改时间' },
+    { id: 'messageTime', name: '原消息时间' }
+  ];
+  const current = normalizeFavoriteData(state.favoriteData).sortMode;
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏筛选] 排序筛选弹窗 -->
+    <div class="chat-modal-header">
+      <span>筛选排序</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      ${modes.map(mode => `
+        <button class="chat-contact-group-choice ${current === mode.id ? 'is-active' : ''}" data-action="set-favorite-sort" data-favorite-sort="${mode.id}" type="button">
+          <span>${mode.name}</span>${current === mode.id ? `<i>${ICON_CHECK}</i>` : ''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+function showFavoritePreviewModal(container, state, itemId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const item = normalizeFavoriteData(state.favoriteData).items.find(entry => String(entry.id) === String(itemId));
+  if (!mask || !panel || !item) return;
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏组展开] 单条/多条收藏卡片预览弹窗 -->
+    <div class="chat-modal-header">
+      <span>${escapeHtml(item.name || '收藏')}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      ${item.messages.map(message => `
+        <div class="favorite-preview-message">
+          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : 'AI'} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
+          ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
+        </div>
+      `).join('')}
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+function showDeleteFavoriteGroupModal(container, state, groupId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const group = normalizeFavoriteData(state.favoriteData).groups.find(item => String(item.id) === String(groupId));
+  if (!mask || !panel || !group) return;
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏分组删除] 删除后内容自动移至 All -->
+    <div class="chat-modal-header">
+      <span>删除收藏分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body"><div class="chat-modal-hint">是否删除“${escapeHtml(group.name)}”？<br>分组内收藏会自动移动至 All。</div></div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-favorite-group" data-favorite-group-id="${escapeHtml(group.id)}" type="button">删除</button>
+    </div>
+  `;
   mask.classList.remove('is-hidden');
 }
 
@@ -2530,6 +2796,52 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
+       [区域标注·已完成·气泡编辑] 消息气泡功能栏 — 编辑文字并同步后续 AI 上文
+       ========================================================================== */
+    case 'msg-bubble-edit': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (messageId) showEditMessageModal(container, state, messageId);
+      break;
+    }
+
+    case 'confirm-edit-message': {
+      const messageId = String(target.dataset.messageId || '');
+      const input = container.querySelector('[data-role="edit-message-content-input"]');
+      const value = String(input?.value || '').trim();
+      if (!messageId || !value) {
+        renderModalNotice(container, '请输入消息内容');
+        break;
+      }
+      const index = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
+      if (index < 0) break;
+      state.currentMessages[index] = { ...state.currentMessages[index], content: value, editedAt: Date.now() };
+      state.selectedMessageId = messageId;
+      state.deleteConfirmMessageId = '';
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      closeModal(container);
+      refreshMessageBubbleRows(container, state, [messageId]);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·聊天消息收藏] 气泡收藏入口：进入多选收藏态并默认选中当前消息
+       ========================================================================== */
+    case 'msg-bubble-favorite': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      state.selectedMessageId = '';
+      state.deleteConfirmMessageId = '';
+      state.multiSelectMode = true;
+      state.selectedMessageIds = [messageId];
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·本次需求5] 消息气泡功能栏 — 删除单条消息
        ========================================================================== */
     case 'msg-bubble-delete': {
@@ -2615,6 +2927,16 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
       ]);
       renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* [区域标注·已完成·聊天消息收藏] 多选模式 — 收藏为单条/消息组卡片 */
+    case 'msg-multi-favorite-selected': {
+      const selectedMessages = getSelectedMessages(state);
+      if (!selectedMessages.length) break;
+      await addMessagesToFavorites(container, state, db, selectedMessages);
+      resetMessageSelectionState(state);
+      renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
     }
 
@@ -2713,6 +3035,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
+       [区域标注·已完成·收藏入口] 收藏折叠栏 — 点击进入收藏子页面
+       ========================================================================== */
+    case 'open-favorite':
+      openSubPage(container, state, 'favorite');
+      break;
+
+    /* ==========================================================================
        [区域标注·修改1] 表情包折叠栏 — 点击进入表情包子页面
        ========================================================================== */
     case 'open-sticker':
@@ -2747,6 +3076,155 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'go-profile':
       closeSubPage(container, state);
       break;
+
+    /* ==========================================================================
+       [区域标注·已完成·收藏独立页] 收藏页面：分组、搜索、筛选、多选、删除、再分组
+       ========================================================================== */
+    case 'switch-favorite-group': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        break;
+      }
+      const data = normalizeFavoriteData(state.favoriteData);
+      const groupId = target.dataset.favoriteGroupId || 'all';
+      const exists = groupId === 'all' || data.groups.some(group => group.id === groupId);
+      state.favoriteData = { ...data, activeGroupId: exists ? groupId : 'all' };
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await persistFavoriteData(state, db);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'create-favorite-group':
+      showCreateFavoriteGroupModal(container);
+      break;
+
+    case 'confirm-create-favorite-group': {
+      const input = container.querySelector('[data-role="favorite-group-name-input"]');
+      const name = String(input?.value || '').trim();
+      if (!name) {
+        renderModalNotice(container, '请输入分组名称');
+        break;
+      }
+      const data = normalizeFavoriteData(state.favoriteData);
+      const group = { id: createUid('favorite_group'), name };
+      state.favoriteData = { ...data, groups: [...data.groups, group], activeGroupId: group.id };
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'confirm-delete-favorite-group': {
+      const groupId = target.dataset.favoriteGroupId || '';
+      const data = normalizeFavoriteData(state.favoriteData);
+      if (!groupId || groupId === 'all') break;
+      state.favoriteData = {
+        ...data,
+        groups: data.groups.filter(group => group.id !== groupId),
+        subGroups: data.subGroups.map(group => group.parentGroupId === groupId ? { ...group, parentGroupId: 'all' } : group),
+        items: data.items.map(item => item.groupId === groupId ? { ...item, groupId: 'all', subGroupId: '', updatedAt: Date.now() } : item),
+        activeGroupId: data.activeGroupId === groupId ? 'all' : data.activeGroupId
+      };
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'toggle-favorite-search': {
+      const data = normalizeFavoriteData(state.favoriteData);
+      state.favoriteData = { ...data, searchOpen: !data.searchOpen };
+      await persistFavoriteData(state, db);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'open-favorite-filter':
+      showFavoriteFilterModal(container, state);
+      break;
+
+    case 'set-favorite-sort': {
+      const sortMode = target.dataset.favoriteSort || 'updatedAt';
+      const data = normalizeFavoriteData(state.favoriteData);
+      state.favoriteData = { ...data, sortMode };
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'open-favorite-preview': {
+      const favoriteId = target.dataset.favoriteId || '';
+      if (favoriteId) showFavoritePreviewModal(container, state, favoriteId);
+      break;
+    }
+
+    case 'toggle-favorite-item': {
+      if (!state.favoriteMultiSelectMode) break;
+      const favoriteId = target.dataset.favoriteId || '';
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      selected.has(favoriteId) ? selected.delete(favoriteId) : selected.add(favoriteId);
+      state.selectedFavoriteIds = Array.from(selected);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'favorite-multi-cancel':
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      rerenderCurrentSubPage(container, state);
+      break;
+
+    case 'favorite-multi-select-all': {
+      const visibleIds = getVisibleFavoriteItems(state).map(item => String(item.id));
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      const isAllSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id));
+      state.selectedFavoriteIds = isAllSelected ? [] : visibleIds;
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'favorite-multi-delete': {
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      if (!selected.size) break;
+      const data = normalizeFavoriteData(state.favoriteData);
+      state.favoriteData = { ...data, items: data.items.filter(item => !selected.has(String(item.id))) };
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await persistFavoriteData(state, db);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    case 'favorite-multi-group':
+      if ((state.selectedFavoriteIds || []).length) showCreateFavoriteSubGroupModal(container);
+      break;
+
+    case 'confirm-create-favorite-sub-group': {
+      const input = container.querySelector('[data-role="favorite-sub-group-name-input"]');
+      const name = String(input?.value || '').trim();
+      if (!name) {
+        renderModalNotice(container, '请输入小分组名称');
+        break;
+      }
+      const data = normalizeFavoriteData(state.favoriteData);
+      const now = Date.now();
+      const subGroup = { id: createUid('favorite_sub_group'), parentGroupId: data.activeGroupId || 'all', name, createdAt: now };
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      state.favoriteData = {
+        ...data,
+        subGroups: [...data.subGroups, subGroup],
+        items: data.items.map(item => selected.has(String(item.id)) ? { ...item, subGroupId: subGroup.id, updatedAt: now } : item)
+      };
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
 
     /* ==========================================================================
        [区域标注·本次需求3] 表情包独立页面：分组切换、新建分组、添加表情包
@@ -2978,7 +3456,9 @@ async function saveMaskData(state, db, maskId) {
     dbPut(db, DATA_KEY_CONTACTS(maskId), state.contacts),
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
-    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments)
+    dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments),
+    /* [区域标注·已完成·收藏持久化] 切换面具前保存当前面具收藏数据 */
+    dbPut(db, DATA_KEY_FAVORITES(maskId), normalizeFavoriteData(state.favoriteData))
   ]);
 }
 
@@ -2987,12 +3467,13 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, favoriteData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
-    dbGet(db, DATA_KEY_MOMENTS(maskId))
+    dbGet(db, DATA_KEY_MOMENTS(maskId)),
+    dbGet(db, DATA_KEY_FAVORITES(maskId))
   ]);
   state.sessions = sessions || [];
   /* === [本次修改] 聊天列表长按删除联系人：切换面具时恢复对应隐藏状态 === */
@@ -3002,6 +3483,9 @@ async function loadMaskData(state, db, maskId) {
   state.contactGroups = normalizeContactGroups(contactGroups);
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
+  state.favoriteData = normalizeFavoriteData(favoriteData);
+  state.favoriteMultiSelectMode = false;
+  state.selectedFavoriteIds = [];
   /* [区域标注·已修改] 聊天提示词设置已改为按“当前面具 + 当前聊天对象”独立读取；切换面具时不再加载面具级通用设置 */
   state.chatPromptSettings = normalizeChatPromptSettings(null);
   state.pendingStickerLocalFile = null;
@@ -3147,6 +3631,8 @@ function openSubPage(container, state, pageType) {
   state.subPageView = pageType;
   state.stickerMultiSelectMode = false;
   state.selectedStickerIds = [];
+  state.favoriteMultiSelectMode = false;
+  state.selectedFavoriteIds = [];
 
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -3172,6 +3658,8 @@ function closeSubPage(container, state) {
   state.subPageView = null;
   state.stickerMultiSelectMode = false;
   state.selectedStickerIds = [];
+  state.favoriteMultiSelectMode = false;
+  state.selectedFavoriteIds = [];
 
   const topBar = container.querySelector('.chat-top-bar');
   const bottomTab = container.querySelector('[data-role="bottom-tab"]');
@@ -3224,6 +3712,132 @@ function rerenderCurrentSubPage(container, state) {
   if (msgWrap && state.subPageView) {
     msgWrap.innerHTML = renderSubPage(state, state.subPageView);
   }
+}
+
+/* ==========================================================================
+   [区域标注·已完成·收藏独立页工具]
+   说明：只服务用户主页“收藏”独立页面；数据来自 DB.js / IndexedDB。
+   ========================================================================== */
+function getFavoriteGroupsWithAll(state) {
+  const data = normalizeFavoriteData(state.favoriteData);
+  return [{ id: 'all', name: 'All' }, ...data.groups];
+}
+
+function getVisibleFavoriteItems(state) {
+  const data = normalizeFavoriteData(state.favoriteData);
+  const keyword = String(data.searchKeyword || '').trim().toLowerCase();
+  let items = data.items.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all'));
+  if (keyword) items = items.filter(item => String(item.name || '').toLowerCase().includes(keyword));
+  return [...items].sort((a, b) => {
+    if (data.sortMode === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
+    if (data.sortMode === 'messageTime') {
+      const ta = Math.max(...(a.messages || []).map(message => Number(message.timestamp || 0)), 0);
+      const tb = Math.max(...(b.messages || []).map(message => Number(message.timestamp || 0)), 0);
+      return tb - ta;
+    }
+    return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  });
+}
+
+function getFavoriteCardTitle(messages = []) {
+  if (!messages.length) return '未命名收藏';
+  if (messages.length === 1) {
+    const msg = messages[0];
+    return String(msg.type === 'sticker' ? `[表情包] ${msg.stickerName || msg.content}` : msg.content || '单条收藏').slice(0, 24);
+  }
+  return `${messages.length} 条消息`;
+}
+
+async function addMessagesToFavorites(container, state, db, messages) {
+  const selected = Array.isArray(messages) ? messages.filter(Boolean) : [];
+  if (!selected.length) return;
+  const data = normalizeFavoriteData(state.favoriteData);
+  const now = Date.now();
+  const safeMessages = selected.map(message => ({
+    id: String(message.id || createUid('fav_msg')),
+    role: String(message.role || 'user'),
+    type: String(message.type || ''),
+    content: String(message.content || ''),
+    stickerName: String(message.stickerName || ''),
+    stickerUrl: String(message.stickerUrl || ''),
+    timestamp: Number(message.timestamp || now)
+  })).filter(message => String(message.content || '').trim());
+  if (!safeMessages.length) return;
+  const item = {
+    id: createUid('favorite'),
+    name: getFavoriteCardTitle(safeMessages),
+    groupId: data.activeGroupId || 'all',
+    subGroupId: '',
+    messages: safeMessages,
+    createdAt: now,
+    updatedAt: now,
+    sourceChatId: String(state.currentChatId || '')
+  };
+  state.favoriteData = { ...data, items: [...data.items, item] };
+  await persistFavoriteData(state, db);
+  showFavoriteSavedModal(container, safeMessages.length);
+}
+
+function renderFavoriteSubPage(state) {
+  const data = normalizeFavoriteData(state.favoriteData);
+  const items = getVisibleFavoriteItems(state);
+  const selectedSet = new Set((state.selectedFavoriteIds || []).map(String));
+  const allVisibleSelected = items.length > 0 && items.every(item => selectedSet.has(String(item.id)));
+  const groupTabsHtml = getFavoriteGroupsWithAll(state).map(group => `
+    <!-- [区域标注·已完成·收藏大分组] 分组：${escapeHtml(group.name)} -->
+    <button class="chat-tab-btn favorite-group-tab-btn ${data.activeGroupId === group.id ? 'is-active' : ''}"
+            data-action="switch-favorite-group"
+            data-favorite-group-id="${escapeHtml(group.id)}"
+            ${group.id !== 'all' ? 'data-long-press-action="delete-favorite-group"' : ''}
+            type="button">${escapeHtml(group.name)}</button>
+  `).join('');
+  const cardsHtml = items.length ? items.map(item => {
+    const sub = data.subGroups.find(group => String(group.id) === String(item.subGroupId));
+    const preview = item.messages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');
+    return `
+      <!-- [区域标注·已完成·收藏卡片] ${escapeHtml(item.name)} -->
+      <button class="favorite-card ${selectedSet.has(String(item.id)) ? 'is-selected' : ''}"
+              data-action="${state.favoriteMultiSelectMode ? 'toggle-favorite-item' : 'open-favorite-preview'}"
+              data-favorite-id="${escapeHtml(item.id)}"
+              type="button">
+        ${state.favoriteMultiSelectMode ? `<span class="favorite-card__check">${selectedSet.has(String(item.id)) ? ICON_CHECK : ''}</span>` : ''}
+        <div class="favorite-card__title">${escapeHtml(item.name || '未命名收藏')}</div>
+        <div class="favorite-card__meta">${item.messages.length > 1 ? '消息组' : '单条消息'}${sub ? ` · ${escapeHtml(sub.name)}` : ''}</div>
+        <div class="favorite-card__preview">${escapeHtml(preview)}</div>
+      </button>
+    `;
+  }).join('') : `<div class="favorite-empty">当前分组暂无收藏<br>可在聊天气泡功能栏点击“收藏”添加</div>`;
+
+  const multiBar = state.favoriteMultiSelectMode ? `
+    <div class="sticker-multi-action-bar">
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-cancel" type="button">${TAB_ICONS.close}<span>取消</span></button>
+      <span class="sticker-multi-action-bar__count">已选 ${selectedSet.size} 个</span>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-group" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.plus}<span>分组</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-select-all" type="button">${allVisibleSelected ? ICON_CHECK : TAB_ICONS.plus}<span>${allVisibleSelected ? '取消全选' : '全选'}</span></button>
+      <button class="sticker-multi-action-bar__btn sticker-multi-action-bar__btn--danger" data-action="favorite-multi-delete" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.close}<span>删除</span></button>
+    </div>
+  ` : '';
+
+  return `
+    <div class="chat-sub-page favorite-sub-page">
+      <div class="chat-sub-page__header chat-sub-page__header--center favorite-sub-page__header">
+        <button class="favorite-page-icon-btn favorite-page-search-btn" data-action="toggle-favorite-search" type="button" aria-label="搜索收藏">${TAB_ICONS.search}</button>
+        <button class="chat-sub-page__title chat-sub-page__title--button chat-sub-page__title--center" data-action="go-profile" type="button">收藏</button>
+        <button class="favorite-page-icon-btn favorite-page-filter-btn" data-action="open-favorite-filter" type="button" aria-label="筛选收藏">${TAB_ICONS.filter}</button>
+      </div>
+      <div class="favorite-search-row ${data.searchOpen ? '' : 'is-hidden'}">
+        <input class="favorite-search-input" data-role="favorite-search-input" type="text" value="${escapeHtml(data.searchKeyword || '')}" placeholder="搜索收藏卡片名称">
+      </div>
+      <div class="favorite-group-tabs"><div class="favorite-group-tabs__scroller">
+        ${groupTabsHtml}
+        <button class="favorite-group-add-tab" data-action="create-favorite-group" type="button" aria-label="新建收藏分组">${TAB_ICONS.plus}</button>
+      </div></div>
+      <div class="favorite-list-scroll ${state.favoriteMultiSelectMode ? 'is-multi-selecting' : ''}">
+        <div class="favorite-grid">${cardsHtml}</div>
+      </div>
+      ${multiBar}
+    </div>
+  `;
 }
 
 function renderStickerSubPage(state) {
@@ -3587,6 +4201,48 @@ function showDeleteStickerGroupModal(container, state, groupId) {
   mask.classList.remove('is-hidden');
 }
 
+function createFavoriteGroupLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const openDeleteModal = () => {
+    const target = pressedTarget;
+    if (!target) return;
+    const groupId = target.dataset.favoriteGroupId || '';
+    const data = normalizeFavoriteData(state.favoriteData);
+    const exists = groupId && groupId !== 'all' && data.groups.some(group => group.id === groupId);
+    if (!exists) return;
+    target.dataset.longPressTriggered = '1';
+    showDeleteFavoriteGroupModal(container, state, groupId);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="delete-favorite-group"]');
+      if (!target) return;
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(openDeleteModal, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="delete-favorite-group"]')) e.preventDefault();
+    }
+  };
+}
+
 function createStickerGroupLongPressHandlers(state, container) {
   let timer = null;
   let pressedTarget = null;
@@ -3653,6 +4309,10 @@ function renderSubPage(state, pageType) {
         </div>
       </div>
     `;
+  }
+
+  if (pageType === 'favorite') {
+    return renderFavoriteSubPage(state);
   }
 
   if (pageType === 'sticker') {
@@ -3730,6 +4390,14 @@ function handleInput(e, state, container, db) {
      ========================================================================== */
   if (target.matches('[data-role="contact-add-search-input"]')) {
     renderContactSearchResults(container, state, target.value || '');
+    return;
+  }
+
+  if (target.matches('[data-role="favorite-search-input"]')) {
+    const data = normalizeFavoriteData(state.favoriteData);
+    state.favoriteData = { ...data, searchKeyword: target.value || '' };
+    dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
+    rerenderCurrentSubPage(container, state);
     return;
   }
 
@@ -3857,6 +4525,17 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    说明：双击任意表情包即可唤起底部悬浮多选栏，并默认选中当前表情包。
    ========================================================================== */
 function handleDoubleClick(e, state, container) {
+  if (state.subPageView === 'favorite') {
+    const target = e.target.closest('[data-favorite-id]');
+    if (!target) return;
+    const favoriteId = String(target.dataset.favoriteId || '').trim();
+    if (!favoriteId) return;
+    state.favoriteMultiSelectMode = true;
+    state.selectedFavoriteIds = [favoriteId];
+    rerenderCurrentSubPage(container, state);
+    return;
+  }
+
   if (state.subPageView !== 'sticker') return;
   if (state.stickerPreviewClickTimer) {
     window.clearTimeout(state.stickerPreviewClickTimer);
