@@ -195,6 +195,14 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次需求1] 消息列表多选模式底部留白
+   说明：使用显式状态类替代仅依赖 :has()，修复首次进入多选时底栏不显示。
+   ========================================================================== */
+.msg-list-area.is-multi-select-mode {
+  padding-bottom: 92px;
+}
+
+/* ==========================================================================
    [区域标注·本次需求5] 消息页空状态提示
    ========================================================================== */
 .msg-empty {
@@ -301,6 +309,37 @@
   background: rgba(200, 184, 154, 0.45);
   border: 1px solid rgba(74, 52, 42, 0.08);
   border-bottom-right-radius: 6px;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求3] 表情包消息气泡
+   说明：聊天面板与 AI 自动发送表情包共用，不显示纯文本气泡底色。
+   ========================================================================== */
+.msg-bubble--sticker {
+  padding: 6px;
+  background: transparent;
+  border: none;
+}
+
+.msg-sticker-bubble {
+  width: min(160px, 42vw);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.08);
+}
+
+.msg-bubble--user .msg-sticker-bubble {
+  background: rgba(255, 250, 244, 0.95);
+}
+
+.msg-sticker-bubble__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  object-fit: cover;
 }
 
 /* [区域标注·本次需求5] 消息时间戳 */
@@ -434,6 +473,11 @@
   transform: scale(0.92);
 }
 
+.msg-input-bar__icon-btn.is-active {
+  background: #4A342A;
+  color: #f8f4ef;
+}
+
 .msg-input-bar__icon-btn svg {
   width: 20px;
   height: 20px;
@@ -471,6 +515,143 @@
 
 .msg-input-bar__send-btn:active:not(:disabled) {
   background: #3a2618;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求3] 输入栏表情包升起面板
+   说明：点击底栏圆形“表情包”按钮后，从底栏上边框升起；一行四个排列。
+   ========================================================================== */
+.msg-sticker-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% - 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 18px;
+  border-radius: 22px 22px 16px 16px;
+  background: rgba(255, 252, 247, 0.97);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(74, 52, 42, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.msg-sticker-panel.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.msg-sticker-panel__groups {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.msg-sticker-panel__group-btn,
+.msg-settings-sticker-group-btn {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.08);
+  color: rgba(74, 52, 42, 0.72);
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.msg-sticker-panel__group-btn.is-active,
+.msg-settings-sticker-group-btn.is-active {
+  background: #4A342A;
+  color: #f8f4ef;
+}
+
+.msg-sticker-panel__group-btn:active,
+.msg-settings-sticker-group-btn:active {
+  transform: scale(0.96);
+}
+
+.msg-sticker-panel__grid {
+  max-height: 248px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.msg-sticker-panel__item {
+  min-width: 0;
+  border: none;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.05);
+  color: #4A342A;
+  padding: 8px 6px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-sticker-panel__item:active {
+  background: rgba(74, 52, 42, 0.13);
+  transform: scale(0.95);
+}
+
+.msg-sticker-panel__item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.msg-sticker-panel__item span {
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.25;
+  color: rgba(74, 52, 42, 0.68);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-sticker-panel__empty,
+.msg-settings-sticker-empty {
+  width: 100%;
+  padding: 18px 10px;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.05);
+  color: rgba(74, 52, 42, 0.46);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   [区域标注·本次需求3] 聊天设置页表情包挂载分组
+   说明：仅显示分组名称，支持多选，和输入栏表情包面板风格统一。
+   ========================================================================== */
+.msg-settings-sticker-groups {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* ==========================================================================
@@ -804,6 +985,24 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次需求5] 删除消息二次确认按钮状态
+   说明：保持应用内浮层风格，不使用原生弹窗。
+   ========================================================================== */
+.msg-bubble-toolbar__btn--danger.is-confirming {
+  background: rgba(181, 67, 54, 0.16);
+  color: #9d3f31;
+}
+
+.msg-bubble-toolbar__btn--confirm-delete {
+  color: #fffaf4;
+  background: #9d3f31;
+}
+
+.msg-bubble-toolbar__btn--confirm-delete:active {
+  background: #8a3428;
+}
+
+/* ==========================================================================
    [区域标注·本次需求5] 消息多选状态与勾选圆点
    说明：多选模式下显示选择圆点，并提供底部删除/转发操作栏。
    ========================================================================== */
@@ -919,6 +1118,15 @@
   background: rgba(181, 67, 54, 0.16);
 }
 
+/* ==========================================================================
+   [区域标注·本次需求1] 多选模式显式隐藏输入栏
+   说明：避免仅依赖 :has() 导致首次进入多选时底栏不显示。
+   ========================================================================== */
+.msg-conversation.is-multi-select-mode .msg-input-shell {
+  display: none;
+}
+
+/* [区域标注·本次需求1] 兼容保留：支持可用环境下的结构选择器 */
 .msg-conversation:has(.msg-multi-action-bar) .msg-input-shell {
   display: none;
 }

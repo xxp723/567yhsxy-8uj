@@ -58,6 +58,39 @@ function stripThinkBlocks(text) {
 }
 
 /* ==========================================================================
+   [区域标注·本次需求3] AI 表情包挂载提示词数据工具
+   说明：
+   1. 表情包资源来自 DB.js / IndexedDB 中的全局共享资产。
+   2. 不同用户面具只通过 mountedStickerGroupIds 决定 AI 可使用哪些分组。
+   3. system prompt 只注入当前已挂载分组下的有效表情包资源。
+   ========================================================================== */
+function normalizeStickerPromptData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const groups = Array.isArray(source.groups)
+    ? source.groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  const rawItems = Array.isArray(source.items)
+    ? source.items
+    : (Array.isArray(source.stickers) ? source.stickers : []);
+  const items = rawItems
+    .map(item => ({
+      id: String(item?.id || '').trim(),
+      groupId: validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all',
+      name: String(item?.name || '').trim(),
+      url: String(item?.url || '').trim()
+    }))
+    .filter(item => item.id && item.name && item.url);
+
+  return { groups, items };
+}
+
+/* ==========================================================================
    ===== 闲谈：通用消息协议格式 START =====
    说明：
    1. 新回复协议统一使用 **`[类型] 角色名：内容`**。
@@ -339,6 +372,7 @@ async function collectPromptRuntimeContext({
   currentContact = null,
   archiveData = null,
   worldBooks = null,
+  stickerData = null,
   userInput = '',
   history = [],
   settings = {}
@@ -359,6 +393,7 @@ async function collectPromptRuntimeContext({
     currentContact,
     archiveData: normalizedArchive,
     worldBooks: normalizedWorldBooks,
+    stickerData: normalizeStickerPromptData(stickerData),
     userInput,
     history,
     settings
@@ -379,6 +414,9 @@ async function collectPromptRuntimeContext({
 export function getDefaultChatPromptSettings() {
   return {
     externalContextEnabled: false,
+    /* ===== 闲谈应用：AI 表情包挂载分组 START ===== */
+    mountedStickerGroupIds: [],
+    /* ===== 闲谈应用：AI 表情包挂载分组 END ===== */
     /* ===== 闲谈应用：时间感知开关 START ===== */
     timeAwarenessEnabled: false,
     /* ===== 闲谈应用：时间感知开关 END ===== */
@@ -405,8 +443,15 @@ export function normalizeChatPromptSettings(rawSettings) {
   const replyBubbleMax = Math.max(replyBubbleMin, Math.floor(Number(source.replyBubbleMax ?? defaults.replyBubbleMax)) || defaults.replyBubbleMax);
   const shortTermMemoryRounds = Math.max(0, Math.floor(Number(source.shortTermMemoryRounds ?? defaults.shortTermMemoryRounds)) || defaults.shortTermMemoryRounds);
 
+  const mountedStickerGroupIds = Array.isArray(source.mountedStickerGroupIds)
+    ? Array.from(new Set(source.mountedStickerGroupIds.map(item => String(item || '').trim()).filter(Boolean)))
+    : defaults.mountedStickerGroupIds;
+
   return {
     externalContextEnabled: Boolean(source.externalContextEnabled),
+    /* ===== 闲谈应用：AI 表情包挂载分组 START ===== */
+    mountedStickerGroupIds,
+    /* ===== 闲谈应用：AI 表情包挂载分组 END ===== */
     /* ===== 闲谈应用：时间感知开关 START ===== */
     timeAwarenessEnabled: Boolean(source.timeAwarenessEnabled),
     /* ===== 闲谈应用：时间感知开关 END ===== */
@@ -716,8 +761,9 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 2. 每个协议块外层必须保留加粗反引号：**\`[类型] 角色名：内容\`**。
 3. 当前已经开放的协议格式如下：
 ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
-4. 现阶段聊天界面只会把 [回复] 渲染为普通文字气泡；其它类型先作为后续扩展预留。
-5. 严禁把幕后思考、格式检查、系统规则、提示词说明写进协议块内容。`
+4. 当前聊天界面会把 [回复] 渲染为普通文字气泡，并把 [表情] 渲染为已挂载表情包气泡；其它类型先作为后续扩展预留。
+5. 如果要发送 [表情]，只能使用当前 system prompt 明确列出的已挂载表情包资源，禁止编造不存在的表情名或资源ID。
+6. 严禁把幕后思考、格式检查、系统规则、提示词说明写进协议块内容。`
     /* ===== 闲谈：通用消息协议格式 END ===== */
   ].filter(Boolean).join('\n\n');
 }
@@ -738,6 +784,59 @@ export function getExternalContext({ enabled = false, context = {} } = {}) {
     `当前激活面具ID：${context.activeMaskId || '未设置'}`,
     `档案应用：${maskCount} 个用户面具，${characterCount} 个角色档案。`,
     `世情应用：${worldBookCount} 本世界书可供筛选。`
+  ].join('\n'));
+}
+
+/* ==========================================================================
+   [提示词区域 8-B][本次需求3] AI 已挂载表情包资源
+   说明：
+   1. 只把当前面具已挂载分组下的表情包资源发给 AI。
+   2. AI 如需发送表情包，必须使用 [表情] 协议，并且只能从以下资源中选择。
+   3. 为减少匹配歧义，优先让 AI 输出资源ID；前端同时兼容资源ID和表情名。
+   ========================================================================== */
+export function getMountedStickerPrompt({ settings = {}, context = {} } = {}) {
+  const normalizedSettings = normalizeChatPromptSettings(settings);
+  const stickerData = normalizeStickerPromptData(context.stickerData);
+  const mountedGroupIds = Array.isArray(normalizedSettings.mountedStickerGroupIds)
+    ? normalizedSettings.mountedStickerGroupIds.map(String)
+    : [];
+
+  if (!mountedGroupIds.length) {
+    return createPromptSection('AI可用表情包资源', [
+      '当前没有给你挂载任何表情包分组。',
+      '因此你这轮只能使用 [回复] 协议发送文字消息，禁止输出 [表情] 协议。'
+    ].join('\n'));
+  }
+
+  const groupNameMap = new Map([
+    ['all', 'All'],
+    ...stickerData.groups.map(group => [group.id, group.name])
+  ]);
+
+  const availableItems = mountedGroupIds.includes('all')
+    ? stickerData.items
+    : stickerData.items.filter(item => mountedGroupIds.includes(String(item.groupId || 'all')));
+
+  const mountedGroupNames = mountedGroupIds.map(groupId => groupNameMap.get(groupId) || groupId);
+
+  if (!availableItems.length) {
+    return createPromptSection('AI可用表情包资源', [
+      `当前已挂载分组：${mountedGroupNames.join('、') || '无'}`,
+      '但这些分组下暂时没有有效表情包资源。',
+      '因此你这轮只能使用 [回复] 协议发送文字消息，禁止输出 [表情] 协议。'
+    ].join('\n'));
+  }
+
+  const stickerLines = availableItems.map((item, index) => (
+    `${index + 1}. 表情名：${item.name}；资源ID：${item.id}；分组：${groupNameMap.get(item.groupId) || item.groupId || 'All'}`
+  ));
+
+  return createPromptSection('AI可用表情包资源', [
+    `当前已挂载分组：${mountedGroupNames.join('、')}`,
+    '如果你判断当前聊天情景适合发表情包，可以发送 [表情] 协议。',
+    '发送 [表情] 协议时，优先使用“资源ID”作为内容；若使用表情名，也必须与以下清单完全一致。',
+    '你只能从下面这些资源里选择，不得编造新表情：',
+    stickerLines.join('\n')
   ].join('\n'));
 }
 
@@ -881,6 +980,7 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     getMemories(runtimeContext),
     getWorldBookAfterChar(runtimeContext),
     getFeaturePrompts({ settings: normalizedSettings }),
+    getMountedStickerPrompt({ settings: normalizedSettings, context: runtimeContext }),
     getExternalContext({ enabled: normalizedSettings.externalContextEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled }),
@@ -1048,7 +1148,8 @@ export async function chat({
   currentSession = null,
   currentContact = null,
   archiveData = null,
-  worldBooks = null
+  worldBooks = null,
+  stickerData = null
 } = {}) {
   const promptContext = await collectPromptRuntimeContext({
     db,
@@ -1057,6 +1158,7 @@ export async function chat({
     currentContact,
     archiveData,
     worldBooks,
+    stickerData,
     userInput,
     history,
     settings: chatSettings

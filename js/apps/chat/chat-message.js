@@ -47,6 +47,47 @@ function formatMsgTime(ts) {
 }
 
 /* ==========================================================================
+   [区域标注·本次需求3] 聊天页表情包面板数据工具
+   说明：All 为固定默认分组；输入栏表情包面板与聊天设置“表情包挂载”共用。
+   ========================================================================== */
+function normalizeStickerPanelData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const groups = Array.isArray(source.groups)
+    ? source.groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  const rawItems = Array.isArray(source.items)
+    ? source.items
+    : (Array.isArray(source.stickers) ? source.stickers : []);
+  const items = rawItems
+    .map(item => ({
+      id: String(item?.id || '').trim(),
+      groupId: validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all',
+      name: String(item?.name || '').trim(),
+      url: String(item?.url || '').trim()
+    }))
+    .filter(item => item.id && item.name && item.url);
+
+  return { groups, items };
+}
+
+function getStickerPanelGroups(rawData) {
+  const data = normalizeStickerPanelData(rawData);
+  return [{ id: 'all', name: 'All' }, ...data.groups];
+}
+
+function getVisibleStickerPanelItems(rawData, groupId = 'all') {
+  const data = normalizeStickerPanelData(rawData);
+  if (groupId === 'all') return data.items;
+  return data.items.filter(item => item.groupId === groupId);
+}
+
+/* ==========================================================================
    [区域标注·本次需求5] 单条消息气泡渲染
    说明：
    1. 导出给 index.js 增量追加消息，避免 AI 每输出一个气泡都整页重绘造成闪屏。
@@ -73,6 +114,14 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   /* ===== 闲谈：删除消息二次确认 START ===== */
   const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
   /* ===== 闲谈：删除消息二次确认 END ===== */
+  const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
+  const bubbleInnerHtml = isStickerMessage
+    ? `
+        <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
+          <img class="msg-sticker-bubble__image" src="${escapeHtml(msg?.stickerUrl || '')}" alt="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
+        </div>
+      `
+    : escapeHtml(msg?.content || '');
 
   return `
     <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
@@ -99,8 +148,8 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''}">
-          ${escapeHtml(msg?.content || '')}
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''}">
+          ${bubbleInnerHtml}
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
       </div>
@@ -128,6 +177,19 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const msgs = messages || [];
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
+
+  /* ==========================================================================
+     [区域标注·本次需求3] 聊天页表情包面板 / AI 挂载设置
+     ========================================================================== */
+  const stickerData = normalizeStickerPanelData(options.stickerData);
+  const stickerPanelGroupId = String(options.stickerPanelGroupId || 'all');
+  const stickerPanelOpen = Boolean(options.stickerPanelOpen);
+  const coffeeDockOpen = Boolean(options.coffeeDockOpen);
+  const stickerGroups = getStickerPanelGroups(stickerData);
+  const visibleStickerItems = getVisibleStickerPanelItems(stickerData, stickerPanelGroupId);
+  const mountedStickerGroupIds = Array.isArray(chatSettings.mountedStickerGroupIds)
+    ? chatSettings.mountedStickerGroupIds.map(String)
+    : [];
 
   /* ========================================================================
      [区域标注·本次需求5] 消息选择状态
@@ -172,16 +234,46 @@ export function renderChatMessage(chatSession, messages, options = {}) {
      说明：当前仅做“表情包、转账”等功能占位，后续在此区域扩展。
      ========================================================================== */
   const featureDockHtml = `
-    <div class="msg-feature-dock" data-role="msg-feature-dock">
-      <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="sticker">
-        ${MSG_ICONS.sticker}<span>表情包</span>
-      </button>
+    <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
       <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="transfer">
         ${MSG_ICONS.wallet}<span>转账</span>
       </button>
       <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="action">
         ${MSG_ICONS.bolt}<span>动作</span>
       </button>
+    </div>
+  `;
+
+  /* ==========================================================================
+     [区域标注·本次需求3] 输入栏表情包升起面板
+     说明：圆形表情包按钮触发；顶部显示分组，可切换；一行四个排列发送到聊天界面。
+     ========================================================================== */
+  const stickerPanelHtml = `
+    <div class="msg-sticker-panel ${stickerPanelOpen ? 'is-open' : ''}" data-role="msg-sticker-panel">
+      <div class="msg-sticker-panel__groups">
+        ${stickerGroups.map(group => `
+          <button class="msg-sticker-panel__group-btn ${stickerPanelGroupId === group.id ? 'is-active' : ''}"
+                  data-action="switch-msg-sticker-group"
+                  data-sticker-group-id="${escapeHtml(group.id)}"
+                  type="button">
+            ${escapeHtml(group.name)}
+          </button>
+        `).join('')}
+      </div>
+      <div class="msg-sticker-panel__grid">
+        ${visibleStickerItems.length
+          ? visibleStickerItems.map(item => `
+              <button class="msg-sticker-panel__item"
+                      data-action="send-msg-sticker"
+                      data-sticker-id="${escapeHtml(item.id)}"
+                      type="button"
+                      title="${escapeHtml(item.name)}">
+                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+                <span>${escapeHtml(item.name)}</span>
+              </button>
+            `).join('')
+          : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`}
+      </div>
     </div>
   `;
 
@@ -198,6 +290,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     </div>
   ` : '';
 
+  /* ========================================================================
+     [区域标注·本次需求1] 多选模式聊天会话显式状态类
+     说明：
+     1. 进入多选后直接停止渲染底部输入栏，不再依赖 CSS :has() 才隐藏输入栏。
+     2. 通过显式类名控制底部留白与层级，修复首次进入多选时底栏不显示的问题。
+     ======================================================================== */
+  const conversationClassName = multiSelectMode ? 'msg-conversation is-multi-select-mode' : 'msg-conversation';
+  const listAreaClassName = multiSelectMode ? 'msg-list-area is-multi-select-mode' : 'msg-list-area';
+
   /* ==========================================================================
      [区域标注] 悬浮底部输入栏
      说明：四周圆角矩形；左侧咖啡按钮；输入框回车发送；右侧魔法棒与纸飞机。
@@ -205,8 +306,10 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const inputBarHtml = `
     <div class="msg-input-shell">
       ${featureDockHtml}
+      ${stickerPanelHtml}
       <div class="msg-input-bar">
         <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
+        <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
         <input type="text" class="msg-input-bar__input" placeholder="输入消息..." data-role="msg-input" ${isSending ? 'disabled' : ''}>
         <button class="msg-input-bar__icon-btn" data-action="msg-magic" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.magicWand}</button>
         <button class="msg-input-bar__icon-btn msg-input-bar__send-btn" data-action="msg-send" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.send}</button>
@@ -256,6 +359,27 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【回复格式】先输出<think>...</think>，再输出最终回复。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
         </section>
 
+        <!-- ==================================================================
+             [区域标注·本次需求3] AI 表情包挂载设置
+             说明：只显示分组名称；支持多选；不同用户面具只决定 AI 挂载哪些分组。
+             ========================================================================== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-card__title">表情包挂载</div>
+          <div class="msg-settings-card__desc">选择要挂载给 AI 使用的表情包分组。AI 只能从已挂载分组里选择符合当前聊天情景的表情包发送。</div>
+          <div class="msg-settings-sticker-groups">
+            ${stickerGroups.length
+              ? stickerGroups.map(group => `
+                  <button class="msg-settings-sticker-group-btn ${mountedStickerGroupIds.includes(group.id) ? 'is-active' : ''}"
+                          data-action="toggle-mounted-sticker-group"
+                          data-sticker-group-id="${escapeHtml(group.id)}"
+                          type="button">
+                    ${escapeHtml(group.name)}
+                  </button>
+                `).join('')
+              : `<div class="msg-settings-sticker-empty">暂无可挂载的表情包分组</div>`}
+          </div>
+        </section>
+
         <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 START ===== -->
         <section class="msg-settings-card">
           <div class="msg-settings-card__title">每轮回复气泡数量</div>
@@ -303,11 +427,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
 
   return `
     <div class="msg-page">
-      <div class="msg-conversation" data-role="msg-conversation">
+      <div class="${conversationClassName}" data-role="msg-conversation">
         ${topBarHtml}
-        <div class="msg-list-area" data-role="msg-list">${messagesHtml}</div>
+        <div class="${listAreaClassName}" data-role="msg-list">${messagesHtml}</div>
         ${multiSelectBarHtml}
-        ${inputBarHtml}
+        ${multiSelectMode ? '' : inputBarHtml}
       </div>
       ${settingsPageHtml}
     </div>
