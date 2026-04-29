@@ -265,6 +265,8 @@ function normalizeFavoriteData(rawData) {
                   content: String(message?.content || ''),
                   stickerName: String(message?.stickerName || ''),
                   stickerUrl: String(message?.stickerUrl || ''),
+                  /* [区域标注·已修改·本次需求2] 收藏消息发言人名称：预览时不再把助手统一显示为 AI */
+                  speakerName: String(message?.speakerName || ''),
                   timestamp: Number(message?.timestamp || 0) || Date.now()
                 }))
                 .filter(message => message.id && message.content)
@@ -279,7 +281,9 @@ function normalizeFavoriteData(rawData) {
             messages,
             createdAt: Number(item?.createdAt || Date.now()),
             updatedAt: Number(item?.updatedAt || item?.createdAt || Date.now()),
-            sourceChatId: String(item?.sourceChatId || '')
+            sourceChatId: String(item?.sourceChatId || ''),
+            /* [区域标注·已修改·本次需求4] 收藏条目自描述当前用户面具身份；实际隔离仍由 DATA_KEY_FAVORITES(maskId) 的 IndexedDB key 完成 */
+            maskId: String(item?.maskId || '')
           };
         })
         .filter(item => item.id && item.messages.length)
@@ -1411,6 +1415,46 @@ function updateMultiSelectActionBar(container, state) {
     btn.toggleAttribute('disabled', count <= 0);
   });
 }
+
+function renderMessageMultiSelectActionBar(state) {
+  const count = (state.selectedMessageIds || []).length;
+  return `
+    <!-- [区域标注·已修改·本次需求3] 气泡收藏进入多选底栏：局部插入，避免点击“收藏”整页重绘闪屏 -->
+    <div class="msg-multi-action-bar" data-role="msg-multi-action-bar">
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-cancel" type="button">${TAB_ICONS.close}<span>取消</span></button>
+      <span class="msg-multi-action-bar__count">已选 ${count} 条</span>
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-favorite-selected" type="button" ${count ? '' : 'disabled'}>${TAB_ICONS.favorite}<span>收藏</span></button>
+      <button class="msg-multi-action-bar__btn msg-multi-action-bar__btn--danger" data-action="msg-multi-delete-selected" type="button" ${count ? '' : 'disabled'}>${TAB_ICONS.close}<span>删除</span></button>
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-forward" type="button" ${count ? '' : 'disabled'}>${TAB_ICONS.forward}<span>转发</span></button>
+    </div>
+  `;
+}
+
+function enterMessageMultiSelectModeWithoutFullRender(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const conversation = msgWrap?.querySelector('[data-role="msg-conversation"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  if (!msgWrap || !conversation || !listArea) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const previousScrollTop = listArea.scrollTop;
+  conversation.classList.add('is-multi-select-mode');
+  listArea.classList.add('is-multi-select-mode');
+  msgWrap.querySelector('.msg-input-shell')?.remove();
+
+  let bar = msgWrap.querySelector('[data-role="msg-multi-action-bar"]');
+  if (!bar) {
+    listArea.insertAdjacentHTML('afterend', renderMessageMultiSelectActionBar(state));
+  } else {
+    bar.outerHTML = renderMessageMultiSelectActionBar(state);
+  }
+
+  refreshCurrentMessageListOnly(container, state);
+  listArea.scrollTop = previousScrollTop;
+  updateMultiSelectActionBar(container, state);
+}
 /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
 
 /* ==========================================================================
@@ -1675,7 +1719,8 @@ function showFavoritePreviewModal(container, state, itemId) {
     <div class="chat-modal-body">
       ${item.messages.map(message => `
         <div class="favorite-preview-message">
-          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : 'AI'} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
+          <!-- [区域标注·已修改·本次需求2] 收藏预览发言人：助手消息显示角色名称，不再固定显示 AI -->
+          <span class="favorite-preview-message__role">${escapeHtml(getFavoriteMessageSpeakerName(state, item, message))} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
           ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
         </div>
       `).join('')}
@@ -3019,7 +3064,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·已完成·聊天消息收藏] 气泡收藏入口：进入多选收藏态并默认选中当前消息
+       [区域标注·已修改·本次需求3] 气泡收藏入口：局部进入多选收藏态，修复点击“收藏”闪屏
        ========================================================================== */
     case 'msg-bubble-favorite': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
@@ -3028,7 +3073,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.deleteConfirmMessageId = '';
       state.multiSelectMode = true;
       state.selectedMessageIds = [messageId];
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      enterMessageMultiSelectModeWithoutFullRender(container, state);
       break;
     }
 
@@ -3986,6 +4031,8 @@ async function addMessagesToFavorites(container, state, db, messages) {
     content: String(message.content || ''),
     stickerName: String(message.stickerName || ''),
     stickerUrl: String(message.stickerUrl || ''),
+    /* [区域标注·已修改·本次需求2] 写入收藏时记录发言人名称，避免收藏预览只显示 AI */
+    speakerName: getFavoriteSourceSpeakerName(state, message),
     timestamp: Number(message.timestamp || now)
   })).filter(message => String(message.content || '').trim());
   if (!safeMessages.length) return;
@@ -3997,7 +4044,9 @@ async function addMessagesToFavorites(container, state, db, messages) {
     messages: safeMessages,
     createdAt: now,
     updatedAt: now,
-    sourceChatId: String(state.currentChatId || '')
+    sourceChatId: String(state.currentChatId || ''),
+    /* [区域标注·已修改·本次需求4] 收藏条目跟随当前用户面具身份隔离；maskId 仅作数据自描述，不做双份存储 */
+    maskId: String(state.activeMaskId || '')
   };
   state.favoriteData = { ...data, items: [...data.items, item] };
   await persistFavoriteData(state, db);
@@ -4684,10 +4733,16 @@ function handleInput(e, state, container, db) {
   }
 
   if (target.matches('[data-role="favorite-search-input"]')) {
+    /* ======================================================================
+       [区域标注·已修改·本次需求1] 收藏搜索栏输入不整页重绘
+       说明：
+       1. 搜索词仍只写入 DB.js / IndexedDB。
+       2. 只局部刷新收藏列表，保留输入框焦点，避免输入法长按删除时每次只删一个字。
+       ====================================================================== */
     const data = normalizeFavoriteData(state.favoriteData);
     state.favoriteData = { ...data, searchKeyword: target.value || '' };
     dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
-    rerenderCurrentSubPage(container, state);
+    refreshFavoriteListOnly(container, state);
     return;
   }
 
@@ -4799,6 +4854,23 @@ async function handleChange(e, state, container, db) {
    ========================================================================== */
 async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
+
+  if (target?.matches?.('[data-role="favorite-search-input"]')) {
+    /* ======================================================================
+       [区域标注·已修改·本次需求1] 收藏搜索栏长按删除键一次性清空
+       说明：只处理收藏独立页搜索框；清空后同步写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       ====================================================================== */
+    if ((e.key === 'Backspace' || e.key === 'Delete') && e.repeat && String(target.value || '')) {
+      e.preventDefault();
+      target.value = '';
+      const data = normalizeFavoriteData(state.favoriteData);
+      state.favoriteData = { ...data, searchKeyword: '' };
+      await persistFavoriteData(state, db);
+      refreshFavoriteListOnly(container, state);
+    }
+    return;
+  }
+
   if (!target?.matches?.('[data-role="msg-input"]')) return;
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
 
