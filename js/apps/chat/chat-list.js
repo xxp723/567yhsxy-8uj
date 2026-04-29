@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 文件名: js/apps/chat/chat-list.js
  * 用途: 闲谈应用 — 聊天列表板块
@@ -5,6 +6,8 @@
  *       折叠分组标题、搜索过滤等功能。
  * 架构层: 应用层（闲谈子模块）
  */
+
+import { TAB_ICONS, escapeHtml } from './chat-utils.js';
 
 /* ==========================================================================
    [区域标注] IconPark 图标 SVG 定义
@@ -20,14 +23,6 @@ const ICONS = {
   /* [区域标注] 消息气泡空状态图标 */
   message: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 19.5h20M14 27.5h12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
-
-/* ==========================================================================
-   [区域标注] 工具函数
-   ========================================================================== */
-function escapeHtml(text) {
-  const map = { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' };
-  return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
-}
 
 function formatTime(ts) {
   if (!ts) return '';
@@ -140,4 +135,135 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
       ${listContentHtml}
     </div>
   `;
+}
+
+/* ==========================================================================
+   [区域标注] 获取可见聊天会话（排除隐藏的）
+   ========================================================================== */
+export function getVisibleChatSessions(state) {
+  const hiddenSet = new Set(Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : []);
+  return (state.sessions || []).filter(session => !hiddenSet.has(String(session.id)));
+}
+
+/* ==========================================================================
+   [区域标注] 显示"添加聊天"弹窗
+   ========================================================================== */
+export function showAddChatModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  /* [区域标注] 构建弹窗内容 — 好友选择列表 */
+  const contactsHtml = state.contacts.length === 0
+    ? `<p style="text-align:center;color:rgba(74,52,42,0.45);font-size:13px;padding:20px 0;">暂无通讯录好友<br>请先在档案应用中添加角色</p>`
+    : state.contacts.map(c => {
+      /* ==========================================================================
+         [区域标注·本次需求3] 删除后允许重新添加
+         说明：被 hiddenChatIds 隐藏的会话不再显示“已添加”，可再次点击恢复聊天列表。
+         ========================================================================== */
+      const alreadyAdded = state.sessions.some(s => s.id === c.id) && !state.hiddenChatIds.map(String).includes(String(c.id));
+      return `
+        <!-- [区域标注] 好友选择项: ${c.name || '未命名'} -->
+        <div class="chat-modal-contact ${alreadyAdded ? '' : ''}" 
+             data-action="select-contact-for-chat" data-contact-id="${c.id}"
+             style="${alreadyAdded ? 'opacity:0.45;pointer-events:none;' : ''}">
+          <div class="chat-modal-contact__avatar">
+            ${c.avatar
+              ? `<img src="${c.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+              : (c.name || '?').charAt(0).toUpperCase()}
+          </div>
+          <span class="chat-modal-contact__name">${c.name || '未命名'}${alreadyAdded ? ' (已添加)' : ''}</span>
+        </div>
+      `;
+    }).join('');
+
+  panel.innerHTML = `
+    <!-- [区域标注] "添加聊天"弹窗 -->
+    <div class="chat-modal-header">
+      <span>添加聊天</span>
+      <button class="chat-modal-close" data-action="close-modal">${TAB_ICONS.close}</button>
+    </div>
+    <input class="chat-modal-search" type="text" placeholder="搜索好友..." data-role="modal-search">
+    <div class="chat-modal-body" data-role="modal-body">
+      ${contactsHtml}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注] 聊天列表长按处理器
+   ========================================================================== */
+export function createChatListLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const openDeleteModal = () => {
+    const target = pressedTarget;
+    if (!target) return;
+
+    const chatId = target.dataset.chatId || '';
+    const exists = chatId && getVisibleChatSessions(state).some(session => String(session.id) === String(chatId));
+    if (!exists) return;
+
+    target.dataset.longPressTriggered = '1';
+    showDeleteChatListContactModal(container, state, chatId);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="delete-chat-list-contact"]');
+      if (!target) return;
+
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(openDeleteModal, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="delete-chat-list-contact"]')) {
+        e.preventDefault();
+      }
+    }
+  };
+}
+
+/* ==========================================================================
+   [区域标注] 删除聊天列表联系人确认弹窗
+   ========================================================================== */
+export function showDeleteChatListContactModal(container, state, chatId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const session = (state.sessions || []).find(item => String(item.id) === String(chatId));
+  if (!mask || !panel || !session) return;
+
+  panel.innerHTML = `
+    <!-- === [本次修改] 聊天列表长按删除联系人确认弹窗 === -->
+    <div class="chat-modal-header">
+      <span>删除聊天联系人</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否从聊天列表中删除“${escapeHtml(session.name || '未命名')}”？<br>通讯录联系人、聊天记录和其它聊天设置都会保留。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-chat-list-contact" data-chat-id="${escapeHtml(session.id)}" type="button">删除</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 文件名: js/apps/chat/moments.js
  * 用途: 闲谈应用 — 朋友圈板块

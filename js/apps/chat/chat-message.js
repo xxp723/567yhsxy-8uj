@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 文件名: js/apps/chat/chat-message.js
  * 用途: 闲谈应用 — 聊天消息页面
@@ -5,10 +6,21 @@
  * 架构层: 应用层（闲谈子模块）
  */
 
+import {
+  TAB_ICONS,
+  DATA_KEY_SESSIONS,
+  DATA_KEY_MESSAGES_PREFIX,
+  dbPut,
+  escapeHtml,
+  normalizeStickerData
+} from './chat-utils.js';
+import { chat } from './prompt.js';
+import { getVisibleChatSessions } from './chat-list.js';
+
 /* ==========================================================================
    [区域标注] IconPark 图标 SVG 定义
    说明：聊天消息页面用到的所有按键图标统一使用 IconPark 风格 SVG。
-   ========================================================================== */
+/* ========================================================================== */
 const MSG_ICONS = {
   back: `<svg viewBox="0 0 48 48" fill="none"><path d="M32 36L20 24l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   send: `<svg viewBox="0 0 48 48" fill="none"><path d="M43 5L25 43l-5-18L2 20L43 5Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20 25l23-20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
@@ -23,7 +35,7 @@ const MSG_ICONS = {
   /* ==========================================================================
      [区域标注·本次修改3] 消息气泡功能栏 IconPark 图标
      说明：单击消息气泡后显示，含修正、删除和多选；“修正”用于 AI 表情包格式补全。
-     ========================================================================== */
+  /* ========================================================================== */
   fixFormat: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 36l4 4l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 6l4 8l8 4l-8 4l-4 8l-4-8l-8-4l8-4l4-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M36 30l2 4l4 2l-4 2l-2 4l-2-4l-4-2l4-2l2-4Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   multiSelect: `<svg viewBox="0 0 48 48" fill="none"><path d="M20 10h20v20H20V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 18v20h20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 20l4 4l7-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -38,11 +50,8 @@ const MSG_ICONS = {
 
 /* ==========================================================================
    [区域标注] 工具函数
-   ========================================================================== */
-function escapeHtml(text) {
-  const map = { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' };
-  return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
-}
+/* ========================================================================== */
+/* escapeHtml 已从 chat-utils.js 导入，不再本地重复定义 */
 
 function formatMsgTime(ts) {
   if (!ts) return '';
@@ -53,7 +62,7 @@ function formatMsgTime(ts) {
 /* ==========================================================================
    [区域标注·本次需求3] 聊天页表情包面板数据工具
    说明：All 为固定默认分组；输入栏表情包面板与聊天设置“表情包挂载”共用。
-   ========================================================================== */
+/* ========================================================================== */
 function normalizeStickerPanelData(rawData) {
   const source = rawData && typeof rawData === 'object' ? rawData : {};
   const groups = Array.isArray(source.groups)
@@ -96,7 +105,7 @@ function getVisibleStickerPanelItems(rawData, groupId = 'all') {
    说明：
    1. 导出给 index.js 增量追加消息，避免 AI 每输出一个气泡都整页重绘造成闪屏。
    2. 同时为每条消息补充 data-message-id，供单击功能栏、删除、多选使用。
-   ========================================================================== */
+/* ========================================================================== */
 export function renderMessageBubble(msg, chatSession, options = {}) {
   const session = chatSession || {};
   const name = session.name || '聊天';
@@ -185,7 +194,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
          messages — 消息数组 [{id, role, content, timestamp}]
          options.chatSettings — 当前聊天设置
          options.isSending — API 调用中状态
-   ========================================================================== */
+/* ========================================================================== */
 export function renderChatMessage(chatSession, messages, options = {}) {
   const session = chatSession || {};
   const name = session.name || '聊天';
@@ -195,7 +204,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
 
   /* ==========================================================================
      [区域标注·本次需求3] 聊天页表情包面板 / AI 挂载设置
-     ========================================================================== */
+  /* ========================================================================== */
   const stickerData = normalizeStickerPanelData(options.stickerData);
   const stickerPanelGroupId = String(options.stickerPanelGroupId || 'all');
   const stickerPanelOpen = Boolean(options.stickerPanelOpen);
@@ -219,7 +228,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
 
   /* ==========================================================================
      [区域标注] 聊天顶部栏
-     ========================================================================== */
+  /* ========================================================================== */
   const topBarHtml = `
     <div class="msg-top-bar">
       <button class="msg-top-bar__back" data-action="msg-back" type="button">${MSG_ICONS.back}</button>
@@ -239,7 +248,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注] 消息列表区域
      说明：AI 回复中的 <think>...</think> 已在 prompt.js 里剥离，界面只展示最终回复。
-     ========================================================================== */
+  /* ========================================================================== */
   const messagesHtml = msgs.length === 0
     ? `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`
     : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
@@ -247,7 +256,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注] 咖啡按钮升起功能区
      说明：当前仅做“表情包、转账”等功能占位，后续在此区域扩展。
-     ========================================================================== */
+  /* ========================================================================== */
   const featureDockHtml = `
     <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
       <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="transfer">
@@ -262,7 +271,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注·本次需求3] 输入栏表情包升起面板
      说明：圆形表情包按钮触发；顶部显示分组，可切换；一行四个排列发送到聊天界面。
-     ========================================================================== */
+  /* ========================================================================== */
   const stickerPanelHtml = `
     <div class="msg-sticker-panel ${stickerPanelOpen ? 'is-open' : ''}" data-role="msg-sticker-panel">
       <div class="msg-sticker-panel__groups">
@@ -295,7 +304,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注·本次需求5] 多选底部操作栏
      说明：多选模式下用户可删除选中消息或转发给聊天列表中的其他联系人。
-     ========================================================================== */
+  /* ========================================================================== */
   const multiSelectBarHtml = multiSelectMode ? `
     <div class="msg-multi-action-bar" data-role="msg-multi-action-bar">
       <button class="msg-multi-action-bar__btn" data-action="msg-multi-cancel" type="button">${MSG_ICONS.close}<span>取消</span></button>
@@ -319,7 +328,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注] 悬浮底部输入栏
      说明：四周圆角矩形；左侧咖啡按钮；输入框回车发送；右侧魔法棒与纸飞机。
-     ========================================================================== */
+  /* ========================================================================== */
   const inputBarHtml = `
     <div class="msg-input-shell">
       ${featureDockHtml}
@@ -337,7 +346,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ==========================================================================
      [区域标注] 独立聊天设置页面
      说明：三点按钮进入；所有设置由 index.js 写入 DB.js / IndexedDB。
-     ========================================================================== */
+  /* ========================================================================== */
   const settingsPageHtml = `
     <div class="msg-settings-page" data-role="msg-settings-page" style="display:none;">
       <div class="msg-settings-header">
@@ -453,4 +462,1136 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       ${settingsPageHtml}
     </div>
   `;
+}
+
+/* ========================================================================== */
+export function sleep(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+
+export function getAiBubbleDelayMs(bubbleText, index) {
+  const length = String(bubbleText || '').length;
+  return Math.min(1300, Math.max(420, 260 + length * 24 + index * 80));
+}
+
+/* ========================================================================== */
+export async function sendMessage(container, state, db, content, settingsManager, options = {}) {
+  const userText = String(content || '').trim();
+  const triggerAi = options.triggerAi !== false;
+  if ((!userText && !options.skipAppendUser) || !state.currentChatId || (triggerAi && state.isAiSending)) return;
+
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!session) return;
+
+  /* [区域标注·本次需求] 用户消息入列并写入 IndexedDB */
+  /* ===== 闲谈：发送消息去重 START ===== */
+  let appendedUserMessage = null;
+  if (!options.skipAppendUser) {
+    appendedUserMessage = {
+      id: `user_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      role: 'user',
+      content: userText,
+      timestamp: Date.now()
+    };
+    state.currentMessages.push(appendedUserMessage);
+  }
+  /* ===== 闲谈：发送消息去重 END ===== */
+
+  await persistCurrentMessages(state, db);
+
+  if (userText) {
+    session.lastMessage = userText;
+    session.lastTime = Date.now();
+    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+  }
+
+  /* ===== 闲谈：发送消息去重 START ===== */
+  if (appendedUserMessage) {
+    appendCurrentMessageBubble(container, state, appendedUserMessage);
+  }
+  /* ===== 闲谈：发送消息去重 END ===== */
+
+  /* ===== 闲谈应用：回车只发送用户消息 START ===== */
+  if (!triggerAi) return;
+  /* ===== 闲谈应用：回车只发送用户消息 END ===== */
+
+  /* ==========================================================================
+     [区域标注·本次修改2] 修复纸飞机发送后闪屏
+     说明：问题出在发送后连续两次整页重绘聊天消息页：
+           第一次渲染用户消息，第二次仅为了显示“正在回复...”又重建整个 msgWrap。
+           这里改为只更新发送状态相关 DOM，不重建聊天页面，避免点击纸飞机后闪屏。
+  /* ========================================================================== */
+  state.isAiSending = true;
+  updateCurrentChatSendingUi(container, state);
+
+  let hasRenderedAiBubble = false;
+
+  try {
+    /* ===== 闲谈应用：短期记忆与最新一轮消息 START ===== */
+    const promptPayload = buildPromptPayloadForLatestUserRound(state.currentMessages, state.chatPromptSettings.shortTermMemoryRounds);
+    /* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
+
+    /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
+    const result = await chat({
+      userInput: promptPayload.userInput,
+      history: promptPayload.history,
+      chatSettings: state.chatPromptSettings,
+      /* [区域标注·已修改] 时间感知请求上下文：把最新用户消息时间与最近聊天时间传给 prompt.js，避免 AI 时间停在旧消息发送时 */
+      conversationTimeContext: promptPayload.conversationTimeContext,
+      settingsManager,
+      /* [区域标注·本次需求] 提示词真实上下文：把当前会话/联系人/面具/档案/DB 传给 prompt.js，供 AI 读取有效信息 */
+      db,
+      activeMaskId: state.activeMaskId,
+      currentSession: session,
+      currentContact: state.contacts.find(contact => String(contact.id) === String(session.id)) || null,
+      archiveData: {
+        activeMaskId: state.activeMaskId,
+        masks: state.archiveMasks,
+        characters: state.archiveCharacters,
+        /* [区域标注·本次修改4] 注入档案应用显示的用户面具关系网络 */
+        supportingRoles: state.archiveSupportingRoles,
+        relations: state.archiveRelations
+      },
+      /* [区域标注·本次需求3] 把全局表情包资产传给 prompt.js，由当前面具挂载分组决定 AI 可用资源 */
+      stickerData: state.stickerData
+    });
+
+    const aiMessages = buildAiReplyMessages(result?.rawText || result?.text || '', state);
+    for (let index = 0; index < aiMessages.length; index += 1) {
+      const message = {
+        ...aiMessages[index],
+        id: `ai_${Date.now()}_${index}`,
+        timestamp: Date.now() + index
+      };
+      const visibleText = String(message.type === 'sticker' ? message.stickerName || message.content || '表情包' : message.content || '').trim();
+      if (index > 0) await sleep(getAiBubbleDelayMs(visibleText, index));
+      state.currentMessages.push(message);
+      hasRenderedAiBubble = true;
+      session.lastMessage = message.type === 'sticker'
+        ? `[表情包] ${message.stickerName || '未命名表情包'}`
+        : (message.content || '（AI 没有返回内容）');
+      session.lastTime = Date.now();
+      await persistCurrentMessages(state, db);
+      await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+      appendCurrentMessageBubble(container, state, state.currentMessages[state.currentMessages.length - 1]);
+    }
+
+    session.lastMessage = aiMessages[aiMessages.length - 1]?.type === 'sticker'
+      ? `[表情包] ${aiMessages[aiMessages.length - 1]?.stickerName || '未命名表情包'}`
+      : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）');
+    session.lastTime = Date.now();
+  } catch (error) {
+    state.currentMessages.push({
+      id: `ai_error_${Date.now()}`,
+      role: 'assistant',
+      content: `API 调用失败：${error?.message || '未知错误'}`,
+      timestamp: Date.now()
+    });
+  } finally {
+    state.isAiSending = false;
+    await persistCurrentMessages(state, db);
+    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+    if (hasRenderedAiBubble) {
+      updateCurrentChatSendingUi(container, state);
+    } else {
+      renderCurrentChatMessage(container, state);
+    }
+  }
+}
+
+/* ========================================================================== */
+export async function persistCurrentMessages(state, db) {
+  if (!state.currentChatId) return;
+  await dbPut(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + state.currentChatId, state.currentMessages);
+}
+
+/* ========================================================================== */
+export function getMountedStickerItems(state) {
+  const data = normalizeStickerData(state.stickerData);
+  const mountedGroupIds = Array.isArray(state.chatPromptSettings?.mountedStickerGroupIds)
+    ? Array.from(new Set(state.chatPromptSettings.mountedStickerGroupIds.map(String).filter(Boolean)))
+    : [];
+  if (!mountedGroupIds.length) return [];
+  if (mountedGroupIds.includes('all')) return data.items;
+  return data.items.filter(item => mountedGroupIds.includes(String(item.groupId || 'all')));
+}
+
+
+export function getStickerProtocolCandidates(token) {
+  const raw = String(token || '').trim();
+  if (!raw) return [];
+
+  /* ========================================================================
+     [区域标注·本次需求2] AI 表情包协议目标强力归一化
+     说明：
+     1. 兼容模型把“资源ID：xxx / 表情名：xxx / xxx”混写进 [表情] 内容。
+     2. 只在已挂载表情包中匹配；不编造、不兜底到其它存储。
+     3. 目标是防止 AI 表情包因轻微掉格式而在聊天界面显示成纯文本协议。
+     ======================================================================== */
+  const cleaned = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/[`*_]+/g, '')
+    .replace(/^["'“”]+|["'“”]+$/g, '')
+    .trim();
+
+  const candidates = [
+    cleaned,
+    cleaned.replace(/^(?:资源\s*ID|资源Id|ID|id|表情名|名称)\s*[：:]\s*/i, '').trim()
+  ];
+
+  [...cleaned.matchAll(/(?:资源\s*ID|资源Id|ID|id|表情名|名称)\s*[：:]\s*([^；;，,\n]+)/gi)]
+    .forEach(match => candidates.push(String(match[1] || '').trim()));
+
+  [...cleaned.matchAll(/sticker_[A-Za-z0-9_:-]+/g)]
+    .forEach(match => candidates.push(String(match[0] || '').trim()));
+
+  cleaned.split(/[；;，,\s]+/).forEach(part => candidates.push(part.trim()));
+
+  return Array.from(new Set(
+    candidates
+      .map(item => String(item || '').replace(/^["'“”]+|["'“”]+$/g, '').trim())
+      .filter(Boolean)
+  ));
+}
+
+
+export function resolveStickerProtocolTarget(token, state) {
+  const candidates = getStickerProtocolCandidates(token);
+  if (!candidates.length) return null;
+
+  const candidateItems = getMountedStickerItems(state);
+  for (const normalizedToken of candidates) {
+    const byId = candidateItems.find(item => String(item.id) === normalizedToken);
+    if (byId) return byId;
+
+    const byName = candidateItems.find(item => String(item.name) === normalizedToken);
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+/* ========================================================================== */
+export function normalizeStickerLooseMatchText(value) {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/[`*_#"“”"'《》（）()\[\]【】{}]/g, '')
+    .replace(/(?:资源\s*ID|资源Id|表情名|名称|表情包|表情|贴纸|sticker|发送|发个|发一张|来个|给你|我发|刚才|点错了|没发出去|这回|看清楚|看看|吧|啊|呀|呢|了)/gi, '')
+    .replace(/[：:；;，,。.!！？?\s-]+/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+
+export function findLooseStickerTargetFromText(text, state) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  const exact = resolveStickerProtocolTarget(raw, state);
+  if (exact) return exact;
+
+  const mountedItems = getMountedStickerItems(state);
+  if (!mountedItems.length) return null;
+
+  const hasStickerIntent = /表情|表情包|贴纸|sticker_|资源\s*ID|资源Id|动图|发.*图|发.*包/i.test(raw);
+  const rawLower = raw.toLowerCase();
+
+  const byId = mountedItems.find(item => {
+    const id = String(item.id || '').trim();
+    return id && rawLower.includes(id.toLowerCase());
+  });
+  if (byId) return byId;
+
+  const rawLoose = normalizeStickerLooseMatchText(raw);
+  if (!rawLoose) return null;
+
+  const byName = mountedItems.find(item => {
+    const name = String(item.name || '').trim();
+    const nameLoose = normalizeStickerLooseMatchText(name);
+    return name && (
+      raw.includes(name) ||
+      (hasStickerIntent && nameLoose.length >= 2 && (rawLoose.includes(nameLoose) || nameLoose.includes(rawLoose)))
+    );
+  });
+
+  return byName || null;
+}
+
+
+export function createStickerMessagePatchFromTarget(message, sticker) {
+  if (!message || !sticker) return null;
+  return {
+    ...message,
+    role: 'assistant',
+    type: 'sticker',
+    content: `[表情包] ${sticker.name}`,
+    stickerId: sticker.id,
+    stickerName: sticker.name,
+    stickerUrl: sticker.url
+  };
+}
+
+
+export function repairAiMessageFormatIfPossible(message, state) {
+  if (!message || message.role !== 'assistant') return null;
+  if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) return null;
+
+  const sticker = findLooseStickerTargetFromText(message.content, state);
+  return sticker ? createStickerMessagePatchFromTarget(message, sticker) : null;
+}
+
+
+export function cleanAiProtocolBlockContent(content) {
+  return String(content || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*(?:`|\*\*)+/g, '')
+    .replace(/(?:`|\*\*)+\s*$/g, '')
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    .trim();
+}
+
+
+export function extractAiProtocolBlocks(rawText) {
+  const visibleText = String(rawText || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim();
+  if (!visibleText) return [];
+
+  /* ========================================================================
+     [区域标注·本次需求2] AI 回复通用协议强力解析器
+     说明：
+     1. 优先寻找任意位置的 [回复]/[表情] 协议头，而不是要求整行完全规范。
+     2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
+     3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
+     ======================================================================== */
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const matches = [...visibleText.matchAll(markerRegex)];
+  if (!matches.length) return [];
+
+  return matches
+    .map((match, index) => {
+      const nextMatch = matches[index + 1];
+      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
+      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+      return {
+        type: String(match[1] || '').trim(),
+        roleName: String(match[2] || '').trim(),
+        content: cleanAiProtocolBlockContent(visibleText.slice(contentStart, contentEnd))
+      };
+    })
+    .filter(item => item.type && item.content);
+}
+
+
+export function buildAiReplyMessages(rawText, state) {
+  const protocolBlocks = extractAiProtocolBlocks(rawText);
+  if (!protocolBlocks.length) {
+    const repairedSticker = findLooseStickerTargetFromText(rawText, state);
+    if (repairedSticker) {
+      return enforceAiReplyMessageCount([{
+        role: 'assistant',
+        type: 'sticker',
+        content: `[表情包] ${repairedSticker.name}`,
+        stickerId: repairedSticker.id,
+        stickerName: repairedSticker.name,
+        stickerUrl: repairedSticker.url
+      }], state.chatPromptSettings);
+    }
+
+    return enforceAiReplyMessageCount(
+      splitAiReplyIntoBubbles(rawText, state.chatPromptSettings).map(content => ({
+        role: 'assistant',
+        content
+      })),
+      state.chatPromptSettings
+    );
+  }
+
+  const builtMessages = [];
+  protocolBlocks.forEach(block => {
+    if (block.type === '表情') {
+      const sticker = resolveStickerProtocolTarget(block.content, state) || findLooseStickerTargetFromText(block.content, state);
+      if (sticker) {
+        builtMessages.push({
+          role: 'assistant',
+          type: 'sticker',
+          content: `[表情包] ${sticker.name}`,
+          stickerId: sticker.id,
+          stickerName: sticker.name,
+          stickerUrl: sticker.url
+        });
+      }
+      /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
+      return;
+    }
+
+    splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach(content => {
+      builtMessages.push({
+        role: 'assistant',
+        content
+      });
+    });
+  });
+
+  return enforceAiReplyMessageCount(
+    builtMessages.length
+      ? builtMessages
+      : [{ role: 'assistant', content: '（AI 没有返回内容）' }],
+    state.chatPromptSettings
+  );
+}
+
+
+export async function sendStickerMessage(container, state, db, stickerId, settingsManager, options = {}) {
+  if (!state.currentChatId || state.isAiSending) return;
+
+  const data = normalizeStickerData(state.stickerData);
+  const sticker = data.items.find(item => String(item.id) === String(stickerId));
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!sticker || !session) return;
+
+  const stickerMessage = {
+    id: `user_sticker_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    role: 'user',
+    type: 'sticker',
+    content: `[表情包] ${sticker.name}`,
+    stickerId: sticker.id,
+    stickerName: sticker.name,
+    stickerUrl: sticker.url,
+    timestamp: Date.now()
+  };
+
+  state.currentMessages.push(stickerMessage);
+  state.stickerPanelOpen = false;
+  state.coffeeDockOpen = false;
+  session.lastMessage = `[表情包] ${sticker.name}`;
+  session.lastTime = Date.now();
+
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+  ]);
+
+  renderCurrentChatMessage(container, state);
+
+  /* ========================================================================
+     [区域标注·本次需求1] 发送表情包后禁止立即调用 API
+     说明：
+     1. 用户点选表情包只把表情包作为 user 消息入列并写入 IndexedDB。
+     2. 只有纸飞机按钮或魔法棒等显式触发点传入 triggerAi:true 时，才允许调用 API。
+     3. 不做双份存储兜底，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  if (options.triggerAi === true) {
+    await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
+  }
+}
+
+/* ========================================================================== */
+export function renderCurrentChatMessage(container, state, options = {}) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !session) return;
+
+  /* ===== 闲谈：多选模式滚动锁定 START ===== */
+  const listBefore = msgWrap.querySelector('[data-role="msg-list"]');
+  const shouldKeepScroll = Boolean(options.keepScroll);
+  const previousScrollTop = listBefore ? listBefore.scrollTop : 0;
+  /* ===== 闲谈：多选模式滚动锁定 END ===== */
+
+  msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
+    chatSettings: state.chatPromptSettings,
+    isSending: state.isAiSending,
+    /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
+    userProfile: state.profile,
+    /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
+
+    /* [区域标注·本次需求3] 聊天消息页表情包面板数据 */
+    stickerData: state.stickerData,
+    stickerPanelGroupId: state.stickerPanelGroupId,
+    stickerPanelOpen: state.stickerPanelOpen,
+    coffeeDockOpen: state.coffeeDockOpen,
+
+    /* [区域标注·本次需求5] 消息气泡功能栏与多选状态 */
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    deleteConfirmMessageId: state.deleteConfirmMessageId
+    /* ===== 闲谈：删除消息二次确认 END ===== */
+  });
+
+  setTimeout(() => {
+    const listArea = msgWrap.querySelector('[data-role="msg-list"]');
+    if (!listArea) return;
+    /* ===== 闲谈：多选模式滚动锁定 START ===== */
+    if (shouldKeepScroll) {
+      listArea.scrollTop = previousScrollTop;
+      return;
+    }
+    /* ===== 闲谈：多选模式滚动锁定 END ===== */
+    listArea.scrollTop = listArea.scrollHeight;
+  }, 30);
+}
+
+/* ========================================================================== */
+export function appendCurrentMessageBubble(container, state, message) {
+  if (!message || !state.currentChatId) return;
+
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !listArea || !session) {
+    renderCurrentChatMessage(container, state);
+    return;
+  }
+
+  const emptyEl = listArea.querySelector('.msg-empty');
+  if (emptyEl) emptyEl.remove();
+
+  listArea.insertAdjacentHTML('beforeend', renderMessageBubble(message, session, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    /* ===== 闲谈：删除消息二次确认 START ===== */
+    deleteConfirmMessageId: state.deleteConfirmMessageId
+    /* ===== 闲谈：删除消息二次确认 END ===== */
+  }));
+  listArea.scrollTop = listArea.scrollHeight;
+}
+
+/* ========================================================================== */
+export function refreshMessageBubbleRows(container, state, messageIds = []) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) return false;
+
+  const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
+  uniqueIds.forEach(messageId => {
+    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"]`);
+    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+    if (!row || !message) return;
+
+    row.outerHTML = renderMessageBubble(message, session, {
+      userProfile: state.profile,
+      selectedMessageId: state.selectedMessageId,
+      multiSelectMode: state.multiSelectMode,
+      selectedMessageIds: state.selectedMessageIds,
+      deleteConfirmMessageId: state.deleteConfirmMessageId
+    });
+  });
+
+  return true;
+}
+
+
+export function refreshCurrentMessageListOnly(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const previousScrollTop = listArea.scrollTop;
+  listArea.innerHTML = (state.currentMessages || []).length
+    ? state.currentMessages.map(message => renderMessageBubble(message, session, {
+        userProfile: state.profile,
+        selectedMessageId: state.selectedMessageId,
+        multiSelectMode: state.multiSelectMode,
+        selectedMessageIds: state.selectedMessageIds,
+        deleteConfirmMessageId: state.deleteConfirmMessageId
+      })).join('')
+    : `<div class="msg-empty"></div>`;
+  listArea.scrollTop = previousScrollTop;
+}
+
+
+export function updateMultiSelectActionBar(container, state) {
+  const bar = container.querySelector('[data-role="msg-multi-action-bar"]');
+  if (!bar) return;
+  const count = (state.selectedMessageIds || []).length;
+  const countEl = bar.querySelector('.msg-multi-action-bar__count');
+  if (countEl) countEl.textContent = `已选 ${count} 条`;
+  bar.querySelectorAll('[data-action="msg-multi-favorite-selected"], [data-action="msg-multi-delete-selected"], [data-action="msg-multi-forward"]').forEach(btn => {
+    btn.toggleAttribute('disabled', count <= 0);
+  });
+}
+
+/* ========================================================================== */
+export function resetMessageSelectionState(state) {
+  state.selectedMessageId = '';
+  state.multiSelectMode = false;
+  state.selectedMessageIds = [];
+  /* ===== 闲谈：删除消息二次确认 START ===== */
+  state.deleteConfirmMessageId = '';
+  /* ===== 闲谈：删除消息二次确认 END ===== */
+}
+
+
+export function getSelectedMessages(state) {
+  const selectedSet = new Set((state.selectedMessageIds || []).map(String));
+  return (state.currentMessages || []).filter(message => selectedSet.has(String(message.id)));
+}
+
+
+export function refreshCurrentSessionLastMessage(state) {
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!session) return;
+
+  const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
+  session.lastMessage = latest?.type === 'sticker'
+    ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
+    : (latest?.content || '');
+  session.lastTime = latest?.timestamp || Date.now();
+}
+
+/* ========================================================================== */
+export async function retryLatestAiReply(container, state, db, settingsManager) {
+  if (!state.currentChatId || state.isAiSending) return;
+
+  for (let i = state.currentMessages.length - 1; i >= 0; i -= 1) {
+    if (state.currentMessages[i]?.role === 'assistant') {
+      state.currentMessages.splice(i, 1);
+      continue;
+    }
+    break;
+  }
+
+  /* ===== 闲谈：用户最新一轮消息触发AI START =====
+     说明：魔法棒重新回复使用“用户最新一轮消息”触发。
+     sendMessage(skipAppendUser) 会基于 state.currentMessages 调用 buildPromptPayloadForLatestUserRound，
+     自动把末尾连续 user 消息合并为“用户最新一轮消息”。 */
+  const latestUserRound = [];
+  for (let i = state.currentMessages.length - 1; i >= 0; i -= 1) {
+    const item = state.currentMessages[i];
+    if (item?.role !== 'user') break;
+    if (String(item.content || '').trim()) latestUserRound.unshift(item);
+  }
+  if (!latestUserRound.length) {
+    renderCurrentChatMessage(container, state);
+    return;
+  }
+
+  /* ========================================================================
+     [区域标注·本次修改1] 魔法棒重 roll 立即清空旧 AI 回复
+     说明：
+     1. 先删除最新一轮 AI 回复并立即写入 DB.js / IndexedDB。
+     2. 立刻刷新当前消息列表，让旧气泡马上从聊天界面消失。
+     3. 再调用 API 重新生成最新一轮回复，不保留旧 AI 气泡到返回列表后才消失。
+     ======================================================================== */
+  refreshCurrentSessionLastMessage(state);
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+  ]);
+  renderCurrentChatMessage(container, state, { keepScroll: true });
+  await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
+  /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
+}
+
+
+/* ===== 闲谈：用户最新一轮消息触发AI START ===== */
+export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRounds = 8) {
+  const normalized = Array.isArray(messages)
+    ? messages.filter(item => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
+    : [];
+
+  let latestUserStart = -1;
+  for (let i = normalized.length - 1; i >= 0; i -= 1) {
+    if (normalized[i].role !== 'user') continue;
+    latestUserStart = i;
+    while (latestUserStart > 0 && normalized[latestUserStart - 1]?.role === 'user') {
+      latestUserStart -= 1;
+    }
+    break;
+  }
+
+  /* 用户最新一轮消息 = 消息末尾往前连续的 user 消息组，而不是最后一条 user 消息 */
+  const currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
+  const latestUserMessage = [...currentRoundMessages].reverse().find(item => Number(item?.timestamp || 0) > 0)
+    || [...normalized].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0)
+    || null;
+  const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
+  const userInput = currentRoundMessages.map((item, index) => {
+    const content = String(item.content || '').trim();
+    return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
+  }).join('\n');
+
+  const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
+  const previous = latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized;
+  /* [区域标注·已修改] 强化时间感知：即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。 */
+  const conversationTimeContext = {
+    latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
+    latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0
+  };
+  if (roundLimit <= 0) {
+    return {
+      userInput,
+      history: [],
+      conversationTimeContext
+    };
+  }
+
+  const rounds = [];
+  let current = [];
+  previous.forEach(item => {
+    if (item.role === 'user' && current.length) {
+      rounds.push(current);
+      current = [];
+    }
+    current.push({
+      role: item.role,
+      content: item.content,
+      /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
+      timestamp: Number(item.timestamp || 0) || 0
+    });
+  });
+  if (current.length) rounds.push(current);
+
+  return {
+    userInput,
+    history: rounds.slice(-roundLimit).flat(),
+    conversationTimeContext
+  };
+}
+
+
+export function splitAiReplyIntoBubbles(text, chatSettings = {}) {
+  const raw = sanitizeAiVisibleReply(text);
+  if (!raw) return ['（AI 没有返回内容）'];
+
+  const { min, max } = getReplyBubbleCountRange(chatSettings);
+
+  /* ==========================================================================
+     [区域标注·已完成·本次需求2] 严格拆分通用消息协议与问号气泡
+     说明：
+     1. 只识别 prompt.js 的 **`[回复] 角色名：文字消息内容`** 通用协议。
+     2. 无论 AI 是否按格式输出，只要同一段里出现多个问句/感叹句/句号句，就强制拆开。
+     3. 同时叠加最少/最多气泡数收口，避免设置页规则只停留在 prompt 层。
+  /* ========================================================================== */
+  const protocolReplyMatches = extractProtocolReplyContents(raw);
+
+  let parts = protocolReplyMatches.length
+    ? protocolReplyMatches
+    : raw
+        .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
+        .map(item => item.trim())
+        .filter(Boolean);
+
+  parts = parts
+    .map(part => cleanAiVisibleBubbleText(part))
+    .filter(Boolean)
+    .flatMap(part => splitStrictSentenceBubbles(part));
+
+  if (parts.length <= 1 && raw.length > 28) {
+    parts = raw
+      .split(/(?<=[，,、；;])\s*/)
+      .map(item => cleanAiVisibleBubbleText(item))
+      .filter(Boolean);
+  }
+
+  while (parts.length < min) {
+    let bestIndex = -1;
+    let bestParts = [];
+    let bestLength = 0;
+
+    parts.forEach((item, index) => {
+      const candidateParts = splitSingleBubbleForCount(item);
+      if (candidateParts.length <= 1) return;
+      if (String(item || '').length > bestLength) {
+        bestIndex = index;
+        bestParts = candidateParts;
+        bestLength = String(item || '').length;
+      }
+    });
+
+    if (bestIndex < 0 || bestParts.length <= 1) break;
+    parts.splice(bestIndex, 1, ...bestParts);
+  }
+
+  const cleaned = parts.map(item => cleanAiVisibleBubbleText(item)).filter(Boolean);
+  return cleaned.length ? cleaned.slice(0, max) : ['（AI 没有返回内容）'];
+}
+
+/* ========================================================================== */
+export function sanitizeAiVisibleReply(text) {
+  let value = cleanAiVisibleBubbleText(text);
+
+  /* ===== 闲谈：通用消息协议解析 START ===== */
+  const protocolReplyMatches = extractProtocolReplyContents(value);
+  if (protocolReplyMatches.length) {
+    value = protocolReplyMatches
+      .map(item => cleanAiVisibleBubbleText(item))
+      .filter(Boolean)
+      .join('\n');
+  }
+  /* ===== 闲谈：通用消息协议解析 END ===== */
+
+  return value
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+
+export function splitStrictSentenceBubbles(text) {
+  const normalized = String(text || '')
+    /* ===== 闲谈：通用消息协议解析 START ===== */
+    .replace(/\*\*`?\s*\[回复\]\s*[^：:\n`]+?\s*[：:]\s*/g, '')
+    .replace(/`?\*\*/g, '')
+    /* ===== 闲谈：通用消息协议解析 END ===== */
+    .replace(/\r\n/g, '\n')
+    .trim();
+
+  if (!normalized) return [];
+
+  return normalized
+    .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
+    .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
+    .split(/\n+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+/* ===== 闲谈：用户最新一轮消息触发AI END ===== */
+
+/* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
+/* ===== 闲谈：通用消息协议解析 START ===== */
+export function extractProtocolReplyContents(text) {
+  /*
+   * ========================================================================
+   * [区域标注·本次需求2] 通用消息协议强力约束入口
+   * 说明：
+   * 1. 统一复用 extractAiProtocolBlocks，不再维护两套容易分叉的协议正则。
+   * 2. 只取 [回复] 内容，保证“回复文字消息”不再把协议头原样显示到聊天界面。
+   * 3. 这里只负责解析可见文本，不做任何持久化存储。
+   * ======================================================================== */
+  return extractAiProtocolBlocks(text)
+    .filter(block => block.type === '回复')
+    .map(block => String(block.content || '').trim())
+    .filter(Boolean);
+}
+
+/* ===== 闲谈：通用消息协议解析 END ===== */
+
+export function getReplyBubbleCountRange(chatSettings = {}) {
+  const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
+  const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
+  return { min, max };
+}
+
+/* ========================================================================== */
+export function cleanAiVisibleBubbleText(text) {
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !/^(思考回复内容|思考内容|检查规则|审查规则|拟定句子|检查结果|最终输出|回复格式|本轮 API 实际请求时间|最近一条已记录的用户消息发送时间|最近一条聊天记录时间|从最近一条用户消息到本轮实际请求已经过去|距上次聊天记录已经过去)\s*[：:]/.test(line))
+    .map(line => line.replace(/^(?:第\s*\d+\s*条|气泡\s*\d+|[0-9]+[.)、])\s*/i, '').trim())
+    .filter(line => !/^\d{4}年\d{1,2}月\d{1,2}日(?:星期[一二三四五六日天])?\s+\d{1,2}:\d{2}(?::\d{2})?\]$/.test(line))
+    .filter(Boolean)
+    .join('\n')
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    .trim();
+}
+
+
+export function splitSingleBubbleForCount(text) {
+  const value = cleanAiVisibleBubbleText(text);
+  if (!value) return [];
+
+  const sentenceParts = splitStrictSentenceBubbles(value);
+  if (sentenceParts.length > 1) return sentenceParts;
+
+  const commaParts = value
+    .split(/(?<=[，,、；;])\s*/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  if (commaParts.length > 1) return commaParts;
+
+  const spaceParts = value
+    .split(/\s+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  if (spaceParts.length > 1) return spaceParts;
+
+  if (value.length <= 1) return [value];
+
+  const splitAt = Math.max(1, Math.ceil(value.length / 2));
+  return [
+    value.slice(0, splitAt).trim(),
+    value.slice(splitAt).trim()
+  ].filter(Boolean);
+}
+
+
+export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
+  const { min, max } = getReplyBubbleCountRange(chatSettings);
+  let normalizedMessages = Array.isArray(messages)
+    ? messages
+        .map(message => {
+          if (!message || message.role !== 'assistant') return null;
+          if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
+            return message;
+          }
+          const content = cleanAiVisibleBubbleText(message.content);
+          return content ? { ...message, content } : null;
+        })
+        .filter(Boolean)
+    : [];
+
+  while (normalizedMessages.length < min) {
+    let bestIndex = -1;
+    let bestParts = [];
+    let bestLength = 0;
+
+    normalizedMessages.forEach((message, index) => {
+      if (String(message.type || '') === 'sticker') return;
+      const parts = splitSingleBubbleForCount(message.content);
+      if (parts.length <= 1) return;
+      const currentLength = String(message.content || '').length;
+      if (currentLength > bestLength) {
+        bestIndex = index;
+        bestParts = parts;
+        bestLength = currentLength;
+      }
+    });
+
+    if (bestIndex < 0 || bestParts.length <= 1) break;
+
+    const baseMessage = normalizedMessages[bestIndex];
+    normalizedMessages.splice(
+      bestIndex,
+      1,
+      ...bestParts.map(content => ({
+        ...baseMessage,
+        content
+      }))
+    );
+  }
+
+  if (normalizedMessages.length > max) {
+    normalizedMessages = normalizedMessages.slice(0, max);
+  }
+
+  return normalizedMessages.length
+    ? normalizedMessages
+    : [{ role: 'assistant', content: '（AI 没有返回内容）' }];
+}
+
+/* ========================================================================== */
+export function updateCurrentChatSendingUi(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (!msgWrap) return;
+
+  const statusEl = msgWrap.querySelector('.msg-top-bar__status');
+  if (statusEl) statusEl.textContent = state.isAiSending ? '正在回复...' : '在线';
+
+  msgWrap.querySelectorAll('[data-role="msg-input"], [data-action="msg-magic"], [data-action="msg-send"]').forEach(el => {
+    el.toggleAttribute('disabled', Boolean(state.isAiSending));
+  });
+}
+
+/* ========================================================================== */
+export function syncMessageDockOpenState(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (!msgWrap) return;
+
+  const coffeeDock = msgWrap.querySelector('[data-role="msg-feature-dock"]');
+  const stickerPanel = msgWrap.querySelector('[data-role="msg-sticker-panel"]');
+  const coffeeBtn = msgWrap.querySelector('[data-action="msg-coffee"]');
+  const stickerBtn = msgWrap.querySelector('[data-action="msg-sticker"]');
+
+  if (coffeeDock) coffeeDock.classList.toggle('is-open', Boolean(state.coffeeDockOpen));
+  if (stickerPanel) stickerPanel.classList.toggle('is-open', Boolean(state.stickerPanelOpen));
+  if (coffeeBtn) coffeeBtn.classList.toggle('is-active', Boolean(state.coffeeDockOpen));
+  if (stickerBtn) stickerBtn.classList.toggle('is-active', Boolean(state.stickerPanelOpen));
+}
+
+
+export function renderMsgStickerPanelGrid(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const panel = msgWrap?.querySelector('[data-role="msg-sticker-panel"]');
+  const grid = panel?.querySelector('.msg-sticker-panel__grid');
+  if (!grid) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const data = normalizeStickerData(state.stickerData);
+  const groupId = String(state.stickerPanelGroupId || 'all');
+  const visibleItems = groupId === 'all'
+    ? data.items
+    : data.items.filter(item => String(item.groupId || 'all') === groupId);
+
+  panel.querySelectorAll('.msg-sticker-panel__group-btn').forEach(btn => {
+    btn.classList.toggle('is-active', String(btn.dataset.stickerGroupId || 'all') === groupId);
+  });
+
+  grid.innerHTML = visibleItems.length
+    ? visibleItems.map(item => `
+        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 START ===== -->
+        <button class="msg-sticker-panel__item"
+                data-action="send-msg-sticker"
+                data-sticker-id="${escapeHtml(item.id)}"
+                type="button"
+                title="${escapeHtml(item.name)}">
+          <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+          <span>${escapeHtml(item.name)}</span>
+        </button>
+        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 END ===== -->
+      `).join('')
+    : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`;
+}
+
+/* ========================================================================== */
+export function syncMountedStickerGroupButtons(container, state) {
+  const selectedSet = new Set(
+    Array.isArray(state.chatPromptSettings?.mountedStickerGroupIds)
+      ? state.chatPromptSettings.mountedStickerGroupIds.map(String)
+      : []
+  );
+
+  container.querySelectorAll('[data-action="toggle-mounted-sticker-group"]').forEach(btn => {
+    btn.classList.toggle('is-active', selectedSet.has(String(btn.dataset.stickerGroupId || '')));
+  });
+}
+
+/* ========================================================================== */
+export function showClearAllMessagesModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  if (!mask || !panel || !session) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求4] 清空全部聊天记录确认弹窗 -->
+    <div class="chat-modal-header">
+      <span>清空聊天记录</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">是否清空与“${escapeHtml(session.name || '未命名')}”的全部聊天记录？<br>此操作只清空当前聊天界面的消息，不删除联系人。</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-clear-all-messages" type="button">清空</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ========================================================================== */
+export function showAiFormatRepairResultModal(container, { success = false, title = '', message = '' } = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次修改3] AI 消息格式修正提示弹窗 -->
+    <div class="chat-modal-header">
+      <span>${escapeHtml(title || (success ? '修正完成' : '无法修正'))}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">${escapeHtml(message || (success ? '已将这条 AI 消息修正为表情包消息。' : '未识别到可匹配的已挂载表情包格式或关键词。'))}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+/* ========================================================================== */
+export function showEditMessageModal(container, state, messageId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const message = (state.currentMessages || []).find(item => String(item.id) === String(messageId));
+  if (!mask || !panel || !message) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·气泡编辑弹窗] 编辑聊天气泡文字，不使用原生弹窗 -->
+    <div class="chat-modal-header">
+      <span>编辑消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <textarea class="chat-modal-search" data-role="edit-message-content-input" maxlength="2000" style="min-height:108px;resize:none;">${escapeHtml(message.content || '')}</textarea>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-edit-message" data-message-id="${escapeHtml(messageId)}" type="button">保存</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="edit-message-content-input"]')?.focus(), 30);
+}
+
+/* ========================================================================== */
+export function showFavoriteSavedModal(container, count) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>收藏完成</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body"><div class="chat-modal-hint">已收藏 ${Number(count || 0)} 条消息，可在用户主页“收藏”折叠栏中查看。</div></div>
+    <div class="chat-modal-footer"><button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button></div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+/* ========================================================================== */
+export function showForwardMessagesModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const selectedMessages = getSelectedMessages(state);
+  const targets = getVisibleChatSessions(state).filter(session => String(session.id) !== String(state.currentChatId));
+
+  const targetHtml = targets.length
+    ? targets.map(session => `
+        <!-- [区域标注·本次需求5] 可转发联系人：${escapeHtml(session.name || '未命名')} -->
+        <button class="chat-forward-target" data-action="confirm-forward-messages" data-chat-id="${escapeHtml(session.id)}" type="button">
+          <span class="chat-forward-target__avatar">
+            ${session.avatar
+              ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(session.name || '')}">`
+              : escapeHtml((session.name || '?').charAt(0).toUpperCase())}
+          </span>
+          <span class="chat-forward-target__name">${escapeHtml(session.name || '未命名')}</span>
+          <span class="chat-forward-target__icon">${TAB_ICONS.forward}</span>
+        </button>
+      `).join('')
+    : `<div class="chat-modal-hint">暂无其它可转发的聊天联系人。</div>`;
+
+  panel.innerHTML = `
+    <!-- [区域标注·本次需求5] 多选消息转发弹窗 -->
+    <div class="chat-modal-header">
+      <span>转发 ${selectedMessages.length} 条消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      ${targetHtml}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
