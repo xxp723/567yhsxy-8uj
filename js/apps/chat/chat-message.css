@@ -322,29 +322,28 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次需求1] 表情包消息气泡图片完整显示修复
+   [区域标注·已完成·本次需求1] 表情包消息气泡铺满显示修复（无留白边）
    说明：
-   1. 只修复聊天消息里的图片/表情包显示，不改其它页面的图片样式。
-   2. 之前使用 object-fit: cover 会裁切图片，导致聊天里的图片主体显示不完整。
-   3. 现改为 contain + 居中承托，优先完整展示整张图片，同时保持闲谈暖色主题气泡风格。
+   1. 仅修改聊天消息页表情包气泡，不改其它页面图片样式。
+   2. 取消承托内边距与 contain 带来的四周留白，改为图片直接铺满气泡容器。
+   3. 使用 cover + 100% 宽高实现“视觉铺满气泡”，保持闲谈主题圆角风格。
    ========================================================================== */
 .msg-bubble--sticker {
-  padding: 6px;
+  padding: 0;
   background: transparent;
   border: none;
 }
 
 .msg-sticker-bubble {
   width: min(180px, 48vw);
+  height: min(180px, 48vw);
   max-width: 100%;
-  min-height: 96px;
-  padding: 10px;
+  min-height: 0;
+  padding: 0;
   box-sizing: border-box;
   border-radius: 18px;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(74, 52, 42, 0.08);
   box-shadow: 0 8px 18px rgba(74, 52, 42, 0.08);
@@ -356,12 +355,12 @@
 
 .msg-sticker-bubble__image {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 220px;
-  object-fit: contain;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  margin: 0;
 }
 
 /* [区域标注·本次需求5] 消息时间戳 */

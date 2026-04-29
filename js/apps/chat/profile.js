@@ -198,17 +198,35 @@ export function calculateTotalChatDays(state) {
   return daySet.size;
 }
 
-/* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次需求2] 聊天天数详情按“聊天列表联系人”实时计数
+   说明：
+   1. 只统计已添加到聊天列表且当前未被删除（未隐藏）的联系人。
+   2. 每个联系人按“加入聊天列表后的累计自然日”计数。
+   3. 联系人从聊天列表删除时计数暂停；重新添加后从原累计值继续计数。
+   ========================================================================== */
+function calculateSessionRunningChatDays(session, nowTs) {
+  const now = Number(nowTs || Date.now());
+  const accumulated = Math.max(0, Number(session?.chatDaysAccumulated || 0));
+  const resumedAt = Number(session?.chatDaysLastResumedAt || 0);
+  if (!Number.isFinite(resumedAt) || resumedAt <= 0) return accumulated;
+  const elapsedMs = Math.max(0, now - resumedAt);
+  const elapsedDays = Math.floor(elapsedMs / 86400000);
+  return accumulated + elapsedDays;
+}
+
 export function calculatePerFriendChatDays(state) {
-  return (state.sessions || []).map(s => {
-    const days = s.lastTime ? 1 : 0; // 简化计算：有最后消息则至少1天
-    return {
-      id: s.id,
-      name: s.name || '未命名',
-      avatar: s.avatar || '',
-      days
-    };
-  });
+  const hiddenSet = new Set((state.hiddenChatIds || []).map(id => String(id)));
+  const now = Date.now();
+
+  return (state.sessions || [])
+    .filter(session => !hiddenSet.has(String(session.id)))
+    .map(session => ({
+      id: session.id,
+      name: session.name || '未命名',
+      avatar: session.avatar || '',
+      days: calculateSessionRunningChatDays(session, now)
+    }));
 }
 
 /* ========================================================================== */
@@ -280,8 +298,9 @@ export function renderSubPage(state, pageType) {
   }
 
   if (pageType === 'chatDaysDetail') {
+    /* [区域标注·已完成·本次需求2] 详情页总天数改为“当前聊天列表联系人实时天数汇总” */
     const friends = calculatePerFriendChatDays(state);
-    const totalDays = calculateTotalChatDays(state);
+    const totalDays = friends.reduce((sum, item) => sum + Number(item.days || 0), 0);
     const listHtml = friends.length === 0
       ? `<p style="text-align:center;color:rgba(74,52,42,0.45);font-size:13px;padding:20px 0;">暂无聊天记录</p>`
       : friends.map(f => `

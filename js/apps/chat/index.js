@@ -666,19 +666,37 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (contact) {
         const existedSession = state.sessions.find(s => s.id === contactId);
         if (existedSession) {
-          /* === [本次修改] 聊天列表长按删除联系人：重新添加时只取消隐藏，保留原会话数据 === */
+          /* ==========================================================================
+             [区域标注·已完成·本次需求2] 重新加入聊天列表：聊天天数恢复实时计数（续算）
+             说明：
+             1. 联系人此前被从聊天列表删除时会暂停计数（见 confirm-delete-chat-list-contact）。
+             2. 重新加入时不重置历史累计值，仅更新续算起点时间。
+             ========================================================================== */
+          existedSession.chatDaysLastResumedAt = Date.now();
           state.hiddenChatIds = state.hiddenChatIds.filter(id => String(id) !== String(contactId));
-          await dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds);
+          await Promise.all([
+            dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+            dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds)
+          ]);
         } else {
           /* [区域标注] 创建新聊天会话 */
+          const now = Date.now();
           const newSession = {
             id: contact.id,
             name: contact.name || '未命名',
             avatar: contact.avatar || '',
             type: 'private',
             lastMessage: '',
-            lastTime: Date.now(),
-            unread: 0
+            lastTime: now,
+            unread: 0,
+            /* ==========================================================================
+               [区域标注·已完成·本次需求2] 新联系人加入聊天列表：初始化聊天天数实时计数字段
+               说明：
+               1. chatDaysAccumulated：暂停前累计天数（初始为0）。
+               2. chatDaysLastResumedAt：当前计数起点（初次加入时从当前时间开始计数）。
+               ========================================================================== */
+            chatDaysAccumulated: 0,
+            chatDaysLastResumedAt: now
           };
           state.sessions.push(newSession);
           await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
@@ -698,14 +716,35 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        ========================================================================== */
     case 'confirm-delete-chat-list-contact': {
       const chatId = target.dataset.chatId || '';
-      const sessionExists = chatId && state.sessions.some(session => String(session.id) === String(chatId));
-      if (!sessionExists) break;
+      const session = chatId ? state.sessions.find(item => String(item.id) === String(chatId)) : null;
+      if (!session) break;
+
+      /* ==========================================================================
+         [区域标注·已完成·本次需求2] 从聊天列表删除联系人：聊天天数暂停计数
+         说明：
+         1. 删除联系人时不删除会话数据，仅写入 hiddenChatIds 隐藏会话。
+         2. 同步把“运行中天数”结算到 chatDaysAccumulated，并清空续算起点实现暂停。
+         3. 重新加入聊天列表时再设置新的 chatDaysLastResumedAt 继续计数。
+         ========================================================================== */
+      const now = Date.now();
+      const accumulated = Math.max(0, Number(session.chatDaysAccumulated || 0));
+      const resumedAt = Number(session.chatDaysLastResumedAt || 0);
+      if (Number.isFinite(resumedAt) && resumedAt > 0) {
+        const elapsedDays = Math.floor(Math.max(0, now - resumedAt) / 86400000);
+        session.chatDaysAccumulated = accumulated + elapsedDays;
+      } else {
+        session.chatDaysAccumulated = accumulated;
+      }
+      session.chatDaysLastResumedAt = 0;
 
       const hiddenSet = new Set(Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : []);
       hiddenSet.add(String(chatId));
       state.hiddenChatIds = Array.from(hiddenSet);
 
-      await dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds);
+      await Promise.all([
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+        dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds)
+      ]);
 
       closeModal(container);
       refreshPanel(container, state, 'chatList');
