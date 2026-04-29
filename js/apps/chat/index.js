@@ -86,6 +86,7 @@ import {
   buildProfileFromMask,
   showMaskSwitcherModal,
   renderSubPage,
+  calculateSessionRunningChatDays,
   getStickerTargetGroupId,
   getVisibleStickers,
   showCreateStickerGroupModal,
@@ -667,11 +668,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         const existedSession = state.sessions.find(s => s.id === contactId);
         if (existedSession) {
           /* ==========================================================================
-             [区域标注·已完成·本次需求2] 重新加入聊天列表：聊天天数恢复实时计数（续算）
+             [区域标注·已完成·本次需求3] 重新加入聊天列表：聊天天数恢复实时计数（续算）
              说明：
              1. 联系人此前被从聊天列表删除时会暂停计数（见 confirm-delete-chat-list-contact）。
              2. 重新加入时不重置历史累计值，仅更新续算起点时间。
+             3. 主页卡片与详情页统一读取该实时计数字段，避免总数不一致。
              ========================================================================== */
+          existedSession.chatDaysAccumulated = Math.max(0, Number(existedSession.chatDaysAccumulated || 0));
           existedSession.chatDaysLastResumedAt = Date.now();
           state.hiddenChatIds = state.hiddenChatIds.filter(id => String(id) !== String(contactId));
           await Promise.all([
@@ -690,10 +693,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
             lastTime: now,
             unread: 0,
             /* ==========================================================================
-               [区域标注·已完成·本次需求2] 新联系人加入聊天列表：初始化聊天天数实时计数字段
+               [区域标注·已完成·本次需求3] 新联系人加入聊天列表：初始化聊天天数实时计数字段
                说明：
                1. chatDaysAccumulated：暂停前累计天数（初始为0）。
                2. chatDaysLastResumedAt：当前计数起点（初次加入时从当前时间开始计数）。
+               3. 详情页会把首次加入当天显示为 1 天，后续按自然日累加。
                ========================================================================== */
             chatDaysAccumulated: 0,
             chatDaysLastResumedAt: now
@@ -702,8 +706,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
           await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
         }
 
+        buildProfileFromMask(state);
         closeModal(container);
         refreshPanel(container, state, 'chatList');
+        refreshPanel(container, state, 'profile');
 
         /* [区域标注] 自动打开新创建或恢复显示的聊天 */
         await openChatMessage(container, state, db, contact.id);
@@ -720,21 +726,15 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (!session) break;
 
       /* ==========================================================================
-         [区域标注·已完成·本次需求2] 从聊天列表删除联系人：聊天天数暂停计数
+         [区域标注·已完成·本次需求3] 从聊天列表删除联系人：聊天天数暂停计数
          说明：
          1. 删除联系人时不删除会话数据，仅写入 hiddenChatIds 隐藏会话。
          2. 同步把“运行中天数”结算到 chatDaysAccumulated，并清空续算起点实现暂停。
          3. 重新加入聊天列表时再设置新的 chatDaysLastResumedAt 继续计数。
+         4. 结算口径复用详情页计算函数，保证主页卡片、详情页、暂停值三者一致。
          ========================================================================== */
       const now = Date.now();
-      const accumulated = Math.max(0, Number(session.chatDaysAccumulated || 0));
-      const resumedAt = Number(session.chatDaysLastResumedAt || 0);
-      if (Number.isFinite(resumedAt) && resumedAt > 0) {
-        const elapsedDays = Math.floor(Math.max(0, now - resumedAt) / 86400000);
-        session.chatDaysAccumulated = accumulated + elapsedDays;
-      } else {
-        session.chatDaysAccumulated = accumulated;
-      }
+      session.chatDaysAccumulated = calculateSessionRunningChatDays(session, now);
       session.chatDaysLastResumedAt = 0;
 
       const hiddenSet = new Set(Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : []);
@@ -746,8 +746,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds)
       ]);
 
+      buildProfileFromMask(state);
       closeModal(container);
       refreshPanel(container, state, 'chatList');
+      refreshPanel(container, state, 'profile');
       break;
     }
 
@@ -1471,14 +1473,73 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         renderModalNotice(container, '请输入小分组名称');
         break;
       }
+
+      /* ==========================================================================
+         [区域标注·已完成·本次需求2] 收藏再分组：合并选中卡片并生成一张新卡片
+         说明：
+         1. 不再只给原卡片写 subGroupId 标记。
+         2. 将已选收藏卡片按选择顺序合并为一张新收藏卡片。
+         3. 每张原卡片的消息组之间插入“————”分隔消息。
+         4. 删除原已选卡片，只保留合并后的新卡片；持久化仅走 DB.js / IndexedDB。
+         ========================================================================== */
       const data = normalizeFavoriteData(state.favoriteData);
+      const selectedIds = (state.selectedFavoriteIds || []).map(String).filter(Boolean);
+      const selectedItems = selectedIds
+        .map(id => data.items.find(item => String(item.id) === id))
+        .filter(Boolean);
+
+      if (selectedItems.length < 2) {
+        renderModalNotice(container, '请至少选择两张收藏卡片进行再分组');
+        break;
+      }
+
       const now = Date.now();
       const subGroup = { id: createUid('favorite_sub_group'), parentGroupId: data.activeGroupId || 'all', name, createdAt: now };
-      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      const mergedMessages = [];
+      selectedItems.forEach((item, itemIndex) => {
+        if (itemIndex > 0) {
+          mergedMessages.push({
+            id: createUid('fav_separator'),
+            role: 'system',
+            type: 'separator',
+            content: '————',
+            stickerName: '',
+            stickerUrl: '',
+            timestamp: now + mergedMessages.length
+          });
+        }
+
+        (Array.isArray(item.messages) ? item.messages : []).forEach(message => {
+          mergedMessages.push({
+            id: createUid('fav_msg'),
+            role: String(message.role || 'user'),
+            type: String(message.type || ''),
+            content: String(message.type === 'sticker' ? (message.content || message.stickerName || '[表情包]') : message.content || ''),
+            stickerName: String(message.stickerName || ''),
+            stickerUrl: String(message.stickerUrl || ''),
+            timestamp: Number(message.timestamp || now)
+          });
+        });
+      });
+
+      const selectedSet = new Set(selectedIds);
+      const mergedItem = {
+        id: createUid('favorite'),
+        name,
+        groupId: data.activeGroupId || 'all',
+        subGroupId: subGroup.id,
+        messages: mergedMessages,
+        createdAt: now,
+        updatedAt: now,
+        sourceChatId: selectedItems.every(item => String(item.sourceChatId || '') === String(selectedItems[0]?.sourceChatId || ''))
+          ? String(selectedItems[0]?.sourceChatId || '')
+          : ''
+      };
+
       state.favoriteData = {
         ...data,
         subGroups: [...data.subGroups, subGroup],
-        items: data.items.map(item => selected.has(String(item.id)) ? { ...item, subGroupId: subGroup.id, updatedAt: now } : item)
+        items: [...data.items.filter(item => !selectedSet.has(String(item.id))), mergedItem]
       };
       state.favoriteMultiSelectMode = false;
       state.selectedFavoriteIds = [];
@@ -1852,6 +1913,24 @@ function rerenderCurrentSubPage(container, state) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·本次需求1] 收藏独立页搜索结果局部刷新
+   说明：
+   1. 搜索输入时只替换收藏卡片网格，不重建搜索 input。
+   2. 保持移动端输入法焦点，允许连续删除多个字。
+   3. 持久化仍只写 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function refreshFavoriteSearchResultsOnly(container, state) {
+  if (state.subPageView !== 'favorite') return;
+  const currentGrid = container.querySelector('.favorite-grid');
+  if (!currentGrid) return;
+
+  const draft = document.createElement('div');
+  draft.innerHTML = renderSubPage(state, 'favorite');
+  const nextGrid = draft.querySelector('.favorite-grid');
+  if (nextGrid) currentGrid.innerHTML = nextGrid.innerHTML;
+}
+
+/* ==========================================================================
    [区域标注] 输入事件代理处理器
    说明：处理搜索框等输入事件
    ========================================================================== */
@@ -1888,10 +1967,17 @@ function handleInput(e, state, container, db) {
   }
 
   if (target.matches('[data-role="favorite-search-input"]')) {
+    /* ==========================================================================
+       [区域标注·已完成·本次需求1] 收藏搜索输入：不重建输入框，避免键盘关闭
+       说明：
+       1. 每次输入/删除只更新收藏数据与卡片网格。
+       2. 不调用 rerenderCurrentSubPage，避免搜索 input 被替换导致输入法收起。
+       3. 持久化仅写入 DB.js / IndexedDB。
+       ========================================================================== */
     const data = normalizeFavoriteData(state.favoriteData);
     state.favoriteData = { ...data, searchKeyword: target.value || '' };
     dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
-    rerenderCurrentSubPage(container, state);
+    refreshFavoriteSearchResultsOnly(container, state);
     return;
   }
 
@@ -2005,31 +2091,13 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
 
   /* ==========================================================================
-     [区域标注·本次修复1-已完成] 收藏独立页搜索框：长按删除键一次性清空
+     [区域标注·已完成·本次需求1] 收藏搜索框删除键不拦截
      说明：
-     1. 仅作用于收藏独立页搜索输入框 data-role="favorite-search-input"。
-     2. 当 Backspace/Delete 进入长按重复阶段（e.repeat）时，直接清空整段关键词。
-     3. 清空后立即写入 DB.js（IndexedDB）并重渲染收藏子页面。
+     1. 已移除“长按删除键一次性清空并重渲染”的逻辑。
+     2. Backspace/Delete 交给系统输入法原生处理，允许连续自由删除多个字。
+     3. 实时筛选由 input 事件局部刷新卡片网格完成，不会关闭键盘。
      ========================================================================== */
-  if (target?.matches?.('[data-role="favorite-search-input"]')) {
-    const isDeleteKey = e.key === 'Backspace' || e.key === 'Delete';
-    if (!isDeleteKey) return;
-
-    const data = normalizeFavoriteData(state.favoriteData);
-    const hasKeyword = Boolean(String(data.searchKeyword || ''));
-    if (!hasKeyword) return;
-
-    const inputValue = String(target.value || '');
-    const isLikelyContinuousDelete = e.repeat || inputValue.length <= 1;
-    if (!isLikelyContinuousDelete) return;
-
-    e.preventDefault();
-    state.favoriteData = { ...data, searchKeyword: '' };
-    target.value = '';
-    await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
-    rerenderCurrentSubPage(container, state);
-    return;
-  }
+  if (target?.matches?.('[data-role="favorite-search-input"]')) return;
 
   if (!target?.matches?.('[data-role="msg-input"]')) return;
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;

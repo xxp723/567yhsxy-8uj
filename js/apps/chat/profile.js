@@ -181,21 +181,20 @@ export function buildProfileFromMask(state) {
     friendsCount: state.contacts.length,
     /* [修改4] 身份数量 = 档案应用中所有用户面具数量 */
     identitiesCount: state.archiveMasks.length,
-    /* [修改4] 聊天天数 = 当前面具身份的聊天总天数（按去重日期计算） */
+    /* [区域标注·已完成·本次需求3] 聊天天数 = 当前聊天列表联系人实时累计天数汇总 */
     chatDays: calculateTotalChatDays(state)
   };
 }
 
-/* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次需求3] 用户主页聊天天数卡片统计口径
+   说明：
+   1. 不再按 sessions.lastTime 去重日期计算，避免主页卡片与详情页口径不一致。
+   2. 与“聊天天数详情”统一为：当前聊天列表中未隐藏联系人的实时累计天数总和。
+   3. 删除聊天列表联系人后暂停计数；重新加入后从累计值继续计数。
+   ========================================================================== */
 export function calculateTotalChatDays(state) {
-  const daySet = new Set();
-  (state.sessions || []).forEach(s => {
-    if (s.lastTime) {
-      const dateStr = new Date(s.lastTime).toISOString().slice(0, 10);
-      daySet.add(dateStr);
-    }
-  });
-  return daySet.size;
+  return calculatePerFriendChatDays(state).reduce((sum, item) => sum + Number(item.days || 0), 0);
 }
 
 /* ==========================================================================
@@ -205,14 +204,27 @@ export function calculateTotalChatDays(state) {
    2. 每个联系人按“加入聊天列表后的累计自然日”计数。
    3. 联系人从聊天列表删除时计数暂停；重新添加后从原累计值继续计数。
    ========================================================================== */
-function calculateSessionRunningChatDays(session, nowTs) {
+export function calculateSessionRunningChatDays(session, nowTs) {
   const now = Number(nowTs || Date.now());
   const accumulated = Math.max(0, Number(session?.chatDaysAccumulated || 0));
   const resumedAt = Number(session?.chatDaysLastResumedAt || 0);
-  if (!Number.isFinite(resumedAt) || resumedAt <= 0) return accumulated;
-  const elapsedMs = Math.max(0, now - resumedAt);
-  const elapsedDays = Math.floor(elapsedMs / 86400000);
-  return accumulated + elapsedDays;
+
+  if (Number.isFinite(resumedAt) && resumedAt > 0) {
+    const elapsedMs = Math.max(0, now - resumedAt);
+    const elapsedDays = Math.floor(elapsedMs / 86400000);
+    /* [区域标注·已完成·本次需求3] 首次加入聊天列表当天计为 1 天，避免详情页显示 0 天 */
+    const runningDays = accumulated > 0 ? elapsedDays : elapsedDays + 1;
+    return accumulated + runningDays;
+  }
+
+  const hasChatDayFields = Object.prototype.hasOwnProperty.call(session || {}, 'chatDaysAccumulated')
+    || Object.prototype.hasOwnProperty.call(session || {}, 'chatDaysLastResumedAt');
+  if (hasChatDayFields || accumulated > 0) return accumulated;
+
+  /* [区域标注·已完成·本次需求3] 兼容旧会话：没有新计数字段时，用已有时间字段补出至少 1 天 */
+  const legacyStart = Number(session?.addedAt || session?.createdAt || session?.lastTime || 0);
+  if (!Number.isFinite(legacyStart) || legacyStart <= 0) return 0;
+  return Math.max(1, Math.floor(Math.max(0, now - legacyStart) / 86400000) + 1);
 }
 
 export function calculatePerFriendChatDays(state) {
@@ -298,7 +310,7 @@ export function renderSubPage(state, pageType) {
   }
 
   if (pageType === 'chatDaysDetail') {
-    /* [区域标注·已完成·本次需求2] 详情页总天数改为“当前聊天列表联系人实时天数汇总” */
+    /* [区域标注·已完成·本次需求3] 聊天天数详情与主页卡片统一使用“当前聊天列表联系人实时累计天数汇总” */
     const friends = calculatePerFriendChatDays(state);
     const totalDays = friends.reduce((sum, item) => sum + Number(item.days || 0), 0);
     const listHtml = friends.length === 0
@@ -740,7 +752,7 @@ export function showCreateFavoriteSubGroupModal(container) {
   const panel = container.querySelector('[data-role="modal-panel"]');
   if (!mask || !panel) return;
   panel.innerHTML = `
-    <!-- [区域标注·已完成·收藏再分组] 新建当前收藏页小分组弹窗 -->
+    <!-- [区域标注·已完成·本次需求2] 收藏再分组合并弹窗：确认后将已选收藏卡片合并成一张新卡片 -->
     <div class="chat-modal-header">
       <span>收藏再分组</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -808,12 +820,17 @@ export function showFavoritePreviewModal(container, state, itemId) {
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      ${item.messages.map(message => `
-        <div class="favorite-preview-message">
-          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : escapeHtml(sourceRoleName)} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
-          ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
-        </div>
-      `).join('')}
+      ${item.messages.map(message => {
+        if (message.type === 'separator') {
+          return `<div class="favorite-preview-message favorite-preview-message--separator">${escapeHtml(message.content || '————')}</div>`;
+        }
+        return `
+          <div class="favorite-preview-message">
+            <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : escapeHtml(sourceRoleName)} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
+            ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
   mask.classList.remove('is-hidden');
