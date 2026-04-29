@@ -42,6 +42,8 @@ const TAB_ICONS = {
   favorite: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l5.6 11.4L42 19.2l-9 8.8l2.1 12.4L24 34.5l-11.1 5.9L15 28l-9-8.8l12.4-1.8L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   search: `<svg viewBox="0 0 48 48" fill="none"><circle cx="21" cy="21" r="13" stroke="currentColor" stroke-width="3"/><path d="M31 31l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   filter: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h36L28 26v12l-8 4V26L6 10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已修改·收藏独立页长按多选] IconPark — 移动到分组图标 */
+  move: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 12h14l4 6h14v22H8V12Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 29h14M27 24l5 5l-5 5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 
   /* ========================================================================
      [区域标注·本次需求3] 用户主页表情包页 IconPark 图标
@@ -478,6 +480,8 @@ export async function mount(container, context) {
   const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
   /* [区域标注·已完成·收藏分组长按删除] 应用内确认弹窗，不使用原生 confirm */
   const favoriteGroupLongPressHandlers = createFavoriteGroupLongPressHandlers(state, container);
+  /* [区域标注·已修改·收藏独立页长按多选] 收藏卡片长按进入多选，不再使用双击触发 */
+  const favoriteCardLongPressHandlers = createFavoriteCardLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
@@ -500,6 +504,11 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -567,6 +576,11 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -1550,6 +1564,53 @@ function showCreateFavoriteGroupModal(container) {
   `;
   mask.classList.remove('is-hidden');
   setTimeout(() => panel.querySelector('[data-role="favorite-group-name-input"]')?.focus(), 30);
+}
+
+function showMoveFavoriteItemsModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const data = normalizeFavoriteData(state.favoriteData);
+  const selectedCount = (state.selectedFavoriteIds || []).length;
+  const groupChoices = getFavoriteGroupsWithAll(state).map(group => ({
+    id: group.id,
+    name: group.name,
+    type: 'group',
+    parentGroupId: ''
+  }));
+  const subGroupChoices = data.subGroups
+    .filter(group => group.parentGroupId === data.activeGroupId)
+    .map(group => ({
+      id: group.id,
+      name: group.name,
+      type: 'subGroup',
+      parentGroupId: group.parentGroupId
+    }));
+  const choices = [...groupChoices, ...subGroupChoices];
+
+  panel.innerHTML = `
+    <!-- [区域标注·已修改·收藏独立页移动分组弹窗] 应用内弹窗，不使用原生浏览器弹窗 -->
+    <div class="chat-modal-header">
+      <span>移动 ${selectedCount} 个收藏</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      ${choices.map(choice => `
+        <button class="chat-contact-group-choice"
+                data-action="confirm-move-favorite-items"
+                data-favorite-target-type="${escapeHtml(choice.type)}"
+                data-favorite-target-id="${escapeHtml(choice.id)}"
+                data-favorite-parent-group-id="${escapeHtml(choice.parentGroupId)}"
+                type="button">
+          <span>${choice.type === 'subGroup' ? '小分组 · ' : ''}${escapeHtml(choice.name)}</span>
+          <i>${TAB_ICONS.move}</i>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
 
 function showCreateFavoriteSubGroupModal(container) {
@@ -3208,7 +3269,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [区域标注·已完成·收藏独立页] 收藏页面：分组、搜索、筛选、多选、删除、再分组
+       [区域标注·已修改·收藏独立页长按多选] 收藏页面：长按多选、分组、移动、全选、删除、再分组
        ========================================================================== */
     case 'switch-favorite-group': {
       if (target.dataset.longPressTriggered === '1') {
@@ -3286,6 +3347,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     case 'open-favorite-preview': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        break;
+      }
       const favoriteId = target.dataset.favoriteId || '';
       if (favoriteId) showFavoritePreviewModal(container, state, favoriteId);
       break;
@@ -3331,6 +3396,37 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'favorite-multi-group':
       if ((state.selectedFavoriteIds || []).length) showCreateFavoriteSubGroupModal(container);
       break;
+
+    case 'favorite-multi-move':
+      if ((state.selectedFavoriteIds || []).length) showMoveFavoriteItemsModal(container, state);
+      break;
+
+    case 'confirm-move-favorite-items': {
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      if (!selected.size) break;
+      const data = normalizeFavoriteData(state.favoriteData);
+      const targetType = String(target.dataset.favoriteTargetType || 'group');
+      const targetId = String(target.dataset.favoriteTargetId || 'all');
+      const targetSubGroup = data.subGroups.find(group => String(group.id) === targetId);
+      const targetGroupId = targetType === 'subGroup'
+        ? String(targetSubGroup?.parentGroupId || data.activeGroupId || 'all')
+        : (targetId === 'all' || data.groups.some(group => String(group.id) === targetId) ? targetId : 'all');
+      const targetSubGroupId = targetType === 'subGroup' && targetSubGroup ? targetSubGroup.id : '';
+      const now = Date.now();
+
+      state.favoriteData = {
+        ...data,
+        items: data.items.map(item => selected.has(String(item.id))
+          ? { ...item, groupId: targetGroupId, subGroupId: targetSubGroupId, updatedAt: now }
+          : item)
+      };
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
 
     case 'confirm-create-favorite-sub-group': {
       const input = container.querySelector('[data-role="favorite-sub-group-name-input"]');
@@ -3921,14 +4017,29 @@ function renderFavoriteSubPage(state) {
             ${group.id !== 'all' ? 'data-long-press-action="delete-favorite-group"' : ''}
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
+  /* [区域标注·已修改·收藏独立页再分组卡片] 当前大分组下的小分组以收藏卡片样式展示 */
+  const subGroupCardsHtml = data.subGroups
+    .filter(group => String(group.parentGroupId || 'all') === String(data.activeGroupId || 'all'))
+    .map(group => {
+      const groupItems = data.items.filter(item => String(item.subGroupId || '') === String(group.id));
+      const preview = groupItems.slice(0, 3).map(item => item.name || getFavoriteCardTitle(item.messages)).join(' / ');
+      return `
+        <div class="favorite-card favorite-sub-group-card" role="group" aria-label="${escapeHtml(group.name)}">
+          <div class="favorite-card__title">${escapeHtml(group.name)}</div>
+          <div class="favorite-card__meta">小分组 · ${groupItems.length} 个收藏</div>
+          <div class="favorite-card__preview">${escapeHtml(preview || '暂无收藏，可通过“移动”加入此小分组')}</div>
+        </div>
+      `;
+    }).join('');
   const cardsHtml = items.length ? items.map(item => {
     const sub = data.subGroups.find(group => String(group.id) === String(item.subGroupId));
     const preview = item.messages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');
     return `
-      <!-- [区域标注·已完成·收藏卡片] ${escapeHtml(item.name)} -->
+      <!-- [区域标注·已修改·收藏独立页长按多选] 收藏卡片：长按进入多选，单击预览 -->
       <button class="favorite-card ${selectedSet.has(String(item.id)) ? 'is-selected' : ''}"
               data-action="${state.favoriteMultiSelectMode ? 'toggle-favorite-item' : 'open-favorite-preview'}"
               data-favorite-id="${escapeHtml(item.id)}"
+              data-long-press-action="favorite-card-multi-select"
               type="button">
         ${state.favoriteMultiSelectMode ? `<span class="favorite-card__check">${selectedSet.has(String(item.id)) ? ICON_CHECK : ''}</span>` : ''}
         <div class="favorite-card__title">${escapeHtml(item.name || '未命名收藏')}</div>
@@ -3939,10 +4050,12 @@ function renderFavoriteSubPage(state) {
   }).join('') : `<div class="favorite-empty">当前分组暂无收藏<br>可在聊天气泡功能栏点击“收藏”添加</div>`;
 
   const multiBar = state.favoriteMultiSelectMode ? `
+    <!-- [区域标注·已修改·收藏独立页长按多选] 多选底栏：分组、移动、全选、删除 -->
     <div class="sticker-multi-action-bar">
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-cancel" type="button">${TAB_ICONS.close}<span>取消</span></button>
       <span class="sticker-multi-action-bar__count">已选 ${selectedSet.size} 个</span>
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-group" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.plus}<span>分组</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-move" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.move}<span>移动</span></button>
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-select-all" type="button">${allVisibleSelected ? ICON_CHECK : TAB_ICONS.plus}<span>${allVisibleSelected ? '取消全选' : '全选'}</span></button>
       <button class="sticker-multi-action-bar__btn sticker-multi-action-bar__btn--danger" data-action="favorite-multi-delete" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.close}<span>删除</span></button>
     </div>
@@ -3963,7 +4076,7 @@ function renderFavoriteSubPage(state) {
         <button class="favorite-group-add-tab" data-action="create-favorite-group" type="button" aria-label="新建收藏分组">${TAB_ICONS.plus}</button>
       </div></div>
       <div class="favorite-list-scroll ${state.favoriteMultiSelectMode ? 'is-multi-selecting' : ''}">
-        <div class="favorite-grid">${cardsHtml}</div>
+        <div class="favorite-grid">${subGroupCardsHtml}${cardsHtml}</div>
       </div>
       ${multiBar}
     </div>
@@ -4331,6 +4444,53 @@ function showDeleteStickerGroupModal(container, state, groupId) {
   mask.classList.remove('is-hidden');
 }
 
+function createFavoriteCardLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const enterMultiSelect = () => {
+    const target = pressedTarget;
+    if (!target || state.subPageView !== 'favorite') return;
+
+    const favoriteId = String(target.dataset.favoriteId || '').trim();
+    const exists = favoriteId && normalizeFavoriteData(state.favoriteData).items.some(item => String(item.id) === favoriteId);
+    if (!exists) return;
+
+    target.dataset.longPressTriggered = '1';
+    state.favoriteMultiSelectMode = true;
+    state.selectedFavoriteIds = [favoriteId];
+    rerenderCurrentSubPage(container, state);
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (state.subPageView !== 'favorite' || state.favoriteMultiSelectMode) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="favorite-card-multi-select"]');
+      if (!target) return;
+
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(enterMultiSelect, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="favorite-card-multi-select"]')) e.preventDefault();
+    }
+  };
+}
+
 function createFavoriteGroupLongPressHandlers(state, container) {
   let timer = null;
   let pressedTarget = null;
@@ -4655,17 +4815,7 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    说明：双击任意表情包即可唤起底部悬浮多选栏，并默认选中当前表情包。
    ========================================================================== */
 function handleDoubleClick(e, state, container) {
-  if (state.subPageView === 'favorite') {
-    const target = e.target.closest('[data-favorite-id]');
-    if (!target) return;
-    const favoriteId = String(target.dataset.favoriteId || '').trim();
-    if (!favoriteId) return;
-    state.favoriteMultiSelectMode = true;
-    state.selectedFavoriteIds = [favoriteId];
-    rerenderCurrentSubPage(container, state);
-    return;
-  }
-
+  /* [区域标注·已修改·收藏独立页长按多选] 收藏卡片已改为长按进入多选；双击仅保留给表情包独立页使用 */
   if (state.subPageView !== 'sticker') return;
   if (state.stickerPreviewClickTimer) {
     window.clearTimeout(state.stickerPreviewClickTimer);
