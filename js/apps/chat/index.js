@@ -42,6 +42,8 @@ const TAB_ICONS = {
   favorite: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l5.6 11.4L42 19.2l-9 8.8l2.1 12.4L24 34.5l-11.1 5.9L15 28l-9-8.8l12.4-1.8L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   search: `<svg viewBox="0 0 48 48" fill="none"><circle cx="21" cy="21" r="13" stroke="currentColor" stroke-width="3"/><path d="M31 31l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   filter: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h36L28 26v12l-8 4V26L6 10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已修改·收藏页移动] IconPark — 移动到现有收藏分组图标 */
+  move: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 12h13l5 6h14v20H8V12Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 29h16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M28 23l6 6l-6 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 
   /* ========================================================================
      [区域标注·本次需求3] 用户主页表情包页 IconPark 图标
@@ -263,6 +265,8 @@ function normalizeFavoriteData(rawData) {
                   content: String(message?.content || ''),
                   stickerName: String(message?.stickerName || ''),
                   stickerUrl: String(message?.stickerUrl || ''),
+                  /* [区域标注·已修改·收藏角色名] 收藏预览显示真实发送者名称，不再把 AI 写死为“AI”。 */
+                  senderName: String(message?.senderName || message?.displayName || '').trim(),
                   timestamp: Number(message?.timestamp || 0) || Date.now()
                 }))
                 .filter(message => message.id && message.content)
@@ -478,6 +482,8 @@ export async function mount(container, context) {
   const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
   /* [区域标注·已完成·收藏分组长按删除] 应用内确认弹窗，不使用原生 confirm */
   const favoriteGroupLongPressHandlers = createFavoriteGroupLongPressHandlers(state, container);
+  /* [区域标注·已修改·收藏卡片长按多选] 长按收藏卡片进入多选，替代原双击触发。 */
+  const favoriteCardLongPressHandlers = createFavoriteCardLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
@@ -500,6 +506,11 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -567,6 +578,11 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
