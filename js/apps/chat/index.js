@@ -263,8 +263,6 @@ function normalizeFavoriteData(rawData) {
                   content: String(message?.content || ''),
                   stickerName: String(message?.stickerName || ''),
                   stickerUrl: String(message?.stickerUrl || ''),
-                  /* [区域标注·已完成·收藏角色名显示] 收藏消息保存角色名，避免界面只显示 AI */
-                  roleName: String(message?.roleName || message?.senderName || '').trim(),
                   timestamp: Number(message?.timestamp || 0) || Date.now()
                 }))
                 .filter(message => message.id && message.content)
@@ -429,11 +427,10 @@ export async function mount(container, context) {
     chatPromptSettings: normalizeChatPromptSettings(null),
     /* [区域标注·本次需求3] 表情包分组与条目：全局共享资产，只从 IndexedDB 读取 */
     stickerData: normalizeStickerData(stickerData),
-    /* [区域标注·本次修改·收藏独立页] 收藏页数据与选择状态，持久化只走 DB.js / IndexedDB */
+    /* [区域标注·已完成·收藏运行时状态] 收藏页数据与选择状态，持久化只走 DB.js / IndexedDB */
     favoriteData: normalizeFavoriteData(favoriteData),
     favoriteMultiSelectMode: false,
     selectedFavoriteIds: [],
-    favoriteLongPressTimer: 0,
     /* [区域标注·本次需求3] 聊天消息页表情包面板运行时状态 */
     stickerPanelOpen: false,
     stickerPanelGroupId: normalizeStickerData(stickerData).activeGroupId || 'all',
@@ -481,8 +478,6 @@ export async function mount(container, context) {
   const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
   /* [区域标注·已完成·收藏分组长按删除] 应用内确认弹窗，不使用原生 confirm */
   const favoriteGroupLongPressHandlers = createFavoriteGroupLongPressHandlers(state, container);
-  /* [区域标注·本次修改·收藏卡片长按多选] 收藏独立页长按卡片进入多选模式 */
-  const favoriteItemLongPressHandlers = createFavoriteItemLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
@@ -505,11 +500,6 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
-  container.addEventListener('pointerdown', favoriteItemLongPressHandlers.pointerdown);
-  container.addEventListener('pointerup', favoriteItemLongPressHandlers.pointerup);
-  container.addEventListener('pointercancel', favoriteItemLongPressHandlers.pointercancel);
-  container.addEventListener('pointerleave', favoriteItemLongPressHandlers.pointerleave);
-  container.addEventListener('contextmenu', favoriteItemLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -577,11 +567,6 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
-      container.removeEventListener('pointerdown', favoriteItemLongPressHandlers.pointerdown);
-      container.removeEventListener('pointerup', favoriteItemLongPressHandlers.pointerup);
-      container.removeEventListener('pointercancel', favoriteItemLongPressHandlers.pointercancel);
-      container.removeEventListener('pointerleave', favoriteItemLongPressHandlers.pointerleave);
-      container.removeEventListener('contextmenu', favoriteItemLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -1572,7 +1557,7 @@ function showCreateFavoriteSubGroupModal(container) {
   const panel = container.querySelector('[data-role="modal-panel"]');
   if (!mask || !panel) return;
   panel.innerHTML = `
-    <!-- [区域标注·已完成·收藏再分组] 新建当前收藏页小分组弹窗：创建后加入当前大分组 TAB 下 -->
+    <!-- [区域标注·已完成·收藏再分组] 新建当前收藏页小分组弹窗 -->
     <div class="chat-modal-header">
       <span>收藏再分组</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -1586,42 +1571,6 @@ function showCreateFavoriteSubGroupModal(container) {
   `;
   mask.classList.remove('is-hidden');
   setTimeout(() => panel.querySelector('[data-role="favorite-sub-group-name-input"]')?.focus(), 30);
-}
-
-/* ==========================================================================
-   [区域标注·已完成·收藏移动弹窗]
-   说明：多选收藏后点击“移动”，在应用内弹窗选择现有大分组；
-         只改收藏卡片 groupId/subGroupId 并写入 DB.js / IndexedDB。
-   ========================================================================== */
-function showMoveFavoriteGroupModal(container, state) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  if (!mask || !panel) return;
-
-  const data = normalizeFavoriteData(state.favoriteData);
-  const selectedCount = Array.isArray(state.selectedFavoriteIds) ? state.selectedFavoriteIds.length : 0;
-  const groups = getFavoriteGroupsWithAll(state);
-  const currentGroupId = data.activeGroupId || 'all';
-
-  panel.innerHTML = `
-    <!-- [区域标注·已完成·收藏移动弹窗] 选择现有分组移动收藏卡片 -->
-    <div class="chat-modal-header">
-      <span>移动 ${selectedCount} 个收藏</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      ${groups.map(group => `
-        <button class="chat-contact-group-choice ${String(group.id) === String(currentGroupId) ? 'is-active' : ''}"
-                data-action="confirm-move-favorite-group"
-                data-favorite-target-group-id="${escapeHtml(group.id)}"
-                type="button">
-          <span>${escapeHtml(group.name)}</span>${String(group.id) === String(currentGroupId) ? `<i>${ICON_CHECK}</i>` : ''}
-        </button>
-      `).join('')}
-    </div>
-  `;
-
-  mask.classList.remove('is-hidden');
 }
 
 function showFavoriteFilterModal(container, state) {
@@ -1665,7 +1614,7 @@ function showFavoritePreviewModal(container, state, itemId) {
     <div class="chat-modal-body">
       ${item.messages.map(message => `
         <div class="favorite-preview-message">
-          <span class="favorite-preview-message__role">${escapeHtml(getFavoriteMessageRoleName(state, item, message))} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
+          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : 'AI'} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
           ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
         </div>
       `).join('')}
@@ -3008,19 +2957,17 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* ========================================================================== 
-       [区域标注·已完成·聊天消息收藏防闪屏] 气泡收藏入口：单条直接收藏并局部收起工具栏
-       说明：不再为了收藏按钮重建整个聊天消息页，避免点击收藏后闪屏。
+    /* ==========================================================================
+       [区域标注·已完成·聊天消息收藏] 气泡收藏入口：进入多选收藏态并默认选中当前消息
        ========================================================================== */
     case 'msg-bubble-favorite': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
-      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
-      if (!message) break;
-      const previousSelectedId = state.selectedMessageId;
+      if (!messageId) break;
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
-      await addMessagesToFavorites(container, state, db, [message]);
-      refreshMessageBubbleRows(container, state, [previousSelectedId, messageId]);
+      state.multiSelectMode = true;
+      state.selectedMessageIds = [messageId];
+      renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
     }
 
@@ -3339,11 +3286,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     case 'open-favorite-preview': {
-      /* [区域标注·已完成·收藏卡片长按多选] 长按触发多选后的 click 不再打开预览弹窗 */
-      if (target.dataset.longPressTriggered === '1') {
-        delete target.dataset.longPressTriggered;
-        break;
-      }
       const favoriteId = target.dataset.favoriteId || '';
       if (favoriteId) showFavoritePreviewModal(container, state, favoriteId);
       break;
@@ -3389,30 +3331,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'favorite-multi-group':
       if ((state.selectedFavoriteIds || []).length) showCreateFavoriteSubGroupModal(container);
       break;
-
-    case 'favorite-multi-move':
-      if ((state.selectedFavoriteIds || []).length) showMoveFavoriteGroupModal(container, state);
-      break;
-
-    case 'confirm-move-favorite-group': {
-      const targetGroupId = target.dataset.favoriteTargetGroupId || 'all';
-      const data = normalizeFavoriteData(state.favoriteData);
-      const exists = targetGroupId === 'all' || data.groups.some(group => String(group.id) === String(targetGroupId));
-      if (!exists) break;
-      const selected = new Set((state.selectedFavoriteIds || []).map(String));
-      const now = Date.now();
-      state.favoriteData = {
-        ...data,
-        activeGroupId: targetGroupId,
-        items: data.items.map(item => selected.has(String(item.id)) ? { ...item, groupId: targetGroupId, subGroupId: '', updatedAt: now } : item)
-      };
-      state.favoriteMultiSelectMode = false;
-      state.selectedFavoriteIds = [];
-      await persistFavoriteData(state, db);
-      closeModal(container);
-      rerenderCurrentSubPage(container, state);
-      break;
-    }
 
     case 'confirm-create-favorite-sub-group': {
       const input = container.querySelector('[data-role="favorite-sub-group-name-input"]');
@@ -3939,19 +3857,7 @@ function getVisibleFavoriteItems(state) {
   const data = normalizeFavoriteData(state.favoriteData);
   const keyword = String(data.searchKeyword || '').trim().toLowerCase();
   let items = data.items.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all'));
-  if (keyword) {
-    items = items.filter(item => {
-      const haystack = [
-        item.name,
-        ...(item.messages || []).flatMap(message => [
-          message.content,
-          message.stickerName,
-          message.roleName
-        ])
-      ].join(' ').toLowerCase();
-      return haystack.includes(keyword);
-    });
-  }
+  if (keyword) items = items.filter(item => String(item.name || '').toLowerCase().includes(keyword));
   return [...items].sort((a, b) => {
     if (data.sortMode === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
     if (data.sortMode === 'messageTime') {
@@ -3972,25 +3878,11 @@ function getFavoriteCardTitle(messages = []) {
   return `${messages.length} 条消息`;
 }
 
-/* ==========================================================================
-   [区域标注·已完成·收藏角色名显示]
-   说明：收藏卡片/预览里，时间左侧显示真实角色名称；
-         旧数据没有 roleName 时按 sourceChatId 回查会话名，仍不写浏览器同步存储。
-   ========================================================================== */
-function getFavoriteMessageRoleName(state, item, message) {
-  if (String(message?.roleName || '').trim()) return String(message.roleName).trim();
-  if (message?.role === 'user') return state.profile?.nickname || '我';
-  const sourceChatId = String(item?.sourceChatId || '');
-  const session = (state.sessions || []).find(entry => String(entry.id) === sourceChatId);
-  return session?.name || '未命名角色';
-}
-
 async function addMessagesToFavorites(container, state, db, messages) {
   const selected = Array.isArray(messages) ? messages.filter(Boolean) : [];
   if (!selected.length) return;
   const data = normalizeFavoriteData(state.favoriteData);
   const now = Date.now();
-  const sourceSession = (state.sessions || []).find(session => String(session.id) === String(state.currentChatId));
   const safeMessages = selected.map(message => ({
     id: String(message.id || createUid('fav_msg')),
     role: String(message.role || 'user'),
@@ -3998,10 +3890,6 @@ async function addMessagesToFavorites(container, state, db, messages) {
     content: String(message.content || ''),
     stickerName: String(message.stickerName || ''),
     stickerUrl: String(message.stickerUrl || ''),
-    /* [区域标注·已完成·收藏角色名显示] 新收藏写入角色名，替代收藏页里模糊的 AI 文案 */
-    roleName: String(message.role || 'user') === 'user'
-      ? (state.profile?.nickname || '我')
-      : (sourceSession?.name || '未命名角色'),
     timestamp: Number(message.timestamp || now)
   })).filter(message => String(message.content || '').trim());
   if (!safeMessages.length) return;
@@ -4035,19 +3923,16 @@ function renderFavoriteSubPage(state) {
   `).join('');
   const cardsHtml = items.length ? items.map(item => {
     const sub = data.subGroups.find(group => String(group.id) === String(item.subGroupId));
-    const latestMessage = [...(item.messages || [])].reverse()[0] || null;
-    const latestRoleName = latestMessage ? getFavoriteMessageRoleName(state, item, latestMessage) : '未命名角色';
-    const latestTime = new Date(latestMessage?.timestamp || item.updatedAt || item.createdAt).toLocaleString();
     const preview = item.messages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');
     return `
-      <!-- [区域标注·已完成·收藏卡片] ${escapeHtml(item.name)}：长按进入多选，角色名已替代 AI -->
+      <!-- [区域标注·已完成·收藏卡片] ${escapeHtml(item.name)} -->
       <button class="favorite-card ${selectedSet.has(String(item.id)) ? 'is-selected' : ''}"
               data-action="${state.favoriteMultiSelectMode ? 'toggle-favorite-item' : 'open-favorite-preview'}"
               data-favorite-id="${escapeHtml(item.id)}"
               type="button">
         ${state.favoriteMultiSelectMode ? `<span class="favorite-card__check">${selectedSet.has(String(item.id)) ? ICON_CHECK : ''}</span>` : ''}
         <div class="favorite-card__title">${escapeHtml(item.name || '未命名收藏')}</div>
-        <div class="favorite-card__meta">${escapeHtml(latestRoleName)} · ${escapeHtml(latestTime)}${sub ? ` · ${escapeHtml(sub.name)}` : ''}</div>
+        <div class="favorite-card__meta">${item.messages.length > 1 ? '消息组' : '单条消息'}${sub ? ` · ${escapeHtml(sub.name)}` : ''}</div>
         <div class="favorite-card__preview">${escapeHtml(preview)}</div>
       </button>
     `;
@@ -4058,7 +3943,6 @@ function renderFavoriteSubPage(state) {
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-cancel" type="button">${TAB_ICONS.close}<span>取消</span></button>
       <span class="sticker-multi-action-bar__count">已选 ${selectedSet.size} 个</span>
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-group" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.plus}<span>分组</span></button>
-      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-move" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.forward}<span>移动</span></button>
       <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-select-all" type="button">${allVisibleSelected ? ICON_CHECK : TAB_ICONS.plus}<span>${allVisibleSelected ? '取消全选' : '全选'}</span></button>
       <button class="sticker-multi-action-bar__btn sticker-multi-action-bar__btn--danger" data-action="favorite-multi-delete" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.close}<span>删除</span></button>
     </div>
@@ -4489,63 +4373,6 @@ function createFavoriteGroupLongPressHandlers(state, container) {
   };
 }
 
-/* ==========================================================================
-   [区域标注·已完成·收藏卡片长按多选]
-   说明：
-   1. 收藏独立页卡片由“双击进入多选”改为“长按进入多选”。
-   2. 长按后默认选中当前收藏卡片；普通单击仍打开收藏预览。
-   3. 仅作用于用户主页收藏独立页，不影响其它页面。
-   ========================================================================== */
-function createFavoriteItemLongPressHandlers(state, container) {
-  let timer = null;
-  let pressedTarget = null;
-
-  const clearTimer = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    pressedTarget = null;
-  };
-
-  const enterFavoriteMultiSelect = () => {
-    const target = pressedTarget;
-    if (!target || state.subPageView !== 'favorite') return;
-
-    const favoriteId = String(target.dataset.favoriteId || '').trim();
-    const exists = favoriteId && getVisibleFavoriteItems(state).some(item => String(item.id) === favoriteId);
-    if (!exists) return;
-
-    target.dataset.longPressTriggered = '1';
-    state.favoriteMultiSelectMode = true;
-    state.selectedFavoriteIds = [favoriteId];
-    rerenderCurrentSubPage(container, state);
-    clearTimer();
-  };
-
-  return {
-    pointerdown(e) {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (state.subPageView !== 'favorite' || state.favoriteMultiSelectMode) return;
-
-      const target = e.target.closest('.favorite-card[data-favorite-id]');
-      if (!target) return;
-
-      clearTimer();
-      pressedTarget = target;
-      timer = window.setTimeout(enterFavoriteMultiSelect, 650);
-    },
-    pointerup: clearTimer,
-    pointercancel: clearTimer,
-    pointerleave: clearTimer,
-    contextmenu(e) {
-      if (e.target.closest('.favorite-card[data-favorite-id]')) {
-        e.preventDefault();
-      }
-    }
-  };
-}
-
 function createStickerGroupLongPressHandlers(state, container) {
   let timer = null;
   let pressedTarget = null;
@@ -4812,23 +4639,6 @@ async function handleChange(e, state, container, db) {
    ========================================================================== */
 async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
-
-  /* ==========================================================================
-     [区域标注·已完成·收藏搜索长按删除清空]
-     说明：收藏独立页搜索框内长按删除键时，浏览器会连续触发 repeat Backspace；
-           捕获 repeat 后一次性清空搜索词并写入 DB.js / IndexedDB，不使用同步键值存储。
-     ========================================================================== */
-  if (target?.matches?.('[data-role="favorite-search-input"]')) {
-    if (e.key === 'Backspace' && e.repeat && !e.isComposing && String(target.value || '').length > 0) {
-      e.preventDefault();
-      const data = normalizeFavoriteData(state.favoriteData);
-      state.favoriteData = { ...data, searchKeyword: '' };
-      await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
-      rerenderCurrentSubPage(container, state);
-    }
-    return;
-  }
-
   if (!target?.matches?.('[data-role="msg-input"]')) return;
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
 
@@ -4845,7 +4655,16 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    说明：双击任意表情包即可唤起底部悬浮多选栏，并默认选中当前表情包。
    ========================================================================== */
 function handleDoubleClick(e, state, container) {
-  if (state.subPageView === 'favorite') return;
+  if (state.subPageView === 'favorite') {
+    const target = e.target.closest('[data-favorite-id]');
+    if (!target) return;
+    const favoriteId = String(target.dataset.favoriteId || '').trim();
+    if (!favoriteId) return;
+    state.favoriteMultiSelectMode = true;
+    state.selectedFavoriteIds = [favoriteId];
+    rerenderCurrentSubPage(container, state);
+    return;
+  }
 
   if (state.subPageView !== 'sticker') return;
   if (state.stickerPreviewClickTimer) {
