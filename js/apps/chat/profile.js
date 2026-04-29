@@ -8,8 +8,9 @@
  * 架构层: 应用层（闲谈子模块）
  */
 
-/* ==========================================================================
-
+/* ========================================================================== */
+/*   [区域标注] 子模块导入                                                    */
+/* ========================================================================== */
 import {
   TAB_ICONS,
   ICON_CHECK,
@@ -24,7 +25,9 @@ import {
 } from './chat-utils.js';
 import { chat } from './prompt.js';
 import { showFavoriteSavedModal } from './chat-message.js';
-   [区域标注] IconPark 图标 SVG 定义
+
+/* ========================================================================== */
+/*   [区域标注] IconPark 图标 SVG 定义                                        */
 /* ========================================================================== */
 const ICONS = {
   /* [区域标注] 好友数量卡片图标（IconPark — People / 用户群组） */
@@ -40,16 +43,17 @@ const ICONS = {
   /* [区域标注] 表情包折叠栏图标（IconPark — EmotionHappy / 笑脸） */
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3"/><path d="M16 28c2 4 6 6 8 6s6-2 8-6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="19" r="2" fill="currentColor"/><circle cx="31" cy="19" r="2" fill="currentColor"/></svg>`,
   /* [区域标注] 折叠栏右侧箭头图标（IconPark — ChevronRight） */
-  chevronRight: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  chevronRight: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* ==========================================================================
+     [区域标注·已完成·收藏多选底栏] IconPark 图标：分组 / 移动 / 全选 / 删除 / 取消
+     说明：用于收藏独立页多选模式悬浮底栏按钮。
+     ========================================================================== */
+  folderPlus: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h14l4 4h18v24H6V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M24 24v10M19 29h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  transfer: `<svg viewBox="0 0 48 48" fill="none"><path d="M42 19H6m28-8l8 8-8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 29h36M14 37l-8-8 8-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  checkOne: `<svg viewBox="0 0 48 48" fill="none"><rect x="6" y="6" width="36" height="36" rx="4" stroke="currentColor" stroke-width="3"/><path d="M15 24l6 6 12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  deleteIcon: `<svg viewBox="0 0 48 48" fill="none"><path d="M9 10h30M18 10V8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M12 14v26a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2V14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  closeSmall: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
-
-/* ==========================================================================
-   [区域标注] 工具函数
-/* ========================================================================== */
-function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
-}
 
 /* ==========================================================================
    [区域标注] 渲染用户主页 HTML
@@ -65,7 +69,7 @@ function escapeHtml(text) {
      - [修改4] 身份数量卡片可点击切换面具
      - [修改4] 聊天天数卡片可点击查看详情
      - [修改6] 显示当前激活面具的头像和个性签名
-/* ========================================================================== */
+   ========================================================================== */
 export function renderProfile(userProfile) {
   const p = userProfile || {};
   const nickname    = p.nickname || '我的昵称';
@@ -626,15 +630,22 @@ export function getFavoriteGroupsWithAll(state) {
 
 
 export function getVisibleFavoriteItems(state) {
+  /* ========================================================================
+     [区域标注·本次修复1-已完成] 收藏独立页容错过滤（修复历史脏数据导致空白）
+     说明：
+     1. 只保留结构合法的收藏卡片对象，避免 item/messages 为空时报错导致页面空白。
+     2. 不改变持久化结构，仅渲染层做防御处理，修改范围限定在收藏独立页。
+     ======================================================================== */
   const data = normalizeFavoriteData(state.favoriteData);
   const keyword = String(data.searchKeyword || '').trim().toLowerCase();
-  let items = data.items.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all'));
+  const safeItems = Array.isArray(data.items) ? data.items.filter(item => item && typeof item === 'object') : [];
+  let items = safeItems.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all'));
   if (keyword) items = items.filter(item => String(item.name || '').toLowerCase().includes(keyword));
   return [...items].sort((a, b) => {
     if (data.sortMode === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
     if (data.sortMode === 'messageTime') {
-      const ta = Math.max(...(a.messages || []).map(message => Number(message.timestamp || 0)), 0);
-      const tb = Math.max(...(b.messages || []).map(message => Number(message.timestamp || 0)), 0);
+      const ta = Math.max(...(Array.isArray(a.messages) ? a.messages : []).map(message => Number(message?.timestamp || 0)), 0);
+      const tb = Math.max(...(Array.isArray(b.messages) ? b.messages : []).map(message => Number(message?.timestamp || 0)), 0);
       return tb - ta;
     }
     return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
@@ -857,29 +868,39 @@ export function renderFavoriteSubPage(state) {
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
   const cardsHtml = items.length ? items.map(item => {
+    /* [区域标注·本次修复1-已完成] 收藏卡片渲染兜底：messages 统一安全数组，避免空白页 */
+    const safeMessages = Array.isArray(item.messages) ? item.messages.filter(message => message && typeof message === 'object') : [];
     const sub = data.subGroups.find(group => String(group.id) === String(item.subGroupId));
-    const preview = item.messages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');
+    const preview = safeMessages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');
     return `
-      <!-- [区域标注·已完成·收藏卡片] ${escapeHtml(item.name)} -->
+      <!-- [区域标注·已完成·收藏卡片（本次已修复空白问题）] ${escapeHtml(item.name || '未命名收藏')} -->
       <button class="favorite-card ${selectedSet.has(String(item.id)) ? 'is-selected' : ''}"
               data-action="${state.favoriteMultiSelectMode ? 'toggle-favorite-item' : 'open-favorite-preview'}"
               data-favorite-id="${escapeHtml(item.id)}"
+              ${!state.favoriteMultiSelectMode ? 'data-long-press-action="favorite-card-select"' : ''}
               type="button">
         ${state.favoriteMultiSelectMode ? `<span class="favorite-card__check">${selectedSet.has(String(item.id)) ? ICON_CHECK : ''}</span>` : ''}
         <div class="favorite-card__title">${escapeHtml(item.name || '未命名收藏')}</div>
-        <div class="favorite-card__meta">${item.messages.length > 1 ? '消息组' : '单条消息'}${sub ? ` · ${escapeHtml(sub.name)}` : ''}</div>
+        <div class="favorite-card__meta">${safeMessages.length > 1 ? '消息组' : '单条消息'}${sub ? ` · ${escapeHtml(sub.name)}` : ''}</div>
         <div class="favorite-card__preview">${escapeHtml(preview)}</div>
       </button>
     `;
   }).join('') : `<div class="favorite-empty">当前分组暂无收藏<br>可在聊天气泡功能栏点击“收藏”添加</div>`;
 
+  /* ==========================================================================
+     [区域标注·已完成·收藏多选底栏] 收藏多选模式悬浮操作栏
+     说明：长按收藏卡片进入多选模式后显示。
+           包含"分组"（新建子分组）、"移动"（移至已有大分组）、"全选"、"删除"按钮。
+           按钮图标统一使用 IconPark 图标。
+     ========================================================================== */
   const multiBar = state.favoriteMultiSelectMode ? `
     <div class="sticker-multi-action-bar">
-      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-cancel" type="button">${TAB_ICONS.close}<span>取消</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-cancel" type="button">${ICONS.closeSmall}<span>取消</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-group" type="button" ${selectedSet.size ? '' : 'disabled'}>${ICONS.folderPlus}<span>分组</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-move" type="button" ${selectedSet.size ? '' : 'disabled'}>${ICONS.transfer}<span>移动</span></button>
       <span class="sticker-multi-action-bar__count">已选 ${selectedSet.size} 个</span>
-      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-group" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.plus}<span>分组</span></button>
-      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-select-all" type="button">${allVisibleSelected ? ICON_CHECK : TAB_ICONS.plus}<span>${allVisibleSelected ? '取消全选' : '全选'}</span></button>
-      <button class="sticker-multi-action-bar__btn sticker-multi-action-bar__btn--danger" data-action="favorite-multi-delete" type="button" ${selectedSet.size ? '' : 'disabled'}>${TAB_ICONS.close}<span>删除</span></button>
+      <button class="sticker-multi-action-bar__btn" data-action="favorite-multi-select-all" type="button">${allVisibleSelected ? ICON_CHECK : ICONS.checkOne}<span>${allVisibleSelected ? '取消全选' : '全选'}</span></button>
+      <button class="sticker-multi-action-bar__btn sticker-multi-action-bar__btn--danger" data-action="favorite-multi-delete" type="button" ${selectedSet.size ? '' : 'disabled'}>${ICONS.deleteIcon}<span>删除</span></button>
     </div>
   ` : '';
 
@@ -931,7 +952,15 @@ export async function importStickerTextToCurrentGroup(container, state, db, text
   };
   await persistStickerData(state, db);
   closeModal(container);
-  rerenderCurrentSubPage(container, state);
+
+  /* ========================================================================
+     [区域标注·本次修复2-已完成] 表情包导入后页面刷新修复（避免未定义函数导致后续页面异常）
+     说明：profile.js 内不直接调用 index.js 私有函数，改为就地刷新子页面容器。
+     ======================================================================== */
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  if (msgWrap && state.subPageView === 'sticker') {
+    msgWrap.innerHTML = renderStickerSubPage(state);
+  }
 }
 
 
@@ -1036,4 +1065,108 @@ export function extractStickerNameFromUrl(url) {
   } catch {
     return '表情包';
   }
+}
+
+
+/* ==========================================================================
+   [区域标注·已完成·收藏卡片长按进入多选] 长按收藏卡片进入多选模式
+   说明：
+   1. 长按 650ms 后进入多选模式，默认选中当前卡片。
+   2. 替代原双击触发方式，与通讯录/表情包分组长按模式保持一致。
+   ========================================================================== */
+export function createFavoriteCardLongPressHandlers(state, container) {
+  let timer = null;
+  let pressedTarget = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedTarget = null;
+  };
+
+  const enterMultiSelect = () => {
+    const target = pressedTarget;
+    if (!target) return;
+    const favoriteId = String(target.dataset.favoriteId || '').trim();
+    if (!favoriteId) return;
+
+    /* 阻止后续 click 事件触发预览弹窗 */
+    target.dataset.longPressTriggered = '1';
+    const originalAction = target.dataset.action;
+    target.dataset.action = '';
+    setTimeout(() => {
+      delete target.dataset.longPressTriggered;
+      if (target.dataset.action === '') target.dataset.action = originalAction;
+    }, 300);
+
+    state.favoriteMultiSelectMode = true;
+    state.selectedFavoriteIds = [favoriteId];
+
+    /* 重新渲染当前子页面 */
+    const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+    if (msgWrap && state.subPageView === 'favorite') {
+      msgWrap.innerHTML = renderFavoriteSubPage(state);
+    }
+    clearTimer();
+  };
+
+  return {
+    pointerdown(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const target = e.target.closest('[data-long-press-action="favorite-card-select"]');
+      if (!target) return;
+      clearTimer();
+      pressedTarget = target;
+      timer = window.setTimeout(enterMultiSelect, 650);
+    },
+    pointerup: clearTimer,
+    pointercancel: clearTimer,
+    pointerleave: clearTimer,
+    contextmenu(e) {
+      if (e.target.closest('[data-long-press-action="favorite-card-select"]')) {
+        e.preventDefault();
+      }
+    }
+  };
+}
+
+
+/* ==========================================================================
+   [区域标注·已完成·收藏移动弹窗] 移动收藏卡片到已有大分组
+   说明：
+   1. 弹窗列出所有已有的大分组（含 All）。
+   2. 用户选择后将选中卡片的 groupId 修改为目标分组。
+   3. 使用应用内自定义弹窗，不使用原生浏览器弹窗。
+   ========================================================================== */
+export function showMoveFavoriteToGroupModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const groups = getFavoriteGroupsWithAll(state);
+  const selectedCount = (state.selectedFavoriteIds || []).length;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·收藏移动弹窗] 选择目标分组弹窗 -->
+    <div class="chat-modal-header">
+      <span>移动到分组</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">将已选的 ${selectedCount} 个收藏移动到：</div>
+      ${groups.map(group => `
+        <button class="chat-contact-group-choice"
+                data-action="confirm-move-favorite-to-group"
+                data-favorite-target-group-id="${escapeHtml(group.id)}"
+                type="button">
+          <span>${escapeHtml(group.name)}</span>
+          <i>${ICONS.chevronRight}</i>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }

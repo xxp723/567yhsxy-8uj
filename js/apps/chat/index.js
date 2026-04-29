@@ -100,6 +100,8 @@ import {
   showFavoriteFilterModal,
   showFavoritePreviewModal,
   createFavoriteGroupLongPressHandlers,
+  createFavoriteCardLongPressHandlers,
+  showMoveFavoriteToGroupModal,
   importStickerTextToCurrentGroup,
   readDocxText
 } from './profile.js';
@@ -227,6 +229,11 @@ export async function mount(container, context) {
   const stickerGroupLongPressHandlers = createStickerGroupLongPressHandlers(state, container);
   /* [区域标注·已完成·收藏分组长按删除] 应用内确认弹窗，不使用原生 confirm */
   const favoriteGroupLongPressHandlers = createFavoriteGroupLongPressHandlers(state, container);
+  /* ==========================================================================
+     [区域标注·已完成·收藏卡片长按进入多选] 长按收藏卡片进入多选模式
+     说明：替代原双击触发方式，长按 650ms 进入多选并默认选中当前卡片。
+     ========================================================================== */
+  const favoriteCardLongPressHandlers = createFavoriteCardLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', clickHandler);
@@ -249,6 +256,11 @@ export async function mount(container, context) {
   container.addEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
   container.addEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
   container.addEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+  container.addEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+  container.addEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+  container.addEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+  container.addEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+  container.addEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
   container.addEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
   container.addEventListener('pointerup', chatListLongPressHandlers.pointerup);
   container.addEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -316,6 +328,11 @@ export async function mount(container, context) {
       container.removeEventListener('pointercancel', favoriteGroupLongPressHandlers.pointercancel);
       container.removeEventListener('pointerleave', favoriteGroupLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', favoriteGroupLongPressHandlers.contextmenu);
+      container.removeEventListener('pointerdown', favoriteCardLongPressHandlers.pointerdown);
+      container.removeEventListener('pointerup', favoriteCardLongPressHandlers.pointerup);
+      container.removeEventListener('pointercancel', favoriteCardLongPressHandlers.pointercancel);
+      container.removeEventListener('pointerleave', favoriteCardLongPressHandlers.pointerleave);
+      container.removeEventListener('contextmenu', favoriteCardLongPressHandlers.contextmenu);
       container.removeEventListener('pointerdown', chatListLongPressHandlers.pointerdown);
       container.removeEventListener('pointerup', chatListLongPressHandlers.pointerup);
       container.removeEventListener('pointercancel', chatListLongPressHandlers.pointercancel);
@@ -1365,6 +1382,40 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if ((state.selectedFavoriteIds || []).length) showCreateFavoriteSubGroupModal(container);
       break;
 
+    /* ==========================================================================
+       [区域标注·已完成·收藏移动] 多选模式 — 打开"移动到分组"弹窗
+       说明：选中收藏卡片后点击"移动"按钮，弹窗列出所有已有大分组供选择。
+       ========================================================================== */
+    case 'favorite-multi-move':
+      if ((state.selectedFavoriteIds || []).length) showMoveFavoriteToGroupModal(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·已完成·收藏移动确认] 确认将选中收藏卡片移动到目标大分组
+       说明：修改选中卡片的 groupId 为目标分组，清除 subGroupId，退出多选模式。
+       ========================================================================== */
+    case 'confirm-move-favorite-to-group': {
+      const targetGroupId = target.dataset.favoriteTargetGroupId || 'all';
+      const selected = new Set((state.selectedFavoriteIds || []).map(String));
+      if (!selected.size) break;
+      const data = normalizeFavoriteData(state.favoriteData);
+      const now = Date.now();
+      state.favoriteData = {
+        ...data,
+        items: data.items.map(item =>
+          selected.has(String(item.id))
+            ? { ...item, groupId: targetGroupId, subGroupId: '', updatedAt: now }
+            : item
+        )
+      };
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await persistFavoriteData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
     case 'confirm-create-favorite-sub-group': {
       const input = container.querySelector('[data-role="favorite-sub-group-name-input"]');
       const name = String(input?.value || '').trim();
@@ -1904,6 +1955,30 @@ async function handleChange(e, state, container, db) {
    ========================================================================== */
 async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
+
+  /* ==========================================================================
+     [区域标注·本次修复2-已完成] 收藏独立页搜索框：长按删除键一次性清空
+     说明：
+     1. 仅作用于收藏独立页搜索输入框 data-role="favorite-search-input"。
+     2. 当用户长按 Backspace/Delete 触发重复 keydown（e.repeat）时，直接清空整段关键词。
+     3. 清空后立即写入 DB.js（IndexedDB）并重渲染收藏子页面。
+     ========================================================================== */
+  if (target?.matches?.('[data-role="favorite-search-input"]')) {
+    const isDeleteKey = e.key === 'Backspace' || e.key === 'Delete';
+    if (!isDeleteKey) return;
+    if (!e.repeat) return; // 仅在“长按触发重复按键”时一次性清空
+
+    e.preventDefault();
+    const data = normalizeFavoriteData(state.favoriteData);
+    if (!String(data.searchKeyword || '')) return;
+
+    state.favoriteData = { ...data, searchKeyword: '' };
+    target.value = '';
+    await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
+    rerenderCurrentSubPage(container, state);
+    return;
+  }
+
   if (!target?.matches?.('[data-role="msg-input"]')) return;
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
 
@@ -1919,18 +1994,12 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    [区域标注·本次需求2] 表情包独立页双击进入多选删除
    说明：双击任意表情包即可唤起底部悬浮多选栏，并默认选中当前表情包。
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·收藏长按替代双击] 收藏页双击逻辑已移除
+   说明：收藏卡片进入多选模式改为长按触发（见 createFavoriteCardLongPressHandlers）。
+         此处仅保留表情包独立页的双击进入多选删除逻辑。
+   ========================================================================== */
 function handleDoubleClick(e, state, container) {
-  if (state.subPageView === 'favorite') {
-    const target = e.target.closest('[data-favorite-id]');
-    if (!target) return;
-    const favoriteId = String(target.dataset.favoriteId || '').trim();
-    if (!favoriteId) return;
-    state.favoriteMultiSelectMode = true;
-    state.selectedFavoriteIds = [favoriteId];
-    rerenderCurrentSubPage(container, state);
-    return;
-  }
-
   if (state.subPageView !== 'sticker') return;
   if (state.stickerPreviewClickTimer) {
     window.clearTimeout(state.stickerPreviewClickTimer);
