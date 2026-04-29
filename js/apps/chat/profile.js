@@ -790,6 +790,17 @@ export function showFavoritePreviewModal(container, state, itemId) {
   const panel = container.querySelector('[data-role="modal-panel"]');
   const item = normalizeFavoriteData(state.favoriteData).items.find(entry => String(entry.id) === String(itemId));
   if (!mask || !panel || !item) return;
+
+  /* ==========================================================================
+     [区域标注·本次修复2-已完成] 收藏预览消息头角色名显示
+     说明：
+     1. 原先固定显示“AI”，在多角色收藏场景下无法区分来源角色。
+     2. 现在优先根据 sourceChatId 匹配当前面具下会话名称，作为 AI 消息头展示名。
+     3. 用户消息仍显示“我”；其余消息无匹配时兜底显示“AI”。
+     ========================================================================== */
+  const sourceSession = (state.sessions || []).find(session => String(session.id) === String(item.sourceChatId || ''));
+  const sourceRoleName = String(sourceSession?.name || '').trim() || 'AI';
+
   panel.innerHTML = `
     <!-- [区域标注·已完成·收藏组展开] 单条/多条收藏卡片预览弹窗 -->
     <div class="chat-modal-header">
@@ -799,7 +810,7 @@ export function showFavoritePreviewModal(container, state, itemId) {
     <div class="chat-modal-body">
       ${item.messages.map(message => `
         <div class="favorite-preview-message">
-          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : 'AI'} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
+          <span class="favorite-preview-message__role">${message.role === 'user' ? '我' : escapeHtml(sourceRoleName)} · ${new Date(message.timestamp || item.createdAt).toLocaleString()}</span>
           ${escapeHtml(message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content)}
         </div>
       `).join('')}

@@ -1047,16 +1047,25 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·已完成·聊天消息收藏] 气泡收藏入口：进入多选收藏态并默认选中当前消息
+       [区域标注·本次修复3-已完成] 气泡收藏入口：单条消息直接收藏并局部刷新，避免闪屏
+       说明：
+       1. 点击“收藏”后直接把当前气泡收藏到当前面具的收藏数据。
+       2. 不再切入多选模式，不触发整页 renderCurrentChatMessage 重绘。
+       3. 收藏完成后仅局部刷新当前气泡行状态，保持界面稳定。
        ========================================================================== */
     case 'msg-bubble-favorite': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (!messageId) break;
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (!message) break;
+
+      await addMessagesToFavorites(container, state, db, [message]);
+
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
-      state.multiSelectMode = true;
-      state.selectedMessageIds = [messageId];
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       break;
     }
 
@@ -1996,21 +2005,25 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
 
   /* ==========================================================================
-     [区域标注·本次修复2-已完成] 收藏独立页搜索框：长按删除键一次性清空
+     [区域标注·本次修复1-已完成] 收藏独立页搜索框：长按删除键一次性清空
      说明：
      1. 仅作用于收藏独立页搜索输入框 data-role="favorite-search-input"。
-     2. 当用户长按 Backspace/Delete 触发重复 keydown（e.repeat）时，直接清空整段关键词。
+     2. 当 Backspace/Delete 进入长按重复阶段（e.repeat）时，直接清空整段关键词。
      3. 清空后立即写入 DB.js（IndexedDB）并重渲染收藏子页面。
      ========================================================================== */
   if (target?.matches?.('[data-role="favorite-search-input"]')) {
     const isDeleteKey = e.key === 'Backspace' || e.key === 'Delete';
     if (!isDeleteKey) return;
-    if (!e.repeat) return; // 仅在“长按触发重复按键”时一次性清空
+
+    const data = normalizeFavoriteData(state.favoriteData);
+    const hasKeyword = Boolean(String(data.searchKeyword || ''));
+    if (!hasKeyword) return;
+
+    const inputValue = String(target.value || '');
+    const isLikelyContinuousDelete = e.repeat || inputValue.length <= 1;
+    if (!isLikelyContinuousDelete) return;
 
     e.preventDefault();
-    const data = normalizeFavoriteData(state.favoriteData);
-    if (!String(data.searchKeyword || '')) return;
-
     state.favoriteData = { ...data, searchKeyword: '' };
     target.value = '';
     await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), normalizeFavoriteData(state.favoriteData));
