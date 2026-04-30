@@ -379,10 +379,17 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           </div>
         </section>
         <!-- ===== 闲谈应用：时间感知设置 END ===== -->
+        <!-- ==================================================================
+             [区域标注·已同步静默审查] 自定义思维链设置
+             说明：
+             1. 本区域已同步 prompt.js 的默认静默审查方案。
+             2. 自定义内容应要求 AI 后台自检，禁止显式输出 <think>...</think>。
+             3. 这里只修改设置提示文案，不改 IndexedDB 持久化逻辑。
+             ========================================================================== -->
         <section class="msg-settings-card">
           <div class="msg-settings-card__title">自定义思维链</div>
-          <div class="msg-settings-card__desc">留空时使用默认思维链；回复里的 think 内容会在聊天界面隐藏。</div>
-          <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【回复格式】先输出<think>...</think>，再输出最终回复。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
+          <div class="msg-settings-card__desc">留空时使用默认静默审查协议；自定义内容也应要求 AI 后台自检，最终回复禁止输出 think 标签、审查过程或幕后说明。</div>
+          <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【静默审查】输出前先在后台核对角色卡事实、已知细节、情感事实和消息格式；最终只输出符合通用消息协议的可见回复，禁止输出 <think>、审查步骤或幕后说明。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
         </section>
 
         <!-- ==================================================================
