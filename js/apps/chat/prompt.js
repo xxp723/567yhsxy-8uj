@@ -1240,7 +1240,7 @@ export function getChatHistory({ history = [], includeTimestamps = false } = {})
             : String(item.content || '');
           return {
             role: item.role,
-            /* [区域标注·已完成·AI识图历史媒体] 历史 user 表情包/图片保留视觉输入，供 AI 看见上下文中的图片。 */
+            /* [区域标注·AI识图历史媒体] 历史 user 表情包/图片保留视觉输入，供 AI 看见上下文中的图片。 */
             content: createVisionMessageContent(item, textContent)
           };
         })
