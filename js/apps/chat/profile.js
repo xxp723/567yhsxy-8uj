@@ -59,7 +59,9 @@ const ICONS = {
      ======================================================================== */
   walletCard: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 14h36v24a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M10 14V8h24v6" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M30 26h12v8H30a4 4 0 0 1 0-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   exchange: `<svg viewBox="0 0 48 48" fill="none"><path d="M7 16h28" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 8l8 8l-8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M41 32H13" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 24l-8 8l8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  recharge: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M24 15v18M15 24h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  recharge: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M24 15v18M15 24h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·本次钱包流水需求] IconPark — 钱包流水图标 */
+  ledger: `<svg viewBox="0 0 48 48" fill="none"><rect x="8" y="6" width="32" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M16 16h16M16 24h16M16 32h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -331,13 +333,32 @@ export function formatWalletMoney(value, currencyCode) {
 export function renderWalletSubPage(state) {
   const walletData = state.walletData || {};
   const { currency, value } = getWalletDisplayAmount(walletData);
+
+  /* ==========================================================================
+     [区域标注·已完成·本次钱包流水需求] 钱包实时流水展示数据
+     说明：
+     1. 钱包流水来自 walletData.ledger（已由 chat-utils.js 规范化）。
+     2. 以当前显示币种实时换算显示金额，支出为负，收入为正。
+     3. 仅展示最近 30 条，避免页面过长。
+     ========================================================================== */
   const rates = walletData.rates && typeof walletData.rates === 'object' ? walletData.rates : {};
-  const rateItems = [
-    { code: 'USD', label: '美元', rate: Number(rates.USD || 0) || 0 },
-    { code: 'JPY', label: '日元', rate: Number(rates.JPY || 0) || 0 },
-    { code: 'KRW', label: '韩元', rate: Number(rates.KRW || 0) || 0 },
-    { code: 'EUR', label: '欧元', rate: Number(rates.EUR || 0) || 0 }
-  ];
+  const displayRate = currency.code === 'CNY' ? 1 : Math.max(0, Number(rates[currency.code] || 0) || 0);
+  const safeDisplayRate = displayRate > 0 ? displayRate : 1;
+  const ledgerItems = (Array.isArray(walletData.ledger) ? walletData.ledger : [])
+    .slice(0, 30)
+    .map(item => {
+      const direction = String(item?.direction || '').trim() === 'out' ? 'out' : 'in';
+      const baseAmount = Math.max(0, Number(item?.amountBaseCny || 0) || 0);
+      const displayAmount = baseAmount * safeDisplayRate;
+      const sign = direction === 'out' ? '-' : '+';
+      return {
+        id: String(item?.id || ''),
+        title: String(item?.title || (direction === 'out' ? '支出' : '收入')),
+        direction,
+        amountText: `${sign}${formatWalletMoney(displayAmount, currency.code)}`,
+        timeText: new Date(Number(item?.timestamp || Date.now())).toLocaleString()
+      };
+    });
 
   return `
     <div class="chat-sub-page wallet-sub-page">
@@ -370,17 +391,36 @@ export function renderWalletSubPage(state) {
             </div>
             <button class="wallet-rate-card__action" data-action="open-wallet-currency-modal" type="button">切换并保存</button>
           </div>
-          <div class="wallet-rate-card__list">
-            <div class="wallet-rate-card__item ${currency.code === 'CNY' ? 'is-active' : ''}">
-              <span>人民币</span>
-              <strong>1 CNY</strong>
-            </div>
-            ${rateItems.map(item => `
-              <div class="wallet-rate-card__item ${currency.code === item.code ? 'is-active' : ''}">
-                <span>${escapeHtml(item.label)}</span>
-                <strong>1 CNY ≈ ${escapeHtml(String(item.rate))} ${escapeHtml(item.code)}</strong>
+        </section>
+
+        <!-- ==========================================================================
+             [区域标注·已完成·本次钱包流水需求] 钱包实时流水板块（位于实时汇率下方）
+             说明：
+             1. 实时展示钱包发出与收到的资金流水。
+             2. 已移除实时汇率卡片中重复的五行换算陈列。
+             ========================================================================== -->
+        <section class="wallet-ledger-card">
+          <div class="wallet-ledger-card__head">
+            <div class="wallet-rate-card__title-wrap">
+              <span class="wallet-rate-card__icon">${ICONS.ledger}</span>
+              <div>
+                <strong class="wallet-rate-card__title">钱包实时流水</strong>
+                <p class="wallet-rate-card__desc">按当前显示币种 ${escapeHtml(currency.code)} 实时换算展示最近收支记录。</p>
               </div>
-            `).join('')}
+            </div>
+          </div>
+          <div class="wallet-ledger-card__list">
+            ${ledgerItems.length ? ledgerItems.map(item => `
+              <div class="wallet-ledger-item">
+                <div class="wallet-ledger-item__main">
+                  <span class="wallet-ledger-item__title">${escapeHtml(item.title)}</span>
+                  <strong class="wallet-ledger-item__amount ${item.direction === 'out' ? 'is-out' : 'is-in'}">${escapeHtml(item.amountText)}</strong>
+                </div>
+                <span class="wallet-ledger-item__time">${escapeHtml(item.timeText)}</span>
+              </div>
+            `).join('') : `
+              <div class="wallet-ledger-empty">暂无流水记录</div>
+            `}
           </div>
         </section>
       </div>

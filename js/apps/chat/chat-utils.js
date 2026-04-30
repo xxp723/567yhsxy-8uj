@@ -223,11 +223,12 @@ export function normalizeStickerData(rawData) {
          此区域已完成，后续修改收藏数据结构可直接从这里开始。
    ========================================================================== */
 /* ==========================================================================
-   [区域标注·已完成·本次钱包需求] 钱包数据规范化
+   [区域标注·已完成·本次钱包需求] 钱包数据规范化（已更新：支持钱包实时流水）
    说明：
    1. balanceBaseCny 始终保存为人民币基础余额。
    2. displayCurrency 只控制钱包页面显示的货币单位与换算结果。
    3. rates 表示 1 CNY 可兑换的目标币种数量；CNY 固定为 1。
+   4. ledger 为钱包实时流水，仅通过 DB.js / IndexedDB 持久化，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function normalizeWalletData(rawData) {
   const source = rawData && typeof rawData === 'object' ? rawData : {};
@@ -238,6 +239,26 @@ export function normalizeWalletData(rawData) {
   const displayCurrency = ['CNY', 'USD', 'JPY', 'KRW', 'EUR'].includes(String(source.displayCurrency || 'CNY'))
     ? String(source.displayCurrency || 'CNY')
     : 'CNY';
+  const rawLedger = Array.isArray(source.ledger) ? source.ledger : [];
+  const ledger = rawLedger
+    .map(item => {
+      const kind = String(item?.kind || '').trim();
+      const title = String(item?.title || '').trim();
+      const amountBaseCny = Math.max(0, safeNumber(item?.amountBaseCny, 0));
+      const direction = String(item?.direction || '').trim() === 'out' ? 'out' : 'in';
+      const timestamp = Math.max(0, safeNumber(item?.timestamp, 0));
+      return {
+        id: String(item?.id || '').trim(),
+        kind: ['transfer', 'recharge'].includes(kind) ? kind : 'transfer',
+        direction,
+        title: title || (direction === 'out' ? '支出' : '收入'),
+        amountBaseCny,
+        timestamp
+      };
+    })
+    .filter(item => item.id && item.amountBaseCny > 0 && item.timestamp > 0)
+    .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
+    .slice(0, 200);
 
   return {
     balanceBaseCny: Math.max(0, safeNumber(source.balanceBaseCny, 0)),
@@ -249,6 +270,7 @@ export function normalizeWalletData(rawData) {
       KRW: Math.max(0, safeNumber(source?.rates?.KRW, 191)),
       EUR: Math.max(0, safeNumber(source?.rates?.EUR, 0.13))
     },
+    ledger,
     updatedAt: Math.max(0, safeNumber(source.updatedAt, Date.now()))
   };
 }

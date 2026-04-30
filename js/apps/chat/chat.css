@@ -2675,7 +2675,7 @@
    [区域标注·已完成·本次钱包需求] 钱包独立页样式
    说明：
    1. 仅作用于用户主页“钱包”子页面，不影响其它板块。
-   2. 余额卡片、充值按钮、实时汇率卡片与弹窗内币种选择统一沿用闲谈主题风格。
+   2. 余额卡片、充值按钮、实时汇率卡片、钱包实时流水与弹窗内币种选择统一沿用闲谈主题风格。
    3. 所有样式仅服务本次钱包改动区域，方便下次直接定位维护。
    ========================================================================== */
 .wallet-sub-page {
@@ -2890,6 +2890,101 @@
 .wallet-rate-card__item.is-active {
   background: rgba(74, 52, 42, 0.1);
   border-color: rgba(74, 52, 42, 0.14);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次钱包流水需求] 钱包实时流水卡片样式
+   说明：
+   1. 板块位于“实时汇率”下方，展示最近收支记录。
+   2. 收入与支出采用同主题差异色区分，并保持与现有卡片圆角/阴影一致。
+   ========================================================================== */
+.wallet-ledger-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(74, 52, 42, 0.06);
+}
+
+.wallet-ledger-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-ledger-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wallet-ledger-card__list::-webkit-scrollbar {
+  display: none;
+}
+
+.wallet-ledger-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.045);
+  border: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.wallet-ledger-item__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wallet-ledger-item__title {
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-ledger-item__amount {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.wallet-ledger-item__amount.is-in {
+  color: #2f8f57;
+}
+
+.wallet-ledger-item__amount.is-out {
+  color: #b45142;
+}
+
+.wallet-ledger-item__time {
+  font-size: 11px;
+  color: rgba(74, 52, 42, 0.45);
+}
+
+.wallet-ledger-empty {
+  padding: 18px 12px;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.045);
+  border: 1px dashed rgba(74, 52, 42, 0.12);
+  color: rgba(74, 52, 42, 0.5);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .wallet-currency-option-list {

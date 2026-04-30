@@ -997,6 +997,21 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.walletData = normalizeWalletData({
         ...state.walletData,
         balanceBaseCny: nextBaseCny,
+        /* ========================================================================
+           [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（用户转账支出）
+           说明：仅写入 walletData.ledger，并通过 persistWalletData 落盘到 IndexedDB。
+           ======================================================================== */
+        ledger: [
+          {
+            id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+            kind: 'transfer',
+            direction: 'out',
+            title: `转账给 ${String(session.name || '对方').trim() || '对方'}`,
+            amountBaseCny: Number(transferBaseCny.toFixed(2)),
+            timestamp: now
+          },
+          ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+        ],
         updatedAt: now
       });
 
@@ -1108,11 +1123,26 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
 
       if (transferDirection === 'incoming' && transferBaseCny > 0) {
-        state.walletData = normalizeWalletData({
-          ...state.walletData,
-          balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
-          updatedAt: now
-        });
+      state.walletData = normalizeWalletData({
+        ...state.walletData,
+        balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+        /* ========================================================================
+           [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（接收收入）
+           说明：仅在 incoming 转账被接收时记一条收入流水。
+           ======================================================================== */
+        ledger: [
+          {
+            id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+            kind: 'transfer',
+            direction: 'in',
+            title: `收到 ${String(transferMessage.transferCounterpartyName || '对方').trim() || '对方'} 转账`,
+            amountBaseCny: Number(transferBaseCny.toFixed(2)),
+            timestamp: now
+          },
+          ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+        ],
+        updatedAt: now
+      });
       }
 
       const session = state.sessions.find(s => s.id === state.currentChatId);
@@ -1167,6 +1197,21 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         state.walletData = normalizeWalletData({
           ...state.walletData,
           balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+          /* ========================================================================
+             [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（转账退回收入）
+             说明：用户发出的转账被退回时，钱包记一条收入流水。
+             ======================================================================== */
+          ledger: [
+            {
+              id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+              kind: 'transfer',
+              direction: 'in',
+              title: `${String(transferMessage.transferCounterpartyName || '对方').trim() || '对方'} 退回转账`,
+              amountBaseCny: Number(transferBaseCny.toFixed(2)),
+              timestamp: now
+            },
+            ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+          ],
           updatedAt: now
         });
 
@@ -1580,10 +1625,26 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         renderModalNotice(container, '请输入大于 0 的充值金额');
         break;
       }
+      const now = Date.now();
       state.walletData = normalizeWalletData({
         ...state.walletData,
         balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + amount,
-        updatedAt: Date.now()
+        /* ========================================================================
+           [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（充值收入）
+           说明：充值成功后写入一条收入流水。
+           ======================================================================== */
+        ledger: [
+          {
+            id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+            kind: 'recharge',
+            direction: 'in',
+            title: '钱包充值',
+            amountBaseCny: Number(amount.toFixed(2)),
+            timestamp: now
+          },
+          ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+        ],
+        updatedAt: now
       });
       await persistWalletData(state, db);
       closeModal(container);
