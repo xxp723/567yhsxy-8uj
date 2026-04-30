@@ -1332,7 +1332,20 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 END ===== */
-    getThinkingInstruction({ settings: normalizedSettings })
+    getThinkingInstruction({ settings: normalizedSettings }),
+    /* ========================================================================
+       [区域标注·已完成·角色卡事实重申锚] 提示词末尾角色卡优先级加固
+       说明：
+       1. 角色卡完整内容仍由 getCharacterCard(runtimeContext) 注入，本区只在 system prompt 末尾重申优先级。
+       2. 目的：避免后续格式规则、表情包规则、时间感知和静默审查协议稀释角色卡事实权重。
+       3. 这里不涉及任何持久化存储；不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    `【角色卡事实重申锚｜最高优先级】
+- 当前聊天对象的角色卡资料、角色卡硬事实摘要、角色卡短句事实摘录，优先级高于普通推测、常识补全、模板化剧情和临场发挥。
+- 如果用户询问角色过去经历、情感牵挂、身份关系等，必须先依据角色卡已有事实回答；角色卡已经写明的内容不得改写、否认、淡化或说“不记得”。
+- 禁止为了制造戏剧冲突而编造与角色卡相反的设定；禁止把角色卡中明确担忧、在意的人或事改成“不在意”“不担心”。
+- 对角色卡未写明的细节，可以保持角色口吻进行合理留白；但任何补充都不得覆盖或冲突角色卡已写明事实。
+- 输出最终回复前，必须静默核对：本轮回复是否违背角色卡事实；若违背，必须先改正再输出。`
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
 }
 

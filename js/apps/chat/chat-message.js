@@ -1799,7 +1799,6 @@ export function showTransferActionModal(container, options = {}) {
       <div class="chat-modal-notice">${escapeHtml(actionHint)}</div>
     </div>
     <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">关闭</button>
       ${canReturn ? `<button class="chat-modal-btn chat-modal-btn--secondary" data-action="msg-transfer-return" data-message-id="${escapeHtml(messageId)}" type="button">${MSG_ICONS.undo}<span>退回</span></button>` : ''}
       ${canAccept ? `<button class="chat-modal-btn chat-modal-btn--primary" data-action="msg-transfer-accept" data-message-id="${escapeHtml(messageId)}" type="button">${MSG_ICONS.check}<span>接收</span></button>` : ''}
     </div>
