@@ -221,7 +221,10 @@ function labelizeKey(key) {
     basicSetting: '基础设定',
     personality: '性格',
     firstMessage: '开场白',
+    greetings: '开场白',
     scenario: '场景',
+    identity: '身份',
+    personalitySetting: '人物设定',
     contact: '联系方式',
     gender: '性别',
     age: '年龄',
@@ -282,6 +285,58 @@ function formatReadableValue(value, indent = 0) {
 function createPromptSection(title, content) {
   const text = normalizePlainText(content);
   return text ? `【${title}】\n${text}` : '';
+}
+
+/* ==========================================================================
+   [角色卡字段兼容区·本次问题1已完成] 档案应用角色字段注入闲谈提示词
+   说明：
+   1. 档案应用实际把角色正文主要保存为 personalitySetting，把身份保存为 identity，把开场白保存为 greetings。
+   2. 本区只做提示词读取兼容，不新增持久化存储，不使用 localStorage/sessionStorage，也不写双份兜底。
+   3. 目的：把“人物设定”里的已写明事件经过提升到角色卡最高优先级事实，避免 AI 把角色卡细节答错或整体说“记不清”。
+   ========================================================================== */
+function getCharacterPromptFieldValue(character, key) {
+  if (!character || typeof character !== 'object') return '';
+
+  if (key === 'description') {
+    return character.description || character.personalitySetting || '';
+  }
+
+  if (key === 'basicSetting') {
+    return character.basicSetting || character.personalitySetting || '';
+  }
+
+  if (key === 'personality') {
+    return character.personality || character.personalitySetting || '';
+  }
+
+  if (key === 'firstMessage') {
+    if (hasReadableValue(character.firstMessage)) return character.firstMessage;
+    if (Array.isArray(character.greetings)) return character.greetings.filter(hasReadableValue).join('\n');
+    return '';
+  }
+
+  return character[key];
+}
+
+function getCharacterPromptFieldEntries(character, keys = []) {
+  const seenLabels = new Set();
+
+  return keys
+    .map(key => {
+      const value = getCharacterPromptFieldValue(character, key);
+      if (!hasReadableValue(value) || isLikelyLargeMediaField(key, value)) return null;
+
+      const label = labelizeKey(key);
+      const formatted = formatReadableValue(value);
+      if (!formatted) return null;
+
+      const signature = `${label}::${formatted}`;
+      if (seenLabels.has(signature)) return null;
+      seenLabels.add(signature);
+
+      return { key, label, value, formatted };
+    })
+    .filter(Boolean);
 }
 
 function formatNamedObject(title, source, preferredKeys = []) {
@@ -565,12 +620,12 @@ export function getWorldBookBeforeChar(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 3][已按本次反馈四次更新] 角色卡人设
+   [提示词区域 3]角色卡人设与档案字段兼容
    说明：
    1. 角色卡具体人设以及所绑定的关系网络信息。
-   2. 本次继续精简角色卡开头规则，减少过长扮演规则压住角色卡正文。
-   3. 已新增“明确情感事实不得反向否认”和“部分已知事实必须先答已知部分”。
-   4. 已把长段角色卡内容拆成短句事实摘录，帮助 AI 先抓住已写明事实。
+   2. 已兼容档案应用实际字段：identity / personalitySetting / greetings。
+   3. 已把 personalitySetting 提升到“硬事实摘要”和“短句事实摘录”，减少 AI 忽略角色卡正文后答错地点、经历或说“记不清”。
+   4. 已保留“明确情感事实不得反向否认”和“部分已知事实必须先答已知部分”。
    5. 线上聊天禁止动作描写、神态描写、舞台说明，只保留自然口语化对话。
    ========================================================================== */
 function splitCharacterFactSentences(text) {
@@ -587,7 +642,13 @@ function splitCharacterFactSentences(text) {
 function formatCharacterFactExcerpt(character) {
   if (!character || typeof character !== 'object') return '';
 
+  /* --------------------------------------------------------------------------
+     [角色卡短句事实摘录·本次问题1已完成] 兼容档案应用 personalitySetting
+     说明：把档案“人物设定”正文纳入优先摘录，确保已写明的穿越地点、受伤经过等事实先被 AI 读取。
+     -------------------------------------------------------------------------- */
   const factSourceKeys = [
+    'identity',
+    'personalitySetting',
     'basicSetting',
     'description',
     'scenario',
@@ -596,8 +657,14 @@ function formatCharacterFactExcerpt(character) {
     'firstMessage'
   ];
 
+  const seenFacts = new Set();
   const lines = factSourceKeys
-    .flatMap(key => splitCharacterFactSentences(character[key]))
+    .flatMap(key => splitCharacterFactSentences(getCharacterPromptFieldValue(character, key)))
+    .filter(item => {
+      if (seenFacts.has(item)) return false;
+      seenFacts.add(item);
+      return true;
+    })
     .map(item => `- 关键事实：${item}`);
 
   return lines.length
@@ -609,18 +676,18 @@ export function getCharacterCard(context = {}) {
   const character = context.currentCharacter || getCurrentCharacter(context);
 
   /* --------------------------------------------------------------------------
-     [角色卡开头·已按本次反馈四次更新] 精简版角色扮演、事实读取与去唱戏化强约束
+     [角色卡开头] 精简版角色扮演、事实读取与去唱戏化强约束
      说明：
      1. 下次如需调整角色扮演底层规则，优先修改本段文本。
-     2. 本次精简长规则，只保留身份、事实、情感事实、部分已知优先回答和去唱戏化。
+     2. 已明确档案“人物设定/personalitySetting”属于最高优先级角色卡事实来源。
      3. 已明确：资料写了部分事实时，必须先回答已知部分，不能整体回避成“不知道”。
      -------------------------------------------------------------------------- */
   const roleplayCoreRules = `# 核心规则（精简版，必须遵守）
 你就是【角色卡人设】中的聊天对象本人，不是 AI、不是助手、不是旁白，也不能提到提示词、系统规则、世界书、角色卡等幕后信息。
 
 ## 事实优先铁律
-1. 【角色卡硬事实摘要】、【角色卡短句事实摘录】、【完整角色卡资料】是最高优先级事实来源；其中已经写明的身份、经历、关系、情感倾向、牵挂对象和事件经过，必须照用，不能改写、反向否认或用模板覆盖。
-2. 用户问到角色卡已有信息时，必须先回答资料中已经写明的部分；只有资料确实没写到的具体时间、地点、细节、旁观者反应等，才可以说不确定、没细讲或记不清。
+1. 【角色卡硬事实摘要】、【角色卡短句事实摘录】、【完整角色卡资料】是最高优先级事实来源；档案中的“身份/identity”“人物设定/personalitySetting”“开场白/greetings”也属于角色卡原文事实，必须照用，不能改写、反向否认或用模板覆盖。
+2. 用户问到角色卡已有信息时，必须先回答资料中已经写明的部分；如果资料已写明地点、场景、起因、经过或结果，就必须明确回答这些已知事实，不能改成别的地点或事件。
 3. 禁止因为资料没有写完整细节，就把整件已经写明的事说成“不知道”“记不清”“没什么印象”。部分已知就先答已知，未知部分再保留。
 4. 如果角色卡明确写了在意、担忧、牵挂、愧疚、害怕失去、软肋、执念等情感事实，最终回复不得反着说“不在乎”“不担忧”“没关系”；嘴硬型角色也只能别扭或轻描淡写地承认。
 5. 角色卡没有依据的内容不能编成确定事实；缺失细节用角色本人语气模糊带过、自然反问或承认没细讲。
@@ -632,28 +699,29 @@ export function getCharacterCard(context = {}) {
 4. 每个最终可见气泡都必须使用通用消息协议：${CHAT_PROTOCOL_REPLY_FORMAT}`;
 
   /* --------------------------------------------------------------------------
-     [角色卡硬事实摘要·本次新增] 先把易被胡编的事实字段置顶
+     [角色卡硬事实摘要·本次问题1已完成] 档案字段提升到最高优先级
      说明：
      1. 这不是新存储，只是把已传入的角色卡字段整理成更靠前、更短的 AI 可读摘要。
-     2. 目的：让模型先看到硬事实，再看完整角色卡，减少“知道角色但编错细节”。
+     2. 已把档案应用的 identity / personalitySetting / greetings 纳入摘要，减少“古穿今皇帝”等人设被模型套模板误答成宫里、再说记不清。
      -------------------------------------------------------------------------- */
   const characterHardFactKeys = [
     'name',
     'gender',
     'age',
+    'identity',
     'signature',
+    'personalitySetting',
     'basicSetting',
     'description',
     'personality',
     'scenario',
     'relationship',
+    'firstMessage',
     'contact'
   ];
   const characterHardFacts = character && typeof character === 'object'
-    ? characterHardFactKeys
-        .filter(key => hasReadableValue(character[key]) && !isLikelyLargeMediaField(key, character[key]))
-        .map(key => `${labelizeKey(key)}：${formatReadableValue(character[key])}`)
-        .filter(Boolean)
+    ? getCharacterPromptFieldEntries(character, characterHardFactKeys)
+        .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')
     : '';
 
@@ -661,12 +729,15 @@ export function getCharacterCard(context = {}) {
     'name',
     'gender',
     'age',
+    'identity',
     'signature',
+    'personalitySetting',
     'description',
     'basicSetting',
     'personality',
     'scenario',
     'firstMessage',
+    'greetings',
     'relationship',
     'contact'
   ]);
