@@ -67,6 +67,8 @@ import {
   sendMessage,
   persistCurrentMessages,
   repairAiMessageFormatIfPossible,
+  repairAiTextMessageFormatIfPossible,
+  repairAiQuoteMessageFormatIfPossible,
   sendStickerMessage,
   sendImageMessage,
   renderCurrentChatMessage,
@@ -81,13 +83,15 @@ import {
   renderMsgStickerPanelGrid,
   syncMountedStickerGroupButtons,
   showClearAllMessagesModal,
+  showAiFormatRepairTypeModal,
   showAiFormatRepairResultModal,
   showEditMessageModal,
   showForwardMessagesModal,
   showMessageImageModal,
   showMessageTransferModal,
   showTransferActionModal,
-  createQuotePayloadFromMessage
+  createQuotePayloadFromMessage,
+  syncPendingQuoteComposer
 } from './chat-message.js';
 import {
   renderProfile,
@@ -1386,20 +1390,45 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·本次修改3] 消息气泡功能栏 — 修正 AI 消息格式
-       说明：只修正 AI 消息中残缺的表情包格式，成功后原地替换并写入 DB.js / IndexedDB。
+       [区域标注·已完成·本次修正分类弹窗] 消息气泡工具栏 → 打开修正类别弹窗
+       说明：
+       1. 点击“修正”先打开应用内分类弹窗，不使用原生浏览器弹窗。
+       2. 弹窗按钮包括：表情包、文本、引用。
+       3. 真正写入仍只调用 persistCurrentMessages/dbPut → DB.js / IndexedDB。
        ========================================================================== */
     case 'msg-bubble-fix-format': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      showAiFormatRepairTypeModal(container, messageId);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·本次修正分类弹窗] 应用 AI 消息格式分类修复
+       说明：根据弹窗中选择的类别，仅修复当前 AI 消息对象；不使用 localStorage/sessionStorage。
+       ========================================================================== */
+    case 'apply-ai-format-repair': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const repairType = String(target.dataset.repairType || 'sticker');
       const messageIndex = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
       if (messageIndex < 0) break;
 
-      const repairedMessage = repairAiMessageFormatIfPossible(state.currentMessages[messageIndex], state);
+      const sourceMessage = state.currentMessages[messageIndex];
+      const repairedMessage = repairType === 'text'
+        ? repairAiTextMessageFormatIfPossible(sourceMessage, state)
+        : (repairType === 'quote'
+            ? repairAiQuoteMessageFormatIfPossible(sourceMessage, state)
+            : repairAiMessageFormatIfPossible(sourceMessage, state));
+
+      const repairLabel = repairType === 'text'
+        ? '文本'
+        : (repairType === 'quote' ? '引用' : '表情包');
+
       if (!repairedMessage) {
         showAiFormatRepairResultModal(container, {
           success: false,
           title: '无法修正',
-          message: '未识别到可匹配的已挂载表情包格式或关键词。请确认 AI 文本里包含表情包资源ID、完整表情名或明显表情关键词。'
+          message: `未识别到可修复的${repairLabel}掉格式内容。请确认这条 AI 消息中仍保留对应协议残片或可匹配内容。`
         });
         break;
       }
@@ -1416,7 +1445,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       showAiFormatRepairResultModal(container, {
         success: true,
         title: '修正完成',
-        message: `已将这条 AI 消息修正为表情包：“${repairedMessage.stickerName || '未命名表情包'}”。`
+        message: `已完成${repairLabel}格式修正，并保存到当前聊天记录。`
       });
       break;
     }
@@ -1431,11 +1460,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·引用回复] 消息气泡功能栏 — 引用回复
+       [区域标注·已完成·本次引用防闪屏修复] 消息气泡工具栏 → 引用回复
        说明：
-       1. 点击第二行“引用”按钮后，仅把引用对象暂存在运行时 state.pendingQuote。
-       2. 用户发送下一条消息时，quote 字段随消息对象写入 DB.js / IndexedDB。
-       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       1. 点击“引用”只局部同步底栏引用框和当前气泡工具栏，不再整页重绘，避免闪屏。
+       2. 用户发送后 sendMessage 会立即清空 state.pendingQuote 并移除底栏引用框。
+       3. quote 字段只随消息对象写入 DB.js / IndexedDB；不使用 localStorage/sessionStorage。
        ======================================================================== */
     case 'msg-bubble-quote': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
@@ -1443,18 +1472,32 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const session = state.sessions.find(item => String(item.id) === String(state.currentChatId)) || {};
       if (!message) break;
 
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
       state.pendingQuote = createQuotePayloadFromMessage(message, session, state.profile || {});
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
       state.coffeeDockOpen = false;
       state.stickerPanelOpen = false;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+
+      syncMessageDockOpenState(container, state);
+      if (!syncPendingQuoteComposer(container, state)) {
+        renderCurrentChatMessage(container, state, { keepScroll: true });
+      } else {
+        refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      }
       break;
     }
 
+    /* ========================================================================
+       [区域标注·已完成·本次引用防闪屏修复] 取消底栏引用回复
+       说明：只局部移除底栏引用框，不重绘整个聊天界面。
+       ======================================================================== */
     case 'cancel-msg-quote': {
       state.pendingQuote = null;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      if (!syncPendingQuoteComposer(container, state)) {
+        renderCurrentChatMessage(container, state, { keepScroll: true });
+      }
       break;
     }
 

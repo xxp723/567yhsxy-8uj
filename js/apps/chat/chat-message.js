@@ -60,7 +60,12 @@ const MSG_ICONS = {
      [区域标注·已完成·引用回复] IconPark — 引用按钮图标
      说明：用于消息气泡第二行“引用”按钮；引用数据随消息对象写入 DB.js / IndexedDB。
      ======================================================================== */
-  quote: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 10H8v12h10v16H8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 10H30v12h10v16H30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  quote: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 10H8v12h10v16H8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 10H30v12h10v16H30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·本次修正分类弹窗] IconPark — 文本修正按钮图标
+     说明：用于“修正”分类弹窗的文本格式修复；不涉及任何持久化存储读写。
+     ======================================================================== */
+  textRepair: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 10h32M14 10v28M34 10v28M10 38h12M26 38h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -806,6 +811,11 @@ export async function sendMessage(container, state, db, content, settingsManager
     };
     state.currentMessages.push(appendedUserMessage);
     state.pendingQuote = null;
+    /* ======================================================================
+       [区域标注·已完成·本次引用残留修复] 发送后立即移除底栏引用框
+       说明：只清理运行时 pendingQuote 与当前 DOM 引用预览；消息 quote 字段已随消息对象写入 IndexedDB。
+       ====================================================================== */
+    syncPendingQuoteComposer(container, state);
   }
   /* ===== 闲谈：发送消息去重 END ===== */
 
@@ -1075,6 +1085,55 @@ export function repairAiMessageFormatIfPossible(message, state) {
 
   const sticker = findLooseStickerTargetFromText(message.content, state);
   return sticker ? createStickerMessagePatchFromTarget(message, sticker) : null;
+}
+
+
+/* ==========================================================================
+   [区域标注·已完成·本次修正分类弹窗] 文本/引用掉格式修复工具
+   说明：
+   1. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
+   2. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
+   3. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
+   ========================================================================== */
+export function repairAiTextMessageFormatIfPossible(message) {
+  if (!message || message.role !== 'assistant') return null;
+  if (['sticker', 'image', 'transfer'].includes(String(message.type || ''))) return null;
+
+  const before = String(message.content || '');
+  const after = cleanAiVisibleBubbleText(before)
+    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*回复\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
+    .replace(/^\s*(?:回复|文字|文本)\s*[：:]\s*/i, '')
+    .replace(/(?:`|\*\*)+/g, '')
+    .trim();
+
+  if (!after || after === before.trim()) return null;
+  return {
+    ...message,
+    type: '',
+    content: after,
+    quote: message.quote || null
+  };
+}
+
+
+export function repairAiQuoteMessageFormatIfPossible(message, state) {
+  if (!message || message.role !== 'assistant') return null;
+  if (['sticker', 'image', 'transfer'].includes(String(message.type || ''))) return null;
+
+  const raw = String(message.content || '').trim();
+  const quoteMatch = raw.match(/(?:\[\s*引用\s*\]\s*[^：:\n`*]+?\s*[：:]\s*)?\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
+  if (!quoteMatch) return null;
+
+  const quotePayload = resolveAiQuotePayloadById(state, quoteMatch[1]);
+  const replyText = cleanAiVisibleBubbleText(quoteMatch[2]);
+  if (!quotePayload || !replyText) return null;
+
+  return {
+    ...message,
+    type: '',
+    content: replyText,
+    quote: quotePayload
+  };
 }
 
 
@@ -1794,6 +1853,12 @@ export function cleanAiVisibleBubbleText(text) {
   return String(text || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
+    /* ======================================================================
+       [区域标注·已完成·本次掉格式强约束] 清理裸露通用协议残片
+       说明：防止 AI 掉格式时把 [回复]/[表情]/[引用]、反引号、加粗残片原样显示为普通文本。
+       ====================================================================== */
+    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用)\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
+    .replace(/(?:`|\*\*)+/g, '')
     .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
     .split(/\n+/)
     .map(line => line.trim())
@@ -1895,6 +1960,37 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
 }
 
 /* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次引用防闪屏修复] 输入栏引用预览局部同步
+   说明：
+   1. 点击“引用”或“取消引用”时只更新底栏引用框，不再重绘整个聊天消息页。
+   2. 用户发送后会立即清除 DOM 中的引用框，避免 quote 已发送但底栏残留。
+   3. 仅使用运行时 state.pendingQuote；持久化仍只随消息对象 quote 字段写入 DB.js / IndexedDB。
+   ========================================================================== */
+export function syncPendingQuoteComposer(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const shell = msgWrap?.querySelector('.msg-input-shell');
+  if (!shell) return false;
+
+  shell.querySelector('[data-role="msg-pending-quote"]')?.remove();
+
+  const pendingQuoteHtml = renderQuotePreview(state.pendingQuote, 'composer');
+  shell.classList.toggle('has-pending-quote', Boolean(pendingQuoteHtml));
+  if (!pendingQuoteHtml) return true;
+
+  const inputBar = shell.querySelector('.msg-input-bar');
+  if (!inputBar) return false;
+
+  inputBar.insertAdjacentHTML('beforebegin', `
+    <div class="msg-pending-quote" data-role="msg-pending-quote">
+      ${pendingQuoteHtml}
+      <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
+    </div>
+  `);
+  return true;
+}
+
+
 export function updateCurrentChatSendingUi(container, state) {
   const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
   if (!msgWrap) return;
@@ -2135,13 +2231,55 @@ export function showClearAllMessagesModal(container, state) {
 }
 
 /* ========================================================================== */
+export function showAiFormatRepairTypeModal(container, messageId = '') {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const safeMessageId = String(messageId || '').trim();
+  if (!mask || !panel || !safeMessageId) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·本次修正分类弹窗] AI 消息格式修正类别选择 -->
+    <div class="chat-modal-header">
+      <span>选择修正类别</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">请选择要修复的掉格式类型。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
+      <div class="msg-format-repair-grid">
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="sticker" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.sticker}</span>
+          <strong>表情包</strong>
+          <em>修复表情包协议或关键词</em>
+        </button>
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="text" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.textRepair}</span>
+          <strong>文本</strong>
+          <em>清理裸露回复协议残片</em>
+        </button>
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="quote" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.quote}</span>
+          <strong>引用</strong>
+          <em>修复引用ID为引用气泡</em>
+        </button>
+      </div>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
+
+
 export function showAiFormatRepairResultModal(container, { success = false, title = '', message = '' } = {}) {
   const mask = container.querySelector('[data-role="modal-mask"]');
   const panel = container.querySelector('[data-role="modal-panel"]');
   if (!mask || !panel) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·本次修改3] AI 消息格式修正提示弹窗 -->
+    <!-- [区域标注·已完成·本次修正分类弹窗] AI 消息格式修正结果提示弹窗 -->
     <div class="chat-modal-header">
       <span>${escapeHtml(title || (success ? '修正完成' : '无法修正'))}</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -2165,7 +2303,7 @@ export function showEditMessageModal(container, state, messageId) {
   if (!mask || !panel || !message) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·气泡编辑弹窗] 编辑聊天气泡文字，不使用原生弹窗 -->
+    <!-- [区域标注·气泡编辑弹窗] 编辑聊天气泡文字，不使用原生弹窗 -->
     <div class="chat-modal-header">
       <span>编辑消息</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>

@@ -1690,3 +1690,66 @@
 .msg-page *::-webkit-scrollbar {
   display: none;
 }
+
+/* ==========================================================================
+   [区域标注·已完成·本次修正分类弹窗] AI 格式修正分类弹窗样式
+   说明：用于“表情包 / 文本 / 引用”修正按钮，延续闲谈应用暖色卡片风格；不涉及存储逻辑。
+   ========================================================================== */
+.msg-format-repair-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.msg-format-repair-option {
+  width: 100%;
+  border: 1px solid rgba(170, 122, 78, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(255, 241, 224, 0.9));
+  color: var(--theme-text, #4a3428);
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  text-align: left;
+  box-shadow: 0 8px 18px rgba(114, 78, 45, 0.08);
+  cursor: pointer;
+}
+
+.msg-format-repair-option:active {
+  transform: scale(0.985);
+}
+
+.msg-format-repair-option__icon {
+  grid-row: 1 / span 2;
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+  background: rgba(205, 145, 86, 0.16);
+  color: var(--theme-primary, #c78343);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-format-repair-option__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.msg-format-repair-option strong {
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.msg-format-repair-option em {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-style: normal;
+  color: rgba(74, 52, 40, 0.62);
+}
