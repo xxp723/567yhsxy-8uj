@@ -78,6 +78,14 @@ export function getCurrentChatPromptSettingsKey(state) {
    ======================================================================== */
 export const DATA_KEY_STICKERS = 'chat_stickers_global';
 /* ========================================================================
+   [区域标注·已完成·本次钱包需求] 用户主页钱包数据键
+   说明：
+   1. 钱包数据按当前面具身份隔离存储。
+   2. 只使用 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   3. 余额基础值统一按人民币 CNY 保存，展示币种可切换为 USD / JPY / KRW / EUR。
+   ======================================================================== */
+export const DATA_KEY_WALLET = (maskId) => `chat_wallet_${maskId || 'default'}`;
+/* ========================================================================
    [区域标注·已完成·收藏持久化] 收藏数据键
    ======================================================================== */
 export const DATA_KEY_FAVORITES = (maskId) => `chat_favorites_${maskId || 'default'}`;
@@ -214,6 +222,37 @@ export function normalizeStickerData(rawData) {
    说明：All 为固定默认大分组；收藏卡片可归属大分组/组内小分组。
          此区域已完成，后续修改收藏数据结构可直接从这里开始。
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次钱包需求] 钱包数据规范化
+   说明：
+   1. balanceBaseCny 始终保存为人民币基础余额。
+   2. displayCurrency 只控制钱包页面显示的货币单位与换算结果。
+   3. rates 表示 1 CNY 可兑换的目标币种数量；CNY 固定为 1。
+   ========================================================================== */
+export function normalizeWalletData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const safeNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const displayCurrency = ['CNY', 'USD', 'JPY', 'KRW', 'EUR'].includes(String(source.displayCurrency || 'CNY'))
+    ? String(source.displayCurrency || 'CNY')
+    : 'CNY';
+
+  return {
+    balanceBaseCny: Math.max(0, safeNumber(source.balanceBaseCny, 0)),
+    displayCurrency,
+    rates: {
+      CNY: 1,
+      USD: Math.max(0, safeNumber(source?.rates?.USD, 0.14)),
+      JPY: Math.max(0, safeNumber(source?.rates?.JPY, 21.5)),
+      KRW: Math.max(0, safeNumber(source?.rates?.KRW, 191)),
+      EUR: Math.max(0, safeNumber(source?.rates?.EUR, 0.13))
+    },
+    updatedAt: Math.max(0, safeNumber(source.updatedAt, Date.now()))
+  };
+}
+
 export function normalizeFavoriteData(rawData) {
   const source = rawData && typeof rawData === 'object' ? rawData : {};
   const groups = Array.isArray(source.groups)
@@ -284,6 +323,17 @@ export function normalizeFavoriteData(rawData) {
 export async function persistFavoriteData(state, db) {
   state.favoriteData = normalizeFavoriteData(state.favoriteData);
   await dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), state.favoriteData);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次钱包需求] 钱包数据持久化
+   说明：
+   1. 钱包余额、显示币种、汇率设置统一只写入 DB.js / IndexedDB。
+   2. 不保留任何 localStorage/sessionStorage 读写逻辑，也不写双份兜底代码。
+   ========================================================================== */
+export async function persistWalletData(state, db) {
+  state.walletData = normalizeWalletData(state.walletData);
+  await dbPut(db, DATA_KEY_WALLET(state.activeMaskId), state.walletData);
 }
 
 /* ==========================================================================

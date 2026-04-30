@@ -26,6 +26,7 @@ import {
   DATA_KEY_CHAT_PROMPT_SETTINGS,
   getCurrentChatPromptSettingsKey,
   DATA_KEY_STICKERS,
+  DATA_KEY_WALLET,
   DATA_KEY_FAVORITES,
   PANEL_KEYS,
   PANEL_LABELS,
@@ -40,7 +41,9 @@ import {
   normalizeContactGroups,
   normalizeContacts,
   normalizeStickerData,
+  normalizeWalletData,
   normalizeFavoriteData,
+  persistWalletData,
   persistFavoriteData,
   loadStickerDataFromDb,
   persistStickerData,
@@ -106,7 +109,9 @@ import {
   createFavoriteCardLongPressHandlers,
   showMoveFavoriteToGroupModal,
   importStickerTextToCurrentGroup,
-  readDocxText
+  readDocxText,
+  showWalletRechargeModal,
+  showWalletCurrencyModal
 } from './profile.js';
 import { renderMoments } from './moments.js';
 
@@ -140,13 +145,14 @@ export async function mount(container, context) {
   const currentActiveMaskId = archiveData.activeMaskId || '';
 
   /* [修改5] 按当前面具ID加载对应数据 */
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, stickerData, favoriteData] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, stickerData, walletData, favoriteData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACTS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(currentActiveMaskId)),
     dbGet(db, DATA_KEY_MOMENTS(currentActiveMaskId)),
     loadStickerDataFromDb(db),
+    dbGet(db, DATA_KEY_WALLET(currentActiveMaskId)),
     dbGet(db, DATA_KEY_FAVORITES(currentActiveMaskId))
   ]);
 
@@ -181,6 +187,14 @@ export async function mount(container, context) {
     chatPromptSettings: normalizeChatPromptSettings(null),
     /* [区域标注·本次需求3] 表情包分组与条目：全局共享资产，只从 IndexedDB 读取 */
     stickerData: normalizeStickerData(stickerData),
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页运行时状态
+       说明：
+       1. 钱包余额基础值、显示币种、汇率设置统一只从 DB.js / IndexedDB 读取。
+       2. walletDraftCurrency 仅用于弹窗中的临时选择态，不做双份存储。
+       ========================================================================== */
+    walletData: normalizeWalletData(walletData),
+    walletDraftCurrency: '',
     /* [区域标注·已完成·收藏运行时状态] 收藏页数据与选择状态，持久化只走 DB.js / IndexedDB */
     favoriteData: normalizeFavoriteData(favoriteData),
     favoriteMultiSelectMode: false,
@@ -1292,6 +1306,70 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     /* ==========================================================================
        [区域标注·已完成·收藏入口] 收藏折叠栏 — 点击进入收藏子页面
        ========================================================================== */
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页 — 打开充值弹窗
+       ========================================================================== */
+    case 'open-wallet-recharge-modal':
+      showWalletRechargeModal(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页 — 确认充值并写入 IndexedDB
+       说明：充值输入金额按人民币累加到 balanceBaseCny。
+       ========================================================================== */
+    case 'confirm-wallet-recharge': {
+      const input = container.querySelector('[data-role="wallet-recharge-input"]');
+      const amount = Number(String(input?.value || '').trim());
+      if (!Number.isFinite(amount) || amount <= 0) {
+        renderModalNotice(container, '请输入大于 0 的充值金额');
+        break;
+      }
+      state.walletData = normalizeWalletData({
+        ...state.walletData,
+        balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + amount,
+        updatedAt: Date.now()
+      });
+      await persistWalletData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页 — 打开币种切换弹窗
+       ========================================================================== */
+    case 'open-wallet-currency-modal':
+      state.walletDraftCurrency = String(state.walletData?.displayCurrency || 'CNY').toUpperCase();
+      showWalletCurrencyModal(container, state);
+      break;
+
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页 — 选择弹窗中的目标币种
+       ========================================================================== */
+    case 'select-wallet-currency': {
+      const currencyCode = String(target.dataset.walletCurrency || 'CNY').toUpperCase();
+      state.walletDraftCurrency = currencyCode;
+      showWalletCurrencyModal(container, state);
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·本次钱包需求] 钱包页 — 保存显示币种并实时更新单位标识
+       ========================================================================== */
+    case 'confirm-wallet-currency': {
+      const nextCurrency = String(state.walletDraftCurrency || state.walletData?.displayCurrency || 'CNY').toUpperCase();
+      state.walletData = normalizeWalletData({
+        ...state.walletData,
+        displayCurrency: nextCurrency,
+        updatedAt: Date.now()
+      });
+      state.walletDraftCurrency = '';
+      await persistWalletData(state, db);
+      closeModal(container);
+      rerenderCurrentSubPage(container, state);
+      break;
+    }
+
     case 'open-favorite':
       openSubPage(container, state, 'favorite');
       break;
@@ -1805,6 +1883,8 @@ async function saveMaskData(state, db, maskId) {
     /* [区域标注·本次需求1] 持久化通讯录自定义分组到 IndexedDB（禁止浏览器同步键值存储） */
     dbPut(db, DATA_KEY_CONTACT_GROUPS(maskId), state.contactGroups),
     dbPut(db, DATA_KEY_MOMENTS(maskId), state.moments),
+    /* [区域标注·已完成·本次钱包需求] 切换面具前保存当前面具钱包数据 */
+    dbPut(db, DATA_KEY_WALLET(maskId), normalizeWalletData(state.walletData)),
     /* [区域标注·已完成·收藏持久化] 切换面具前保存当前面具收藏数据 */
     dbPut(db, DATA_KEY_FAVORITES(maskId), normalizeFavoriteData(state.favoriteData))
   ]);
@@ -1815,12 +1895,13 @@ async function saveMaskData(state, db, maskId) {
    说明：在切换面具后调用，从 IndexedDB 恢复该面具的数据
    ========================================================================== */
 async function loadMaskData(state, db, maskId) {
-  const [sessions, hiddenChatIds, contacts, contactGroups, moments, favoriteData] = await Promise.all([
+  const [sessions, hiddenChatIds, contacts, contactGroups, moments, walletData, favoriteData] = await Promise.all([
     dbGet(db, DATA_KEY_SESSIONS(maskId)),
     dbGet(db, DATA_KEY_HIDDEN_CHAT_IDS(maskId)),
     dbGet(db, DATA_KEY_CONTACTS(maskId)),
     dbGet(db, DATA_KEY_CONTACT_GROUPS(maskId)),
     dbGet(db, DATA_KEY_MOMENTS(maskId)),
+    dbGet(db, DATA_KEY_WALLET(maskId)),
     dbGet(db, DATA_KEY_FAVORITES(maskId))
   ]);
   state.sessions = sessions || [];
@@ -1831,6 +1912,9 @@ async function loadMaskData(state, db, maskId) {
   state.contactGroups = normalizeContactGroups(contactGroups);
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
+  /* [区域标注·已完成·本次钱包需求] 切换面具时同步加载对应钱包数据 */
+  state.walletData = normalizeWalletData(walletData);
+  state.walletDraftCurrency = '';
   state.favoriteData = normalizeFavoriteData(favoriteData);
   state.favoriteMultiSelectMode = false;
   state.selectedFavoriteIds = [];
@@ -1904,6 +1988,7 @@ function openSubPage(container, state, pageType) {
    ========================================================================== */
 function closeSubPage(container, state) {
   state.subPageView = null;
+  state.walletDraftCurrency = '';
   state.stickerMultiSelectMode = false;
   state.selectedStickerIds = [];
   state.favoriteMultiSelectMode = false;

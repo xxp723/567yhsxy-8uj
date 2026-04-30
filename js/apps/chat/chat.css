@@ -2670,3 +2670,291 @@
   box-shadow: 0 12px 32px rgba(44, 32, 22, 0.16);
   background: rgba(255, 255, 255, 0.72);
 }
+
+/* ==========================================================================
+   [区域标注·已完成·本次钱包需求] 钱包独立页样式
+   说明：
+   1. 仅作用于用户主页“钱包”子页面，不影响其它板块。
+   2. 余额卡片、充值按钮、实时汇率卡片与弹窗内币种选择统一沿用闲谈主题风格。
+   3. 所有样式仅服务本次钱包改动区域，方便下次直接定位维护。
+   ========================================================================== */
+.wallet-sub-page {
+  height: 100%;
+  min-height: 0;
+}
+
+.wallet-sub-page__body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding: 18px 16px 28px 16px;
+}
+
+.wallet-balance-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(74, 52, 42, 0.98) 0%, rgba(106, 79, 66, 0.96) 100%);
+  color: #fff9f3;
+  box-shadow: 0 16px 34px rgba(74, 52, 42, 0.2);
+}
+
+.wallet-balance-card__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff7ef;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wallet-balance-card__icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.wallet-balance-card__content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wallet-balance-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 249, 243, 0.76);
+}
+
+.wallet-balance-card__amount {
+  font-size: 31px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #fffdf9;
+  word-break: break-all;
+}
+
+.wallet-balance-card__currency {
+  font-size: 12px;
+  color: rgba(255, 249, 243, 0.72);
+}
+
+.wallet-primary-btn {
+  width: 100%;
+  border: none;
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: #4A342A;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(74, 52, 42, 0.12);
+  transition: transform 0.1s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.wallet-primary-btn:active {
+  transform: scale(0.98);
+  opacity: 0.92;
+}
+
+.wallet-primary-btn__icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wallet-primary-btn__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.wallet-rate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(74, 52, 42, 0.06);
+}
+
+.wallet-rate-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wallet-rate-card__title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wallet-rate-card__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wallet-rate-card__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.wallet-rate-card__title {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #4A342A;
+}
+
+.wallet-rate-card__desc {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: rgba(74, 52, 42, 0.55);
+}
+
+.wallet-rate-card__action {
+  align-self: flex-start;
+  border: none;
+  border-radius: 16px;
+  padding: 9px 14px;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.wallet-rate-card__action:active {
+  background: rgba(74, 52, 42, 0.16);
+  transform: scale(0.98);
+}
+
+.wallet-rate-card__list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.wallet-rate-card__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.045);
+  border: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.wallet-rate-card__item span {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(74, 52, 42, 0.72);
+}
+
+.wallet-rate-card__item strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: #4A342A;
+  text-align: right;
+}
+
+.wallet-rate-card__item.is-active {
+  background: rgba(74, 52, 42, 0.1);
+  border-color: rgba(74, 52, 42, 0.14);
+}
+
+.wallet-currency-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wallet-currency-option {
+  width: 100%;
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.045);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  color: #4A342A;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.wallet-currency-option:active {
+  transform: scale(0.99);
+}
+
+.wallet-currency-option.is-active {
+  background: rgba(74, 52, 42, 0.1);
+  border-color: rgba(74, 52, 42, 0.18);
+  box-shadow: 0 0 0 2px rgba(74, 52, 42, 0.04);
+}
+
+.wallet-currency-option__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+}
+
+.wallet-currency-option__rate {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(74, 52, 42, 0.56);
+}
+
+.wallet-currency-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(74, 52, 42, 0.94) 0%, rgba(106, 79, 66, 0.92) 100%);
+  color: #fff9f3;
+}
+
+.wallet-currency-preview__label {
+  font-size: 12px;
+  color: rgba(255, 249, 243, 0.72);
+}
+
+.wallet-currency-preview__amount {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #fffdf9;
+  word-break: break-all;
+}
