@@ -26,6 +26,11 @@ const MSG_ICONS = {
   send: `<svg viewBox="0 0 48 48" fill="none"><path d="M43 5L25 43l-5-18L2 20L43 5Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20 25l23-20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   magicWand: `<svg viewBox="0 0 48 48" fill="none"><path d="M43 5L5 43" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M35 5l8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M20 6l2 6l6 2l-6 2l-2 6l-2-6l-6-2l6-2l2-6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M36 24l1.5 4l4 1.5l-4 1.5l-1.5 4l-1.5-4l-4-1.5l4-1.5l1.5-4Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   coffee: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 20h28v14a8 8 0 0 1-8 8H14a8 8 0 0 1-8-8V20Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M34 24h4a6 6 0 0 1 0 12h-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 6v6M20 6v6M28 6v6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·AI识图图片入口] IconPark — 图片按钮图标
+     说明：用于聊天消息页咖啡功能区“图片”板块，图标来源保持 IconPark 风格。
+  /* ======================================================================== */
+  image: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h36v28H6V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 30l7-8l6 6l5-5l8 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="18" r="3" stroke="currentColor" stroke-width="3"/></svg>`,
   more: `<svg viewBox="0 0 48 48" fill="none"><circle cx="12" cy="24" r="3" fill="currentColor"/><circle cx="24" cy="24" r="3" fill="currentColor"/><circle cx="36" cy="24" r="3" fill="currentColor"/></svg>`,
   emptyChat: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`,
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
@@ -128,13 +133,27 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
   /* ===== 闲谈：删除消息二次确认 END ===== */
   const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
+  /* ========================================================================
+     [区域标注·已完成·AI识图图片消息渲染] 图片消息类型判断
+     说明：
+     1. type:image 的消息来自咖啡功能区“图片”板块。
+     2. imageUrl 会随当前聊天记录写入 DB.js / IndexedDB，并在 prompt.js 中作为视觉输入发送给 AI。
+     3. 不使用 localStorage/sessionStorage，也不保留双份存储兜底。
+     ======================================================================== */
+  const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
   const bubbleInnerHtml = isStickerMessage
     ? `
         <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
           <img class="msg-sticker-bubble__image" src="${escapeHtml(msg?.stickerUrl || '')}" alt="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
         </div>
       `
-    : escapeHtml(msg?.content || '');
+    : (isImageMessage
+        ? `
+          <div class="msg-image-bubble" title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
+            <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
+          </div>
+        `
+        : escapeHtml(msg?.content || ''));
 
   return `
     <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
@@ -172,7 +191,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''}">
           ${bubbleInnerHtml}
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
@@ -254,11 +273,17 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
 
   /* ==========================================================================
-     [区域标注] 咖啡按钮升起功能区
-     说明：当前仅做“表情包、转账”等功能占位，后续在此区域扩展。
+     [区域标注·已完成·AI识图图片入口] 咖啡按钮升起功能区
+     说明：
+     1. 已新增“图片”板块，用户可通过应用内面板发送本地图片或图片 URL。
+     2. 图片消息写入当前聊天记录并持久化到 DB.js / IndexedDB。
+     3. 发送后的图片会在 prompt.js 中作为视觉输入传给 AI，不使用浏览器同步键值存储。
   /* ========================================================================== */
   const featureDockHtml = `
     <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
+      <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
+        ${MSG_ICONS.image}<span>图片</span>
+      </button>
       <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="transfer">
         ${MSG_ICONS.wallet}<span>转账</span>
       </button>
@@ -540,9 +565,11 @@ export async function sendMessage(container, state, db, content, settingsManager
     /* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
 
     /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
-    const result = await chat({
+      const result = await chat({
       userInput: promptPayload.userInput,
       history: promptPayload.history,
+      /* [区域标注·已完成·AI识图当前轮媒体] 把本轮用户图片/表情包消息原始字段传给 prompt.js 组装视觉输入。 */
+      currentUserRoundMessages: promptPayload.currentUserRoundMessages,
       chatSettings: state.chatPromptSettings,
       /* [区域标注·已修改] 时间感知请求上下文：把最新用户消息时间与最近聊天时间传给 prompt.js，避免 AI 时间停在旧消息发送时 */
       conversationTimeContext: promptPayload.conversationTimeContext,
@@ -851,6 +878,53 @@ export function buildAiReplyMessages(rawText, state) {
 }
 
 
+/* ==========================================================================
+   [区域标注·已完成·AI识图图片消息发送] 图片消息入列与持久化
+   说明：
+   1. 图片来源仅来自聊天消息页咖啡功能区“图片”板块：本地 data URL 或用户输入 URL。
+   2. 消息对象使用 type:image / imageUrl / imageName / imageSource，随 currentMessages 写入 DB.js / IndexedDB。
+   3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+   ========================================================================== */
+export async function sendImageMessage(container, state, db, imageUrl, settingsManager, options = {}) {
+  if (!state.currentChatId || state.isAiSending) return;
+
+  const safeUrl = String(imageUrl || '').trim();
+  if (!safeUrl) return;
+
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!session) return;
+
+  const imageName = String(options.imageName || '').trim() || (safeUrl.startsWith('data:image/') ? '本地图片' : '图片链接');
+  const imageMessage = {
+    id: `user_image_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    role: 'user',
+    type: 'image',
+    content: `[图片] ${imageName}`,
+    imageUrl: safeUrl,
+    imageName,
+    imageSource: safeUrl.startsWith('data:image/') ? 'local' : 'url',
+    timestamp: Date.now()
+  };
+
+  state.currentMessages.push(imageMessage);
+  state.stickerPanelOpen = false;
+  state.coffeeDockOpen = false;
+  session.lastMessage = `[图片] ${imageName}`;
+  session.lastTime = Date.now();
+
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+  ]);
+
+  renderCurrentChatMessage(container, state);
+
+  if (options.triggerAi === true) {
+    await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
+  }
+}
+
+
 export async function sendStickerMessage(container, state, db, stickerId, settingsManager, options = {}) {
   if (!state.currentChatId || state.isAiSending) return;
 
@@ -1053,7 +1127,9 @@ export function refreshCurrentSessionLastMessage(state) {
   const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
   session.lastMessage = latest?.type === 'sticker'
     ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
-    : (latest?.content || '');
+    : (latest?.type === 'image'
+        ? `[图片] ${latest?.imageName || '图片'}`
+        : (latest?.content || ''));
   session.lastTime = latest?.timestamp || Date.now();
 }
 
@@ -1085,10 +1161,10 @@ export async function retryLatestAiReply(container, state, db, settingsManager) 
   }
 
   /* ========================================================================
-     [区域标注·本次修改1] 魔法棒重 roll 立即清空旧 AI 回复
+     [区域标注·已完成·魔法棒局部刷新防闪屏] 魔法棒重 roll 立即清空旧 AI 回复
      说明：
      1. 先删除最新一轮 AI 回复并立即写入 DB.js / IndexedDB。
-     2. 立刻刷新当前消息列表，让旧气泡马上从聊天界面消失。
+     2. 只刷新消息列表区域，不重建整个聊天消息页壳子，避免点击魔法棒闪屏。
      3. 再调用 API 重新生成最新一轮回复，不保留旧 AI 气泡到返回列表后才消失。
      ======================================================================== */
   refreshCurrentSessionLastMessage(state);
@@ -1096,7 +1172,7 @@ export async function retryLatestAiReply(container, state, db, settingsManager) 
     persistCurrentMessages(state, db),
     dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
   ]);
-  renderCurrentChatMessage(container, state, { keepScroll: true });
+  refreshCurrentMessageListOnly(container, state);
   await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
   /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
 }
@@ -1136,10 +1212,22 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
     latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0
   };
+  const currentUserRoundMessages = currentRoundMessages.map(item => ({
+    role: item.role,
+    content: item.content,
+    type: item.type || '',
+    stickerUrl: item.stickerUrl || '',
+    stickerName: item.stickerName || '',
+    imageUrl: item.imageUrl || '',
+    imageName: item.imageName || '',
+    timestamp: Number(item.timestamp || 0) || 0
+  }));
+
   if (roundLimit <= 0) {
     return {
       userInput,
       history: [],
+      currentUserRoundMessages,
       conversationTimeContext
     };
   }
@@ -1154,6 +1242,11 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     current.push({
       role: item.role,
       content: item.content,
+      type: item.type || '',
+      stickerUrl: item.stickerUrl || '',
+      stickerName: item.stickerName || '',
+      imageUrl: item.imageUrl || '',
+      imageName: item.imageName || '',
       /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
       timestamp: Number(item.timestamp || 0) || 0
     });
@@ -1163,6 +1256,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   return {
     userInput,
     history: rounds.slice(-roundLimit).flat(),
+    currentUserRoundMessages,
     conversationTimeContext
   };
 }
@@ -1475,6 +1569,40 @@ export function syncMountedStickerGroupButtons(container, state) {
 }
 
 /* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·AI识图图片弹窗] 图片发送应用内弹窗
+   说明：
+   1. 替代原生浏览器弹窗，保持闲谈应用统一暖色主题。
+   2. 用户可选择本地图片，也可输入图片 URL；确认 URL 后由 index.js 写入当前聊天消息。
+   3. 本地图片读取为 data URL 后直接写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+export function showMessageImageModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>发送图片</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">选择本地图片，或粘贴图片 URL。发送后会在聊天界面显示为图片，AI 也能看到这张图。</div>
+      <input class="msg-image-file-input" data-role="msg-image-file-input" type="file" accept="image/*">
+      <input class="chat-modal-search" data-role="msg-image-url-input" type="url" placeholder="https://example.com/image.png">
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-send-image-url" type="button">发送链接图片</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="msg-image-url-input"]')?.focus(), 30);
+}
+
+
 export function showClearAllMessagesModal(container, state) {
   const mask = container.querySelector('[data-role="modal-mask"]');
   const panel = container.querySelector('[data-role="modal-panel"]');

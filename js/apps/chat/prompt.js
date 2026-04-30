@@ -108,12 +108,83 @@ const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
 ];
 /* ===== 闲谈：通用消息协议格式 END ===== */
 
+/* ==========================================================================
+   [区域标注·已完成·AI识图多模态消息工具]
+   说明：
+   1. 只使用聊天消息记录中已经写入 DB.js / IndexedDB 的 stickerUrl / imageUrl。
+   2. 不读取 localStorage/sessionStorage，不写双份存储兜底。
+   3. 内部统一使用 OpenAI 兼容的 content parts；各 API 请求器再转换为自身格式。
+   ========================================================================== */
+function isImageDataUrl(url = '') {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(url || '').trim());
+}
+
+function parseImageDataUrl(url = '') {
+  const match = String(url || '').trim().match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+  return match ? { mimeType: match[1], data: match[2] } : null;
+}
+
+function guessImageMimeType(url = '') {
+  const value = String(url || '').split('?')[0].split('#')[0].toLowerCase();
+  if (value.endsWith('.jpg') || value.endsWith('.jpeg')) return 'image/jpeg';
+  if (value.endsWith('.webp')) return 'image/webp';
+  if (value.endsWith('.gif')) return 'image/gif';
+  if (value.endsWith('.png')) return 'image/png';
+  return 'image/png';
+}
+
+function getMessageVisualUrl(message = {}) {
+  if (String(message?.type || '') === 'sticker') return String(message?.stickerUrl || '').trim();
+  if (String(message?.type || '') === 'image') return String(message?.imageUrl || '').trim();
+  return '';
+}
+
+function getMessageVisualLabel(message = {}) {
+  if (String(message?.type || '') === 'sticker') return `用户发送了一张表情包：${message?.stickerName || message?.content || '未命名表情包'}`;
+  if (String(message?.type || '') === 'image') return `用户发送了一张图片：${message?.imageName || message?.content || '图片'}`;
+  return '';
+}
+
+function createVisionMessageContent(message = {}, textContent = '') {
+  const text = String(textContent || '').trim();
+  const visualUrl = getMessageVisualUrl(message);
+  if (!visualUrl || message.role !== 'user') return text;
+
+  const visualLabel = getMessageVisualLabel(message);
+  return [
+    { type: 'text', text: [text, visualLabel].filter(Boolean).join('\n') || visualLabel || '用户发送了一张图片。' },
+    { type: 'image_url', image_url: { url: visualUrl } }
+  ];
+}
+
+function hasMessageContent(content) {
+  if (Array.isArray(content)) {
+    return content.some(part => {
+      if (part?.type === 'text') return String(part.text || '').trim();
+      if (part?.type === 'image_url') return String(part.image_url?.url || '').trim();
+      return false;
+    });
+  }
+  return String(content || '').trim();
+}
+
+function getTextFromMessageContent(content) {
+  if (Array.isArray(content)) {
+    return content
+      .filter(part => part?.type === 'text')
+      .map(part => String(part.text || '').trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+  return String(content || '');
+}
+
 function normalizeMessages(messages) {
   return Array.isArray(messages)
     ? messages
         .filter(item => item && (item.role === 'user' || item.role === 'assistant' || item.role === 'system'))
-        .map(item => ({ role: item.role, content: String(item.content || '') }))
-        .filter(item => item.content.trim())
+        .map(item => ({ role: item.role, content: Array.isArray(item.content) ? item.content : String(item.content || '') }))
+        .filter(item => hasMessageContent(item.content))
     : [];
 }
 
@@ -1046,13 +1117,17 @@ export function getChatHistory({ history = [], includeTimestamps = false } = {})
   return Array.isArray(history)
     ? history
         .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
-        .map(item => ({
-          role: item.role,
-          content: includeTimestamps
+        .map(item => {
+          const textContent = includeTimestamps
             ? formatHistoryMessageContentForTimeAwareness(item)
-            : String(item.content || '')
-        }))
-        .filter(item => item.content.trim())
+            : String(item.content || '');
+          return {
+            role: item.role,
+            /* [区域标注·已完成·AI识图历史媒体] 历史 user 表情包/图片保留视觉输入，供 AI 看见上下文中的图片。 */
+            content: createVisionMessageContent(item, textContent)
+          };
+        })
+        .filter(item => hasMessageContent(item.content))
     : [];
 }
 
@@ -1185,7 +1260,7 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
    2. 追加历史对话。
    3. 最后一条 user 消息由“当前指令 + 用户最新一轮消息”组成。
    ========================================================================== */
-export function buildChatMessages({ userInput, history = [], settings = {}, context = {} } = {}) {
+export function buildChatMessages({ userInput, history = [], currentUserRoundMessages = [], settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
   const systemPrompt = buildSystemPrompt({ settings: normalizedSettings, context: { ...context, userInput, history } });
   const messages = [];
@@ -1207,7 +1282,21 @@ export function buildChatMessages({ userInput, history = [], settings = {}, cont
     : rawUserInput;
 
   if (finalUserContent.trim()) {
-    messages.push({ role: 'user', content: finalUserContent });
+    const currentRoundVisualMessages = Array.isArray(currentUserRoundMessages)
+      ? currentUserRoundMessages.filter(item => item?.role === 'user' && getMessageVisualUrl(item))
+      : [];
+    if (currentRoundVisualMessages.length) {
+      const contentParts = [{ type: 'text', text: finalUserContent }];
+      currentRoundVisualMessages.forEach(item => {
+        const visualUrl = getMessageVisualUrl(item);
+        const visualLabel = getMessageVisualLabel(item);
+        if (visualLabel) contentParts.push({ type: 'text', text: visualLabel });
+        contentParts.push({ type: 'image_url', image_url: { url: visualUrl } });
+      });
+      messages.push({ role: 'user', content: contentParts });
+    } else {
+      messages.push({ role: 'user', content: finalUserContent });
+    }
   }
 
   return messages;
@@ -1241,6 +1330,66 @@ async function getPrimaryApiConfig(settingsManager) {
 /* ==========================================================================
    [API 调用区域] OpenAI / DeepSeek 兼容接口
    ========================================================================== */
+function toOpenAiLikeMessages(messages = []) {
+  return normalizeMessages(messages);
+}
+
+function toGeminiPart(part) {
+  if (part?.type === 'text') return { text: String(part.text || '') };
+  if (part?.type === 'image_url') {
+    const url = String(part.image_url?.url || '').trim();
+    const dataUrl = parseImageDataUrl(url);
+    if (dataUrl) {
+      return { inlineData: { mimeType: dataUrl.mimeType, data: dataUrl.data } };
+    }
+    return { fileData: { mimeType: guessImageMimeType(url), fileUri: url } };
+  }
+  return null;
+}
+
+function toGeminiText(message) {
+  const content = message?.content;
+  if (Array.isArray(content)) {
+    return content
+      .map(part => part?.type === 'text' ? String(part.text || '').trim() : '')
+      .filter(Boolean)
+      .join('\n');
+  }
+  return String(content || '');
+}
+
+function toClaudeContent(content) {
+  if (!Array.isArray(content)) return String(content || '');
+
+  return content
+    .map(part => {
+      if (part?.type === 'text') return { type: 'text', text: String(part.text || '') };
+      if (part?.type === 'image_url') {
+        const url = String(part.image_url?.url || '').trim();
+        const dataUrl = parseImageDataUrl(url);
+        if (dataUrl) {
+          return {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: dataUrl.mimeType,
+              data: dataUrl.data
+            }
+          };
+        }
+        return {
+          type: 'image',
+          source: {
+            type: 'url',
+            url
+          }
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 async function requestOpenAiLike(profile, messages) {
   const response = await fetch(`${trimSlash(profile.baseUrl)}/chat/completions`, {
     method: 'POST',
@@ -1253,7 +1402,7 @@ async function requestOpenAiLike(profile, messages) {
       temperature: profile.temperature,
       max_tokens: profile.maxTokens,
       stream: false,
-      messages
+      messages: toOpenAiLikeMessages(messages)
     })
   });
 
@@ -1271,13 +1420,20 @@ async function requestOpenAiLike(profile, messages) {
    ========================================================================== */
 async function requestGemini(profile, messages) {
   const url = `${trimSlash(profile.baseUrl)}/models/${encodeURIComponent(profile.model)}:generateContent?key=${encodeURIComponent(profile.apiKey)}`;
-  const mergedText = messages.map(item => `${item.role.toUpperCase()}:\n${item.content}`).join('\n\n');
+  const normalizedMessages = normalizeMessages(messages);
+  const mergedText = normalizedMessages
+    .map(item => `${item.role.toUpperCase()}:\n${toGeminiText(item)}`)
+    .join('\n\n');
+  const visualParts = normalizedMessages
+    .filter(item => item.role === 'user' && Array.isArray(item.content))
+    .flatMap(item => item.content.filter(part => part?.type === 'image_url').map(toGeminiPart))
+    .filter(Boolean);
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: mergedText }] }],
+      contents: [{ role: 'user', parts: [{ text: mergedText }, ...visualParts] }],
       generationConfig: {
         temperature: profile.temperature,
         maxOutputTokens: profile.maxTokens
@@ -1299,9 +1455,9 @@ async function requestGemini(profile, messages) {
    ========================================================================== */
 async function requestClaude(profile, messages) {
   const systemPrompt = messages.find(item => item.role === 'system')?.content || '';
-  const claudeMessages = messages
+  const claudeMessages = normalizeMessages(messages)
     .filter(item => item.role === 'user' || item.role === 'assistant')
-    .map(item => ({ role: item.role, content: item.content }));
+    .map(item => ({ role: item.role, content: toClaudeContent(item.content) }));
 
   const response = await fetch(`${trimSlash(profile.baseUrl)}/messages`, {
     method: 'POST',
@@ -1343,6 +1499,7 @@ export async function chat({
   archiveData = null,
   worldBooks = null,
   stickerData = null,
+  currentUserRoundMessages = [],
   conversationTimeContext = {}
 } = {}) {
   const promptContext = await collectPromptRuntimeContext({
@@ -1362,6 +1519,7 @@ export async function chat({
   const messages = buildChatMessages({
     userInput,
     history,
+    currentUserRoundMessages,
     settings: chatSettings,
     context: promptContext
   });

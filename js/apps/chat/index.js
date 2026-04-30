@@ -65,6 +65,7 @@ import {
   persistCurrentMessages,
   repairAiMessageFormatIfPossible,
   sendStickerMessage,
+  sendImageMessage,
   renderCurrentChatMessage,
   refreshMessageBubbleRows,
   refreshCurrentMessageListOnly,
@@ -79,7 +80,8 @@ import {
   showClearAllMessagesModal,
   showAiFormatRepairResultModal,
   showEditMessageModal,
-  showForwardMessagesModal
+  showForwardMessagesModal,
+  showMessageImageModal
 } from './chat-message.js';
 import {
   renderProfile,
@@ -902,6 +904,29 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (state.coffeeDockOpen) state.stickerPanelOpen = false;
       syncMessageDockOpenState(container, state);
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·AI识图图片入口] 咖啡功能区 — 打开图片发送弹窗
+       说明：应用内弹窗提供本地图片上传和图片 URL 输入，不使用原生浏览器弹窗。
+       ======================================================================== */
+    case 'open-msg-image-modal':
+      showMessageImageModal(container);
+      break;
+
+    case 'confirm-send-image-url': {
+      const input = container.querySelector('[data-role="msg-image-url-input"]');
+      const imageUrl = String(input?.value || '').trim();
+      if (!/^https?:\/\/\S+/i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
+        renderModalNotice(container, '请输入有效的图片 URL');
+        break;
+      }
+      await sendImageMessage(container, state, db, imageUrl, settingsManager, {
+        imageName: '链接图片',
+        triggerAi: false
+      });
+      closeModal(container);
+      break;
+    }
 
     /* ========================================================================
        [区域标注·本次需求3] 聊天消息页底栏表情包按钮 / 分组切换 / 发送
@@ -2027,6 +2052,42 @@ function handleInput(e, state, container, db) {
    ========================================================================== */
 async function handleChange(e, state, container, db) {
   const target = e.target;
+
+  /* ========================================================================
+     [区域标注·已完成·AI识图本地图片上传] 聊天消息页图片文件选择
+     说明：
+     1. 从咖啡功能区“图片”弹窗选择本地图片后读取为 data URL。
+     2. 直接作为 type:image 消息写入当前聊天记录并持久化到 DB.js / IndexedDB。
+     3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+     ======================================================================== */
+  if (target?.matches?.('[data-role="msg-image-file-input"]')) {
+    const file = target.files?.[0];
+    if (!file) return;
+
+    if (!/^image\//i.test(file.type || '')) {
+      renderModalNotice(container, '请选择图片文件');
+      target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const imageUrl = String(reader.result || '');
+      if (!imageUrl.startsWith('data:image/')) {
+        renderModalNotice(container, '图片读取失败，请重新选择');
+        return;
+      }
+      await sendImageMessage(container, state, db, imageUrl, null, {
+        imageName: file.name || '本地图片',
+        triggerAi: false
+      });
+      closeModal(container);
+    };
+    reader.onerror = () => renderModalNotice(container, '图片读取失败，请重新选择');
+    reader.readAsDataURL(file);
+    return;
+  }
+ 
 
   /* ===== 闲谈表情包本地文件导入：txt/docx change 处理 START ===== */
   if (target?.matches?.('[data-role="sticker-import-file-input"]')) {

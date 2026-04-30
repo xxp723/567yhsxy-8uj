@@ -363,6 +363,47 @@
   margin: 0;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·AI识图图片消息样式]
+   说明：
+   1. 仅作用于聊天消息页 type:image 图片消息气泡。
+   2. 图片内容随聊天消息写入 DB.js / IndexedDB；样式层不涉及任何浏览器同步键值存储。
+   3. 保持闲谈应用暖色圆角气泡风格，与表情包气泡视觉统一。
+   ========================================================================== */
+.msg-bubble--image {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.msg-image-bubble {
+  width: min(220px, 58vw);
+  max-width: 100%;
+  min-height: 96px;
+  max-height: 260px;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 18px;
+  overflow: hidden;
+  display: block;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.08);
+}
+
+.msg-bubble--user .msg-image-bubble {
+  background: rgba(255, 250, 244, 0.95);
+}
+
+.msg-image-bubble__image {
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: 260px;
+  object-fit: cover;
+  margin: 0;
+}
+
 /* [区域标注·本次需求5] 消息时间戳 */
 .msg-bubble__time {
   font-size: 10px;
@@ -447,6 +488,35 @@
 .msg-feature-dock__item svg {
   width: 22px;
   height: 22px;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·AI识图图片弹窗样式]
+   说明：图片发送入口使用应用内弹窗与自定义文件选择控件，不使用原生浏览器 alert/confirm/prompt。
+   ========================================================================== */
+.msg-image-file-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px dashed rgba(74, 52, 42, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.82);
+  color: rgba(74, 52, 42, 0.72);
+  padding: 12px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.msg-image-file-input::file-selector-button {
+  border: none;
+  border-radius: 999px;
+  background: #4A342A;
+  color: #f8f4ef;
+  padding: 8px 12px;
+  margin-right: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 /* ==========================================================================
