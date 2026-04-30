@@ -619,13 +619,21 @@ export async function sendMessage(container, state, db, content, settingsManager
         id: `ai_${Date.now()}_${index}`,
         timestamp: Date.now() + index
       };
-      const visibleText = String(message.type === 'sticker' ? message.stickerName || message.content || '表情包' : message.content || '').trim();
+      const visibleText = String(
+        message.type === 'sticker'
+          ? message.stickerName || message.content || '表情包'
+          : (message.type === 'transfer'
+              ? message.transferDisplayAmount || message.content || '转账'
+              : message.content || '')
+      ).trim();
       if (index > 0) await sleep(getAiBubbleDelayMs(visibleText, index));
       state.currentMessages.push(message);
       hasRenderedAiBubble = true;
       session.lastMessage = message.type === 'sticker'
         ? `[表情包] ${message.stickerName || '未命名表情包'}`
-        : (message.content || '（AI 没有返回内容）');
+        : (message.type === 'transfer'
+            ? `[转账] ${message.transferDisplayAmount || message.content || '¥0.00'}`
+            : (message.content || '（AI 没有返回内容）'));
       session.lastTime = Date.now();
       await persistCurrentMessages(state, db);
       await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
@@ -634,7 +642,9 @@ export async function sendMessage(container, state, db, content, settingsManager
 
     session.lastMessage = aiMessages[aiMessages.length - 1]?.type === 'sticker'
       ? `[表情包] ${aiMessages[aiMessages.length - 1]?.stickerName || '未命名表情包'}`
-      : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）');
+      : (aiMessages[aiMessages.length - 1]?.type === 'transfer'
+          ? `[转账] ${aiMessages[aiMessages.length - 1]?.transferDisplayAmount || aiMessages[aiMessages.length - 1]?.content || '¥0.00'}`
+          : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）'));
     session.lastTime = Date.now();
   } catch (error) {
     state.currentMessages.push({
@@ -806,6 +816,40 @@ export function cleanAiProtocolBlockContent(content) {
     .trim();
 }
 
+/* ==========================================================================
+   [区域标注·已完成·角色主动转账协议解析] AI 转账协议内容解析
+   说明：
+   1. 只解析 `[转账] 角色名：{金额:xxx,备注:xxx}` 对应的大括号内容。
+   2. 解析成功后统一生成 type:transfer 结构化消息，持久化仍只走 DB.js / IndexedDB。
+   3. 不新增任何本地同步存储，也不改用户手动转账入口逻辑。
+   ========================================================================== */
+export function parseAiTransferProtocolPayload(content) {
+  const normalized = cleanAiProtocolBlockContent(content);
+  if (!normalized) return null;
+
+  const bodyMatch = normalized.match(/\{\s*([\s\S]*?)\s*\}/);
+  const body = bodyMatch ? String(bodyMatch[1] || '').trim() : normalized;
+  if (!body) return null;
+
+  const amountMatch = body.match(/金额\s*[：:]\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
+  if (!amountMatch) return null;
+
+  const amount = Number(amountMatch[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const noteMatch = body.match(/备注\s*[：:]\s*([^}]*)/i);
+  const transferNote = String(noteMatch?.[1] || '').trim();
+
+  return {
+    transferAmount: Number(amount.toFixed(2)),
+    transferBaseCny: Number(amount.toFixed(2)),
+    transferCurrency: 'CNY',
+    transferDisplayAmount: `¥${amount.toFixed(2)}`,
+    transferNote,
+    content: `¥${amount.toFixed(2)}`
+  };
+}
+
 
 export function extractAiProtocolBlocks(rawText) {
   const visibleText = String(rawText || '')
@@ -815,13 +859,13 @@ export function extractAiProtocolBlocks(rawText) {
   if (!visibleText) return [];
 
   /* ========================================================================
-     [区域标注·本次需求2] AI 回复通用协议强力解析器
+     [区域标注·已完成·角色主动转账协议解析器] AI 回复通用协议强力解析器
      说明：
-     1. 优先寻找任意位置的 [回复]/[表情] 协议头，而不是要求整行完全规范。
+     1. 优先寻找任意位置的 [回复]/[表情]/[转账] 协议头，而不是要求整行完全规范。
      2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -879,6 +923,19 @@ export function buildAiReplyMessages(rawText, state) {
         });
       }
       /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
+      return;
+    }
+
+    if (block.type === '转账') {
+      const transferPayload = parseAiTransferProtocolPayload(block.content);
+      if (transferPayload) {
+        builtMessages.push({
+          role: 'assistant',
+          type: 'transfer',
+          ...transferPayload
+        });
+      }
+      /* [区域标注·已完成·角色主动转账协议容错] 转账协议格式不合法时直接丢弃，避免残缺协议原样露出 */
       return;
     }
 
@@ -1150,7 +1207,9 @@ export function refreshCurrentSessionLastMessage(state) {
     ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
     : (latest?.type === 'image'
         ? `[图片] ${latest?.imageName || '图片'}`
-        : (latest?.content || ''));
+        : (latest?.type === 'transfer'
+            ? `[转账] ${latest?.transferDisplayAmount || latest?.content || '¥0.00'}`
+            : (latest?.content || '')));
   session.lastTime = latest?.timestamp || Date.now();
 }
 
@@ -1464,6 +1523,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
         .map(message => {
           if (!message || message.role !== 'assistant') return null;
           if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
+            return message;
+          }
+          if (String(message.type || '') === 'transfer') {
             return message;
           }
           const content = cleanAiVisibleBubbleText(message.content);
