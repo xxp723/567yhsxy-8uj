@@ -50,7 +50,8 @@ const MSG_ICONS = {
   forward: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 10l12 12l-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22H20c-8 0-12 4-12 12v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-  broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -149,6 +150,9 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
+  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system';
+  const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
+  const transferStatusLabel = transferStatus === 'accepted' ? '已接收' : (transferStatus === 'returned' ? '已退回' : '待处理');
   const bubbleInnerHtml = isStickerMessage
     ? `
         <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
@@ -171,16 +175,26 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                   ${String(msg?.transferNote || '').trim()
                     ? `<span class="msg-transfer-bubble__note">${escapeHtml(msg.transferNote)}</span>`
                     : `<span class="msg-transfer-bubble__note msg-transfer-bubble__note--empty">无备注</span>`}
+                  <span class="msg-transfer-bubble__status msg-transfer-bubble__status--${escapeHtml(transferStatus)}">${escapeHtml(transferStatusLabel)}</span>
                 </div>
               </div>
             `
             : escapeHtml(msg?.content || '')));
 
+  if (isTransferSystemMessage) {
+    return `
+      <!-- [区域标注·已完成·本次转账需求] 聊天中间系统通知：转账接收/退回状态 -->
+      <div class="msg-transfer-system-row">
+        <span class="msg-transfer-system-row__text">${escapeHtml(msg?.content || '')}</span>
+      </div>
+    `;
+  }
+
   return `
-    <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
+    <!-- [区域标注·已完成·本次转账需求] 可单击转账消息：${escapeHtml(messageId)} -->
     <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'} ${multiSelectMode ? 'is-multi-selecting' : ''} ${isSelected ? 'is-selected' : ''}"
          data-message-id="${escapeHtml(messageId)}"
-         data-action="${multiSelectMode ? 'msg-multi-toggle' : 'msg-bubble-select'}">
+         data-action="${multiSelectMode ? 'msg-multi-toggle' : (isTransferMessage ? 'msg-transfer-open-actions' : 'msg-bubble-select')}">
       ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
       <div class="msg-bubble-content">
         ${isToolbarOpen ? `
@@ -932,6 +946,10 @@ export function buildAiReplyMessages(rawText, state) {
         builtMessages.push({
           role: 'assistant',
           type: 'transfer',
+          /* [区域标注·已完成·本次转账需求] AI 发起转账默认待用户处理 */
+          transferDirection: 'incoming',
+          transferStatus: 'pending',
+          transferCounterpartyName: String(block.roleName || '').trim(),
           ...transferPayload
         });
       }
@@ -1740,6 +1758,54 @@ export function showMessageTransferModal(container, options = {}) {
 
   mask.classList.remove('is-hidden');
   setTimeout(() => panel.querySelector('[data-role="msg-transfer-amount-input"]')?.focus(), 30);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 转账消息操作弹窗（接收 / 退回）
+   说明：
+   1. 用户点击转账消息后使用应用内弹窗处理，不使用原生浏览器弹窗。
+   2. 这里只负责 UI；余额变更和消息状态持久化统一由 index.js 写入 DB.js / IndexedDB。
+   ========================================================================== */
+export function showTransferActionModal(container, options = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const messageId = String(options.messageId || '').trim();
+  const amountLabel = String(options.amountLabel || '').trim() || '¥0.00';
+  const noteLabel = String(options.note || '').trim();
+  const statusLabel = String(options.statusLabel || '').trim() || '待处理';
+  const actionHint = String(options.actionHint || '').trim() || '请选择处理方式';
+  const canAccept = Boolean(options.canAccept);
+  const canReturn = Boolean(options.canReturn);
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>转账操作</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body msg-transfer-action-modal-body">
+      <div class="msg-transfer-action-card">
+        <div class="msg-transfer-action-card__row">
+          <span class="msg-transfer-action-card__label">金额</span>
+          <strong class="msg-transfer-action-card__amount">${escapeHtml(amountLabel)}</strong>
+        </div>
+        <div class="msg-transfer-action-card__row">
+          <span class="msg-transfer-action-card__label">状态</span>
+          <span class="msg-transfer-action-card__status">${escapeHtml(statusLabel)}</span>
+        </div>
+        ${noteLabel ? `<div class="msg-transfer-action-card__note">${escapeHtml(noteLabel)}</div>` : ''}
+      </div>
+      <div class="chat-modal-notice">${escapeHtml(actionHint)}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">关闭</button>
+      ${canReturn ? `<button class="chat-modal-btn chat-modal-btn--secondary" data-action="msg-transfer-return" data-message-id="${escapeHtml(messageId)}" type="button">${MSG_ICONS.undo}<span>退回</span></button>` : ''}
+      ${canAccept ? `<button class="chat-modal-btn chat-modal-btn--primary" data-action="msg-transfer-accept" data-message-id="${escapeHtml(messageId)}" type="button">${MSG_ICONS.check}<span>接收</span></button>` : ''}
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
 
 export function showClearAllMessagesModal(container, state) {

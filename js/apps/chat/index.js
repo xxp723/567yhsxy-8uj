@@ -85,7 +85,8 @@ import {
   showEditMessageModal,
   showForwardMessagesModal,
   showMessageImageModal,
-  showMessageTransferModal
+  showMessageTransferModal,
+  showTransferActionModal
 } from './chat-message.js';
 import {
   renderProfile,
@@ -1003,6 +1004,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         id: `user_transfer_${now}_${Math.random().toString(16).slice(2)}`,
         role: 'user',
         type: 'transfer',
+        /* [区域标注·已完成·本次转账需求] 用户发起转账默认待 AI 处理（接收/退回） */
+        transferDirection: 'outgoing',
+        transferStatus: 'pending',
+        transferCounterpartyName: String(session.name || '').trim(),
         content: transferDisplayAmount,
         transferDisplayAmount,
         transferCurrency: displayCurrencyCode,
@@ -1041,6 +1046,155 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         triggerAi: false
       });
       closeModal(container);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·本次转账需求] 点击转账气泡打开“接收/退回”操作弹窗
+       说明：
+       1. 对 pending 状态开放操作；accepted/returned 仅展示当前状态。
+       2. 弹窗与状态流转只使用应用内 UI + DB.js / IndexedDB 持久化。
+       ======================================================================== */
+    case 'msg-transfer-open-actions': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      const transferMessage = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (!transferMessage || String(transferMessage.type || '') !== 'transfer') break;
+
+      const transferStatus = String(transferMessage.transferStatus || 'pending').trim();
+      const statusLabel = transferStatus === 'accepted' ? '已接收' : (transferStatus === 'returned' ? '已退回' : '待处理');
+      const canOperate = transferStatus === 'pending';
+
+      showTransferActionModal(container, {
+        messageId,
+        amountLabel: String(transferMessage.transferDisplayAmount || transferMessage.content || '¥0.00'),
+        note: String(transferMessage.transferNote || ''),
+        statusLabel,
+        actionHint: canOperate ? '请选择接收或退回' : `当前转账状态：${statusLabel}`,
+        canAccept: canOperate,
+        canReturn: canOperate
+      });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·本次转账需求] 确认接收转账
+       说明：
+       1. incoming（AI→用户）接收后才给用户钱包加余额。
+       2. outgoing（用户→AI）接收表示 AI 已收款，不变更钱包余额（扣款已在发起时完成）。
+       ======================================================================== */
+    case 'msg-transfer-accept': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      if (!messageId) break;
+
+      const messageIndex = (state.currentMessages || []).findIndex(item => String(item.id) === messageId);
+      if (messageIndex < 0) break;
+
+      const transferMessage = state.currentMessages[messageIndex];
+      if (String(transferMessage.type || '') !== 'transfer') break;
+      if (String(transferMessage.transferStatus || 'pending') !== 'pending') {
+        closeModal(container);
+        break;
+      }
+
+      const now = Date.now();
+      const transferDirection = String(transferMessage.transferDirection || '').trim() || (transferMessage.role === 'assistant' ? 'incoming' : 'outgoing');
+      const transferBaseCny = Math.max(0, Number(transferMessage.transferBaseCny || 0) || 0);
+
+      state.currentMessages[messageIndex] = {
+        ...transferMessage,
+        transferDirection,
+        transferStatus: 'accepted',
+        transferHandledAt: now
+      };
+
+      if (transferDirection === 'incoming' && transferBaseCny > 0) {
+        state.walletData = normalizeWalletData({
+          ...state.walletData,
+          balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+          updatedAt: now
+        });
+      }
+
+      const session = state.sessions.find(s => s.id === state.currentChatId);
+      if (session) {
+        session.lastMessage = '[转账] 已接收';
+        session.lastTime = now;
+      }
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+        persistWalletData(state, db)
+      ]);
+
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·本次转账需求] 确认退回转账 + 生成系统通知
+       说明：
+       1. incoming（AI→用户）退回：只改状态，不变更用户钱包。
+       2. outgoing（用户→AI）退回：退款到用户钱包，并插入“角色名 已退回”系统通知。
+       ======================================================================== */
+    case 'msg-transfer-return': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      if (!messageId) break;
+
+      const messageIndex = (state.currentMessages || []).findIndex(item => String(item.id) === messageId);
+      if (messageIndex < 0) break;
+
+      const transferMessage = state.currentMessages[messageIndex];
+      if (String(transferMessage.type || '') !== 'transfer') break;
+      if (String(transferMessage.transferStatus || 'pending') !== 'pending') {
+        closeModal(container);
+        break;
+      }
+
+      const now = Date.now();
+      const transferDirection = String(transferMessage.transferDirection || '').trim() || (transferMessage.role === 'assistant' ? 'incoming' : 'outgoing');
+      const transferBaseCny = Math.max(0, Number(transferMessage.transferBaseCny || 0) || 0);
+
+      state.currentMessages[messageIndex] = {
+        ...transferMessage,
+        transferDirection,
+        transferStatus: 'returned',
+        transferHandledAt: now
+      };
+
+      if (transferDirection === 'outgoing' && transferBaseCny > 0) {
+        state.walletData = normalizeWalletData({
+          ...state.walletData,
+          balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+          updatedAt: now
+        });
+
+        const session = state.sessions.find(s => s.id === state.currentChatId);
+        const roleName = String(transferMessage.transferCounterpartyName || session?.name || '对方').trim() || '对方';
+        state.currentMessages.push({
+          id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
+          role: 'system',
+          type: 'transfer_system',
+          content: `${roleName} 已退回`,
+          timestamp: now + 1
+        });
+      }
+
+      const session = state.sessions.find(s => s.id === state.currentChatId);
+      if (session) {
+        session.lastMessage = '[转账] 已退回';
+        session.lastTime = now;
+      }
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+        persistWalletData(state, db)
+      ]);
+
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
       break;
     }
 

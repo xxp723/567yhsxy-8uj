@@ -486,6 +486,55 @@
   color: rgba(74, 52, 42, 0.38);
 }
 
+.msg-transfer-bubble__status {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 20px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+
+.msg-transfer-bubble__status--pending {
+  color: #8b5e2c;
+  background: rgba(228, 186, 112, 0.2);
+  border-color: rgba(228, 186, 112, 0.38);
+}
+
+.msg-transfer-bubble__status--accepted {
+  color: #2f6a3a;
+  background: rgba(125, 196, 143, 0.2);
+  border-color: rgba(125, 196, 143, 0.38);
+}
+
+.msg-transfer-bubble__status--returned {
+  color: #9d3f31;
+  background: rgba(181, 67, 54, 0.14);
+  border-color: rgba(181, 67, 54, 0.32);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 聊天中间系统通知样式（已接收/已退回）
+   说明：与主题风格统一的小字系统行，不使用原生弹窗提示。
+   ========================================================================== */
+.msg-transfer-system-row {
+  align-self: center;
+  max-width: 86%;
+  padding: 2px 0;
+}
+
+.msg-transfer-system-row__text {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(74, 52, 42, 0.48);
+  text-align: center;
+}
+
 /* [区域标注·本次需求5] 消息时间戳 */
 .msg-bubble__time {
   font-size: 10px;
@@ -660,6 +709,58 @@
   font-weight: 700;
   color: rgba(74, 52, 42, 0.46);
   letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 转账操作弹窗样式（接收 / 退回）
+   说明：用户点击转账气泡后弹出，沿用闲谈应用弹窗视觉。
+   ========================================================================== */
+.msg-transfer-action-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-transfer-action-card {
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(255, 252, 247, 0.96), rgba(242, 233, 223, 0.92));
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-transfer-action-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.msg-transfer-action-card__label {
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.56);
+}
+
+.msg-transfer-action-card__amount {
+  font-size: 17px;
+  font-weight: 800;
+  color: #4A342A;
+  line-height: 1.2;
+}
+
+.msg-transfer-action-card__status {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.72);
+}
+
+.msg-transfer-action-card__note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(74, 52, 42, 0.68);
+  word-break: break-word;
 }
 
 /* ==========================================================================
