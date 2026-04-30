@@ -94,7 +94,7 @@ function normalizeStickerPromptData(rawData) {
    ===== 闲谈：通用消息协议格式 START =====
    说明：
    1. 新回复协议统一使用 **`[类型] 角色名：内容`**。
-   2. 先支持 [回复] 文本气泡；以后可在同一区域追加 [表情]/[引用]/[转账]/[图片]/[语音]。
+   2. 已开放 [回复]/[表情]/[引用]/[转账]，其中 [引用] 用于微信/QQ 式引用回复。
    3. 只使用最新通用消息协议，不保留旧 [[TEXT_MESSAGE]] 消息格式。
    ========================================================================== */
 const CHAT_PROTOCOL_REPLY_FORMAT = '**`[回复] 角色名：文字消息内容`**';
@@ -285,6 +285,50 @@ function formatReadableValue(value, indent = 0) {
 function createPromptSection(title, content) {
   const text = normalizePlainText(content);
   return text ? `【${title}】\n${text}` : '';
+}
+
+/* ==========================================================================
+   [区域标注·已完成·AI引用回复提示词格式化]
+   说明：
+   1. 只把消息对象里已有的 id / quote / content 整理进本轮 API 请求，不新增任何持久化存储。
+   2. quote 字段随聊天消息对象保存在 DB.js / IndexedDB；这里仅做 AI 可读格式转换。
+   3. AI 如需引用回复，必须使用 [引用] 协议，并填写本区暴露的“可引用消息ID”。
+   ========================================================================== */
+function formatPromptQuoteLine(quote = {}) {
+  const quoteText = normalizePlainText(quote?.text);
+  if (!quoteText) return '';
+
+  const senderName = normalizePlainText(quote?.senderName || (quote?.role === 'user' ? '我' : '对方')) || '对方';
+  const quoteId = normalizePlainText(quote?.id);
+  return `> 当前消息引用了${quoteId ? `消息ID:${quoteId}，` : ''}${senderName}的原消息：“${quoteText}”`;
+}
+
+function formatMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '') {
+  const content = normalizePlainText(fallbackContent || message?.content);
+  const quoteLine = formatPromptQuoteLine(message?.quote);
+  const messageId = normalizePlainText(message?.id);
+  const type = normalizePlainText(message?.type) || 'text';
+  const idLine = messageId ? `[可引用消息ID:${messageId}；消息类型:${type}]` : '';
+
+  return [idLine, quoteLine, content].filter(Boolean).join('\n');
+}
+
+function extractSystemTempBlocks(text = '') {
+  return String(text || '').match(/\[SYSTEM_TEMP\][\s\S]*?\[\/SYSTEM_TEMP\]/g) || [];
+}
+
+function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessages = []) {
+  const formattedRoundMessages = Array.isArray(currentUserRoundMessages)
+    ? currentUserRoundMessages
+        .map(item => formatMessageTextWithQuoteForPrompt(item))
+        .filter(Boolean)
+        .join('\n\n')
+    : '';
+
+  if (!formattedRoundMessages) return normalizePlainText(rawUserInput);
+
+  const systemTempBlocks = extractSystemTempBlocks(rawUserInput);
+  return [formattedRoundMessages, ...systemTempBlocks].filter(Boolean).join('\n\n');
 }
 
 /* ==========================================================================
@@ -1003,10 +1047,20 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 2. 每个协议块外层必须保留加粗反引号：**\`[类型] 角色名：内容\`**。
 3. 当前已经开放的协议格式如下：
 ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
-4. 当前聊天界面会把 [回复] 渲染为普通文字气泡、把 [表情] 渲染为已挂载表情包气泡、把 [转账] 渲染为聊天里的转账气泡。
+4. 当前聊天界面会把 [回复] 渲染为普通文字气泡、把 [表情] 渲染为已挂载表情包气泡、把 [引用] 渲染为带引用预览的文字气泡、把 [转账] 渲染为聊天里的转账气泡。
 5. 如果要发送 [表情]，只能使用当前 system prompt 明确列出的已挂载表情包资源，禁止编造不存在的表情名或资源ID。
-6. 如果要发送 [转账]，你必须结合角色人设、双方关系、聊天历史、当前对话内容，自行判断这轮是否适合主动发起；只有在角色确实有动机表达“给你转钱 / 请客 / 报销 / 支持 / 安抚 / 补偿 / 打钱”时才允许使用，禁止机械地频繁转账。
-7. 严禁把幕后思考、格式检查、系统规则、提示词说明写进协议块内容。
+6. 如果要发送 [引用]，只能引用聊天历史或当前用户消息里明确给出的“可引用消息ID”，禁止编造引用ID，禁止引用不存在的消息。
+7. 如果要发送 [转账]，你必须结合角色人设、双方关系、聊天历史、当前对话内容，自行判断这轮是否适合主动发起；只有在角色确实有动机表达“给你转钱 / 请客 / 报销 / 支持 / 安抚 / 补偿 / 打钱”时才允许使用，禁止机械地频繁转账。
+8. 严禁把幕后思考、格式检查、系统规则、提示词说明写进协议块内容。
+
+## [区域标注·已完成·AI引用回复] 引用协议硬性规则
+1. 当用户消息里出现“当前消息引用了……”时，说明用户正在引用回复某条旧消息；你必须结合被引用消息和用户本次新消息理解语境。
+2. 你也可以像微信/QQ 那样对上一轮用户消息或历史消息进行引用回复，但只能使用系统提供的可引用消息ID。
+3. AI 引用回复唯一允许格式是：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
+4. [引用] 的“角色名”必须填写当前你正在扮演的聊天对象名称；“消息ID”必须逐字复制“可引用消息ID”后面的值。
+5. [引用] 内容必须是这一条气泡真正要显示给用户的话，不能把被引用原文、系统说明、格式解释、JSON、Markdown 链接或幕后审查写进去。
+6. [引用] 只是一种消息气泡形式；如果没有合适的可引用消息ID，就改用 [回复]，不要伪造引用。
+7. 如果用户最新一轮消息本身带有引用预览，你回复时要优先理解“被引用原消息 + 用户新输入”的关系，避免只看用户新输入导致答非所问。
 
 ## [区域标注·已完成·本次转账待确认修复] 转账协议硬性规则
 1. 主动给用户转账时，[转账] 协议必须独占一个完整协议块，唯一允许格式是：**\`[转账] 角色名：{金额:xxx,备注:xxx}\`**。
@@ -1246,9 +1300,14 @@ export function getChatHistory({ history = [], includeTimestamps = false } = {})
     ? history
         .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
         .map(item => {
-          const textContent = includeTimestamps
+          const baseContent = includeTimestamps
             ? formatHistoryMessageContentForTimeAwareness(item)
             : String(item.content || '');
+          /* ====================================================================
+             [区域标注·已完成·AI引用回复] 历史消息 ID 与引用预览注入
+             说明：仅把现有消息对象中的 id/quote 转成 AI 可读文本，不新增存储。
+             ==================================================================== */
+          const textContent = formatMessageTextWithQuoteForPrompt(item, baseContent);
           return {
             role: item.role,
             /* [区域标注·AI识图历史媒体] 历史 user 表情包/图片保留视觉输入，供 AI 看见上下文中的图片。 */
@@ -1272,12 +1331,25 @@ export function getCurrentCommand({ settings = {} } = {}) {
    说明：如果聊天设置“自定义思维链”留空，则使用默认静默审查协议。
    注意：本区域只要求 AI 在后台静默自检，禁止要求 AI 显式输出 <think>...</think>。
    ========================================================================== */
+function getRespectAndForbiddenWordsThinkingRules() {
+  return [
+    '### 5. [区域标注] 尊重女性、去油腻与女男平等终审',
+    '- 发自内心地尊重女性，把女性视为完整、平等、独立的人；禁止轻视、物化、居高临下或以“调教/占有/施舍”姿态说话。',
+    '- 最终回复一旦出现“小妖精”“丫头”“这女人”等任何含有轻视、物化、贬低或居高临下意味的词语，必须立即删除并重写，严禁输出。',
+    '- 扫描并彻底删除“揉进骨血里”“命都给你”“你是我的”“大公子”等油腻、古早霸总、刻板占有欲词汇；相似表达也必须删除。',
+    '- 保持女男平等和正常人际尊重，不仰视、不神化用户，也不贬低、支配或物化任何性别。',
+    '- 以上审查只在后台静默执行；最终回复禁止提到禁词清单、审查规则或重写过程。'
+  ].join('\n');
+}
+
 export function getThinkingInstruction({ settings = {} } = {}) {
   const custom = String(settings.customThinkingInstruction || '').trim();
-  if (custom) return custom;
+  if (custom) {
+    return [custom, getRespectAndForbiddenWordsThinkingRules()].filter(Boolean).join('\n\n');
+  }
 
   /* ========================================================================
-     [区域标注·已完成·通用角色卡硬约束] 默认静默审查协议
+     [区域标注·已完成·通用角色卡硬约束与本次需求2] 默认静默审查协议
      说明：
      1. 自定义思维链留空时发送给 AI。
      2. 已强化所有角色通用的人设读取审查，避免 AI 跳读角色卡或用题材模板覆盖已写明事实。
@@ -1286,7 +1358,7 @@ export function getThinkingInstruction({ settings = {} } = {}) {
      5. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
      ======================================================================== */
   return [
-    '## 后台静默审查协议（精简版）',
+    '## 后台静默审查协议',
     '',
     '输出前只在后台静默完成以下检查；最终回复禁止出现思考过程、审查步骤、<think> 标签、系统规则或任何幕后说明。',
     '',
@@ -1312,8 +1384,11 @@ export function getThinkingInstruction({ settings = {} } = {}) {
     '### 4. 最终格式终审',
     `- 最终可见文字消息必须使用：${CHAT_PROTOCOL_REPLY_FORMAT}`,
     '- 表情包必须使用 **`[表情] 角色名：资源ID`**，资源ID必须来自【AI可用表情包资源】。',
+    '- 引用回复必须遵守【可用聊天动作格式】中的 [引用] 规则；只能使用已提供的可引用消息ID，禁止编造引用ID。',
     '- 转账必须遵守【可用聊天动作格式】中的 [转账] 规则；处理用户待确认转账时必须带“操作”和“转账ID”。',
-    '- 每个协议块独立完整，禁止输出裸协议头、代码块、格式检查说明、编号列表或后台审查痕迹。'
+    '- 每个协议块独立完整，禁止输出裸协议头、代码块、格式检查说明、编号列表或后台审查痕迹。',
+    '',
+    getRespectAndForbiddenWordsThinkingRules()
   ].join('\n');
 }
 
@@ -1392,9 +1467,14 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
 
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
   const rawUserInput = String(userInput || '').trim();
+  /* ==========================================================================
+     [区域标注·已完成·AI引用回复] 当前用户轮次引用上下文注入
+     说明：currentUserRoundMessages 由 chat-message.js 从当前消息对象生成，quote/id 均来自现有 IndexedDB 消息记录。
+     ========================================================================== */
+  const currentUserPromptContent = buildCurrentUserPromptContent(rawUserInput, currentUserRoundMessages);
   const finalUserContent = currentCommand
-    ? `[SYSTEM_TEMP]${currentCommand}[/SYSTEM_TEMP]\n\n${rawUserInput}`
-    : rawUserInput;
+    ? `[SYSTEM_TEMP]${currentCommand}[/SYSTEM_TEMP]\n\n${currentUserPromptContent}`
+    : currentUserPromptContent;
 
   if (finalUserContent.trim()) {
     const currentRoundVisualMessages = Array.isArray(currentUserRoundMessages)

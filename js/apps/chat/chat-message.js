@@ -55,7 +55,12 @@ const MSG_ICONS = {
   broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注·已完成·气泡功能区复制] IconPark — 复制按钮图标 */
-  copy: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 16V8h24v24h-8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 16h24v24H8V16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
+  copy: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 16V8h24v24h-8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 16h24v24H8V16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·引用回复] IconPark — 引用按钮图标
+     说明：用于消息气泡第二行“引用”按钮；引用数据随消息对象写入 DB.js / IndexedDB。
+     ======================================================================== */
+  quote: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 10H8v12h10v16H8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 10H30v12h10v16H30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -67,6 +72,54 @@ function formatMsgTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/* ========================================================================
+   [区域标注·已完成·引用回复] 引用消息数据工具
+   说明：
+   1. 只从当前消息对象提取可读摘要，随回复消息的 quote 字段写入 IndexedDB。
+   2. 不使用 localStorage/sessionStorage，不保留双份存储兜底。
+   3. 下次如需修改引用预览文案或长度，优先修改本区域。
+   ======================================================================== */
+function getMessageDisplayTextForQuote(message = {}) {
+  const type = String(message?.type || '');
+  if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
+  if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
+  if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
+  if (type === 'transfer_system') return String(message?.content || '系统提示').trim();
+  return String(message?.content || '').trim();
+}
+
+export function createQuotePayloadFromMessage(message = {}, chatSession = {}, userProfile = {}) {
+  if (!message?.id) return null;
+  const isUser = message.role === 'user';
+  const text = getMessageDisplayTextForQuote(message).replace(/\s+/g, ' ').trim();
+  return {
+    id: String(message.id),
+    role: String(message.role || ''),
+    senderName: isUser
+      ? String(userProfile?.nickname || '我')
+      : String(chatSession?.name || '对方'),
+    text: text.length > 86 ? `${text.slice(0, 86)}…` : text,
+    type: String(message.type || 'text'),
+    timestamp: Number(message.timestamp || 0) || 0
+  };
+}
+
+function renderQuotePreview(quote = {}, variant = 'bubble') {
+  const text = String(quote?.text || '').trim();
+  if (!text) return '';
+  const senderName = String(quote?.senderName || (quote?.role === 'user' ? '我' : '对方')).trim();
+  const className = variant === 'composer' ? 'msg-quote-preview msg-quote-preview--composer' : 'msg-quote-preview';
+  return `
+    <div class="${className}">
+      <span class="msg-quote-preview__bar"></span>
+      <div class="msg-quote-preview__body">
+        <span class="msg-quote-preview__sender">${escapeHtml(senderName)}</span>
+        <span class="msg-quote-preview__text">${escapeHtml(text)}</span>
+      </div>
+    </div>
+  `;
 }
 
 /* ==========================================================================
@@ -157,6 +210,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system';
   const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
   const isTransferAccepted = transferStatus === 'accepted';
+  /* ========================================================================
+     [区域标注·已完成·引用回复] 消息气泡内引用预览
+     说明：引用预览是消息对象 quote 字段的展示层，quote 字段随 currentMessages 写入 DB.js / IndexedDB。
+     ======================================================================== */
+  const quoteHtml = renderQuotePreview(msg?.quote);
   const bubbleInnerHtml = isStickerMessage
     ? `
         <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
@@ -251,9 +309,17 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--copy" data-action="msg-bubble-copy" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.copy}<span>复制</span>
             </button>
+            <!-- ==================================================================
+                 [区域标注·已完成·引用回复] 第二行引用按钮
+                 说明：点击后把当前消息设为待引用对象，下一条用户消息会携带 quote 字段写入 IndexedDB。
+                 ================================================================== -->
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--quote" data-action="msg-bubble-quote" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.quote}<span>引用</span>
+            </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+          ${quoteHtml}
           ${bubbleInnerHtml}
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
@@ -306,6 +372,12 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const multiSelectMode = Boolean(options.multiSelectMode);
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
   const selectedCount = selectedMessageIds.length;
+  /* ========================================================================
+     [区域标注·已完成·引用回复] 输入栏待引用状态
+     说明：仅运行时保存待引用对象；真正发送后 quote 字段随消息对象写入 DB.js / IndexedDB。
+     ======================================================================== */
+  const pendingQuote = options.pendingQuote || null;
+  const pendingQuoteHtml = renderQuotePreview(pendingQuote, 'composer');
 
   /* ==========================================================================
      [区域标注] 聊天顶部栏
@@ -417,9 +489,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
      说明：四周圆角矩形；左侧咖啡按钮；输入框回车发送；右侧魔法棒与纸飞机。
   /* ========================================================================== */
   const inputBarHtml = `
-    <div class="msg-input-shell">
+    <div class="msg-input-shell ${pendingQuoteHtml ? 'has-pending-quote' : ''}">
       ${featureDockHtml}
       ${stickerPanelHtml}
+      ${pendingQuoteHtml ? `
+        <div class="msg-pending-quote" data-role="msg-pending-quote">
+          ${pendingQuoteHtml}
+          <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
+        </div>
+      ` : ''}
       <div class="msg-input-bar">
         <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
         <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
@@ -714,13 +792,20 @@ export async function sendMessage(container, state, db, content, settingsManager
   /* ===== 闲谈：发送消息去重 START ===== */
   let appendedUserMessage = null;
   if (!options.skipAppendUser) {
+    const pendingQuote = state.pendingQuote && state.pendingQuote.id ? { ...state.pendingQuote } : null;
     appendedUserMessage = {
       id: `user_${Date.now()}_${Math.random().toString(16).slice(2)}`,
       role: 'user',
       content: userText,
+      /* ======================================================================
+         [区域标注·已完成·引用回复] 用户引用回复持久化字段
+         说明：quote 字段随 currentMessages 写入 DB.js / IndexedDB；发送后清空运行时待引用状态。
+         ====================================================================== */
+      ...(pendingQuote ? { quote: pendingQuote } : {}),
       timestamp: Date.now()
     };
     state.currentMessages.push(appendedUserMessage);
+    state.pendingQuote = null;
   }
   /* ===== 闲谈：发送消息去重 END ===== */
 
@@ -1037,6 +1122,15 @@ export function parseAiTransferProtocolPayload(content) {
 }
 
 
+export function resolveAiQuotePayloadById(state, quoteId = '') {
+  const targetId = String(quoteId || '').trim();
+  if (!targetId) return null;
+  const session = state.sessions?.find?.(item => String(item.id) === String(state.currentChatId)) || {};
+  const message = (state.currentMessages || []).find(item => String(item.id) === targetId);
+  return message ? createQuotePayloadFromMessage(message, session, state.profile || {}) : null;
+}
+
+
 export function extractAiProtocolBlocks(rawText) {
   const visibleText = String(rawText || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -1051,7 +1145,7 @@ export function extractAiProtocolBlocks(rawText) {
      2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -1126,6 +1220,24 @@ export function buildAiReplyMessages(rawText, state) {
         });
       }
       /* [区域标注·已完成·角色主动转账协议容错] 转账协议格式不合法时直接丢弃，避免残缺协议原样露出 */
+      return;
+    }
+
+    if (block.type === '引用') {
+      /* ======================================================================
+         [区域标注·已完成·AI引用回复] AI [引用] 协议解析
+         说明：AI 输出 {引用ID:xxx}文字 时，前端解析为 quote 字段并随 AI 消息写入 DB.js / IndexedDB。
+         ====================================================================== */
+      const quoteMatch = String(block.content || '').match(/^\s*\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
+      const quotePayload = quoteMatch ? resolveAiQuotePayloadById(state, quoteMatch[1]) : null;
+      const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : block.content);
+      splitStrictSentenceBubbles(replyText).forEach(content => {
+        builtMessages.push({
+          role: 'assistant',
+          content,
+          ...(quotePayload ? { quote: quotePayload } : {})
+        });
+      });
       return;
     }
 
@@ -1267,7 +1379,9 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     /* ===== 闲谈：删除消息二次确认 START ===== */
-    deleteConfirmMessageId: state.deleteConfirmMessageId
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    /* [区域标注·已完成·引用回复] 渲染输入栏待引用预览 */
+    pendingQuote: state.pendingQuote
     /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 
@@ -1305,7 +1419,8 @@ export function appendCurrentMessageBubble(container, state, message) {
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     /* ===== 闲谈：删除消息二次确认 START ===== */
-    deleteConfirmMessageId: state.deleteConfirmMessageId
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    pendingQuote: state.pendingQuote
     /* ===== 闲谈：删除消息二次确认 END ===== */
   }));
   listArea.scrollTop = listArea.scrollHeight;
@@ -1487,8 +1602,14 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0
   };
   const currentUserRoundMessages = currentRoundMessages.map(item => ({
+    /* ======================================================================
+       [区域标注·已完成·AI引用回复] 当前轮用户消息可引用 ID
+       说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用用户最新一轮消息；不新增存储。
+       ====================================================================== */
+    id: item.id || '',
     role: item.role,
     content: item.content,
+    quote: item.quote || null,
     type: item.type || '',
     stickerUrl: item.stickerUrl || '',
     stickerName: item.stickerName || '',
@@ -1514,8 +1635,14 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
       current = [];
     }
     current.push({
+      /* ======================================================================
+         [区域标注·已完成·AI引用回复] 历史消息可引用 ID
+         说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用短期记忆范围内的消息；不新增存储。
+         ====================================================================== */
+      id: item.id || '',
       role: item.role,
       content: item.content,
+      quote: item.quote || null,
       type: item.type || '',
       stickerUrl: item.stickerUrl || '',
       stickerName: item.stickerName || '',

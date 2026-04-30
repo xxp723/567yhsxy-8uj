@@ -86,7 +86,8 @@ import {
   showForwardMessagesModal,
   showMessageImageModal,
   showMessageTransferModal,
-  showTransferActionModal
+  showTransferActionModal,
+  createQuotePayloadFromMessage
 } from './chat-message.js';
 import {
   renderProfile,
@@ -219,6 +220,11 @@ export async function mount(container, context) {
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: '',
     /* ===== 闲谈：删除消息二次确认 END ===== */
+    /* ========================================================================
+       [区域标注·已完成·引用回复] 当前输入栏待引用对象
+       说明：仅运行时保存；发送消息时 quote 字段随消息对象写入 DB.js / IndexedDB。
+       ======================================================================== */
+    pendingQuote: null,
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null,              // null | 'wallet' | 'sticker' | 'chatDaysDetail'
     /* [区域标注·本次需求2] 表情包独立页多选删除运行时状态 */
@@ -536,6 +542,7 @@ async function openChatMessage(container, state, db, chatId) {
   state.stickerPanelOpen = false;
   state.stickerPanelGroupId = 'all';
   state.coffeeDockOpen = false;
+  state.pendingQuote = null;
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
@@ -580,6 +587,7 @@ function closeChatMessage(container, state) {
   state.stickerPanelOpen = false;
   state.stickerPanelGroupId = 'all';
   state.coffeeDockOpen = false;
+  state.pendingQuote = null;
 
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -1419,6 +1427,34 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-edit': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (messageId) showEditMessageModal(container, state, messageId);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·引用回复] 消息气泡功能栏 — 引用回复
+       说明：
+       1. 点击第二行“引用”按钮后，仅把引用对象暂存在运行时 state.pendingQuote。
+       2. 用户发送下一条消息时，quote 字段随消息对象写入 DB.js / IndexedDB。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ======================================================================== */
+    case 'msg-bubble-quote': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      const session = state.sessions.find(item => String(item.id) === String(state.currentChatId)) || {};
+      if (!message) break;
+
+      state.pendingQuote = createQuotePayloadFromMessage(message, session, state.profile || {});
+      state.selectedMessageId = '';
+      state.deleteConfirmMessageId = '';
+      state.coffeeDockOpen = false;
+      state.stickerPanelOpen = false;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+    }
+
+    case 'cancel-msg-quote': {
+      state.pendingQuote = null;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
     }
 
@@ -2378,6 +2414,7 @@ async function loadMaskData(state, db, maskId) {
   state.stickerPanelOpen = false;
   state.stickerPanelGroupId = 'all';
   state.coffeeDockOpen = false;
+  state.pendingQuote = null;
   state.stickerMultiSelectMode = false;
   state.selectedStickerIds = [];
 }

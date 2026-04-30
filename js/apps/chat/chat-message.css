@@ -322,6 +322,74 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·引用回复气泡样式]
+   说明：
+   1. 仅作用于闲谈消息气泡内 quote 字段的引用预览，以及输入栏待引用预览。
+   2. quote 字段随现有聊天消息对象写入 DB.js / IndexedDB；本区域只负责展示样式，不使用 localStorage/sessionStorage。
+   3. 已按微信/QQ 类引用回复形态完成：左侧竖线、发送者、摘要文本，并保持闲谈暖色主题统一。
+   ========================================================================== */
+.msg-bubble--with-quote {
+  min-width: min(168px, 58vw);
+}
+
+.msg-quote-preview {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 8px 9px;
+  border-radius: 13px;
+  background: rgba(74, 52, 42, 0.055);
+  border: 1px solid rgba(74, 52, 42, 0.06);
+}
+
+.msg-bubble--user .msg-quote-preview {
+  background: rgba(255, 250, 244, 0.42);
+  border-color: rgba(74, 52, 42, 0.07);
+}
+
+.msg-quote-preview__bar {
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.28);
+}
+
+.msg-quote-preview__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msg-quote-preview__sender {
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(74, 52, 42, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-quote-preview__text {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(74, 52, 42, 0.58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-quote-preview--composer {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(255, 252, 247, 0.82);
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次表情包气泡缩小] 表情包消息气泡铺满显示 + 缩小一圈
    说明：
    1. 仅修改聊天消息页表情包气泡，不改其它页面图片样式。
@@ -569,6 +637,60 @@
   bottom: 12px;
   z-index: 20;
   overflow: visible;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·引用回复输入栏待引用样式]
+   说明：
+   1. 点击消息气泡第二行“引用”后，在输入栏上方展示待引用对象，可用右侧 IconPark 关闭按钮取消。
+   2. 待引用对象仅为运行时状态；用户真正发送后 quote 字段随消息对象写入 DB.js / IndexedDB。
+   3. 本区域不使用原生浏览器弹窗，不涉及 localStorage/sessionStorage。
+   ========================================================================== */
+.msg-input-shell.has-pending-quote .msg-input-bar {
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+
+.msg-pending-quote {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  margin: 0 8px -4px;
+  padding: 8px 8px 12px;
+  border-radius: 18px 18px 10px 10px;
+  background: rgba(248, 244, 239, 0.96);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-bottom-color: rgba(74, 52, 42, 0.04);
+  box-shadow: 0 10px 24px rgba(74, 52, 42, 0.11);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.msg-pending-quote__cancel {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: rgba(74, 52, 42, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-pending-quote__cancel:active {
+  background: rgba(74, 52, 42, 0.16);
+  transform: scale(0.92);
+}
+
+.msg-pending-quote__cancel svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* ==========================================================================
