@@ -12,7 +12,9 @@ import {
   DATA_KEY_MESSAGES_PREFIX,
   dbPut,
   escapeHtml,
-  normalizeStickerData
+  normalizeStickerData,
+  normalizeWalletData,
+  persistWalletData
 } from './chat-utils.js';
 import { chat } from './prompt.js';
 import { getVisibleChatSessions } from './chat-list.js';
@@ -542,6 +544,138 @@ export function getAiBubbleDelayMs(bubbleText, index) {
   return Math.min(1300, Math.max(420, 260 + length * 24 + index * 80));
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次转账待确认修复] 用户转账待 AI 决策工具
+   说明：
+   1. 用户发给 AI 的转账保持 pending，直到纸飞机触发 API 后才把待确认状态交给 AI。
+   2. AI 可用 [转账] 协议返回“操作:接收/退回”，这里只更新当前消息与钱包数据。
+   3. 所有状态和钱包流水只通过 DB.js / IndexedDB 持久化，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function getPendingOutgoingTransfers(state) {
+  return (Array.isArray(state.currentMessages) ? state.currentMessages : [])
+    .filter(message => (
+      String(message?.type || '') === 'transfer'
+      && String(message?.transferDirection || '') === 'outgoing'
+      && String(message?.transferStatus || 'pending') === 'pending'
+    ));
+}
+
+function buildPendingOutgoingTransferSystemTemp(pendingTransfers = []) {
+  const transfers = Array.isArray(pendingTransfers) ? pendingTransfers : [];
+  if (!transfers.length) return '';
+
+  const lines = transfers.map((message, index) => (
+    `${index + 1}. 转账ID:${String(message.id || '').trim()}；金额:${String(message.transferDisplayAmount || message.content || '¥0.00').trim()}；备注:${String(message.transferNote || '无').trim() || '无'}`
+  ));
+
+  return `[SYSTEM_TEMP]
+当前有用户已经转给你的待确认转账，用户现在点击纸飞机调用 API，你必须以当前角色的人设、关系阶段和上下文自行决定接收或退回。
+待确认转账如下：
+${lines.join('\n')}
+如果决定接收其中某笔转账，必须输出独立协议块：**\`[转账] 角色名：{操作:接收,转账ID:对应ID}\`**。
+如果决定退回其中某笔转账，必须输出独立协议块：**\`[转账] 角色名：{操作:退回,转账ID:对应ID,备注:可选理由}\`**。
+该处理协议只用于界面更新，不会显示成普通文字；你仍应另外用 [回复] 协议自然回应用户。
+[/SYSTEM_TEMP]`;
+}
+
+function extractAiPendingTransferDecisions(rawText) {
+  const visibleText = String(rawText || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim();
+  if (!visibleText) return [];
+
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[转账\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const matches = [...visibleText.matchAll(markerRegex)];
+
+  return matches
+    .map((match, index) => {
+      const nextMatch = matches[index + 1];
+      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
+      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+      const body = cleanAiProtocolBlockContent(visibleText.slice(contentStart, contentEnd));
+      const actionMatch = body.match(/操作\s*[：:]\s*(接收|退回|拒收|拒绝|返回)/i);
+      const idMatch = body.match(/转账\s*ID\s*[：:]\s*([^,，;；}\s]+)/i) || body.match(/transfer\s*Id\s*[：:]\s*([^,，;；}\s]+)/i);
+      if (!actionMatch || !idMatch) return null;
+      const rawAction = String(actionMatch[1] || '').trim();
+      return {
+        transferId: String(idMatch[1] || '').trim(),
+        action: rawAction === '接收' ? 'accepted' : 'returned'
+      };
+    })
+    .filter(item => item && item.transferId && item.action);
+}
+
+async function applyAiPendingTransferDecisions(state, db, rawText) {
+  const decisions = extractAiPendingTransferDecisions(rawText);
+  if (!decisions.length) return false;
+
+  let changed = false;
+  const now = Date.now();
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  const decisionMap = new Map(decisions.map(item => [String(item.transferId), item.action]));
+
+  for (const message of (Array.isArray(state.currentMessages) ? state.currentMessages : [])) {
+    if (
+      String(message?.type || '') !== 'transfer'
+      || String(message?.transferDirection || '') !== 'outgoing'
+      || String(message?.transferStatus || 'pending') !== 'pending'
+    ) continue;
+
+    const action = decisionMap.get(String(message.id || ''));
+    if (!action) continue;
+
+    message.transferStatus = action;
+    message.transferHandledAt = now;
+    changed = true;
+
+    const roleName = String(message.transferCounterpartyName || session?.name || '对方').trim() || '对方';
+    const transferBaseCny = Math.max(0, Number(message.transferBaseCny || 0) || 0);
+
+    if (action === 'returned' && transferBaseCny > 0) {
+      state.walletData = normalizeWalletData({
+        ...state.walletData,
+        balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+        ledger: [
+          {
+            id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+            kind: 'transfer',
+            direction: 'in',
+            title: `${roleName} 退回转账`,
+            amountBaseCny: Number(transferBaseCny.toFixed(2)),
+            timestamp: now
+          },
+          ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+        ],
+        updatedAt: now
+      });
+    }
+
+    state.currentMessages.push({
+      id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
+      role: 'user',
+      type: 'transfer_system',
+      content: action === 'accepted' ? `${roleName} 已接收` : `${roleName} 已退回`,
+      transferStatus: action,
+      timestamp: now + 1
+    });
+  }
+
+  if (!changed) return false;
+
+  if (session) {
+    session.lastMessage = '[转账]';
+    session.lastTime = now;
+  }
+
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+    persistWalletData(state, db)
+  ]);
+  return true;
+}
+
 /* ========================================================================== */
 export async function sendMessage(container, state, db, content, settingsManager, options = {}) {
   const userText = String(content || '').trim();
@@ -599,9 +733,17 @@ export async function sendMessage(container, state, db, content, settingsManager
     const promptPayload = buildPromptPayloadForLatestUserRound(state.currentMessages, state.chatPromptSettings.shortTermMemoryRounds);
     /* ===== 闲谈应用：短期记忆与最新一轮消息 END ===== */
 
+    /* ========================================================================
+       [区域标注·已完成·本次转账待确认修复] 纸飞机触发时把待确认转账交给 AI 决策
+       说明：用户转账不再立即显示“AI 已接收”；仅在本次 API 请求中注入临时状态指令。
+       ======================================================================== */
+    const pendingOutgoingTransfers = getPendingOutgoingTransfers(state);
+    const pendingTransferTemp = buildPendingOutgoingTransferSystemTemp(pendingOutgoingTransfers);
+    const userInputForAi = [promptPayload.userInput, pendingTransferTemp].filter(Boolean).join('\n\n');
+
     /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
       const result = await chat({
-      userInput: promptPayload.userInput,
+      userInput: userInputForAi,
       history: promptPayload.history,
       /* [区域标注·已完成·AI识图当前轮媒体] 把本轮用户图片/表情包消息原始字段传给 prompt.js 组装视觉输入。 */
       currentUserRoundMessages: promptPayload.currentUserRoundMessages,
@@ -626,7 +768,12 @@ export async function sendMessage(container, state, db, content, settingsManager
       stickerData: state.stickerData
     });
 
-    const aiMessages = buildAiReplyMessages(result?.rawText || result?.text || '', state);
+    const rawAiText = result?.rawText || result?.text || '';
+    const hasAppliedPendingTransferDecision = await applyAiPendingTransferDecisions(state, db, rawAiText);
+    if (hasAppliedPendingTransferDecision) {
+      refreshCurrentMessageListOnly(container, state);
+    }
+    const aiMessages = buildAiReplyMessages(rawAiText, state);
     for (let index = 0; index < aiMessages.length; index += 1) {
       const message = {
         ...aiMessages[index],

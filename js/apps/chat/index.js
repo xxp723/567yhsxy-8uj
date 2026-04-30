@@ -947,11 +947,12 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·本次转账显示优化] 咖啡功能区 — 确认转账并写入 IndexedDB
+       [区域标注·已完成·本次转账待确认修复] 咖啡功能区 — 确认转账并写入 IndexedDB
        说明：
        1. 金额输入按当前钱包显示币种解释，再换算回 balanceBaseCny 扣减。
-       2. 用户给 AI 的转账发出后直接记录为已接收，并追加中间系统小字“对方已接收”。
-       3. 钱包余额、当前聊天消息、聊天列表最近消息统一持久化到 DB.js / IndexedDB。
+       2. 用户给 AI 的转账发出后只记录为 pending，不再立即显示“对方已接收”。
+       3. 等用户点击“纸飞机”触发 API 后，由 AI 根据角色卡人设与上下文自行决定接收或退回。
+       4. 钱包余额、当前聊天消息、聊天列表最近消息统一持久化到 DB.js / IndexedDB。
        ======================================================================== */
     case 'confirm-msg-transfer': {
       if (!state.currentChatId) break;
@@ -1019,9 +1020,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         id: `user_transfer_${now}_${Math.random().toString(16).slice(2)}`,
         role: 'user',
         type: 'transfer',
-        /* [区域标注·已完成·本次转账显示优化] 用户发起转账后显示 AI 已接收 */
+        /* [区域标注·已完成·本次转账待确认修复] 用户发起转账后保持待确认，等待纸飞机触发 AI 自行处理 */
         transferDirection: 'outgoing',
-        transferStatus: 'accepted',
+        transferStatus: 'pending',
         transferCounterpartyName: String(session.name || '').trim(),
         content: transferDisplayAmount,
         transferDisplayAmount,
@@ -1033,13 +1034,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
 
       state.currentMessages.push(transferMessage);
-      state.currentMessages.push({
-        id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
-        role: 'user',
-        type: 'transfer_system',
-        content: `${String(session.name || '对方').trim() || '对方'} 已接收`,
-        timestamp: now + 1
-      });
       state.coffeeDockOpen = false;
       state.stickerPanelOpen = false;
       session.lastMessage = '[转账]';
