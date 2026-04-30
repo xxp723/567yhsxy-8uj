@@ -947,11 +947,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·本次转账需求] 咖啡功能区 — 确认转账并写入 IndexedDB
+       [区域标注·已完成·本次转账显示优化] 咖啡功能区 — 确认转账并写入 IndexedDB
        说明：
        1. 金额输入按当前钱包显示币种解释，再换算回 balanceBaseCny 扣减。
-       2. 钱包余额、当前聊天消息、聊天列表最近消息统一持久化到 DB.js / IndexedDB。
-       3. 备注会随转账消息一起发送到当前聊天，不触发 AI 自动回复。
+       2. 用户给 AI 的转账发出后直接记录为已接收，并追加中间系统小字“对方已接收”。
+       3. 钱包余额、当前聊天消息、聊天列表最近消息统一持久化到 DB.js / IndexedDB。
        ======================================================================== */
     case 'confirm-msg-transfer': {
       if (!state.currentChatId) break;
@@ -1019,9 +1019,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         id: `user_transfer_${now}_${Math.random().toString(16).slice(2)}`,
         role: 'user',
         type: 'transfer',
-        /* [区域标注·已完成·本次转账需求] 用户发起转账默认待 AI 处理（接收/退回） */
+        /* [区域标注·已完成·本次转账显示优化] 用户发起转账后显示 AI 已接收 */
         transferDirection: 'outgoing',
-        transferStatus: 'pending',
+        transferStatus: 'accepted',
         transferCounterpartyName: String(session.name || '').trim(),
         content: transferDisplayAmount,
         transferDisplayAmount,
@@ -1033,9 +1033,16 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
 
       state.currentMessages.push(transferMessage);
+      state.currentMessages.push({
+        id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        type: 'transfer_system',
+        content: `${String(session.name || '对方').trim() || '对方'} 已接收`,
+        timestamp: now + 1
+      });
       state.coffeeDockOpen = false;
       state.stickerPanelOpen = false;
-      session.lastMessage = `[转账] ${transferDisplayAmount}${transferNote ? ` ${transferNote}` : ''}`;
+      session.lastMessage = '[转账]';
       session.lastTime = now;
 
       await Promise.all([
@@ -1076,7 +1083,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (!transferMessage || String(transferMessage.type || '') !== 'transfer') break;
 
       const transferStatus = String(transferMessage.transferStatus || 'pending').trim();
-      const statusLabel = transferStatus === 'accepted' ? '已接收' : (transferStatus === 'returned' ? '已退回' : '待处理');
+      const statusLabel = transferStatus === 'accepted' ? '已完成' : (transferStatus === 'returned' ? '已关闭' : '等待操作');
       const canOperate = transferStatus === 'pending';
 
       showTransferActionModal(container, {
@@ -1123,31 +1130,43 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
 
       if (transferDirection === 'incoming' && transferBaseCny > 0) {
-      state.walletData = normalizeWalletData({
-        ...state.walletData,
-        balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
-        /* ========================================================================
-           [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（接收收入）
-           说明：仅在 incoming 转账被接收时记一条收入流水。
-           ======================================================================== */
-        ledger: [
-          {
-            id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
-            kind: 'transfer',
-            direction: 'in',
-            title: `收到 ${String(transferMessage.transferCounterpartyName || '对方').trim() || '对方'} 转账`,
-            amountBaseCny: Number(transferBaseCny.toFixed(2)),
-            timestamp: now
-          },
-          ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
-        ],
-        updatedAt: now
-      });
+        state.walletData = normalizeWalletData({
+          ...state.walletData,
+          balanceBaseCny: Number(state.walletData?.balanceBaseCny || 0) + transferBaseCny,
+          /* ========================================================================
+             [区域标注·已完成·本次钱包流水需求] 钱包实时流水记录（接收收入）
+             说明：仅在 incoming 转账被接收时记一条收入流水。
+             ======================================================================== */
+          ledger: [
+            {
+              id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
+              kind: 'transfer',
+              direction: 'in',
+              title: `收到 ${String(transferMessage.transferCounterpartyName || '对方').trim() || '对方'} 转账`,
+              amountBaseCny: Number(transferBaseCny.toFixed(2)),
+              timestamp: now
+            },
+            ...(Array.isArray(state.walletData?.ledger) ? state.walletData.ledger : [])
+          ],
+          updatedAt: now
+        });
       }
+
+      /* ========================================================================
+         [区域标注·已完成·本次转账显示优化] 接收转账后生成中间系统小字
+         说明：让用户侧界面与后续 AI 上下文都能看到“你已接收”，不显示原状态文字。
+         ======================================================================== */
+      state.currentMessages.push({
+        id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        type: 'transfer_system',
+        content: transferDirection === 'incoming' ? '你已接收' : '对方已接收',
+        timestamp: now + 1
+      });
 
       const session = state.sessions.find(s => s.id === state.currentChatId);
       if (session) {
-        session.lastMessage = '[转账] 已接收';
+        session.lastMessage = '[转账]';
         session.lastTime = now;
       }
 
@@ -1163,9 +1182,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·本次转账需求] 确认退回转账 + 生成系统通知
+       [区域标注·已完成·本次转账显示优化] 确认退回转账 + 生成中间系统小字
        说明：
-       1. incoming（AI→用户）退回：只改状态，不变更用户钱包。
+       1. incoming（AI→用户）退回：只改状态，不变更用户钱包，并插入“你已退回”系统通知供 AI 上下文读取。
        2. outgoing（用户→AI）退回：退款到用户钱包，并插入“角色名 已退回”系统通知。
        ======================================================================== */
     case 'msg-transfer-return': {
@@ -1193,6 +1212,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         transferHandledAt: now
       };
 
+      const session = state.sessions.find(s => s.id === state.currentChatId);
+      const roleName = String(transferMessage.transferCounterpartyName || session?.name || '对方').trim() || '对方';
+
       if (transferDirection === 'outgoing' && transferBaseCny > 0) {
         state.walletData = normalizeWalletData({
           ...state.walletData,
@@ -1206,7 +1228,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
               id: `wallet_ledger_${now}_${Math.random().toString(16).slice(2)}`,
               kind: 'transfer',
               direction: 'in',
-              title: `${String(transferMessage.transferCounterpartyName || '对方').trim() || '对方'} 退回转账`,
+              title: `${roleName} 退回转账`,
               amountBaseCny: Number(transferBaseCny.toFixed(2)),
               timestamp: now
             },
@@ -1214,21 +1236,18 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
           ],
           updatedAt: now
         });
-
-        const session = state.sessions.find(s => s.id === state.currentChatId);
-        const roleName = String(transferMessage.transferCounterpartyName || session?.name || '对方').trim() || '对方';
-        state.currentMessages.push({
-          id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
-          role: 'system',
-          type: 'transfer_system',
-          content: `${roleName} 已退回`,
-          timestamp: now + 1
-        });
       }
 
-      const session = state.sessions.find(s => s.id === state.currentChatId);
+      state.currentMessages.push({
+        id: `transfer_system_${now}_${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        type: 'transfer_system',
+        content: transferDirection === 'incoming' ? '你已退回' : `${roleName} 已退回`,
+        timestamp: now + 1
+      });
+
       if (session) {
-        session.lastMessage = '[转账] 已退回';
+        session.lastMessage = '[转账]';
         session.lastTime = now;
       }
 

@@ -143,16 +143,16 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      ======================================================================== */
   const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
   /* ========================================================================
-     [区域标注·已完成·本次转账需求] 转账消息类型判断
+     [区域标注·已完成·本次转账显示优化] 转账消息类型与状态表现
      说明：
-     1. type:transfer 的消息来自聊天消息页咖啡功能区“转账”板块。
-     2. 金额基础值按 CNY 写入当前聊天记录；显示金额和币种跟随发起转账时的钱包显示单位。
+     1. type:transfer 的消息来自聊天消息页咖啡功能区“转账”板块或 AI 转账协议。
+     2. 转账气泡不再显示“待处理/已接收/已退回”文字，改用颜色状态和 IconPark 对钩表现已接收。
      3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system';
   const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
-  const transferStatusLabel = transferStatus === 'accepted' ? '已接收' : (transferStatus === 'returned' ? '已退回' : '待处理');
+  const isTransferAccepted = transferStatus === 'accepted';
   const bubbleInnerHtml = isStickerMessage
     ? `
         <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
@@ -167,7 +167,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         `
         : (isTransferMessage
             ? `
-              <div class="msg-transfer-bubble" title="转账">
+              <div class="msg-transfer-bubble msg-transfer-bubble--${escapeHtml(transferStatus)}" title="转账">
                 <div class="msg-transfer-bubble__icon">${MSG_ICONS.wallet}</div>
                 <div class="msg-transfer-bubble__content">
                   <span class="msg-transfer-bubble__label">转账</span>
@@ -175,8 +175,8 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                   ${String(msg?.transferNote || '').trim()
                     ? `<span class="msg-transfer-bubble__note">${escapeHtml(msg.transferNote)}</span>`
                     : `<span class="msg-transfer-bubble__note msg-transfer-bubble__note--empty">无备注</span>`}
-                  <span class="msg-transfer-bubble__status msg-transfer-bubble__status--${escapeHtml(transferStatus)}">${escapeHtml(transferStatusLabel)}</span>
                 </div>
+                ${isTransferAccepted ? `<span class="msg-transfer-bubble__check" aria-label="已接收">${MSG_ICONS.check}</span>` : ''}
               </div>
             `
             : escapeHtml(msg?.content || '')));

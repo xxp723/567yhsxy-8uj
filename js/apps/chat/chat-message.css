@@ -322,11 +322,11 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次需求1] 表情包消息气泡铺满显示修复（无留白边）
+   [区域标注·已完成·本次表情包气泡缩小] 表情包消息气泡铺满显示 + 缩小一圈
    说明：
    1. 仅修改聊天消息页表情包气泡，不改其它页面图片样式。
    2. 取消承托内边距与 contain 带来的四周留白，改为图片直接铺满气泡容器。
-   3. 使用 cover + 100% 宽高实现“视觉铺满气泡”，保持闲谈主题圆角风格。
+   3. 本区域已按本次要求缩小表情包消息气泡比例，保持图片3风格的轻量消息体量。
    ========================================================================== */
 .msg-bubble--sticker {
   padding: 0;
@@ -335,8 +335,8 @@
 }
 
 .msg-sticker-bubble {
-  width: min(180px, 48vw);
-  height: min(180px, 48vw);
+  width: min(148px, 40vw);
+  height: min(148px, 40vw);
   max-width: 100%;
   min-height: 0;
   padding: 0;
@@ -405,10 +405,10 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次转账需求] 转账消息气泡样式
+   [区域标注·已完成·本次转账显示优化] 转账消息气泡样式
    说明：
    1. 仅作用于聊天消息页 type:transfer 消息气泡。
-   2. 视觉风格与当前暖色主题统一，使用钱包卡片式信息层级展示金额与备注。
+   2. 已去除“待处理/已接收/已退回”文字状态，改用气泡颜色变化与 IconPark 对钩表现已接收。
    3. 这里只处理展示样式，不涉及 localStorage/sessionStorage，持久化统一走 DB.js / IndexedDB。
    ========================================================================== */
 .msg-bubble--transfer {
@@ -426,6 +426,7 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  position: relative;
   background: linear-gradient(135deg, rgba(255, 252, 247, 0.98), rgba(245, 236, 227, 0.94));
   border: 1px solid rgba(74, 52, 42, 0.08);
   box-shadow: 0 8px 18px rgba(74, 52, 42, 0.08);
@@ -433,6 +434,21 @@
 
 .msg-bubble--user .msg-transfer-bubble {
   background: linear-gradient(135deg, rgba(241, 228, 208, 0.96), rgba(230, 211, 184, 0.92));
+}
+
+.msg-transfer-bubble--accepted {
+  background: linear-gradient(135deg, rgba(235, 246, 235, 0.98), rgba(213, 232, 214, 0.94));
+  border-color: rgba(89, 139, 91, 0.22);
+}
+
+.msg-bubble--user .msg-transfer-bubble--accepted {
+  background: linear-gradient(135deg, rgba(225, 238, 218, 0.98), rgba(203, 224, 196, 0.94));
+}
+
+.msg-transfer-bubble--returned {
+  background: linear-gradient(135deg, rgba(244, 238, 233, 0.9), rgba(232, 222, 213, 0.84));
+  border-color: rgba(74, 52, 42, 0.08);
+  opacity: 0.72;
 }
 
 .msg-transfer-bubble__icon {
@@ -486,35 +502,28 @@
   color: rgba(74, 52, 42, 0.38);
 }
 
-.msg-transfer-bubble__status {
+.msg-transfer-bubble__check {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(47, 106, 58, 0.16);
+  color: #2f6a3a;
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
-  min-height: 20px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  border: 1px solid transparent;
+  justify-content: center;
 }
 
-.msg-transfer-bubble__status--pending {
-  color: #8b5e2c;
-  background: rgba(228, 186, 112, 0.2);
-  border-color: rgba(228, 186, 112, 0.38);
+.msg-bubble-row--right .msg-transfer-bubble__check {
+  left: 10px;
+  right: auto;
 }
 
-.msg-transfer-bubble__status--accepted {
-  color: #2f6a3a;
-  background: rgba(125, 196, 143, 0.2);
-  border-color: rgba(125, 196, 143, 0.38);
-}
-
-.msg-transfer-bubble__status--returned {
-  color: #9d3f31;
-  background: rgba(181, 67, 54, 0.14);
-  border-color: rgba(181, 67, 54, 0.32);
+.msg-transfer-bubble__check svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* ==========================================================================
