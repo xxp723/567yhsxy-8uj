@@ -1268,21 +1268,22 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·气泡两排功能区]
+   [区域标注·已完成·本次缩小消息气泡小功能区]
    说明：
    1. 单击 AI/用户消息气泡后，从该条气泡上方浮现两排五列功能区。
-   2. 图标在上、文字在下；复制按钮已加入第二排。
-   3. 功能区关闭逻辑由 index.js 处理：点击聊天消息页任意非功能区区域即关闭。
+   2. 本区域已按本次要求整体缩小一圈：收窄网格、间距、内边距、按钮高度、字号与图标尺寸。
+   3. 仅修改消息气泡单击后的小功能区，不影响底部多选操作栏、输入栏咖啡功能区或其它弹窗。
+   4. 功能区关闭逻辑由 index.js 处理：点击聊天消息页任意非功能区区域即关闭。
    ========================================================================== */
 .msg-bubble-toolbar {
   align-self: flex-start;
   display: grid;
-  grid-template-columns: repeat(5, minmax(42px, 1fr));
-  gap: 7px;
-  width: min(292px, calc(100vw - 54px));
-  padding: 8px;
-  margin-bottom: 5px;
-  border-radius: 18px;
+  grid-template-columns: repeat(5, minmax(36px, 1fr));
+  gap: 5px;
+  width: min(250px, calc(100vw - 54px));
+  padding: 6px;
+  margin-bottom: 4px;
+  border-radius: 16px;
   background: rgba(255, 252, 247, 0.97);
   border: 1px solid rgba(74, 52, 42, 0.08);
   box-shadow: 0 12px 28px rgba(74, 52, 42, 0.15);
@@ -1308,19 +1309,19 @@
 
 .msg-bubble-toolbar__btn {
   min-width: 0;
-  min-height: 48px;
+  min-height: 40px;
   border: none;
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(74, 52, 42, 0.06);
   color: #4A342A;
-  padding: 7px 4px 6px;
+  padding: 5px 3px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.1;
   font-weight: 700;
   cursor: pointer;
@@ -1333,8 +1334,8 @@
 }
 
 .msg-bubble-toolbar__btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .msg-bubble-toolbar__btn span {
