@@ -84,7 +84,8 @@ import {
   showAiFormatRepairResultModal,
   showEditMessageModal,
   showForwardMessagesModal,
-  showMessageImageModal
+  showMessageImageModal,
+  showMessageTransferModal
 } from './chat-message.js';
 import {
   renderProfile,
@@ -111,7 +112,9 @@ import {
   importStickerTextToCurrentGroup,
   readDocxText,
   showWalletRechargeModal,
-  showWalletCurrencyModal
+  showWalletCurrencyModal,
+  getWalletDisplayAmount,
+  formatWalletMoney
 } from './profile.js';
 import { renderMoments } from './moments.js';
 
@@ -926,6 +929,105 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'open-msg-image-modal':
       showMessageImageModal(container);
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·本次转账需求] 咖啡功能区 — 打开转账弹窗
+       说明：
+       1. 弹窗余额实时读取当前钱包余额与当前显示币种。
+       2. 使用应用内统一弹窗，不使用原生浏览器弹窗。
+       ======================================================================== */
+    case 'open-msg-transfer-modal': {
+      const walletDisplay = getWalletDisplayAmount(state.walletData || {});
+      showMessageTransferModal(container, {
+        balanceLabel: formatWalletMoney(walletDisplay.value, walletDisplay.currency.code),
+        currencyCode: walletDisplay.currency.code
+      });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·本次转账需求] 咖啡功能区 — 确认转账并写入 IndexedDB
+       说明：
+       1. 金额输入按当前钱包显示币种解释，再换算回 balanceBaseCny 扣减。
+       2. 钱包余额、当前聊天消息、聊天列表最近消息统一持久化到 DB.js / IndexedDB。
+       3. 备注会随转账消息一起发送到当前聊天，不触发 AI 自动回复。
+       ======================================================================== */
+    case 'confirm-msg-transfer': {
+      if (!state.currentChatId) break;
+      const session = state.sessions.find(s => s.id === state.currentChatId);
+      if (!session) break;
+
+      const amountInput = container.querySelector('[data-role="msg-transfer-amount-input"]');
+      const noteInput = container.querySelector('[data-role="msg-transfer-note-input"]');
+      const transferAmount = Number(String(amountInput?.value || '').trim());
+      const transferNote = String(noteInput?.value || '').trim();
+
+      if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+        renderModalNotice(container, '请输入大于 0 的转账金额');
+        break;
+      }
+
+      const walletDisplay = getWalletDisplayAmount(state.walletData || {});
+      const displayCurrencyCode = walletDisplay.currency.code;
+      const rates = state.walletData?.rates && typeof state.walletData.rates === 'object' ? state.walletData.rates : {};
+      const displayRate = displayCurrencyCode === 'CNY'
+        ? 1
+        : Math.max(0, Number(rates[displayCurrencyCode] || 0) || 0);
+
+      if (!Number.isFinite(displayRate) || displayRate <= 0) {
+        renderModalNotice(container, '当前钱包币种汇率不可用，请先切换币种后重试');
+        break;
+      }
+
+      const transferBaseCny = displayCurrencyCode === 'CNY'
+        ? transferAmount
+        : (transferAmount / displayRate);
+
+      const currentBaseCny = Math.max(0, Number(state.walletData?.balanceBaseCny || 0) || 0);
+      if (transferBaseCny > currentBaseCny + 1e-8) {
+        renderModalNotice(container, '钱包余额不足');
+        break;
+      }
+
+      const now = Date.now();
+      const nextBaseCny = Math.max(0, currentBaseCny - transferBaseCny);
+      const transferDisplayAmount = formatWalletMoney(transferAmount, displayCurrencyCode);
+
+      state.walletData = normalizeWalletData({
+        ...state.walletData,
+        balanceBaseCny: nextBaseCny,
+        updatedAt: now
+      });
+
+      const transferMessage = {
+        id: `user_transfer_${now}_${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        type: 'transfer',
+        content: transferDisplayAmount,
+        transferDisplayAmount,
+        transferCurrency: displayCurrencyCode,
+        transferAmount: Number(transferAmount.toFixed(walletDisplay.currency.precision)),
+        transferBaseCny: Number(transferBaseCny.toFixed(2)),
+        transferNote,
+        timestamp: now
+      };
+
+      state.currentMessages.push(transferMessage);
+      state.coffeeDockOpen = false;
+      state.stickerPanelOpen = false;
+      session.lastMessage = `[转账] ${transferDisplayAmount}${transferNote ? ` ${transferNote}` : ''}`;
+      session.lastTime = now;
+
+      await Promise.all([
+        persistWalletData(state, db),
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
 
     case 'confirm-send-image-url': {
       const input = container.querySelector('[data-role="msg-image-url-input"]');

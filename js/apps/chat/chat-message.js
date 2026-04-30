@@ -141,6 +141,14 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 不使用 localStorage/sessionStorage，也不保留双份存储兜底。
      ======================================================================== */
   const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
+  /* ========================================================================
+     [区域标注·已完成·本次转账需求] 转账消息类型判断
+     说明：
+     1. type:transfer 的消息来自聊天消息页咖啡功能区“转账”板块。
+     2. 金额基础值按 CNY 写入当前聊天记录；显示金额和币种跟随发起转账时的钱包显示单位。
+     3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const isTransferMessage = String(msg?.type || '') === 'transfer';
   const bubbleInnerHtml = isStickerMessage
     ? `
         <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
@@ -153,7 +161,20 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
           </div>
         `
-        : escapeHtml(msg?.content || ''));
+        : (isTransferMessage
+            ? `
+              <div class="msg-transfer-bubble" title="转账">
+                <div class="msg-transfer-bubble__icon">${MSG_ICONS.wallet}</div>
+                <div class="msg-transfer-bubble__content">
+                  <span class="msg-transfer-bubble__label">转账</span>
+                  <strong class="msg-transfer-bubble__amount">${escapeHtml(msg?.transferDisplayAmount || msg?.content || '')}</strong>
+                  ${String(msg?.transferNote || '').trim()
+                    ? `<span class="msg-transfer-bubble__note">${escapeHtml(msg.transferNote)}</span>`
+                    : `<span class="msg-transfer-bubble__note msg-transfer-bubble__note--empty">无备注</span>`}
+                </div>
+              </div>
+            `
+            : escapeHtml(msg?.content || '')));
 
   return `
     <!-- [区域标注·本次需求5] 可单击消息气泡：${escapeHtml(messageId)} -->
@@ -191,7 +212,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''}">
           ${bubbleInnerHtml}
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
@@ -273,18 +294,18 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
 
   /* ==========================================================================
-     [区域标注·已完成·AI识图图片入口] 咖啡按钮升起功能区
+     [区域标注·已完成·咖啡功能区图片与转账入口] 咖啡按钮升起功能区
      说明：
-     1. 已新增“图片”板块，用户可通过应用内面板发送本地图片或图片 URL。
-     2. 图片消息写入当前聊天记录并持久化到 DB.js / IndexedDB。
-     3. 发送后的图片会在 prompt.js 中作为视觉输入传给 AI，不使用浏览器同步键值存储。
+     1. 已保留“图片”板块，用户可通过应用内面板发送本地图片或图片 URL。
+     2. 已新增“转账”板块，点击后打开应用内转账弹窗，不使用原生浏览器弹窗。
+     3. 图片与转账消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
   /* ========================================================================== */
   const featureDockHtml = `
     <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
       <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
         ${MSG_ICONS.image}<span>图片</span>
       </button>
-      <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="transfer">
+      <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
         ${MSG_ICONS.wallet}<span>转账</span>
       </button>
       <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="action">
@@ -1602,6 +1623,62 @@ export function showMessageImageModal(container) {
   setTimeout(() => panel.querySelector('[data-role="msg-image-url-input"]')?.focus(), 30);
 }
 
+
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 聊天消息页转账应用内弹窗
+   说明：
+   1. 弹窗结构与闲谈应用现有 chat-modal 风格保持一致，不使用原生浏览器弹窗。
+   2. 余额文案由 index.js 根据当前钱包余额与显示币种实时计算后传入。
+   3. 这里只负责渲染转账弹窗，不做 localStorage/sessionStorage 读写，也不做双份存储兜底。
+   ========================================================================== */
+export function showMessageTransferModal(container, options = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const balanceLabel = String(options.balanceLabel || '').trim() || '¥0.00';
+  const currencyCode = String(options.currencyCode || 'CNY').trim().toUpperCase();
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·本次转账需求] 聊天消息页转账弹窗 -->
+    <div class="chat-modal-header">
+      <span>转账</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body msg-transfer-modal-body">
+      <label class="msg-transfer-modal-field">
+        <span class="msg-transfer-modal-field__label">金额</span>
+        <input class="chat-modal-search msg-transfer-modal-field__input"
+               data-role="msg-transfer-amount-input"
+               type="number"
+               min="0.01"
+               step="0.01"
+               placeholder="输入转账金额">
+      </label>
+      <div class="msg-transfer-modal-balance">
+        <span class="msg-transfer-modal-balance__label">钱包余额</span>
+        <strong class="msg-transfer-modal-balance__amount">${escapeHtml(balanceLabel)}</strong>
+        <span class="msg-transfer-modal-balance__currency">${escapeHtml(currencyCode)}</span>
+      </div>
+      <label class="msg-transfer-modal-field">
+        <span class="msg-transfer-modal-field__label">备注</span>
+        <input class="chat-modal-search msg-transfer-modal-field__input"
+               data-role="msg-transfer-note-input"
+               type="text"
+               maxlength="60"
+               placeholder="输入想要留言的话">
+      </label>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-msg-transfer" type="button">确认转账</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="msg-transfer-amount-input"]')?.focus(), 30);
+}
 
 export function showClearAllMessagesModal(container, state) {
   const mask = container.querySelector('[data-role="modal-mask"]');

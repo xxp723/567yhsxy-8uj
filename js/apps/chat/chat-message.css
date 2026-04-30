@@ -404,6 +404,88 @@
   margin: 0;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 转账消息气泡样式
+   说明：
+   1. 仅作用于聊天消息页 type:transfer 消息气泡。
+   2. 视觉风格与当前暖色主题统一，使用钱包卡片式信息层级展示金额与备注。
+   3. 这里只处理展示样式，不涉及 localStorage/sessionStorage，持久化统一走 DB.js / IndexedDB。
+   ========================================================================== */
+.msg-bubble--transfer {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.msg-transfer-bubble {
+  width: min(228px, 60vw);
+  max-width: 100%;
+  padding: 14px;
+  box-sizing: border-box;
+  border-radius: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(255, 252, 247, 0.98), rgba(245, 236, 227, 0.94));
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.08);
+}
+
+.msg-bubble--user .msg-transfer-bubble {
+  background: linear-gradient(135deg, rgba(241, 228, 208, 0.96), rgba(230, 211, 184, 0.92));
+}
+
+.msg-transfer-bubble__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.msg-transfer-bubble__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.msg-transfer-bubble__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msg-transfer-bubble__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.56);
+  letter-spacing: 0.02em;
+}
+
+.msg-transfer-bubble__amount {
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #4A342A;
+  word-break: break-word;
+}
+
+.msg-transfer-bubble__note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(74, 52, 42, 0.76);
+  word-break: break-word;
+}
+
+.msg-transfer-bubble__note--empty {
+  color: rgba(74, 52, 42, 0.38);
+}
+
 /* [区域标注·本次需求5] 消息时间戳 */
 .msg-bubble__time {
   font-size: 10px;
@@ -517,6 +599,67 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次转账需求] 转账弹窗样式
+   说明：
+   1. 仅作用于聊天消息页“转账”应用内弹窗。
+   2. 金额输入、余额展示、备注输入保持与闲谈应用现有弹窗风格统一。
+   3. 不使用原生浏览器弹窗，不增加任何双份存储逻辑。
+   ========================================================================== */
+.msg-transfer-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-transfer-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-transfer-modal-field__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.72);
+}
+
+.msg-transfer-modal-field__input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.msg-transfer-modal-balance {
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(255, 252, 247, 0.96), rgba(242, 233, 223, 0.92));
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.msg-transfer-modal-balance__label {
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.56);
+}
+
+.msg-transfer-modal-balance__amount {
+  font-size: 16px;
+  font-weight: 800;
+  color: #4A342A;
+  line-height: 1.2;
+}
+
+.msg-transfer-modal-balance__currency {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.46);
+  letter-spacing: 0.04em;
 }
 
 /* ==========================================================================
