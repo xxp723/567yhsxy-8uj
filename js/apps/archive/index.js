@@ -38,6 +38,10 @@ const RELATION_ALLOWED_TARGET_TYPES = {
 /* [修改标注·本次问题1] 关系标签预设（新增/编辑关系条目统一使用） */
 const RELATION_PRESET_OPTIONS = ['朋友', '恋人', '亲人', '同事', '上司', '敌人', '下属', '陌生人', '熟人', '自定义'];
 
+/* [区域标注·已完成·本次需求2] 档案性别选择框预设
+   说明：用户面具 / 角色档案 / 配角档案编辑页统一使用这些选项；自定义值仍按字符串保存到 IndexedDB。 */
+const ARCHIVE_GENDER_PRESET_OPTIONS = ['男', '女', '双性', '无性别', '自定义'];
+
 function createDefaultData() {
   return {
     masks: [],
@@ -1738,6 +1742,118 @@ export async function mount(container, context) {
   const collectInputValue = (scopeEl, role) => normalizeString(scopeEl.querySelector(`[data-role="${role}"]`)?.value);
   const collectTextareaValue = (scopeEl, role) => normalizeString(scopeEl.querySelector(`[data-role="${role}"]`)?.value);
 
+  /* [区域标注·已完成·本次需求2] 性别选择框与自定义小弹窗工具
+     说明：
+     1. 用户面具 / 角色档案 / 配角档案编辑页共用本区。
+     2. 不使用浏览器原生 prompt/alert/confirm；自定义性别用档案应用内的小弹窗样式。
+     3. 不新增持久化结构；最终仍把性别作为字符串写入 db.js / IndexedDB。 */
+  const buildGenderSelectHtml = (currentGender = '') => {
+    const safeGender = normalizeString(currentGender);
+    const isPreset = ARCHIVE_GENDER_PRESET_OPTIONS.includes(safeGender);
+    const selectedValue = isPreset ? safeGender : (safeGender ? '自定义' : '男');
+    const customValue = isPreset ? '' : safeGender;
+
+    return `
+      <label class="archive-gender-select-row archive-relation-picker-row">
+        <span>性别</span>
+        <input data-role="gender-value" type="hidden" value="${escapeHtml(customValue || selectedValue)}">
+        <select data-role="gender" aria-label="性别">
+          ${ARCHIVE_GENDER_PRESET_OPTIONS.map((option) => `
+            <option value="${escapeHtml(option)}" ${selectedValue === option ? 'selected' : ''}>${escapeHtml(option)}</option>
+          `).join('')}
+        </select>
+        <div class="archive-relation-picker-modal hidden" data-role="gender-custom-modal">
+          <div class="archive-relation-picker-modal__panel">
+            <div class="archive-relation-picker-modal__header">
+              <strong>自定义性别</strong>
+              <button class="archive-character-paper__icon-btn" type="button" data-action="gender-custom-close" aria-label="关闭">${icon.close}</button>
+            </div>
+            <div class="archive-form-row" style="margin:0;">
+              <input data-role="gender-custom-input" type="text" value="${escapeHtml(customValue)}" placeholder="请输入自定义性别">
+            </div>
+            <div class="archive-modal-actions" style="margin-top:10px;">
+              <button type="button" class="ui-button danger" data-action="gender-custom-delete">${icon.remove}<span>删除</span></button>
+              <button type="button" class="ui-button primary" data-action="gender-custom-save">${icon.check}<span>保存</span></button>
+            </div>
+          </div>
+        </div>
+      </label>
+    `;
+  };
+
+  const collectGenderValue = (scopeEl) => {
+    const selectValue = normalizeString(scopeEl.querySelector('[data-role="gender"]')?.value);
+    const hiddenValue = normalizeString(scopeEl.querySelector('[data-role="gender-value"]')?.value);
+    return selectValue === '自定义'
+      ? (hiddenValue && hiddenValue !== '自定义' ? hiddenValue : '未设定')
+      : (selectValue || '未设定');
+  };
+
+  const bindGenderSelectEvents = (scopeEl) => {
+    const select = scopeEl.querySelector('[data-role="gender"]');
+    const hidden = scopeEl.querySelector('[data-role="gender-value"]');
+    const customModal = scopeEl.querySelector('[data-role="gender-custom-modal"]');
+    const customInput = scopeEl.querySelector('[data-role="gender-custom-input"]');
+
+    if (!select || !hidden || !customModal || !customInput) return;
+
+    const openCustomModal = () => {
+      customModal.classList.remove('hidden');
+      customInput.value = ARCHIVE_GENDER_PRESET_OPTIONS.includes(hidden.value) ? '' : normalizeString(hidden.value);
+      customInput.focus();
+    };
+
+    const closeCustomModal = () => {
+      customModal.classList.add('hidden');
+    };
+
+    select.addEventListener('change', () => {
+      const value = normalizeString(select.value);
+      if (value === '自定义') {
+        hidden.value = normalizeString(hidden.value) && !ARCHIVE_GENDER_PRESET_OPTIONS.includes(hidden.value)
+          ? normalizeString(hidden.value)
+          : '自定义';
+        openCustomModal();
+        return;
+      }
+      hidden.value = value;
+      closeCustomModal();
+    });
+
+    scopeEl.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-action]')?.getAttribute('data-action');
+      if (!action) return;
+
+      if (action === 'gender-custom-close') {
+        if (normalizeString(hidden.value) === '自定义') {
+          select.value = '男';
+          hidden.value = '男';
+        }
+        closeCustomModal();
+        return;
+      }
+
+      if (action === 'gender-custom-save') {
+        const customValue = normalizeString(customInput.value);
+        if (!customValue) {
+          notify('请填写自定义性别', 'error');
+          return;
+        }
+        select.value = '自定义';
+        hidden.value = customValue;
+        closeCustomModal();
+        return;
+      }
+
+      if (action === 'gender-custom-delete') {
+        customInput.value = '';
+        select.value = '男';
+        hidden.value = '男';
+        closeCustomModal();
+      }
+    });
+  };
+
   const bindAvatarFormEvents = (scopeEl) => {
     const hiddenInput = scopeEl.querySelector('[data-role="avatar-hidden"]');
     const preview = scopeEl.querySelector('[data-role="avatar-preview"]');
@@ -1831,10 +1947,10 @@ export async function mount(container, context) {
             </div>
           </div>
 
-          <!-- [模块标注] 双列字段模块：姓名、性别、年龄、身份、签名、联系方式 -->
+          <!-- [区域标注·已完成·本次需求2] 双列字段模块：性别已从输入框改为选择框，支持男/女/双性/无性别/自定义 -->
           <div class="archive-form-row archive-form-row--two">
             <label><span>姓名</span><input data-role="name" type="text" value="${escapeHtml(currentItem?.name || '')}" /></label>
-            <label><span>性别</span><input data-role="gender" type="text" value="${escapeHtml(currentItem?.gender || '')}" /></label>
+            ${buildGenderSelectHtml(currentItem?.gender || '')}
             <label><span>年龄</span><input data-role="age" type="text" value="${escapeHtml(currentItem?.age || '')}" /></label>
             <label><span>身份</span><input data-role="identity" type="text" value="${escapeHtml(currentItem?.identity || '')}" /></label>
             <!-- [修改标注·需求3] "一句话签名"改名为"个性签名" -->
@@ -1880,6 +1996,7 @@ export async function mount(container, context) {
       `,
       onOpen: (modalScope) => {
         bindAvatarFormEvents(modalScope);
+        bindGenderSelectEvents(modalScope);
 
         /* [修改标注·需求4d] 开场白编辑器交互逻辑：切换/新增/删除开场白 */
         if (!isMask) {
@@ -1950,7 +2067,8 @@ export async function mount(container, context) {
           id: currentItem?.id || uid(isMask ? 'mask' : 'char'),
           avatar: collectAvatarValue(modalScope),
           name: collectInputValue(modalScope, 'name'),
-          gender: collectInputValue(modalScope, 'gender'),
+          /* [区域标注·已完成·本次需求2] 性别从选择框/自定义小弹窗统一采集 */
+          gender: collectGenderValue(modalScope),
           age: collectInputValue(modalScope, 'age'),
           identity: collectInputValue(modalScope, 'identity'),
           signature: collectInputValue(modalScope, 'signature'),
@@ -2039,9 +2157,10 @@ export async function mount(container, context) {
             </div>
           </div>
 
+          <!-- [区域标注·已完成·本次需求2] 配角档案性别已从输入框改为选择框，支持男/女/双性/无性别/自定义 -->
           <div class="archive-form-row archive-form-row--two">
             <label><span>姓名</span><input data-role="name" type="text" value="${escapeHtml(currentItem?.name || '')}" /></label>
-            <label><span>性别</span><input data-role="gender" type="text" value="${escapeHtml(currentItem?.gender || '')}" /></label>
+            ${buildGenderSelectHtml(currentItem?.gender || '')}
           </div>
 
           <!-- [修改标注·本次任务1] 联系方式右侧小字标注 -->
@@ -2059,13 +2178,15 @@ export async function mount(container, context) {
       `,
       onOpen: (modalScope) => {
         bindAvatarFormEvents(modalScope);
+        bindGenderSelectEvents(modalScope);
       },
       onConfirm: (modalScope) => {
         const item = normalizeSupportingRole({
           id: currentItem?.id || uid('support'),
           avatar: collectAvatarValue(modalScope),
           name: collectInputValue(modalScope, 'name'),
-          gender: collectInputValue(modalScope, 'gender'),
+          /* [区域标注·已完成·本次需求2] 配角性别从选择框/自定义小弹窗统一采集 */
+          gender: collectGenderValue(modalScope),
           contact: collectInputValue(modalScope, 'contact'),
           basicSetting: collectTextareaValue(modalScope, 'basicSetting')
         });
