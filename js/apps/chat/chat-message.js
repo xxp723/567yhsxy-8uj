@@ -53,7 +53,9 @@ const MSG_ICONS = {
   check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-  undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·气泡功能区复制] IconPark — 复制按钮图标 */
+  copy: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 16V8h24v24h-8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 16h24v24H8V16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -185,9 +187,26 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
 
   if (isTransferSystemMessage) {
     return `
-      <!-- [区域标注·已完成·本次转账需求] 聊天中间系统通知：转账接收/退回状态 -->
-      <div class="msg-transfer-system-row">
+      <!-- ======================================================================
+           [区域标注·已完成·系统提示小字删除] 可单击聊天中间系统提示
+           说明：单击系统提示文字显示应用内删除选项；确认后由 index.js 写入 DB.js / IndexedDB。
+           ====================================================================== -->
+      <div class="msg-transfer-system-row ${isToolbarOpen ? 'is-action-open' : ''}"
+           data-message-id="${escapeHtml(messageId)}"
+           data-action="msg-system-tip-select">
         <span class="msg-transfer-system-row__text">${escapeHtml(msg?.content || '')}</span>
+        ${isToolbarOpen ? `
+          <div class="msg-system-tip-actions" data-role="msg-bubble-toolbar">
+            <button class="msg-system-tip-actions__btn ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-system-tip-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
+            </button>
+            ${isDeleteConfirming ? `
+              <button class="msg-system-tip-actions__btn msg-system-tip-actions__btn--confirm" data-action="msg-system-tip-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认删除</span>
+              </button>
+            ` : ''}
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -200,7 +219,10 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
       ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
       <div class="msg-bubble-content">
         ${isToolbarOpen ? `
-          <!-- [区域标注·已完成·气泡小功能区] 单击气泡后显示：修正 / 编辑 / 收藏 / 删除 / 多选 -->
+          <!-- ==================================================================
+               [区域标注·已完成·气泡两排功能区] 单击气泡后显示 IconPark 图标功能区
+               说明：五列网格，图标在上文字在下；复制按钮位于第二排。点击聊天消息页任意非功能区区域关闭。
+               ================================================================== -->
           <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
             ${isAssistant ? `
               <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--fix-format" data-action="msg-bubble-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
@@ -225,6 +247,9 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             <!-- ===== 闲谈：删除消息二次确认 END ===== -->
             <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.multiSelect}<span>多选</span>
+            </button>
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--copy" data-action="msg-bubble-copy" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.copy}<span>复制</span>
             </button>
           </div>
         ` : ''}
@@ -1295,7 +1320,11 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
 
   const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
   uniqueIds.forEach(messageId => {
-    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"]`);
+    /* ======================================================================
+       [区域标注·已完成·系统提示小字删除] 局部刷新支持系统提示行
+       说明：普通气泡和中间系统提示都通过 data-message-id 局部替换，不重绘整页。
+       ====================================================================== */
+    const row = listArea.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
     const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
     if (!row || !message) return;
 

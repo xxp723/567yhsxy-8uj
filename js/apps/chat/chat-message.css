@@ -1268,22 +1268,26 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求5] 消息气泡单击功能栏
-   说明：单击 AI/用户消息气泡后，从该条气泡上方浮现“删除 / 多选”圆角功能栏。
+   [区域标注·已完成·气泡两排功能区]
+   说明：
+   1. 单击 AI/用户消息气泡后，从该条气泡上方浮现两排五列功能区。
+   2. 图标在上、文字在下；复制按钮已加入第二排。
+   3. 功能区关闭逻辑由 index.js 处理：点击聊天消息页任意非功能区区域即关闭。
    ========================================================================== */
 .msg-bubble-toolbar {
   align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 7px;
-  margin-bottom: 4px;
-  border-radius: 15px;
-  background: rgba(255, 252, 247, 0.96);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(42px, 1fr));
+  gap: 7px;
+  width: min(292px, calc(100vw - 54px));
+  padding: 8px;
+  margin-bottom: 5px;
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.97);
   border: 1px solid rgba(74, 52, 42, 0.08);
-  box-shadow: 0 10px 24px rgba(74, 52, 42, 0.14);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.15);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   animation: msgToolbarPop 0.16s ease-out;
 }
 
@@ -1303,16 +1307,21 @@
 }
 
 .msg-bubble-toolbar__btn {
+  min-width: 0;
+  min-height: 48px;
   border: none;
-  border-radius: 11px;
+  border-radius: 14px;
   background: rgba(74, 52, 42, 0.06);
   color: #4A342A;
-  padding: 6px 7px;
+  padding: 7px 4px 6px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   font-family: inherit;
   font-size: 10px;
+  line-height: 1.1;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
@@ -1324,8 +1333,15 @@
 }
 
 .msg-bubble-toolbar__btn svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
+}
+
+.msg-bubble-toolbar__btn span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .msg-bubble-toolbar__btn--danger {
@@ -1338,7 +1354,7 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求5] 删除消息二次确认按钮状态
+   [区域标注·已完成·气泡/系统提示删除二次确认]
    说明：保持应用内浮层风格，不使用原生弹窗。
    ========================================================================== */
 .msg-bubble-toolbar__btn--danger.is-confirming {
@@ -1352,6 +1368,61 @@
 }
 
 .msg-bubble-toolbar__btn--confirm-delete:active {
+  background: #8a3428;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·系统提示小字删除]
+   说明：单击中间系统提示小字后显示删除/确认删除操作区；不使用原生浏览器弹窗。
+   ========================================================================== */
+.msg-system-tip-actions {
+  margin-top: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.96);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 10px 24px rgba(74, 52, 42, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: msgToolbarPop 0.16s ease-out;
+}
+
+.msg-system-tip-actions__btn {
+  border: none;
+  border-radius: 13px;
+  background: rgba(181, 67, 54, 0.08);
+  color: #b54336;
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-system-tip-actions__btn:active {
+  background: rgba(181, 67, 54, 0.16);
+  transform: scale(0.95);
+}
+
+.msg-system-tip-actions__btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.msg-system-tip-actions__btn--confirm {
+  color: #fffaf4;
+  background: #9d3f31;
+}
+
+.msg-system-tip-actions__btn--confirm:active {
   background: #8a3428;
 }
 

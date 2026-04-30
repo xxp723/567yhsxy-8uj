@@ -611,6 +611,32 @@ function closeChatMessage(container, state) {
    ========================================================================== */
 async function handleClick(e, state, container, db, eventBus, windowManager, appMeta, settingsManager) {
   const target = e.target.closest('[data-action]');
+
+  /* ========================================================================
+     [区域标注·已完成·气泡/系统提示功能区关闭逻辑]
+     说明：
+     1. 功能区打开后，点击聊天消息页任意非功能区区域都会关闭功能区。
+     2. 仅使用运行时状态与局部 DOM 刷新，不涉及任何持久化存储。
+     3. 不使用原生浏览器弹窗，不影响其它板块点击逻辑。
+     ======================================================================== */
+  const openedMessageId = String(state.selectedMessageId || '');
+  if (
+    state.currentChatId
+    && openedMessageId
+    && !state.multiSelectMode
+    && !e.target.closest('[data-role="msg-bubble-toolbar"]')
+    && e.target.closest('[data-role="msg-page-wrap"]')
+  ) {
+    const clickedAction = String(target?.dataset?.action || '');
+    const clickedMessageId = String(target?.dataset?.messageId || '');
+    const previousDeleteConfirmId = state.deleteConfirmMessageId;
+    const shouldOnlyClose = !['msg-bubble-select', 'msg-system-tip-select'].includes(clickedAction) || clickedMessageId === openedMessageId;
+    state.selectedMessageId = '';
+    state.deleteConfirmMessageId = '';
+    refreshMessageBubbleRows(container, state, [openedMessageId, previousDeleteConfirmId, clickedMessageId]);
+    if (shouldOnlyClose) return;
+  }
+
   if (!target) return;
   const action = target.dataset.action;
 
@@ -1316,7 +1342,8 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·本次需求5] 单击消息气泡 — 显示/隐藏气泡上方功能栏
+       [区域标注·已完成·气泡两排功能区] 单击消息气泡 — 显示气泡上方功能栏
+       说明：再次点击当前气泡或消息页非功能区区域的关闭逻辑已统一放在 handleClick 顶部。
        ========================================================================== */
     case 'msg-bubble-select': {
       const messageId = String(target.dataset.messageId || '');
@@ -1326,10 +1353,27 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
       state.multiSelectMode = false;
       state.selectedMessageIds = [];
-      state.selectedMessageId = state.selectedMessageId === messageId ? '' : messageId;
+      state.selectedMessageId = messageId;
       state.deleteConfirmMessageId = '';
       refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·系统提示小字删除] 单击中间系统提示 — 显示删除选项
+       说明：只作用于聊天中间系统提示小字；确认后统一写入 DB.js / IndexedDB。
+       ========================================================================== */
+    case 'msg-system-tip-select': {
+      const messageId = String(target.dataset.messageId || '');
+      if (!messageId) break;
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      state.multiSelectMode = false;
+      state.selectedMessageIds = [];
+      state.selectedMessageId = messageId;
+      state.deleteConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       break;
     }
 
@@ -1425,6 +1469,54 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
+       [区域标注·已完成·气泡功能区复制] 消息气泡功能栏 — 复制本条消息内容
+       说明：复制只使用剪贴板 API / 临时 DOM，不写入任何持久化存储。
+       ========================================================================== */
+    case 'msg-bubble-copy': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (!message) break;
+
+      const copyText = String(
+        message.type === 'sticker'
+          ? (message.stickerName || message.content || '')
+          : (message.type === 'image'
+              ? (message.imageName || message.content || '')
+              : (message.type === 'transfer'
+                  ? (message.transferDisplayAmount || message.content || '')
+                  : (message.content || '')))
+      ).trim();
+      if (!copyText) break;
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(copyText);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = copyText;
+          textarea.setAttribute('readonly', 'readonly');
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-9999px';
+          textarea.style.top = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          textarea.remove();
+        }
+      } catch (error) {
+        break;
+      }
+
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      state.selectedMessageId = '';
+      state.deleteConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·本次需求5] 消息气泡功能栏 — 删除单条消息
        ========================================================================== */
     case 'msg-bubble-delete': {
@@ -1437,6 +1529,20 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.selectedMessageId = messageId;
       refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·系统提示小字删除] 系统提示小字 — 删除选项二次确认
+       ========================================================================== */
+    case 'msg-system-tip-delete': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      state.deleteConfirmMessageId = state.deleteConfirmMessageId === messageId ? '' : messageId;
+      state.selectedMessageId = messageId;
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
       break;
     }
 
@@ -1455,6 +1561,24 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
     /* ===== 闲谈：删除消息二次确认 END ===== */
+
+    /* ==========================================================================
+       [区域标注·已完成·系统提示小字删除] 系统提示小字 — 确认删除
+       说明：删除后只更新当前聊天消息并持久化到 DB.js / IndexedDB。
+       ========================================================================== */
+    case 'msg-system-tip-confirm-delete': {
+      const messageId = String(target.dataset.messageId || state.deleteConfirmMessageId || state.selectedMessageId || '');
+      if (!messageId || state.deleteConfirmMessageId !== messageId) break;
+      state.currentMessages = (state.currentMessages || []).filter(message => String(message.id) !== messageId);
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      refreshCurrentMessageListOnly(container, state);
+      break;
+    }
 
     /* ==========================================================================
        [区域标注·本次需求5] 消息气泡功能栏 — 进入多选模式
