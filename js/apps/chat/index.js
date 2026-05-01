@@ -128,6 +128,49 @@ import {
 } from './profile.js';
 import { renderMoments } from './moments.js';
 
+/* ========================================================================
+   [区域标注·已完成·本次控制台日志开关] 聊天日志存储键（IndexedDB）
+   说明：严格使用 DB.js，不使用 localStorage/sessionStorage。
+   ======================================================================== */
+const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
+
+function normalizeChatConsoleLogs(logs) {
+  return Array.isArray(logs)
+    ? logs.slice(-500).map(item => ({
+        id: String(item?.id || `log_${Date.now()}_${Math.random().toString(16).slice(2)}`),
+        ts: Number(item?.ts || Date.now()) || Date.now(),
+        time: String(item?.time || new Date(Number(item?.ts || Date.now())).toLocaleTimeString('zh-CN', { hour12: false })),
+        level: String(item?.level || 'info').toLowerCase(),
+        text: String(item?.text || '')
+      }))
+    : [];
+}
+
+async function persistCurrentChatConsoleLogs(state, db) {
+  if (!state?.currentChatId) return;
+  await dbPut(
+    db,
+    DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId),
+    normalizeChatConsoleLogs(state.chatConsoleLogs)
+  );
+}
+
+async function addChatConsoleLog(container, state, db, level, text) {
+  if (!state?.currentChatId || !state?.chatConsoleEnabled) return;
+  const ts = Date.now();
+  const entry = {
+    id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
+    ts,
+    time: new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }),
+    level: String(level || 'info').toLowerCase(),
+    text: String(text || '').trim()
+  };
+  if (!entry.text) return;
+  state.chatConsoleLogs = [...state.chatConsoleLogs, entry].slice(-500);
+  await persistCurrentChatConsoleLogs(state, db);
+  renderCurrentChatMessage(container, state, { keepScroll: true });
+}
+
 /* ==========================================================================
    [区域标注] mount — 应用挂载入口
    说明：由 AppManager 调用，接收容器元素和上下文
@@ -170,12 +213,6 @@ export async function mount(container, context) {
   ]);
 
   /* [区域标注] 应用状态对象 */
-  /* ========================================================================
-     [区域标注·已完成·本次控制台日志开关] 聊天日志存储键（IndexedDB）
-     说明：严格使用 DB.js，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
-
   const state = {
     activePanel: 'chatList',        // 当前激活的板块
     chatSubTab: 'all',              // 聊天列表子TAB: all / private / group
@@ -257,37 +294,6 @@ export async function mount(container, context) {
     chatConsoleExpanded: false,
     chatConsoleWarnErrorOnly: false,
     chatConsoleLogs: []
-  };
-
-  const normalizeChatConsoleLogs = (logs) => (
-    Array.isArray(logs) ? logs.slice(-500).map(item => ({
-      id: String(item?.id || `log_${Date.now()}_${Math.random().toString(16).slice(2)}`),
-      ts: Number(item?.ts || Date.now()) || Date.now(),
-      time: String(item?.time || new Date(Number(item?.ts || Date.now())).toLocaleTimeString('zh-CN', { hour12: false })),
-      level: String(item?.level || 'info').toLowerCase(),
-      text: String(item?.text || '')
-    })) : []
-  );
-
-  const persistCurrentChatConsoleLogs = async () => {
-    if (!state.currentChatId) return;
-    await dbPut(db, DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId), normalizeChatConsoleLogs(state.chatConsoleLogs));
-  };
-
-  const addChatConsoleLog = async (level, text) => {
-    if (!state.currentChatId || !state.chatConsoleEnabled) return;
-    const ts = Date.now();
-    const entry = {
-      id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
-      ts,
-      time: new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }),
-      level: String(level || 'info').toLowerCase(),
-      text: String(text || '').trim()
-    };
-    if (!entry.text) return;
-    state.chatConsoleLogs = [...state.chatConsoleLogs, entry].slice(-500);
-    await persistCurrentChatConsoleLogs();
-    renderCurrentChatMessage(container, state, { keepScroll: true });
   };
 
   /* [修改4·修改6] 根据当前面具构建 profile 数据 */
@@ -1031,7 +1037,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const value = String(input?.value || '').trim();
       if (input) input.value = '';
 
-      await addChatConsoleLog('info', value ? `发送消息：${value}` : '发送触发：仅请求 AI 回复');
+      await addChatConsoleLog(container, state, db, 'info', value ? `发送消息：${value}` : '发送触发：仅请求 AI 回复');
 
       /* ===== 闲谈应用：纸飞机触发AI回复 START ===== */
       if (value) {
@@ -1955,7 +1961,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
     case 'clear-chat-console-logs':
       state.chatConsoleLogs = [];
-      await persistCurrentChatConsoleLogs();
+      await persistCurrentChatConsoleLogs(state, db);
       renderCurrentChatMessage(container, state, { keepScroll: true });
       break;
 
