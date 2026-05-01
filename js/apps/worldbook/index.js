@@ -276,9 +276,17 @@ export async function mount(container, context) {
   const loadArchiveCache = async () => {
     try {
       const all = await db?.getAll?.('appsData');
-      /* [修改标注·Issue3修复] 档案数据ID与archive应用一致：archive::archive-data */
+      /* ======================================================================
+         [修改标注·已完成·档案主记录防回初始联动读取修复]
+         说明：
+         1. 档案数据ID与 archive 应用一致：archive::archive-data。
+         2. 标准档案主记录读取 record.value；兼容读取旧错误 record.data 仅用于避免世情联动读不到角色。
+         3. 本区只读档案主记录，不写 archive::archive-data；世界书仍只保存到 worldbook::all-books。
+         4. 不使用 localStorage/sessionStorage，不写双份兜底，也不做长文本过滤。
+         ====================================================================== */
       const rec = all?.find(x => x.id === 'archive::archive-data');
-      if (rec?.value && Array.isArray(rec.value.characters)) _archiveCharsCache = rec.value.characters;
+      const archiveData = rec?.value ?? rec?.data ?? null;
+      if (archiveData && Array.isArray(archiveData.characters)) _archiveCharsCache = archiveData.characters;
     } catch {}
   };
   const chars = () => _archiveCharsCache;

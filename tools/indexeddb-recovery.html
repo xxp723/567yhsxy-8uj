@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>MiniPhone IndexedDB 档案恢复工具</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6efe5;
+      --card: rgba(255, 252, 247, 0.92);
+      --ink: #33251b;
+      --muted: #8b7462;
+      --line: rgba(86, 57, 33, 0.16);
+      --accent: #9b5b35;
+      --accent-2: #c88454;
+      --danger: #b84535;
+      --ok: #2f7d59;
+      --shadow: 0 18px 60px rgba(67, 42, 22, 0.16);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 8%, rgba(255, 226, 185, 0.85), transparent 32%),
+        radial-gradient(circle at 90% 0%, rgba(226, 178, 127, 0.5), transparent 30%),
+        linear-gradient(180deg, #fff8ef 0%, var(--bg) 100%);
+      padding: 22px;
+    }
+
+    .page {
+      width: min(980px, 100%);
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      letter-spacing: 0.02em;
+    }
+
+    .desc {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 22px rgba(155, 91, 53, 0.22);
+    }
+
+    button.secondary {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, var(--danger), #d67455);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 252, 247, 0.88);
+      box-shadow: 0 10px 36px rgba(67, 42, 22, 0.08);
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 17px;
+    }
+
+    .metric {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .metric b {
+      color: var(--ink);
+    }
+
+    .status {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.warn { color: var(--danger); }
+
+    pre {
+      max-height: 420px;
+      overflow: auto;
+      margin: 0;
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(48, 34, 23, 0.92);
+      color: #fff4e8;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .mask-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .pill strong { color: var(--ink); }
+
+    @media (max-width: 760px) {
+      body { padding: 14px; }
+      .grid { grid-template-columns: 1fr; }
+      .hero { border-radius: 22px; padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>MiniPhone IndexedDB 档案恢复工具</h1>
+      <p class="desc">
+        本页面只访问项目 IndexedDB：<b>MiniPhoneDB / appsData</b>。
+        默认只读扫描；导出快照只生成下载文件；只有点击恢复按钮才会写回 IndexedDB。
+        不使用 localStorage/sessionStorage，不使用原生浏览器弹窗。
+      </p>
+
+      <div class="toolbar">
+        <button id="scanBtn" type="button">扫描现有数据</button>
+        <button id="exportBtn" class="secondary" type="button" disabled>导出快照 JSON</button>
+        <button id="repairValueBtn" type="button" disabled>从旧 data 结构恢复档案</button>
+        <button id="draftMasksBtn" class="danger" type="button" disabled>主档案丢失时生成占位面具</button>
+      </div>
+
+      <div id="status" class="status">请先点击“扫描现有数据”。如果你的应用平时不是通过当前这个网址打开，请用同一个网址来源打开本工具，否则浏览器会看到不同的 IndexedDB。</div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>扫描摘要</h2>
+        <div id="summary" class="metric">尚未扫描。</div>
+      </article>
+
+      <article class="card">
+        <h2>可识别的旧面具 / 数据线索</h2>
+        <div id="maskList" class="mask-list">
+          <div class="pill">尚未扫描。</div>
+        </div>
+      </article>
+
+      <article class="card" style="grid-column: 1 / -1;">
+        <h2>详细诊断</h2>
+        <pre id="details">尚未扫描。</pre>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    /* ======================================================================
+       [恢复工具·已完成·IndexedDB 基础访问区]
+       说明：
+       1. 只连接 MiniPhoneDB，不使用 localStorage/sessionStorage。
+       2. 默认只读扫描；写入只在用户点击恢复按钮后执行。
+       3. 不使用 alert/confirm/prompt，所有提示显示在页面内。
+       ====================================================================== */
+    const DB_NAME = 'MiniPhoneDB';
+    const STORE_NAME = 'appsData';
+    const ARCHIVE_ID = 'archive::archive-data';
+
+    const state = {
+      db: null,
+      appsData: [],
+      snapshot: null,
+      archiveRecord: null,
+      archiveCandidate: null,
+      archiveSource: '',
+      discoveredMaskIds: [],
+      canRepairValue: false,
+      canCreateDraftMasks: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(message, tone = '') {
+      const el = $('status');
+      el.textContent = message;
+      el.className = `status ${tone}`.trim();
+    }
+
+    function safeJson(value) {
+      return JSON.stringify(value, null, 2);
+    }
+
+    async function openDb() {
+      if (typeof indexedDB.databases === 'function') {
+        const databases = await indexedDB.databases();
+        const exists = databases.some(database => database && database.name === DB_NAME);
+        if (!exists) {
+          throw new Error('当前来源下没有旧 MiniPhoneDB。请确认用与应用相同的网址打开本工具。');
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.close();
+            reject(new Error('当前 MiniPhoneDB 中没有 appsData 仓库，请确认网址来源是否正确。'));
+            return;
+          }
+          resolve(db);
+        };
+        request.onerror = () => reject(request.error || new Error('IndexedDB 打开失败'));
+        request.onupgradeneeded = () => {
+          request.transaction.abort();
+          reject(new Error('当前来源下没有旧 MiniPhoneDB，已阻止创建空库。请确认用与应用相同的网址打开本工具。'));
+        };
+      });
+    }
+
+    function txGetAll(db, storeName) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error || new Error(`${storeName} 读取失败`));
+      });
+    }
+
+    function txPut(db, storeName, value) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const req = store.put(value);
+        req.onsuccess = () => resolve(value);
+        req.onerror = () => reject(req.error || new Error(`${storeName} 写入失败`));
+      });
+    }
+
+    /* ======================================================================
+       [恢复工具·已完成·只读扫描区]
+       说明：
+       1. 扫描 appsData 中的档案、闲谈、世情记录。
+       2. 判断 archive::archive-data 是否仍可从 value 或旧错误 data 字段恢复。
+       3. 从闲谈分面具 key 中提取旧 maskId 线索。
+       ====================================================================== */
+    function extractMaskIdFromChatKey(id) {
+      const text = String(id || '');
+      const prefixes = [
+        'chat_sessions_',
+        'chat_hidden_chat_ids_',
+        'chat_contacts_',
+        'chat_contact_groups_',
+        'chat_moments_',
+        'chat_wallet_',
+        'chat_favorites_'
+      ];
+      for (const prefix of prefixes) {
+        if (text.startsWith(prefix)) return text.slice(prefix.length) || 'default';
+      }
+
+      if (text.startsWith('chat_msgs_')) {
+        const rest = text.slice('chat_msgs_'.length);
+        const lastSeparator = rest.lastIndexOf('_');
+        return lastSeparator > 0 ? rest.slice(0, lastSeparator) : rest;
+      }
+
+      return '';
+    }
+
+    function isUsefulArchiveData(data) {
+      return Boolean(
+        data &&
+        typeof data === 'object' &&
+        (
+          Array.isArray(data.masks) ||
+          Array.isArray(data.characters) ||
+          Array.isArray(data.supportingRoles) ||
+          Array.isArray(data.relations)
+        )
+      );
+    }
+
+    function createDraftArchiveFromMaskIds(maskIds) {
+      const now = Date.now();
+      const safeMaskIds = maskIds.filter(id => id && id !== 'default');
+      return {
+        masks: safeMaskIds.map((id, index) => ({
+          id,
+          name: `待补全的旧用户面具 ${index + 1}`,
+          avatar: '',
+          signature: '由恢复工具根据闲谈分面具数据生成的占位面具，请在档案应用中补全姓名、头像和设定。',
+          roleBindingIds: [],
+          recoveredAt: now,
+          recoveryNote: '原档案主记录未保留完整 masks 信息；此占位用于重新挂接闲谈分面具数据。'
+        })),
+        characters: [],
+        supportingRoles: [],
+        relations: [],
+        activeMaskId: safeMaskIds[0] || '',
+        recoveredAt: now,
+        recoveryNote: '由 tools/indexeddb-recovery.html 生成。'
+      };
+    }
+
+    function analyze(records) {
+      const archiveRecord = records.find(item => item && item.id === ARCHIVE_ID) || null;
+      const archiveValue = archiveRecord?.value ?? null;
+      const archiveData = archiveRecord?.data ?? null;
+      const archiveCandidate = isUsefulArchiveData(archiveValue)
+        ? archiveValue
+        : (isUsefulArchiveData(archiveData) ? archiveData : null);
+      const archiveSource = archiveCandidate === archiveValue ? 'value' : (archiveCandidate === archiveData ? 'data' : '');
+
+      const maskIdSet = new Set();
+      const chatRecords = [];
+      const worldbookRecords = [];
+
+      for (const record of records) {
+        const id = String(record?.id || '');
+        if (id.startsWith('chat_')) {
+          chatRecords.push(record);
+          const maskId = extractMaskIdFromChatKey(id);
+          if (maskId) maskIdSet.add(maskId);
+        }
+        if (id.startsWith('worldbook::')) worldbookRecords.push(record);
+      }
+
+      if (archiveCandidate?.activeMaskId) maskIdSet.add(String(archiveCandidate.activeMaskId));
+      if (Array.isArray(archiveCandidate?.masks)) {
+        archiveCandidate.masks.forEach(mask => {
+          if (mask?.id) maskIdSet.add(String(mask.id));
+        });
+      }
+
+      const discoveredMaskIds = Array.from(maskIdSet).filter(Boolean).sort();
+
+      return {
+        archiveRecord,
+        archiveValue,
+        archiveData,
+        archiveCandidate,
+        archiveSource,
+        discoveredMaskIds,
+        chatRecords,
+        worldbookRecords,
+        canRepairValue: archiveSource === 'data' && isUsefulArchiveData(archiveCandidate),
+        canCreateDraftMasks: !isUsefulArchiveData(archiveCandidate) && discoveredMaskIds.some(id => id !== 'default')
+      };
+    }
+
+    function renderAnalysis(result) {
+      const archiveMaskCount = Array.isArray(result.archiveCandidate?.masks) ? result.archiveCandidate.masks.length : 0;
+      const archiveCharacterCount = Array.isArray(result.archiveCandidate?.characters) ? result.archiveCandidate.characters.length : 0;
+      const archiveSourceLabel = result.archiveSource || '未找到可用 value/data';
+
+      $('summary').innerHTML = `
+        <div>appsData 总记录：<b>${state.appsData.length}</b></div>
+        <div>档案主记录：<b>${result.archiveRecord ? '存在' : '不存在'}</b></div>
+        <div>可用档案来源：<b>${archiveSourceLabel}</b></div>
+        <div>档案面具数量：<b>${archiveMaskCount}</b></div>
+        <div>档案角色数量：<b>${archiveCharacterCount}</b></div>
+        <div>闲谈相关记录：<b>${result.chatRecords.length}</b></div>
+        <div>世情相关记录：<b>${result.worldbookRecords.length}</b></div>
+      `;
+
+      $('maskList').innerHTML = result.discoveredMaskIds.length
+        ? result.discoveredMaskIds.map(id => `<div class="pill"><strong>${escapeHtml(id)}</strong></div>`).join('')
+        : '<div class="pill">没有从现有 key 中识别到旧面具 ID。</div>';
+
+      $('details').textContent = safeJson({
+        archiveRecordShape: result.archiveRecord
+          ? {
+              id: result.archiveRecord.id,
+              appId: result.archiveRecord.appId,
+              hasValue: Object.prototype.hasOwnProperty.call(result.archiveRecord, 'value'),
+              hasData: Object.prototype.hasOwnProperty.call(result.archiveRecord, 'data'),
+              valueKeys: result.archiveValue && typeof result.archiveValue === 'object' ? Object.keys(result.archiveValue) : [],
+              dataKeys: result.archiveData && typeof result.archiveData === 'object' ? Object.keys(result.archiveData) : []
+            }
+          : null,
+        archiveSource: result.archiveSource,
+        archiveMaskNames: Array.isArray(result.archiveCandidate?.masks)
+          ? result.archiveCandidate.masks.map(mask => ({ id: mask?.id, name: mask?.name || mask?.nickname || '' }))
+          : [],
+        discoveredMaskIds: result.discoveredMaskIds,
+        chatRecordIds: result.chatRecords.map(item => item.id),
+        worldbookRecordIds: result.worldbookRecords.map(item => item.id)
+      });
+
+      $('exportBtn').disabled = false;
+      $('repairValueBtn').disabled = !result.canRepairValue;
+      $('draftMasksBtn').disabled = !result.canCreateDraftMasks;
+
+      if (result.canRepairValue) {
+        setStatus('扫描完成：发现旧档案数据仍在错误的 data 字段中，可以点击“从旧 data 结构恢复档案”。', 'ok');
+      } else if (isUsefulArchiveData(result.archiveCandidate)) {
+        setStatus('扫描完成：档案主记录里已经有可用 value 数据；如果应用仍不显示，请刷新应用页面后再看。', 'ok');
+      } else if (result.canCreateDraftMasks) {
+        setStatus('扫描完成：没有找到完整档案主数据，但从闲谈 key 中找到了旧面具 ID。可先导出快照，再点击“主档案丢失时生成占位面具”。', 'warn');
+      } else {
+        setStatus('扫描完成：没有找到可直接恢复的档案数据，也没有识别到旧面具 ID。请确认是否使用了与应用相同的网址来源打开本工具。', 'warn');
+      }
+    }
+
+    function escapeHtml(text) {
+      const map = {
+        '&': String.fromCharCode(38, 97, 109, 112, 59),
+        '<': String.fromCharCode(38, 108, 116, 59),
+        '>': String.fromCharCode(38, 103, 116, 59),
+        '"': String.fromCharCode(38, 113, 117, 111, 116, 59),
+        "'": String.fromCharCode(38, 35, 51, 57, 59)
+      };
+      return String(text ?? '').replace(/[&<>"']/g, c => map[c] || c);
+    }
+
+    async function scan() {
+      try {
+        setStatus('正在只读扫描 IndexedDB...');
+        const db = await openDb();
+        state.db = db;
+        state.appsData = await txGetAll(db, STORE_NAME);
+        const result = analyze(state.appsData);
+
+        state.archiveRecord = result.archiveRecord;
+        state.archiveCandidate = result.archiveCandidate;
+        state.archiveSource = result.archiveSource;
+        state.discoveredMaskIds = result.discoveredMaskIds;
+        state.canRepairValue = result.canRepairValue;
+        state.canCreateDraftMasks = result.canCreateDraftMasks;
+        state.snapshot = {
+          exportedAt: new Date().toISOString(),
+          dbName: DB_NAME,
+          storeName: STORE_NAME,
+          appsData: state.appsData
+        };
+
+        renderAnalysis(result);
+      } catch (error) {
+        setStatus(`扫描失败：${error?.message || error}`, 'warn');
+      }
+    }
+
+    /* ======================================================================
+       [恢复工具·已完成·快照导出区]
+       说明：
+       1. 使用 Blob 生成下载文件，不写入浏览器同步键值存储。
+       2. 建议任何恢复写入前先导出。
+       ====================================================================== */
+    function exportSnapshot() {
+      if (!state.snapshot) {
+        setStatus('请先扫描，再导出快照。', 'warn');
+        return;
+      }
+      const blob = new Blob([safeJson(state.snapshot)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `miniphone-appsData-snapshot-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus('快照已生成下载。请保存好该 JSON 文件后再执行恢复写入。', 'ok');
+    }
+
+    /* ======================================================================
+       [恢复工具·已完成·档案 value 结构恢复区]
+       说明：
+       1. 仅当旧完整档案仍存在 record.data 时启用。
+       2. 写回档案应用标准结构 value，不写 data 双份兜底。
+       ====================================================================== */
+    async function repairArchiveValue() {
+      if (!state.db || !state.canRepairValue || !isUsefulArchiveData(state.archiveCandidate)) {
+        setStatus('当前扫描结果不满足从旧 data 结构恢复的条件。', 'warn');
+        return;
+      }
+
+      const restoredRecord = {
+        id: ARCHIVE_ID,
+        appId: 'archive',
+        key: 'archive-data',
+        value: {
+          ...state.archiveCandidate,
+          activeMaskId: state.archiveCandidate.activeMaskId || state.discoveredMaskIds.find(id => id !== 'default') || ''
+        },
+        updatedAt: Date.now(),
+        recoveredBy: 'tools/indexeddb-recovery.html'
+      };
+
+      await txPut(state.db, STORE_NAME, restoredRecord);
+      setStatus('已恢复：archive::archive-data 已写回档案应用标准 value 结构。请刷新档案应用和闲谈应用查看。', 'ok');
+      await scan();
+    }
+
+    /* ======================================================================
+       [恢复工具·已完成·占位面具恢复区]
+       说明：
+       1. 仅在完整档案主记录已丢失，但闲谈分面具 key 仍存在时使用。
+       2. 不伪造角色卡详情，只创建可挂接旧聊天数据的占位面具。
+       3. 写回 value 结构，不使用 data 双份兜底。
+       ====================================================================== */
+    async function createDraftMasks() {
+      if (!state.db || !state.canCreateDraftMasks) {
+        setStatus('当前扫描结果不满足生成占位面具的条件。', 'warn');
+        return;
+      }
+
+      const draftArchive = createDraftArchiveFromMaskIds(state.discoveredMaskIds);
+      if (!draftArchive.masks.length) {
+        setStatus('没有可用于生成占位面具的旧面具 ID。', 'warn');
+        return;
+      }
+
+      const restoredRecord = {
+        id: ARCHIVE_ID,
+        appId: 'archive',
+        key: 'archive-data',
+        value: draftArchive,
+        updatedAt: Date.now(),
+        recoveredBy: 'tools/indexeddb-recovery.html'
+      };
+
+      await txPut(state.db, STORE_NAME, restoredRecord);
+      setStatus('已生成占位面具：旧闲谈分面具数据可以重新被挂接。请刷新档案应用补全面具信息。', 'ok');
+      await scan();
+    }
+
+    $('scanBtn').addEventListener('click', scan);
+    $('exportBtn').addEventListener('click', exportSnapshot);
+    $('repairValueBtn').addEventListener('click', repairArchiveValue);
+    $('draftMasksBtn').addEventListener('click', createDraftMasks);
+  </script>
+</body>
+</html>

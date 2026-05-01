@@ -650,6 +650,27 @@ export async function mount(container, context) {
       if (record?.value && hasArchiveContent(record.value)) {
         return normalizeArchiveData(record.value);
       }
+
+      /* ======================================================================
+         [区域标注·已完成·档案主记录防回初始根因修复]
+         说明：
+         1. 档案应用的主记录 archive::archive-data 标准结构使用 record.value。
+         2. 旧版本闲谈/其它逻辑曾可能把同一个 id 写成 record.data，档案应用只读 value 时会误判为空，
+            随后 rerender()/saveData() 会把默认空档案写回，造成用户面具、角色卡页面回到初始状态。
+         3. 这里仅做一次性结构修正：发现 data 中存在有效档案时，转换为标准 value 结构并覆盖同一条记录。
+         4. 不使用 localStorage/sessionStorage，不写 value+data 双份兜底，也不做长文本过滤。
+         ====================================================================== */
+      if (record?.data && hasArchiveContent(record.data)) {
+        const normalizedFromLegacyData = normalizeArchiveData(record.data);
+        await context.db?.put?.('appsData', {
+          id: ARCHIVE_DB_RECORD_ID,
+          appId: context.appId,
+          key: 'archive-data',
+          value: normalizedFromLegacyData,
+          updatedAt: Date.now()
+        });
+        return normalizedFromLegacyData;
+      }
     } catch (_) {
       // IndexedDB 读取失败，返回默认数据
     }
