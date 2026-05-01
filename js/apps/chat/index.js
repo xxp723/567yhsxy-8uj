@@ -69,6 +69,7 @@ import {
   repairAiMessageFormatIfPossible,
   repairAiTextMessageFormatIfPossible,
   repairAiQuoteMessageFormatIfPossible,
+  repairAiSystemTipFormatIfPossible,
   sendStickerMessage,
   sendImageMessage,
   renderCurrentChatMessage,
@@ -84,6 +85,7 @@ import {
   syncMountedStickerGroupButtons,
   showClearAllMessagesModal,
   showAiFormatRepairTypeModal,
+  showAiWithdrawnMessageModal,
   showAiFormatRepairResultModal,
   showEditMessageModal,
   showForwardMessagesModal,
@@ -1544,13 +1546,26 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        [区域标注·已完成·本次修正分类弹窗] 消息气泡工具栏 → 打开修正类别弹窗
        说明：
        1. 点击“修正”先打开应用内分类弹窗，不使用原生浏览器弹窗。
-       2. 弹窗按钮包括：表情包、文本、引用。
+       2. 弹窗按钮包括：表情包、文本、引用、系统提示。
        3. 真正写入仍只调用 persistCurrentMessages/dbPut → DB.js / IndexedDB。
        ========================================================================== */
-    case 'msg-bubble-fix-format': {
+    case 'msg-bubble-fix-format':
+    case 'msg-system-tip-fix-format': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (!messageId) break;
       showAiFormatRepairTypeModal(container, messageId);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·AI本轮撤回查看弹窗] 系统提示小字 → 查看 AI 撤回原文
+       说明：使用应用内弹窗展示撤回内容；消息数据已在当前聊天记录中，不读取其它存储。
+       ======================================================================== */
+    case 'msg-system-tip-view-withdrawn': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (!message || String(message.type || '') !== 'ai_withdraw_system') break;
+      showAiWithdrawnMessageModal(container, message);
       break;
     }
 
@@ -1569,11 +1584,15 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         ? repairAiTextMessageFormatIfPossible(sourceMessage, state)
         : (repairType === 'quote'
             ? repairAiQuoteMessageFormatIfPossible(sourceMessage, state)
-            : repairAiMessageFormatIfPossible(sourceMessage, state));
+            : (repairType === 'system'
+                ? repairAiSystemTipFormatIfPossible(sourceMessage, state)
+                : repairAiMessageFormatIfPossible(sourceMessage, state)));
 
       const repairLabel = repairType === 'text'
         ? '文本'
-        : (repairType === 'quote' ? '引用' : '表情包');
+        : (repairType === 'quote'
+            ? '引用'
+            : (repairType === 'system' ? '系统提示' : '表情包'));
 
       if (!repairedMessage) {
         showAiFormatRepairResultModal(container, {

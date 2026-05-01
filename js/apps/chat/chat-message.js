@@ -167,6 +167,11 @@ const MSG_ICONS = {
      ======================================================================== */
   quote: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 10H8v12h10v16H8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 10H30v12h10v16H30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   /* ========================================================================
+     [区域标注·已完成·AI本轮撤回] IconPark — 系统提示修正/查看撤回图标
+     说明：服务 AI 撤回系统提示的查看弹窗与“修正→系统提示”；不涉及额外存储。
+     ======================================================================== */
+  systemTip: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 8h32v26H18L8 42V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M16 18h16M16 26h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* ========================================================================
      [区域标注·已完成·本次修正分类弹窗] IconPark — 文本修正按钮图标
      说明：用于“修正”分类弹窗的文本格式修复；不涉及任何持久化存储读写。
      ======================================================================== */
@@ -210,7 +215,7 @@ function getMessageDisplayTextForQuote(message = {}) {
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
-  if (type === 'transfer_system') return String(message?.content || '系统提示').trim();
+  if (type === 'transfer_system' || type === 'ai_withdraw_system') return String(message?.content || '系统提示').trim();
   return String(message?.content || '').trim();
 }
 
@@ -331,7 +336,15 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
-  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system';
+  /* ========================================================================
+     [区域标注·已完成·AI本轮撤回系统提示渲染]
+     说明：
+     1. transfer_system 继续用于转账系统小字。
+     2. ai_withdraw_system 专用于 AI 本轮撤回后生成的微信/QQ式中间小字。
+     3. 撤回原文随该消息对象写入当前聊天记录（DB.js / IndexedDB），用户可点开看，AI 上文只读取“撤回了什么”摘要。
+     ======================================================================== */
+  const isAiWithdrawSystemMessage = String(msg?.type || '') === 'ai_withdraw_system';
+  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage;
   const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
   const isTransferAccepted = transferStatus === 'accepted';
   /* ========================================================================
@@ -379,6 +392,14 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         <span class="msg-transfer-system-row__text">${escapeHtml(msg?.content || '')}</span>
         ${isToolbarOpen ? `
           <div class="msg-system-tip-actions" data-role="msg-bubble-toolbar">
+            ${isAiWithdrawSystemMessage ? `
+              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-view-withdrawn" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.systemTip}<span>查看</span>
+              </button>
+              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.fixFormat}<span>修正</span>
+              </button>
+            ` : ''}
             <button class="msg-system-tip-actions__btn ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-system-tip-delete" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
             </button>
@@ -1408,6 +1429,29 @@ export function repairAiQuoteMessageFormatIfPossible(message, state) {
   };
 }
 
+/* ========================================================================
+   [区域标注·已完成·AI本轮撤回系统提示修正]
+   说明：
+   1. “修正 → 系统提示”专门修复 AI 撤回系统小字的显示格式。
+   2. 只修改当前消息对象；持久化由 index.js 写入 DB.js / IndexedDB。
+   3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   ======================================================================== */
+export function repairAiSystemTipFormatIfPossible(message) {
+  if (!message || String(message.type || '') !== 'ai_withdraw_system') return null;
+  const withdrawnText = String(message.withdrawnContent || message.aiVisibleWithdrawnSummary || '').trim();
+  if (!withdrawnText) return null;
+  const roleName = String(message.withdrawnRoleName || '').trim() || '对方';
+  return {
+    ...message,
+    role: 'user',
+    type: 'ai_withdraw_system',
+    content: `${roleName} 撤回了一条消息`,
+    withdrawnContent: withdrawnText,
+    aiVisibleWithdrawnSummary: withdrawnText,
+    withdrawnRoleName: roleName
+  };
+}
+
 
 export function cleanAiProtocolBlockContent(content) {
   return String(content || '')
@@ -1476,7 +1520,7 @@ export function extractAiProtocolBlocks(rawText) {
      2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -1521,6 +1565,53 @@ export function buildAiReplyMessages(rawText, state) {
 
   const builtMessages = [];
   protocolBlocks.forEach(block => {
+    if (block.type === '撤回') {
+      /* ======================================================================
+         [区域标注·已完成·AI本轮撤回协议解析]
+         说明：
+         1. AI 只能撤回本轮已经生成的 assistant 消息；系统提示不会被后续撤回误删。
+         2. prompt.js 已强约束 AI 多条撤回必须输出多条 [撤回]；这里仍兼容旧模型的 {目标:全部}/{条数:N}。
+         3. 无论旧模型写单条批量撤回还是多条独立撤回，最终都逐条追加 ai_withdraw_system 系统小字，禁止合并成“撤回了N条消息”。
+         ====================================================================== */
+      const body = cleanAiProtocolBlockContent(block.content);
+      const countMatch = body.match(/条数\s*[：:]\s*(\d+)/i);
+      const targetAll = /目标\s*[：:]\s*(全部|所有|all)/i.test(body);
+      const countFromBody = Math.max(1, Math.floor(Number(countMatch?.[1] || 1)) || 1);
+      const requestedWithdrawCount = targetAll
+        ? builtMessages.filter(message => message?.role === 'assistant').length
+        : countFromBody;
+      const roleName = String(block.roleName || '').trim() || '对方';
+
+      for (let i = 0; i < requestedWithdrawCount; i += 1) {
+        const withdrawIndex = builtMessages
+          .map((message, index) => ({ message, index }))
+          .reverse()
+          .find(item => item.message?.role === 'assistant')?.index;
+
+        if (withdrawIndex === undefined) break;
+
+        const [removedMessage] = builtMessages.splice(withdrawIndex, 1);
+        const withdrawnText = String(
+          removedMessage.type === 'sticker'
+            ? `[表情包] ${removedMessage.stickerName || removedMessage.content || ''}`
+            : (removedMessage.type === 'transfer'
+                ? `[转账] ${removedMessage.transferDisplayAmount || removedMessage.content || ''}`
+                : (removedMessage.content || ''))
+        ).trim();
+        if (!withdrawnText) continue;
+
+        builtMessages.push({
+          role: 'user',
+          type: 'ai_withdraw_system',
+          content: `${roleName} 撤回了一条消息`,
+          withdrawnContent: withdrawnText,
+          aiVisibleWithdrawnSummary: withdrawnText,
+          withdrawnRoleName: roleName
+        });
+      }
+      return;
+    }
+
     if (block.type === '表情') {
       const sticker = resolveStickerProtocolTarget(block.content, state) || findLooseStickerTargetFromText(block.content, state);
       if (sticker) {
@@ -2188,7 +2279,13 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
   let normalizedMessages = Array.isArray(messages)
     ? messages
         .map(message => {
-          if (!message || message.role !== 'assistant') return null;
+          if (!message) return null;
+          /* ==================================================================
+             [区域标注·已完成·AI本轮撤回逐条系统提示保留]
+             说明：ai_withdraw_system 是撤回后给用户/后续 AI 看的中间系统小字，不参与 AI 气泡数量裁剪，也不能因为 role:user 被过滤。
+             ================================================================== */
+          if (String(message.type || '') === 'ai_withdraw_system') return message;
+          if (message.role !== 'assistant') return null;
           if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
             return message;
           }
@@ -2207,7 +2304,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     let bestLength = 0;
 
     normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker') return;
+      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system') return;
       const parts = splitSingleBubbleForCount(message.content);
       if (parts.length <= 1) return;
       const currentLength = String(message.content || '').length;
@@ -2231,8 +2328,14 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     );
   }
 
-  if (normalizedMessages.length > max) {
-    normalizedMessages = normalizedMessages.slice(0, max);
+  const countableMessages = normalizedMessages.filter(message => String(message.type || '') !== 'ai_withdraw_system');
+  if (countableMessages.length > max) {
+    let keptCountable = 0;
+    normalizedMessages = normalizedMessages.filter(message => {
+      if (String(message.type || '') === 'ai_withdraw_system') return true;
+      keptCountable += 1;
+      return keptCountable <= max;
+    });
   }
 
   return normalizedMessages.length
@@ -2648,7 +2751,13 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
   if (!mask || !panel || !safeMessageId) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·本次消息掉格式修复] AI 消息格式修正类别选择 -->
+    <!-- ======================================================================
+         [区域标注·已完成·AI本轮撤回系统提示修正入口] AI 消息格式修正类别选择
+         说明：
+         1. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
+         2. 仍由 index.js 调用 repairAiSystemTipFormatIfPossible 后写入 DB.js / IndexedDB。
+         3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+         ====================================================================== -->
     <div class="chat-modal-header">
       <span>选择修正类别</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -2671,6 +2780,11 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
           <strong>引用</strong>
           <em>修复引用ID为引用气泡</em>
         </button>
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="system" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.systemTip}</span>
+          <strong>系统提示</strong>
+          <em>修复撤回小字格式</em>
+        </button>
       </div>
       <div class="chat-modal-notice" data-role="modal-notice"></div>
     </div>
@@ -2682,6 +2796,33 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
   mask.classList.remove('is-hidden');
 }
 
+
+/* ========================================================================
+   [AI本轮撤回查看弹窗]
+   说明：用户点击 AI 撤回系统提示后查看原文；应用内弹窗，不使用原生浏览器弹窗。
+   ======================================================================== */
+export function showAiWithdrawnMessageModal(container, message = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [AI本轮撤回查看弹窗] -->
+    <div class="chat-modal-header">
+      <span>撤回的消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">这条内容已被 AI 撤回；用户可查看原文，后续 AI 只能看到自己撤回了什么。</div>
+      <div class="msg-withdrawn-content">${escapeHtml(message.withdrawnContent || message.aiVisibleWithdrawnSummary || '')}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
 
 export function showAiFormatRepairResultModal(container, { success = false, title = '', message = '' } = {}) {
   const mask = container.querySelector('[data-role="modal-mask"]');
