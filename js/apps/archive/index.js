@@ -2862,6 +2862,11 @@ export async function mount(container, context) {
     }));
   };
 
+  /* [区域标注·已完成·本次档案DB完整写入修复] 世界书绑定变更同步写回档案主记录
+     说明：
+     1. 点击角色详情里的世界书绑定/解绑时，会同时修改世情记录 worldbook::all-books 与档案主记录 archive::archive-data。
+     2. 避免只解绑 worldbook::all-books，却没有保存角色档案 boundWorldBooks，导致刷新后又被档案数据补回绑定。
+     3. 持久化只使用 DB.js / IndexedDB，不使用 localStorage/sessionStorage，也不写双份兜底。 */
   const toggleWorldBookBinding = async (bookId, characterId) => {
     const book = _worldBookCache.find((b) => b.id === bookId);
     if (!book) return;
@@ -2908,6 +2913,8 @@ export async function mount(container, context) {
     } catch (_) {
       // ignore
     }
+
+    await persistArchiveData();
   };
 
   const addCharacterFromImportedObject = async (obj, avatarDataUrl = '') => {

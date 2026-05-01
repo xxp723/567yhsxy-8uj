@@ -764,11 +764,12 @@ export function getCharacterCard(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 3·已完成·本次需求1] 用户面具身份及其绑定关系网络
+   [提示词区域 3] 用户面具身份及其绑定关系网络
    说明：
    1. 只发送姓名、昵称、性别、年龄、身份、联系方式、个性签名、用户设定和绑定关系网络。
-   2. 不发送未提到的其它面具字段，不使用 localStorage/sessionStorage。
-   3. 若当前面具未匹配到有效档案，本区域保持为空而不是编造面具内容。
+   2. 用户设定读取档案应用实际保存字段 personalitySetting，避免用户面具设定传给 AI 时为空。
+   3. 不发送未提到的其它面具字段，不使用 localStorage/sessionStorage。
+   4. 若当前面具未匹配到有效档案，本区域保持为空而不是编造面具内容。
    ========================================================================== */
 export function getUserPersona(context = {}) {
   const mask = context.currentMask || getCurrentMask(context);
@@ -781,9 +782,7 @@ export function getUserPersona(context = {}) {
         'identity',
         'contact',
         'signature',
-        'description',
-        'basicSetting',
-        'personality'
+        'personalitySetting'
       ])
         .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')

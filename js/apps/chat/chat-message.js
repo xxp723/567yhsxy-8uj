@@ -10,7 +10,9 @@ import {
   TAB_ICONS,
   DATA_KEY_SESSIONS,
   DATA_KEY_MESSAGES_PREFIX,
+  ARCHIVE_DB_RECORD_ID,
   dbPut,
+  dbGetArchiveData,
   escapeHtml,
   normalizeStickerData,
   normalizeWalletData,
@@ -51,6 +53,75 @@ async function persistChatConsoleRuntimeLogs(state, db) {
     DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId),
     Array.isArray(state.chatConsoleLogs) ? state.chatConsoleLogs.slice(-500) : []
   );
+}
+
+/* ========================================================================
+   [区域标注·已完成·本次角色卡/用户面具上下文修复] AI 请求前刷新档案上下文
+   说明：
+   1. 每次真正调用 AI 前，都通过 dbGetArchiveData → DB.js / IndexedDB 读取最新档案数据。
+   2. 同步刷新角色卡、用户面具、配角、关系网络运行时缓存，避免闲谈应用启动后的旧缓存/空缓存传给 prompt.js。
+   3. 同时写入聊天控制台排查日志：角色卡/用户面具是否命中、设定长度、双方关系条数。
+   4. 读取失败时仅沿用当前运行时 state，保证聊天流程不中断。
+   ======================================================================== */
+async function refreshArchiveContextForAiRequest(state, db, session = {}) {
+  let latestArchive = null;
+
+  try {
+    latestArchive = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
+  } catch (error) {
+    appendChatConsoleRuntimeLog(state, 'warn', `档案上下文读取失败，沿用当前缓存：${error?.message || '未知错误'}`);
+  }
+
+  const archiveData = latestArchive && typeof latestArchive === 'object' ? latestArchive : {};
+  const latestMasks = Array.isArray(archiveData.masks) ? archiveData.masks : state.archiveMasks;
+  const latestCharacters = Array.isArray(archiveData.characters) ? archiveData.characters : state.archiveCharacters;
+  const latestSupportingRoles = Array.isArray(archiveData.supportingRoles) ? archiveData.supportingRoles : state.archiveSupportingRoles;
+  const latestRelations = Array.isArray(archiveData.relations) ? archiveData.relations : state.archiveRelations;
+
+  state.archiveMasks = Array.isArray(latestMasks) ? latestMasks : [];
+  state.archiveCharacters = Array.isArray(latestCharacters) ? latestCharacters : [];
+  state.archiveSupportingRoles = Array.isArray(latestSupportingRoles) ? latestSupportingRoles : [];
+  state.archiveRelations = Array.isArray(latestRelations) ? latestRelations : [];
+
+  const activeMaskId = String(state.activeMaskId || archiveData.activeMaskId || '').trim();
+  const currentContact = (state.contacts || []).find(contact => String(contact.id) === String(session.id)) || null;
+  const roleIdCandidates = [
+    currentContact?.roleId,
+    session?.roleId,
+    currentContact?.id,
+    session?.id
+  ].map(value => String(value || '').trim()).filter(Boolean);
+
+  const matchedCharacter = state.archiveCharacters.find(character => roleIdCandidates.includes(String(character?.id || '').trim())) || null;
+  const matchedMask = state.archiveMasks.find(mask => String(mask?.id || '').trim() === activeMaskId) || null;
+
+  const countDirectRelations = (ownerType, ownerId) => {
+    const safeOwnerId = String(ownerId || '').trim();
+    if (!safeOwnerId) return 0;
+    return state.archiveRelations.filter(relation => (
+      (String(relation?.ownerType || '') === ownerType && String(relation?.ownerId || '') === safeOwnerId)
+      || (String(relation?.targetType || '') === ownerType && String(relation?.targetId || '') === safeOwnerId)
+    )).length;
+  };
+
+  const characterSettingLength = String(matchedCharacter?.personalitySetting || '').trim().length;
+  const maskSettingLength = String(matchedMask?.personalitySetting || '').trim().length;
+  const characterRelationCount = countDirectRelations('character', matchedCharacter?.id);
+  const maskRelationCount = countDirectRelations('mask', matchedMask?.id);
+
+  appendChatConsoleRuntimeLog(
+    state,
+    'info',
+    `档案上下文刷新：角色卡=${matchedCharacter ? '已匹配' : '未匹配'}，人物设定长度=${characterSettingLength}，角色关系=${characterRelationCount}；用户面具=${matchedMask ? '已匹配' : '未匹配'}，用户设定长度=${maskSettingLength}，面具关系=${maskRelationCount}`
+  );
+
+  return {
+    activeMaskId,
+    masks: state.archiveMasks,
+    characters: state.archiveCharacters,
+    supportingRoles: state.archiveSupportingRoles,
+    relations: state.archiveRelations
+  };
 }
 
 /* ==========================================================================
@@ -1030,6 +1101,12 @@ export async function sendMessage(container, state, db, content, settingsManager
     const pendingTransferTemp = buildPendingOutgoingTransferSystemTemp(pendingOutgoingTransfers);
     const userInputForAi = [promptPayload.userInput, pendingTransferTemp].filter(Boolean).join('\n\n');
 
+    /* ========================================================================
+       [区域标注·已完成·本次角色卡/用户面具上下文修复] AI 请求前读取最新档案
+       说明：确保角色卡及其关系网络、用户面具身份及其关系网络均来自 DB.js / IndexedDB 最新记录，而不是闲谈启动时旧缓存。
+       ======================================================================== */
+    const latestArchiveDataForAi = await refreshArchiveContextForAiRequest(state, db, session);
+
     /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
     appendChatConsoleRuntimeLog(state, 'info', `开始请求 AI：history=${promptPayload.history.length}，currentRound=${promptPayload.currentUserRoundMessages.length}`);
     const result = await chat({
@@ -1046,14 +1123,8 @@ export async function sendMessage(container, state, db, content, settingsManager
       activeMaskId: state.activeMaskId,
       currentSession: session,
       currentContact: state.contacts.find(contact => String(contact.id) === String(session.id)) || null,
-      archiveData: {
-        activeMaskId: state.activeMaskId,
-        masks: state.archiveMasks,
-        characters: state.archiveCharacters,
-        /* [区域标注·本次修改4] 注入档案应用显示的用户面具关系网络 */
-        supportingRoles: state.archiveSupportingRoles,
-        relations: state.archiveRelations
-      },
+      /* [区域标注·已完成·本次角色卡/用户面具上下文修复] 传入刚从 IndexedDB 刷新的完整档案上下文 */
+      archiveData: latestArchiveDataForAi,
       /* [区域标注·本次需求3] 把全局表情包资产传给 prompt.js，由当前面具挂载分组决定 AI 可用资源 */
       stickerData: state.stickerData
     });
