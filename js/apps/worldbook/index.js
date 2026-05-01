@@ -172,6 +172,8 @@ const I = {
   pin: '<svg viewBox="0 0 48 48" fill="none"><path d="M24 44s16-12 16-24a16 16 0 0 0-32 0c0 12 16 24 16 24Z" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="20" r="5" stroke="currentColor" stroke-width="3"/></svg>',
   book: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 8h14a4 4 0 0 1 4 4v28a3 3 0 0 0-3-3H6V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M42 8H28a4 4 0 0 0-4 4v28a3 3 0 0 1 3-3h15V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>',
   link: '<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l-4 4a7 7 0 0 0 10 10l4-4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M29 19l4-4a7 7 0 0 0-10-10l-4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 30l12-12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
+  /* [修改标注·已完成·本次世情手动保存按钮] 保存图标 - IconPark Save */
+  save: '<svg viewBox="0 0 48 48" fill="none"><path d="M9 42h30a3 3 0 0 0 3-3V15L33 6H9a3 3 0 0 0-3 3v30a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 6v14h20V6M16 42V29h16v13" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>',
   /* [修改标注·需求6-改] 放大/全屏图标 - IconPark FullScreen */
   expand: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 6h12M6 6v12M42 6H30M42 6v12M6 42h12M6 42V30M42 42H30M42 42V30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   /* [修改标注·需求6-改] 收缩/退出全屏图标 - IconPark OffScreen */
@@ -260,7 +262,14 @@ export async function mount(container, context) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    void queueSaveWorldBooks();
+    return queueSaveWorldBooks();
+  };
+
+  /* [修改标注·已完成·本次世情手动保存按钮] 手动保存当前世界书：
+     只通过 DB.js / IndexedDB 落盘；不使用 localStorage/sessionStorage，也不使用原生弹窗。 */
+  const saveCurrentWorldBookNow = async () => {
+    await flushSave();
+    toast('世界书已保存', 'success');
   };
   /* chars() 从 IndexedDB 缓存读取档案数据（由 loadArchiveCache 预加载） */
   let _archiveCharsCache = [];
@@ -533,7 +542,8 @@ export async function mount(container, context) {
       const book = findBook(S.openId);
       const bookName = book ? book.name : '世界书';
       const left = document.createElement('span'); left.className = 'wb-header-left';
-      left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button>';
+      /* [修改标注·已完成·本次世情手动保存按钮] 返回按钮右侧增加“保存”按钮，用于强制同步当前世界书条目与设置到 IndexedDB。 */
+      left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button><button class="wb-header-btn" data-a="savebook" title="保存世界书">' + I.save + '</button>';
       header.appendChild(left);
       /* [本次修改标注·仅限需求2] 打开世界书后，点击标题中的世界书名称直接返回桌面 */
       renderHomeTitle(bookName);
@@ -647,6 +657,7 @@ export async function mount(container, context) {
 
     if (a === 'ob') { const id = ev.target.closest('[data-a="ob"]').dataset.id; S.openId = id; S.sOpen = false; S.sQ = ''; S.expEnt.clear(); render(); return; }
     if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
+    if (a === 'savebook') { void saveCurrentWorldBookNow(); return; }
     if (a === 'gohome') { closeToDesktop(); return; }
     if (a === 'tg') { S.tab = ev.target.closest('[data-a="tg"]').dataset.tab; S.openId = null; render(); return; }
     if (a === 'na') { openNewBookMod(); return; }
@@ -714,6 +725,7 @@ export async function mount(container, context) {
     const a = ev.target.closest('[data-a]')?.dataset.a;
     if (a === 'gohome') { closeToDesktop(); return; }
     if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
+    if (a === 'savebook') { void saveCurrentWorldBookNow(); return; }
     if (a === 'imp') { $fi.click(); return; }
     if (a === 'expall') { exportAll(); return; }
     if (a === 'ts') { S.sOpen = !S.sOpen; if (!S.sOpen) { S.sQ = ''; S.sBooks.clear(); S.sEntries.clear(); } render(); return; }
