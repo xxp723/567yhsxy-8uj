@@ -197,8 +197,11 @@ export async function mount(container, context) {
   await ensureCSS();
   const S = { books: [], tab: 'global', openId: null, sOpen: false, sQ: '', sBooks: new Set(), sEntries: new Set(), expEnt: new Set() };
   const { db, appId, eventBus } = context;
-  /* [修改标注·需求3] 点击标题文字返回桌面时，复用应用统一关闭事件，避免仅移除窗口壳体 */
-  const closeToDesktop = () => { flushSave(); eventBus?.emit('app:close', { appId }); };
+  /* [世界书离开前强制落盘] 点击标题文字返回桌面前先等待最新世界书写入 IndexedDB，避免重进时回到旧内容 */
+  const closeToDesktop = async () => {
+    await flushSave();
+    eventBus?.emit('app:close', { appId });
+  };
 
   /* ======================================================================
      [修改标注·已完成·本次保存链路修复] 世情应用保存入口
@@ -765,7 +768,8 @@ export async function mount(container, context) {
   render();
 
   /* unmount */
-  return () => {
+  return async () => {
+    await flushSave();
     $c.removeEventListener('click', onClick);
     $c.removeEventListener('input', onInput);
     $c.removeEventListener('change', onChange);
@@ -773,7 +777,6 @@ export async function mount(container, context) {
     $c.removeEventListener('pointerup', onPointerUp);
     $c.removeEventListener('pointercancel', onPointerUp);
     $t.removeEventListener('click', onClick);
-    flushSave();
     if (header) header.removeEventListener('click', onHeaderClick);
     if (eventBus) eventBus.off('character:imported', onCharImported);
     if (closeBtn) closeBtn.style.display = '';
