@@ -430,6 +430,9 @@ function normalizeArchiveData(rawArchive) {
     ...archive,
     masks: Array.isArray(archive.masks) ? archive.masks : [],
     characters: Array.isArray(archive.characters) ? archive.characters : [],
+    /* [区域标注·已完成·本次需求1] 档案关系网络注入修复：保留配角档案与关系网络，避免发送给 AI 的关系上下文为空字符串 */
+    supportingRoles: Array.isArray(archive.supportingRoles) ? archive.supportingRoles : [],
+    relations: Array.isArray(archive.relations) ? archive.relations : [],
     activeMaskId: archive.activeMaskId || ''
   };
 }
@@ -471,16 +474,47 @@ function isWorldBookAvailableForCharacter(book, characterId) {
   return Boolean(characterId && boundIds.includes(String(characterId)));
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次需求1] 当前聊天角色档案匹配修复
+   说明：
+   1. 优先使用通讯录保存的 roleId / 会话 roleId 精确匹配档案应用 characters[].id。
+   2. 再使用 contact.id / session.id 兼容旧数据；最后按联系人/会话名称兜底匹配。
+   3. 本区只读取已传入或 IndexedDB 中的档案数据，不使用 localStorage/sessionStorage。
+   4. 不向 AI 发送角色开场白 greetings，也不发送角色绑定世界书名称 boundWorldBooks。
+   ========================================================================== */
 function getCurrentCharacterId(context = {}) {
   const session = context.currentSession || {};
   const contact = context.currentContact || {};
-  return String(session.roleId || session.id || contact.roleId || contact.id || context.currentCharacterId || '').trim();
+  const characters = Array.isArray(context.archiveData?.characters) ? context.archiveData.characters : [];
+  const candidateIds = [
+    contact.roleId,
+    session.roleId,
+    context.currentCharacterId,
+    contact.id,
+    session.id
+  ].map(item => String(item || '').trim()).filter(Boolean);
+
+  const matchedId = candidateIds.find(candidateId => (
+    characters.some(character => String(character?.id || '') === candidateId)
+  ));
+
+  return matchedId || candidateIds[0] || '';
 }
 
 function getCurrentCharacter(context = {}) {
   const characterId = getCurrentCharacterId(context);
   const characters = Array.isArray(context.archiveData?.characters) ? context.archiveData.characters : [];
-  return characters.find(item => String(item?.id || '') === characterId) || context.currentCharacter || null;
+  const byId = characters.find(item => String(item?.id || '') === characterId);
+  if (byId) return byId;
+
+  const session = context.currentSession || {};
+  const contact = context.currentContact || {};
+  const candidateNames = [
+    contact.name,
+    session.name
+  ].map(item => normalizePlainText(item)).filter(Boolean);
+
+  return characters.find(character => candidateNames.includes(normalizePlainText(character?.name))) || context.currentCharacter || null;
 }
 
 function getCurrentMask(context = {}) {
@@ -490,8 +524,12 @@ function getCurrentMask(context = {}) {
 }
 
 /* ==========================================================================
-   用户面具身份绑定关系网络格式化
-   说明：读取档案应用写入 IndexedDB 的 relations，不使用 localStorage/sessionStorage。
+   [区域标注·已完成·本次需求1] 用户面具/角色关系网络格式化修复
+   说明：
+   1. 读取档案应用写入 IndexedDB 的 masks / characters / supportingRoles / relations。
+   2. 同时支持当前对象作为 owner 或 target 的双向关系，避免关系网络为空。
+   3. 只发送关系对象类型、名称、关系标签、当前视角备注；不发送开场白或世界书名称。
+   4. 不使用 localStorage/sessionStorage，不写双份存储兜底。
    ========================================================================== */
 function getArchiveEntityListByType(context = {}, type = '') {
   const archive = context.archiveData || {};
@@ -513,32 +551,43 @@ function getRelationDisplayText(type = '', custom = '') {
   return safeType || safeCustom || '未设定';
 }
 
-function formatUserPersonaRelationNetwork(context = {}, mask = null) {
-  const maskId = String(mask?.id || context.activeMaskId || '').trim();
+function formatArchiveRelationNetworkForEntity(context = {}, entityType = '', entityId = '', title = '关系网络') {
+  const safeType = String(entityType || '').trim();
+  const safeId = String(entityId || '').trim();
   const relations = Array.isArray(context.archiveData?.relations) ? context.archiveData.relations : [];
-  if (!maskId || !relations.length) return '';
+  if (!safeType || !safeId || !relations.length) return '';
+
+  const typeLabels = {
+    mask: '用户面具',
+    character: '角色',
+    supporting: '配角'
+  };
 
   const lines = relations
     .map(item => {
-      const isOwnerSide = item?.ownerType === 'mask' && String(item?.ownerId || '') === maskId;
-      const isTargetSide = item?.targetType === 'mask' && String(item?.targetId || '') === maskId;
+      const isOwnerSide = item?.ownerType === safeType && String(item?.ownerId || '') === safeId;
+      const isTargetSide = item?.targetType === safeType && String(item?.targetId || '') === safeId;
       if (!isOwnerSide && !isTargetSide) return '';
 
       const counterpartType = isOwnerSide ? item.targetType : item.ownerType;
       const counterpartId = isOwnerSide ? item.targetId : item.ownerId;
       const counterpartName = getArchiveEntityName(context, counterpartType, counterpartId);
+      const counterpartTypeLabel = typeLabels[counterpartType] || '人物';
       const relationLabel = isOwnerSide
         ? getRelationDisplayText(item.ownerRelationType, item.ownerRelationCustom)
         : getRelationDisplayText(item.targetRelationType, item.targetRelationCustom);
       const note = normalizePlainText(isOwnerSide ? item.ownerNote : item.targetNote);
 
-      return `- 用户面具对「${counterpartName}」的关系：${relationLabel}${note ? `；备注：${note}` : ''}`;
+      return `- 与${counterpartTypeLabel}「${counterpartName}」：${relationLabel}${note ? `；当前视角备注：${note}` : ''}`;
     })
     .filter(Boolean);
 
-  return lines.length
-    ? `用户面具身份绑定的关系网络：\n${lines.join('\n')}`
-    : '';
+  return lines.length ? `${title}：\n${lines.join('\n')}` : '';
+}
+
+function formatUserPersonaRelationNetwork(context = {}, mask = null) {
+  const maskId = String(mask?.id || context.activeMaskId || '').trim();
+  return formatArchiveRelationNetworkForEntity(context, 'mask', maskId, '用户面具身份绑定的关系网络');
 }
 
 /* ==========================================================================
@@ -547,28 +596,7 @@ function formatUserPersonaRelationNetwork(context = {}, mask = null) {
    ========================================================================== */
 function formatCharacterRelationNetwork(context = {}, character = null) {
   const characterId = String(character?.id || getCurrentCharacterId(context)).trim();
-  const relations = Array.isArray(context.archiveData?.relations) ? context.archiveData.relations : [];
-  if (!characterId || !relations.length) return '';
-
-  const lines = relations
-    .map(item => {
-      const isOwnerSide = item?.ownerType === 'character' && String(item?.ownerId || '') === characterId;
-      const isTargetSide = item?.targetType === 'character' && String(item?.targetId || '') === characterId;
-      if (!isOwnerSide && !isTargetSide) return '';
-
-      const counterpartType = isOwnerSide ? item.targetType : item.ownerType;
-      const counterpartId = isOwnerSide ? item.targetId : item.ownerId;
-      const counterpartName = getArchiveEntityName(context, counterpartType, counterpartId);
-      const relationLabel = isOwnerSide
-        ? getRelationDisplayText(item.ownerRelationType, item.ownerRelationCustom)
-        : getRelationDisplayText(item.targetRelationType, item.targetRelationCustom);
-      const note = normalizePlainText(isOwnerSide ? item.ownerNote : item.targetNote);
-
-      return `- 对「${counterpartName}」：${relationLabel}${note ? `；备注：${note}` : ''}`;
-    })
-    .filter(Boolean);
-
-  return lines.length ? `角色关系网：\n${lines.join('\n')}` : '';
+  return formatArchiveRelationNetworkForEntity(context, 'character', characterId, '角色关系网');
 }
 
 async function collectPromptRuntimeContext({
@@ -700,11 +728,13 @@ export function getWorldBookBeforeChar(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 2] 角色卡人设及其绑定关系网络
+   [提示词区域 2·已完成·本次需求1] 角色卡人设及其绑定关系网络
    说明：
    1. 本区域告诉 AI 要扮演哪个角色，并发送该角色的档案字段与绑定关系网。
-   2. 档案字段以中文标签 + 已填写内容发送，不发送开场白。
-   3. 本区域不再重复发送角色硬事实摘要、短句摘录或嵌套资料标题。
+   2. 只发送姓名、性别、年龄、身份、联系方式、个性签名、人物设定和关系网络。
+   3. 不发送角色开场白 greetings，不发送角色绑定世界书名称 boundWorldBooks。
+   4. 若未匹配到当前聊天角色档案，本区域会保持为空而不是编造档案内容。
+   5. 本区域只读取 DB.js / IndexedDB 已有档案数据，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function getCharacterCard(context = {}) {
   const character = context.currentCharacter || getCurrentCharacter(context);
@@ -717,16 +747,15 @@ export function getCharacterCard(context = {}) {
         'identity',
         'contact',
         'signature',
-        'personalitySetting',
-        'relationship'
+        'personalitySetting'
       ])
         .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')
     : '';
 
   return createPromptSection('角色卡人设及其绑定关系网络', [
-    '这是你，不是 AI助手，这是你要扮演的角色。',
-    '人物设定如含 YAML/Markdown，按结构化角色事实读取。',
+    character ? '这是你，不是 AI助手，这是你要扮演的角色。' : '',
+    character ? '人物设定如含 YAML/Markdown，按结构化角色事实读取。' : '',
     /* 角色档案性别硬约束与“双性”释义注入 */
     createArchiveGenderPromptNote(character, '当前聊天对象/角色档案'),
     characterFields,
@@ -735,25 +764,36 @@ export function getCharacterCard(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 3] 用户面具身份
-   说明：角色卡所绑定的用户面具身份，以及档案应用中该用户面具显示的关系网络。
+   [提示词区域 3·已完成·本次需求1] 用户面具身份及其绑定关系网络
+   说明：
+   1. 只发送姓名、昵称、性别、年龄、身份、联系方式、个性签名、用户设定和绑定关系网络。
+   2. 不发送未提到的其它面具字段，不使用 localStorage/sessionStorage。
+   3. 若当前面具未匹配到有效档案，本区域保持为空而不是编造面具内容。
    ========================================================================== */
 export function getUserPersona(context = {}) {
   const mask = context.currentMask || getCurrentMask(context);
-  const personaText = formatNamedObject('用户面具身份', mask, [
-    'name',
-    'nickname',
-    'signature',
-    'description',
-    'basicSetting',
-    'personality'
-  ]).replace(/^【用户面具身份】\n/, '');
+  const personaText = mask && typeof mask === 'object'
+    ? getCharacterPromptFieldEntries(mask, [
+        'name',
+        'nickname',
+        'gender',
+        'age',
+        'identity',
+        'contact',
+        'signature',
+        'description',
+        'basicSetting',
+        'personality'
+      ])
+        .map(entry => `${entry.label}：${entry.formatted}`)
+        .join('\n')
+    : '';
 
   /* 用户面具身份绑定的档案关系网络 */
   const relationNetworkText = formatUserPersonaRelationNetwork(context, mask);
 
   return createPromptSection('用户面具身份', [
-    '这是你的对话对象。',
+    mask ? '这是你的对话对象。' : '',
     /* 用户面具性别硬约束与“双性”释义注入 */
     createArchiveGenderPromptNote(mask, '用户面具'),
     personaText,
