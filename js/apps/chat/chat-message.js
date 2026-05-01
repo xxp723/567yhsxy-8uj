@@ -19,6 +19,40 @@ import {
 import { chat } from './prompt.js';
 import { getVisibleChatSessions } from './chat-list.js';
 
+/* ========================================================================
+   [区域标注·已完成·本次控制台日志开关增强] 聊天控制台日志存储键与工具
+   说明：
+   1. 与 index.js 保持同一 IndexedDB 键规则，严格只走 DB.js（dbPut）。
+   2. 日志队列最多 500 条，超出自动删除旧日志。
+   3. 仅在聊天设置开关开启时记录。
+   ======================================================================== */
+const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
+
+function appendChatConsoleRuntimeLog(state, level, text) {
+  if (!state?.chatConsoleEnabled || !state?.currentChatId) return false;
+  const payload = String(text || '').trim();
+  if (!payload) return false;
+  const ts = Date.now();
+  const entry = {
+    id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
+    ts,
+    time: new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }),
+    level: String(level || 'info').toLowerCase(),
+    text: payload
+  };
+  state.chatConsoleLogs = [...(Array.isArray(state.chatConsoleLogs) ? state.chatConsoleLogs : []), entry].slice(-500);
+  return true;
+}
+
+async function persistChatConsoleRuntimeLogs(state, db) {
+  if (!state?.currentChatId) return;
+  await dbPut(
+    db,
+    DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId),
+    Array.isArray(state.chatConsoleLogs) ? state.chatConsoleLogs.slice(-500) : []
+  );
+}
+
 /* ==========================================================================
    [区域标注] IconPark 图标 SVG 定义
    说明：聊天消息页面用到的所有按键图标统一使用 IconPark 风格 SVG。
@@ -918,6 +952,16 @@ export async function sendMessage(container, state, db, content, settingsManager
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!session) return;
 
+  /* ======================================================================
+     [区域标注·已完成·本次控制台日志开关增强] 用户发送与触发记录
+     说明：记录当前聊天页给 AI 的触发情况（文本发送 / 空触发）。
+     ====================================================================== */
+  if (!options.skipAppendUser) {
+    appendChatConsoleRuntimeLog(state, 'info', userText ? `用户发送：${userText}` : '用户发送：空文本');
+  } else if (triggerAi) {
+    appendChatConsoleRuntimeLog(state, 'info', '触发 AI 回复（不追加用户消息）');
+  }
+
   /* [区域标注·本次需求] 用户消息入列并写入 IndexedDB */
   /* ===== 闲谈：发送消息去重 START ===== */
   let appendedUserMessage = null;
@@ -987,7 +1031,8 @@ export async function sendMessage(container, state, db, content, settingsManager
     const userInputForAi = [promptPayload.userInput, pendingTransferTemp].filter(Boolean).join('\n\n');
 
     /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
-      const result = await chat({
+    appendChatConsoleRuntimeLog(state, 'info', `开始请求 AI：history=${promptPayload.history.length}，currentRound=${promptPayload.currentUserRoundMessages.length}`);
+    const result = await chat({
       userInput: userInputForAi,
       history: promptPayload.history,
       /* [区域标注·已完成·AI识图当前轮媒体] 把本轮用户图片/表情包消息原始字段传给 prompt.js 组装视觉输入。 */
@@ -1014,11 +1059,21 @@ export async function sendMessage(container, state, db, content, settingsManager
     });
 
     const rawAiText = result?.rawText || result?.text || '';
+    if (!String(rawAiText || '').trim()) {
+      appendChatConsoleRuntimeLog(state, 'warn', 'AI 返回为空文本');
+    } else {
+      appendChatConsoleRuntimeLog(state, 'info', `AI 原始返回长度：${String(rawAiText).length}`);
+    }
     const hasAppliedPendingTransferDecision = await applyAiPendingTransferDecisions(state, db, rawAiText);
     if (hasAppliedPendingTransferDecision) {
       refreshCurrentMessageListOnly(container, state);
     }
     const aiMessages = buildAiReplyMessages(rawAiText, state);
+    if (!aiMessages.length) {
+      appendChatConsoleRuntimeLog(state, 'warn', '解析后无可显示消息');
+    } else {
+      appendChatConsoleRuntimeLog(state, 'info', `解析完成：${aiMessages.length} 条消息`);
+    }
     for (let index = 0; index < aiMessages.length; index += 1) {
       const message = {
         ...aiMessages[index],
@@ -1034,6 +1089,15 @@ export async function sendMessage(container, state, db, content, settingsManager
       ).trim();
       if (index > 0) await sleep(getAiBubbleDelayMs(visibleText, index));
       state.currentMessages.push(message);
+      appendChatConsoleRuntimeLog(
+        state,
+        'info',
+        message.type === 'sticker'
+          ? `AI消息[${index + 1}]：表情包 ${message.stickerName || ''}`.trim()
+          : (message.type === 'transfer'
+              ? `AI消息[${index + 1}]：转账 ${message.transferDisplayAmount || message.content || ''}`.trim()
+              : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`)
+      );
       hasRenderedAiBubble = true;
       session.lastMessage = message.type === 'sticker'
         ? `[表情包] ${message.stickerName || '未命名表情包'}`
@@ -1053,6 +1117,7 @@ export async function sendMessage(container, state, db, content, settingsManager
           : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）'));
     session.lastTime = Date.now();
   } catch (error) {
+    appendChatConsoleRuntimeLog(state, 'error', `API 调用失败：${error?.message || '未知错误'}`);
     state.currentMessages.push({
       id: `ai_error_${Date.now()}`,
       role: 'assistant',
@@ -1061,8 +1126,11 @@ export async function sendMessage(container, state, db, content, settingsManager
     });
   } finally {
     state.isAiSending = false;
-    await persistCurrentMessages(state, db);
-    await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+    await Promise.all([
+      persistCurrentMessages(state, db),
+      dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+      persistChatConsoleRuntimeLogs(state, db)
+    ]);
     if (hasRenderedAiBubble) {
       updateCurrentChatSendingUi(container, state);
     } else {
