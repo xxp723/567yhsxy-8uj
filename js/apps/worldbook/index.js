@@ -52,7 +52,18 @@ async function ldDB(db) {
   try { const a = await db?.getAll?.('appsData'); const r = a?.find(x => x.id === WB_DB_PFX + 'all-books'); if (r?.value && Array.isArray(r.value)) return r.value.map(mkBook); } catch {} return [];
 }
 async function svDB(db, aid, books) {
-  try { await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() }); } catch {}
+  await db?.put?.('appsData', { id: WB_DB_PFX + 'all-books', appId: aid, key: 'all-books', value: books, updatedAt: Date.now() });
+}
+
+/* ========================================================================
+   [修改标注·已完成·世情应用 IndexedDB 持久化修复] 保存队列工具
+   说明：
+   1. 世情应用的世界书只写入 DB.js 提供的 IndexedDB 实例，不使用 localStorage/sessionStorage。
+   2. 每次保存都使用当前世界书快照，并通过串行队列写入，避免连续 input 触发的旧写入晚完成后覆盖新内容。
+   3. 输入类修改可使用 debounceSaveWorldBooks；开关/删除/新增/导入等立即性操作使用 queueSaveWorldBooks。
+   ======================================================================== */
+function cloneWorldBooksForSave(books = []) {
+  return JSON.parse(JSON.stringify(Array.isArray(books) ? books : []));
 }
 
 /* [修改标注·本次问题1] 世情应用样式预加载守卫：
@@ -187,8 +198,67 @@ export async function mount(container, context) {
   const S = { books: [], tab: 'global', openId: null, sOpen: false, sQ: '', sBooks: new Set(), sEntries: new Set(), expEnt: new Set() };
   const { db, appId, eventBus } = context;
   /* [修改标注·需求3] 点击标题文字返回桌面时，复用应用统一关闭事件，避免仅移除窗口壳体 */
-  const closeToDesktop = () => { eventBus?.emit('app:close', { appId }); };
-  const save = () => { S.books.forEach(b => { b.updatedAt = Date.now(); }); void svDB(db, appId, S.books); };
+  const closeToDesktop = () => { flushSave(); eventBus?.emit('app:close', { appId }); };
+
+  /* ======================================================================
+     [修改标注·已完成·本次保存链路修复] 世情应用保存入口
+     说明：
+     1. 原 save() 为 fire-and-forget，连续输入时可能出现 IndexedDB 写入乱序；现改为“最新快照 + 串行队列”。
+     2. save() 仍作为本文件唯一业务保存入口，最终只调用 svDB 写入 DB.js / IndexedDB。
+     3. flushSave() 用于退出世情应用前把最后一次待保存内容推入队列；不添加任何浏览器原生弹窗。
+     ====================================================================== */
+  let saveQueue = Promise.resolve();
+  let pendingSaveSnapshot = null;
+  let saveTimer = null;
+
+  const markBooksUpdated = () => {
+    const now = Date.now();
+    S.books.forEach(b => { b.updatedAt = now; });
+  };
+
+  const queueSaveWorldBooks = () => {
+    markBooksUpdated();
+    pendingSaveSnapshot = cloneWorldBooksForSave(S.books);
+
+    saveQueue = saveQueue
+      .catch(() => {})
+      .then(async () => {
+        const snapshot = pendingSaveSnapshot;
+        pendingSaveSnapshot = null;
+        if (!snapshot) return;
+        await svDB(db, appId, snapshot);
+      })
+      .catch((err) => {
+        console.error('[WorldBook] IndexedDB 保存失败:', err);
+        toast('保存失败，请重试', 'error');
+      });
+
+    return saveQueue;
+  };
+
+  const save = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void queueSaveWorldBooks();
+  };
+
+  const debounceSaveWorldBooks = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void queueSaveWorldBooks();
+    }, 180);
+  };
+
+  const flushSave = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void queueSaveWorldBooks();
+  };
   /* chars() 从 IndexedDB 缓存读取档案数据（由 loadArchiveCache 预加载） */
   let _archiveCharsCache = [];
   const loadArchiveCache = async () => {
@@ -379,9 +449,10 @@ export async function mount(container, context) {
       '<div class="wb-entry-field"><label>条目名称</label><input type="text" data-f="name" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.name) + '" placeholder="输入名称"></div>' +
       /* [修改标注·需求6] 内容板块标题行右侧添加放大按钮 */
       '<div class="wb-entry-field wb-entry-field--content"><div class="wb-entry-field__label-row"><label>内容</label><div class="wb-entry-field__label-actions">' + expandTokenHtml + '<button class="wb-content-expand-btn" data-a="expandcontent" data-eid="' + e.id + '" data-bid="' + bid + '" title="放大内容编辑区">' + I.expand + '</button></div></div><textarea data-f="content" data-eid="' + e.id + '" data-bid="' + bid + '" rows="4" placeholder="输入条目内容">' + esc(e.content) + '</textarea></div>' +
-      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>位置</label><button class="wb-pos-picker-btn" data-a="openpos" data-eid="' + e.id + '" data-bid="' + bid + '">' + esc(POS_LABELS[e.position] || e.position) + '</button></div>' +
+      /* [修改标注·已完成·位置/触发方式状态同步] data-pos/data-trigger 记录当前值，打开应用内选择弹窗时可正确高亮当前设置。 */
+      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>位置</label><button class="wb-pos-picker-btn" data-a="openpos" data-pos="' + esc(e.position) + '" data-eid="' + e.id + '" data-bid="' + bid + '">' + esc(POS_LABELS[e.position] || e.position) + '</button></div>' +
       '<div class="wb-entry-field" style="flex:1"><label>排序</label><input type="number" data-f="order" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + e.order + '"></div></div>' +
-      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>触发方式</label><button class="wb-pos-picker-btn" data-a="opentrigger" data-eid="' + e.id + '" data-bid="' + bid + '">' + (e.triggerType === 'always' ? '常驻' : '关键词') + '</button></div>' +
+      '<div class="wb-entry-field-row"><div class="wb-entry-field" style="flex:1"><label>触发方式</label><button class="wb-pos-picker-btn" data-a="opentrigger" data-trigger="' + esc(e.triggerType) + '" data-eid="' + e.id + '" data-bid="' + bid + '">' + (e.triggerType === 'always' ? '常驻' : '关键词') + '</button></div>' +
       '<div class="wb-entry-field" style="flex:1"><label>关键词</label><input type="text" data-f="keywords" data-eid="' + e.id + '" data-bid="' + bid + '" value="' + esc(e.keywords.join(', ')) + '" placeholder="逗号分隔"' + (e.triggerType === 'always' ? ' disabled' : '') + '></div></div>' +
       /* [修改标注·需求5] "禁止递归"改为"不可递归"，字体调小至与条目内容字体大小一致 */
       '<div class="wb-entry-switch-row wb-entry-switch-row--small"><label>不可递归</label><label class="wb-entry-toggle"><input type="checkbox" data-f="disableRecursion" data-eid="' + e.id + '" data-bid="' + bid + '"' + (e.disableRecursion ? ' checked' : '') + '><span class="wb-toggle-track"></span></label></div>' +
@@ -601,7 +672,7 @@ export async function mount(container, context) {
     else if (f === 'content') entry.content = t.value;
     else if (f === 'order') entry.order = parseInt(t.value) || 0;
     else if (f === 'keywords') entry.keywords = t.value.split(/[,，]+/).map(k => k.trim()).filter(Boolean);
-    save();
+    debounceSaveWorldBooks();
   };
 
   /* checkbox 事件 */
@@ -702,6 +773,7 @@ export async function mount(container, context) {
     $c.removeEventListener('pointerup', onPointerUp);
     $c.removeEventListener('pointercancel', onPointerUp);
     $t.removeEventListener('click', onClick);
+    flushSave();
     if (header) header.removeEventListener('click', onHeaderClick);
     if (eventBus) eventBus.off('character:imported', onCharImported);
     if (closeBtn) closeBtn.style.display = '';
