@@ -876,7 +876,7 @@ function formatWorldBookEntriesByPosition(position, context = {}) {
   };
 
   const content = (position === 'beforeChar' || position === 'afterChar') && chunks.length
-    ? ['以下是必须严格遵守的世界设定。', ...chunks].join('\n\n')
+    ? ['以下是你的所有言行必须严格遵守的世界设定,严禁出现逻辑冲突。', ...chunks].join('\n\n')
     : chunks.join('\n\n');
 
   return createPromptSection(sectionTitleMap[position] || '世界书条目', content);
