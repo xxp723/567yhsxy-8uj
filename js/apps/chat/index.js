@@ -170,6 +170,12 @@ export async function mount(container, context) {
   ]);
 
   /* [区域标注] 应用状态对象 */
+  /* ========================================================================
+     [区域标注·已完成·本次控制台日志开关] 聊天日志存储键（IndexedDB）
+     说明：严格使用 DB.js，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
+
   const state = {
     activePanel: 'chatList',        // 当前激活的板块
     chatSubTab: 'all',              // 聊天列表子TAB: all / private / group
@@ -241,7 +247,47 @@ export async function mount(container, context) {
     /* [区域标注·本次需求3] 表情包本地上传临时预览，不持久化；确认后才写入 IndexedDB */
     pendingStickerLocalFile: null,
     /* [区域标注·本次需求3] 表情包独立页单击放大预览延迟计时器；仅运行时使用，不持久化 */
-    stickerPreviewClickTimer: 0
+    stickerPreviewClickTimer: 0,
+
+    /* ========================================================================
+       [区域标注·已完成·本次控制台日志开关] 聊天页控制台日志状态
+       说明：日志队列最多 500 条；持久化只走 DB.js / IndexedDB。
+       ======================================================================== */
+    chatConsoleEnabled: false,
+    chatConsoleExpanded: false,
+    chatConsoleWarnErrorOnly: false,
+    chatConsoleLogs: []
+  };
+
+  const normalizeChatConsoleLogs = (logs) => (
+    Array.isArray(logs) ? logs.slice(-500).map(item => ({
+      id: String(item?.id || `log_${Date.now()}_${Math.random().toString(16).slice(2)}`),
+      ts: Number(item?.ts || Date.now()) || Date.now(),
+      time: String(item?.time || new Date(Number(item?.ts || Date.now())).toLocaleTimeString('zh-CN', { hour12: false })),
+      level: String(item?.level || 'info').toLowerCase(),
+      text: String(item?.text || '')
+    })) : []
+  );
+
+  const persistCurrentChatConsoleLogs = async () => {
+    if (!state.currentChatId) return;
+    await dbPut(db, DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId), normalizeChatConsoleLogs(state.chatConsoleLogs));
+  };
+
+  const addChatConsoleLog = async (level, text) => {
+    if (!state.currentChatId || !state.chatConsoleEnabled) return;
+    const ts = Date.now();
+    const entry = {
+      id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
+      ts,
+      time: new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }),
+      level: String(level || 'info').toLowerCase(),
+      text: String(text || '').trim()
+    };
+    if (!entry.text) return;
+    state.chatConsoleLogs = [...state.chatConsoleLogs, entry].slice(-500);
+    await persistCurrentChatConsoleLogs();
+    renderCurrentChatMessage(container, state, { keepScroll: true });
   };
 
   /* [修改4·修改6] 根据当前面具构建 profile 数据 */
@@ -569,6 +615,9 @@ async function openChatMessage(container, state, db, chatId) {
   if (subTabs) subTabs.style.display = 'none';
   if (bottomTab) bottomTab.style.display = 'none';
   panels.forEach(p => p.style.display = 'none');
+
+  state.chatConsoleLogs = normalizeChatConsoleLogs(await dbGet(db, DATA_KEY_CHAT_CONSOLE(state.activeMaskId, chatId)));
+  state.chatConsoleExpanded = false;
 
   if (msgWrap) {
     msgWrap.style.display = 'flex';
@@ -981,6 +1030,8 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const input = container.querySelector('[data-role="msg-input"]');
       const value = String(input?.value || '').trim();
       if (input) input.value = '';
+
+      await addChatConsoleLog('info', value ? `发送消息：${value}` : '发送触发：仅请求 AI 回复');
 
       /* ===== 闲谈应用：纸飞机触发AI回复 START ===== */
       if (value) {
@@ -1877,6 +1928,47 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.timeAwarenessEnabled);
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·本次控制台日志开关] 日志开关与抽屉操作
+       ======================================================================== */
+    case 'toggle-chat-console':
+      state.chatConsoleEnabled = !state.chatConsoleEnabled;
+      if (!state.chatConsoleEnabled) state.chatConsoleExpanded = false;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+
+    case 'toggle-chat-console-expand':
+      state.chatConsoleExpanded = !state.chatConsoleExpanded;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+
+    case 'set-chat-console-filter-warn-error':
+      state.chatConsoleWarnErrorOnly = true;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+
+    case 'set-chat-console-filter-all':
+      state.chatConsoleWarnErrorOnly = false;
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+
+    case 'clear-chat-console-logs':
+      state.chatConsoleLogs = [];
+      await persistCurrentChatConsoleLogs();
+      renderCurrentChatMessage(container, state, { keepScroll: true });
+      break;
+
+    case 'copy-chat-console-logs': {
+      const text = (state.chatConsoleLogs || []).map(item => `[${item.time}] ${String(item.level || 'info').toUpperCase()} ${item.text}`).join('\n');
+      if (!text) break;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        }
+      } catch (_) {}
+      break;
+    }
     /* ===== 闲谈应用：时间感知设置开关 END ===== */
 
     /* ========================================================================

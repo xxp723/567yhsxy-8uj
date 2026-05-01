@@ -73,7 +73,13 @@ const MSG_ICONS = {
   userAvatar: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 24a9 9 0 1 0 0-18a9 9 0 0 0 0 18Z" stroke="currentColor" stroke-width="3"/><path d="M8 42a16 16 0 0 1 32 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   upload: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 16L24 6l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v8h32v-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 14l3-3a10 10 0 0 1 14 14l-3 3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 34l-3 3a10 10 0 0 1-14-14l3-3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  crop: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 4v32a8 8 0 0 0 8 8h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M4 12h24a8 8 0 0 1 8 8v24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 18h12v12H18V18Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
+  crop: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 4v32a8 8 0 0 0 8 8h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M4 12h24a8 8 0 0 1 8 8v24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 18h12v12H18V18Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·本次控制台日志开关] IconPark — 控制台日志抽屉图标
+     说明：仅服务聊天设置页“查看控制台日志”与聊天页底栏上方日志抽屉。
+     ======================================================================== */
+  monitor: `<svg viewBox="0 0 48 48" fill="none"><rect x="6" y="8" width="36" height="24" rx="3" stroke="currentColor" stroke-width="3"/><path d="M24 32v8M16 40h16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 24l6-7l5 5l9-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warning: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6l18 32H6L24 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M24 18v10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="33" r="2" fill="currentColor"/></svg>`
 };
 
 /* ==========================================================================
@@ -398,6 +404,18 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const pendingQuote = options.pendingQuote || null;
   const pendingQuoteHtml = renderQuotePreview(pendingQuote, 'composer');
 
+  /* ========================================================================
+     [区域标注·已完成·本次控制台日志开关] 聊天页日志抽屉状态
+     说明：日志队列由 index.js 维护；这里仅负责渲染，不涉及持久化实现。
+     ======================================================================== */
+  const chatConsoleEnabled = Boolean(options.chatConsoleEnabled);
+  const chatConsoleExpanded = Boolean(options.chatConsoleExpanded);
+  const chatConsoleWarnErrorOnly = Boolean(options.chatConsoleWarnErrorOnly);
+  const chatConsoleLogs = Array.isArray(options.chatConsoleLogs) ? options.chatConsoleLogs : [];
+  const visibleConsoleLogs = chatConsoleWarnErrorOnly
+    ? chatConsoleLogs.filter(item => String(item?.level || '').toLowerCase() === 'warn' || String(item?.level || '').toLowerCase() === 'error')
+    : chatConsoleLogs;
+
   /* ==========================================================================
      [区域标注] 聊天顶部栏
   /* ========================================================================== */
@@ -517,6 +535,39 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
         </div>
       ` : ''}
+
+      <!-- ====================================================================
+           [区域标注·已完成·本次控制台日志开关] 聊天页底栏上方日志抽屉
+           说明：开关开启后显示；点击后抽屉上展开，支持仅看警告错误、查看全部、清空、复制。
+           ==================================================================== -->
+      ${chatConsoleEnabled ? `
+        <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
+          <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
+            <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
+            <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
+          </button>
+          <div class="msg-console-dock__panel">
+            <div class="msg-console-dock__toolbar">
+              <button class="msg-console-dock__btn ${chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-warn-error" type="button">${MSG_ICONS.warning}<span>仅 warn/error</span></button>
+              <button class="msg-console-dock__btn ${!chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-all" type="button"><span>查看全部</span></button>
+              <button class="msg-console-dock__btn" data-action="clear-chat-console-logs" type="button">${MSG_ICONS.broom}<span>清空日志</span></button>
+              <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
+            </div>
+            <div class="msg-console-dock__list" data-role="msg-console-list">
+              ${visibleConsoleLogs.length
+                ? visibleConsoleLogs.map(item => `
+                    <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
+                      <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
+                      <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>
+                      <span class="msg-console-log__text">${escapeHtml(String(item?.text || ''))}</span>
+                    </div>
+                  `).join('')
+                : `<div class="msg-console-dock__empty">目前没有日志资料。</div>`}
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="msg-input-bar">
         <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
         <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
@@ -606,6 +657,20 @@ export function renderChatMessage(chatSession, messages, options = {}) {
               <div class="msg-settings-card__desc">开启后会向 AI 注入当前真实时间，并让角色按早中晚深夜自然聊天。</div>
             </div>
             <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             [区域标注·已完成·本次控制台日志开关] 聊天设置页新增开关
+             说明：开启后在聊天页底栏上方显示日志入口，实时查看发送/API/警告/错误日志。
+             ================================================================== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-row">
+            <div>
+              <div class="msg-settings-card__title">查看控制台日志</div>
+              <div class="msg-settings-card__desc">实时显示当前聊天页消息发送情况、API 错误、警告和其它错误。</div>
+            </div>
+            <button class="msg-ios-switch ${chatConsoleEnabled ? 'is-on' : ''}" data-action="toggle-chat-console" type="button" aria-label="查看控制台日志"></button>
           </div>
         </section>
         <!-- ===== 闲谈应用：时间感知设置 END ===== -->
@@ -1500,7 +1565,15 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: state.deleteConfirmMessageId,
     /* [区域标注·已完成·引用回复] 渲染输入栏待引用预览 */
-    pendingQuote: state.pendingQuote
+    pendingQuote: state.pendingQuote,
+    /* ======================================================================
+       [区域标注·已完成·本次控制台日志开关] 聊天页日志抽屉渲染参数透传
+       说明：由 index.js 维护状态；这里只负责把状态传给 renderChatMessage。
+       ====================================================================== */
+    chatConsoleEnabled: state.chatConsoleEnabled,
+    chatConsoleExpanded: state.chatConsoleExpanded,
+    chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
+    chatConsoleLogs: state.chatConsoleLogs
     /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 
