@@ -2694,7 +2694,24 @@ async function performMaskSwitch(container, state, db, eventBus, newMaskId) {
       ...(latestArchive && typeof latestArchive === 'object' ? latestArchive : {}),
       activeMaskId: newMaskId
     };
-    await dbPut(db, ARCHIVE_DB_RECORD_ID, nextArchiveData);
+    /* ======================================================================
+       [修改标注·已完成·本次需求1·档案主记录写回修复]
+       说明：
+       1. 切换闲谈用户面具时需要同步档案应用的 activeMaskId。
+       2. archive::archive-data 是档案应用主记录，必须保持档案应用使用的 value 结构。
+       3. 禁止用闲谈 dbPut() 写该记录；dbPut() 会写成 data 字段并覆盖原 value，
+          导致档案应用重进后读不到 masks/characters，页面回到初始状态。
+       4. 本区只使用 DB.js / IndexedDB，不使用 localStorage/sessionStorage，也不写双份存储。
+       5. 若 IndexedDB 中已存在旧错误 data 结构，上方 dbGetArchiveData 已兼容读出，
+          此处会统一修正回 value 结构。
+       ====================================================================== */
+    await db?.put?.('appsData', {
+      id: ARCHIVE_DB_RECORD_ID,
+      appId: 'archive',
+      key: 'archive-data',
+      value: nextArchiveData,
+      updatedAt: Date.now()
+    });
   } catch (_) {
     // 保持界面流程继续执行，避免面具切换被持久化失败阻断
   }
