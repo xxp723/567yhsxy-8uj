@@ -1353,18 +1353,26 @@ export function repairAiMessageFormatIfPossible(message, state) {
 
 
 /* ==========================================================================
-   [区域标注·已完成·本次修正分类弹窗] 文本/引用掉格式修复工具
+   [区域标注·已完成·本次消息掉格式修复] 文本/引用掉格式修复工具
    说明：
-   1. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
-   2. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
-   3. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
+   1. “修正 → 文本”就是用于修复图片中这类普通文字气泡掉格式：裸露 [回复] 协议头、Markdown 加粗/反引号、格式检查前缀或“修正后内容”等说明文字。
+   2. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
+   3. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
+   4. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
    ========================================================================== */
 export function repairAiTextMessageFormatIfPossible(message) {
   if (!message || message.role !== 'assistant') return null;
   if (['sticker', 'image', 'transfer'].includes(String(message.type || ''))) return null;
 
   const before = String(message.content || '');
-  const after = cleanAiVisibleBubbleText(before)
+  const protocolBlocks = extractAiProtocolBlocks(before).filter(block => block.type === '回复');
+  const protocolText = protocolBlocks
+    .map(block => cleanAiVisibleBubbleText(block.content))
+    .filter(Boolean)
+    .join('\n');
+
+  const after = cleanAiVisibleBubbleText(protocolText || before)
+    .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
     .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*回复\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
     .replace(/^\s*(?:回复|文字|文本)\s*[：:]\s*/i, '')
     .replace(/(?:`|\*\*)+/g, '')
@@ -2126,9 +2134,10 @@ export function cleanAiVisibleBubbleText(text) {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     /* ======================================================================
-       [区域标注·已完成·本次掉格式强约束] 清理裸露通用协议残片
-       说明：防止 AI 掉格式时把 [回复]/[表情]/[引用]、反引号、加粗残片原样显示为普通文本。
+       [区域标注·已完成·本次消息掉格式修复] 清理裸露通用协议残片
+       说明：防止 AI 掉格式时把 [回复]/[表情]/[引用]、反引号、加粗残片、格式检查前缀或“修正后内容”原样显示为普通文本。
        ====================================================================== */
+    .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
     .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用)\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
     .replace(/(?:`|\*\*)+/g, '')
     .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
@@ -2639,13 +2648,13 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
   if (!mask || !panel || !safeMessageId) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·本次修正分类弹窗] AI 消息格式修正类别选择 -->
+    <!-- [区域标注·已完成·本次消息掉格式修复] AI 消息格式修正类别选择 -->
     <div class="chat-modal-header">
       <span>选择修正类别</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">请选择要修复的掉格式类型。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
+      <div class="chat-modal-hint">图片中这类普通文字气泡掉格式，请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
       <div class="msg-format-repair-grid">
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="sticker" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.sticker}</span>
@@ -2655,7 +2664,7 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="text" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.textRepair}</span>
           <strong>文本</strong>
-          <em>清理裸露回复协议残片</em>
+          <em>修复裸露协议/修正后内容</em>
         </button>
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="quote" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.quote}</span>
