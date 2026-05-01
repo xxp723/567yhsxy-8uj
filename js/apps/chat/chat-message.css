@@ -1753,3 +1753,162 @@
   font-style: normal;
   color: rgba(74, 52, 40, 0.62);
 }
+
+/* ==========================================================================
+   [区域标注·已完成·当前会话头像设置样式]
+   说明：
+   1. 仅服务聊天设置页顶部“当前会话联系人头像”板块和头像裁剪弹窗。
+   2. 视觉沿用闲谈应用暖色卡片 / 应用内弹窗风格，不使用原生浏览器弹窗。
+   3. 样式层不涉及任何持久化存储；保存逻辑只写当前 session.avatar 到 DB.js / IndexedDB。
+   ========================================================================== */
+.msg-settings-avatar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(242, 233, 223, 0.78));
+}
+
+.msg-settings-avatar-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.msg-settings-avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e8ddd2, #d4c4b2);
+  border: 2px solid rgba(74, 52, 42, 0.1);
+  box-shadow: 0 10px 22px rgba(74, 52, 42, 0.1);
+  color: #4A342A;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.msg-settings-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.msg-settings-avatar-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.msg-settings-avatar-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.msg-settings-avatar-action {
+  border: none;
+  border-radius: 17px;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  padding: 10px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-settings-avatar-action:active {
+  background: rgba(74, 52, 42, 0.15);
+  transform: scale(0.97);
+}
+
+.msg-settings-avatar-action svg {
+  width: 17px;
+  height: 17px;
+}
+
+.msg-avatar-crop-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-avatar-crop-stage {
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(232, 221, 210, 0.9), rgba(212, 196, 178, 0.72));
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  box-shadow: inset 0 0 0 999px rgba(74, 52, 42, 0.03), 0 12px 26px rgba(74, 52, 42, 0.1);
+}
+
+.msg-avatar-crop-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center center;
+  transition: transform 0.08s linear;
+  will-change: transform;
+}
+
+.msg-avatar-crop-frame {
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 252, 247, 0.96);
+  box-shadow: 0 0 0 999px rgba(74, 52, 42, 0.2);
+  color: rgba(255, 252, 247, 0.85);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-avatar-crop-frame svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.72;
+}
+
+.msg-avatar-crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg-avatar-crop-field {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(74, 52, 42, 0.66);
+}
+
+.msg-avatar-crop-field input[type="range"] {
+  width: 100%;
+  accent-color: #4A342A;
+}
+
+.msg-avatar-crop-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.msg-avatar-crop-footer .chat-modal-btn {
+  min-width: 0;
+  flex: 1 1 auto;
+}

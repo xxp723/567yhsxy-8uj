@@ -90,6 +90,10 @@ import {
   showMessageImageModal,
   showMessageTransferModal,
   showTransferActionModal,
+  showChatAvatarUrlModal,
+  showChatAvatarCropModal,
+  updateChatAvatarCropPreview,
+  buildChatAvatarFromCropModal,
   createQuotePayloadFromMessage,
   syncPendingQuoteComposer
 } from './chat-message.js';
@@ -581,6 +585,40 @@ async function openChatMessage(container, state, db, chatId) {
 /* ==========================================================================
    [区域标注] 关闭聊天消息页面，返回聊天列表
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·当前会话头像设置保存]
+   说明：
+   1. 只更新当前会话 session.avatar，让聊天列表与当前聊天界面使用该头像。
+   2. 不修改 contacts/contact.avatar，不影响通讯录头像或联系人原始头像。
+   3. 持久化只调用 dbPut → DATA_KEY_SESSIONS → DB.js / IndexedDB；不使用 localStorage/sessionStorage。
+   ========================================================================== */
+async function saveCurrentChatSessionAvatar(container, state, db, avatarUrl) {
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  const safeAvatarUrl = String(avatarUrl || '').trim();
+  if (!session || !safeAvatarUrl) return false;
+
+  session.avatar = safeAvatarUrl;
+  session.avatarUpdatedAt = Date.now();
+  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+  const preview = container.querySelector('[data-role="msg-settings-avatar-preview"]');
+  if (preview) {
+    preview.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(session.name || '')}">`;
+  }
+
+  const topAvatar = container.querySelector('.msg-top-bar__avatar');
+  if (topAvatar) {
+    topAvatar.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(session.name || '')}">`;
+  }
+
+  container.querySelectorAll('.msg-bubble-row--left .msg-bubble__avatar').forEach(avatarEl => {
+    avatarEl.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(session.name || '')}">`;
+  });
+
+  refreshPanel(container, state, 'chatList');
+  return true;
+}
+
 function closeChatMessage(container, state) {
   state.currentChatId = null;
   state.currentMessages = [];
@@ -1327,6 +1365,62 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const settingsPage = container.querySelector('[data-role="msg-settings-page"]');
       if (conversation) conversation.style.display = 'none';
       if (settingsPage) settingsPage.style.display = 'flex';
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·当前会话头像设置入口]
+       说明：本地上传/URL 上传均进入应用内裁剪弹窗，不使用原生浏览器弹窗。
+       ========================================================================== */
+    case 'open-chat-avatar-local-picker': {
+      const input = container.querySelector('[data-role="msg-avatar-file-input"]');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+      break;
+    }
+
+    case 'open-chat-avatar-url-modal':
+      showChatAvatarUrlModal(container);
+      break;
+
+    case 'confirm-chat-avatar-url': {
+      const input = container.querySelector('[data-role="chat-avatar-url-input"]');
+      const imageUrl = String(input?.value || '').trim();
+      if (!/^https?:\/\/\S+/i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
+        renderModalNotice(container, '请输入有效的图片 URL');
+        break;
+      }
+      showChatAvatarCropModal(container, {
+        imageUrl,
+        source: 'url',
+        fileName: '链接头像'
+      });
+      break;
+    }
+
+    case 'save-chat-avatar-original':
+    case 'save-chat-avatar-compressed':
+    case 'save-chat-avatar-cropped': {
+      try {
+        const mode = action === 'save-chat-avatar-original'
+          ? 'original'
+          : (action === 'save-chat-avatar-compressed' ? 'compressed' : 'cropped');
+        const avatarUrl = await buildChatAvatarFromCropModal(container, mode);
+        if (!avatarUrl) {
+          renderModalNotice(container, '头像生成失败，请重新选择图片');
+          break;
+        }
+        const saved = await saveCurrentChatSessionAvatar(container, state, db, avatarUrl);
+        if (!saved) {
+          renderModalNotice(container, '当前会话不存在，无法保存头像');
+          break;
+        }
+        closeModal(container);
+      } catch (error) {
+        renderModalNotice(container, error?.message || '头像保存失败；如使用跨域 URL，请选择“原图头像”或换用本地上传');
+      }
       break;
     }
 
@@ -2626,6 +2720,15 @@ function handleInput(e, state, container, db) {
   }
 
   /* ==========================================================================
+     [区域标注·已完成·当前会话头像裁剪预览]
+     说明：滑杆只更新应用内裁剪预览，不写入任何持久化存储。
+     ========================================================================== */
+  if (target.matches('[data-role="chat-avatar-crop-zoom"], [data-role="chat-avatar-crop-x"], [data-role="chat-avatar-crop-y"]')) {
+    updateChatAvatarCropPreview(container);
+    return;
+  }
+
+  /* ==========================================================================
      [区域标注·已修改] 聊天设置输入按联系人独立持久化
      说明：当前指令、自定义思维链统一写入“当前面具 + 当前聊天对象”的 IndexedDB 记录。
      ========================================================================== */
@@ -2671,6 +2774,41 @@ function handleInput(e, state, container, db) {
    ========================================================================== */
 async function handleChange(e, state, container, db) {
   const target = e.target;
+
+  /* ========================================================================
+     [区域标注·已完成·当前会话头像本地上传]
+     说明：
+     1. 从聊天设置页头像板块选择本地图片后读取为 data URL，并进入应用内裁剪弹窗。
+     2. 只暂存于弹窗预览；点击保存后才写入当前 session.avatar → DB.js / IndexedDB。
+     3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+     ======================================================================== */
+  if (target?.matches?.('[data-role="msg-avatar-file-input"]')) {
+    const file = target.files?.[0];
+    if (!file) return;
+
+    if (!/^image\//i.test(file.type || '')) {
+      renderModalNotice(container, '请选择图片文件');
+      target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageUrl = String(reader.result || '');
+      if (!imageUrl.startsWith('data:image/')) {
+        renderModalNotice(container, '图片读取失败，请重新选择');
+        return;
+      }
+      showChatAvatarCropModal(container, {
+        imageUrl,
+        source: 'local',
+        fileName: file.name || '本地头像'
+      });
+    };
+    reader.onerror = () => renderModalNotice(container, '图片读取失败，请重新选择');
+    reader.readAsDataURL(file);
+    return;
+  }
 
   /* ========================================================================
      [区域标注·已完成·AI识图本地图片上传] 聊天消息页图片文件选择

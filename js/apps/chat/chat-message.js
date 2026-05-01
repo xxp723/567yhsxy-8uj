@@ -65,7 +65,15 @@ const MSG_ICONS = {
      [区域标注·已完成·本次修正分类弹窗] IconPark — 文本修正按钮图标
      说明：用于“修正”分类弹窗的文本格式修复；不涉及任何持久化存储读写。
      ======================================================================== */
-  textRepair: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 10h32M14 10v28M34 10v28M10 38h12M26 38h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  textRepair: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 10h32M14 10v28M34 10v28M10 38h12M26 38h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·当前会话头像设置] IconPark — 头像上传 / 链接 / 裁剪图标
+     说明：仅用于聊天设置页“当前会话联系人头像”区域；不涉及其它资料头像。
+     ======================================================================== */
+  userAvatar: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 24a9 9 0 1 0 0-18a9 9 0 0 0 0 18Z" stroke="currentColor" stroke-width="3"/><path d="M8 42a16 16 0 0 1 32 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  upload: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 16L24 6l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v8h32v-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  link: `<svg viewBox="0 0 48 48" fill="none"><path d="M19 29l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 14l3-3a10 10 0 0 1 14 14l-3 3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 34l-3 3a10 10 0 0 1-14-14l3-3" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  crop: `<svg viewBox="0 0 48 48" fill="none"><path d="M12 4v32a8 8 0 0 0 8 8h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M4 12h24a8 8 0 0 1 8 8v24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M18 18h12v12H18V18Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -524,6 +532,34 @@ export function renderChatMessage(chatSession, messages, options = {}) {
         <div class="msg-settings-header__title">聊天设置</div>
       </div>
       <div class="msg-settings-body">
+        <!-- ==================================================================
+             [区域标注·已完成·当前会话头像设置]
+             说明：
+             1. 仅修改当前聊天会话 session.avatar，用于聊天列表与当前聊天界面联系人头像。
+             2. 不写入联系人 contact.avatar，不影响通讯录头像或角色原始头像。
+             3. 保存逻辑由 index.js 写入 DB.js / IndexedDB；禁止 localStorage/sessionStorage。
+             ================================================================== -->
+        <section class="msg-settings-card msg-settings-avatar-card">
+          <div class="msg-settings-avatar-main">
+            <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview">
+              ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
+            </div>
+            <div class="msg-settings-avatar-info">
+              <div class="msg-settings-card__title">当前会话联系人头像</div>
+              <div class="msg-settings-card__desc">只应用到聊天列表和当前聊天界面，不会改动通讯录或联系人原始头像。</div>
+            </div>
+          </div>
+          <div class="msg-settings-avatar-actions">
+            <input data-role="msg-avatar-file-input" type="file" accept="image/*" hidden>
+            <button class="msg-settings-avatar-action" data-action="open-chat-avatar-local-picker" type="button">
+              ${MSG_ICONS.upload}<span>本地上传</span>
+            </button>
+            <button class="msg-settings-avatar-action" data-action="open-chat-avatar-url-modal" type="button">
+              ${MSG_ICONS.link}<span>URL链接</span>
+            </button>
+          </div>
+        </section>
+
         <section class="msg-settings-card">
           <div class="msg-settings-card__title">当前指令</div>
           <textarea class="msg-settings-textarea" data-role="msg-current-command" placeholder="输入仅对下一次/当前状态生效的临时指令">${escapeHtml(chatSettings.currentCommand || '')}</textarea>
@@ -2204,6 +2240,135 @@ export function showTransferActionModal(container, options = {}) {
   `;
 
   mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·当前会话头像设置弹窗]
+   说明：
+   1. 头像 URL 输入、裁剪预览、原图头像/自动压缩均使用应用内弹窗，不使用原生浏览器弹窗。
+   2. 弹窗只产生待保存头像数据；真正保存由 index.js 更新当前 session.avatar 并写入 DB.js / IndexedDB。
+   3. URL 原图模式直接保存 URL；裁剪/压缩模式通过 canvas 输出 data:image/jpeg。
+   ========================================================================== */
+export function showChatAvatarUrlModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·当前会话头像URL输入弹窗] -->
+    <div class="chat-modal-header">
+      <span>头像 URL</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">粘贴图片链接后进入裁剪预览。保存后仅更新当前聊天会话头像。</div>
+      <input class="chat-modal-search" data-role="chat-avatar-url-input" type="url" placeholder="https://example.com/avatar.png">
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-chat-avatar-url" type="button">${MSG_ICONS.link}<span>继续</span></button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="chat-avatar-url-input"]')?.focus(), 30);
+}
+
+export function showChatAvatarCropModal(container, { imageUrl = '', source = 'local', fileName = '' } = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const safeImageUrl = String(imageUrl || '').trim();
+  if (!mask || !panel || !safeImageUrl) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·当前会话头像裁剪弹窗] -->
+    <div class="chat-modal-header">
+      <span>裁剪头像</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body msg-avatar-crop-modal-body"
+         data-role="chat-avatar-crop-modal"
+         data-avatar-source="${escapeHtml(source)}"
+         data-avatar-file-name="${escapeHtml(fileName)}"
+         data-avatar-original-url="${escapeHtml(safeImageUrl)}">
+      <div class="chat-modal-hint">拖动下方滑杆自由调整裁剪区域；可选择保留原图或自动压缩，避免图片过大造成卡顿。</div>
+      <div class="msg-avatar-crop-stage">
+        <img class="msg-avatar-crop-image" data-role="chat-avatar-crop-image" src="${escapeHtml(safeImageUrl)}" alt="头像预览">
+        <div class="msg-avatar-crop-frame">${MSG_ICONS.crop}</div>
+      </div>
+      <div class="msg-avatar-crop-controls">
+        <label class="msg-avatar-crop-field"><span>缩放</span><input data-role="chat-avatar-crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></label>
+        <label class="msg-avatar-crop-field"><span>横向</span><input data-role="chat-avatar-crop-x" type="range" min="-100" max="100" step="1" value="0"></label>
+        <label class="msg-avatar-crop-field"><span>纵向</span><input data-role="chat-avatar-crop-y" type="range" min="-100" max="100" step="1" value="0"></label>
+      </div>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer msg-avatar-crop-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="save-chat-avatar-original" type="button">原图头像</button>
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="save-chat-avatar-compressed" type="button">自动压缩图片</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="save-chat-avatar-cropped" type="button">${MSG_ICONS.check}<span>保存使用</span></button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+  updateChatAvatarCropPreview(container);
+}
+
+export function updateChatAvatarCropPreview(container) {
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const image = panel?.querySelector('[data-role="chat-avatar-crop-image"]');
+  if (!image) return;
+  const zoom = Number(panel.querySelector('[data-role="chat-avatar-crop-zoom"]')?.value || 1);
+  const offsetX = Number(panel.querySelector('[data-role="chat-avatar-crop-x"]')?.value || 0);
+  const offsetY = Number(panel.querySelector('[data-role="chat-avatar-crop-y"]')?.value || 0);
+  image.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`;
+}
+
+export async function buildChatAvatarFromCropModal(container, mode = 'cropped') {
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const modal = panel?.querySelector('[data-role="chat-avatar-crop-modal"]');
+  const originalUrl = String(modal?.dataset?.avatarOriginalUrl || '').trim();
+  if (!modal || !originalUrl) return '';
+
+  if (mode === 'original') return originalUrl;
+
+  const image = panel.querySelector('[data-role="chat-avatar-crop-image"]');
+  if (!image) return '';
+  await new Promise((resolve, reject) => {
+    if (image.complete && image.naturalWidth > 0) {
+      resolve();
+      return;
+    }
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('图片加载失败，请重新选择'));
+  });
+
+  const size = mode === 'compressed' ? 256 : 320;
+  const quality = mode === 'compressed' ? 0.72 : 0.9;
+  const zoom = Math.max(1, Number(panel.querySelector('[data-role="chat-avatar-crop-zoom"]')?.value || 1));
+  const offsetX = Number(panel.querySelector('[data-role="chat-avatar-crop-x"]')?.value || 0);
+  const offsetY = Number(panel.querySelector('[data-role="chat-avatar-crop-y"]')?.value || 0);
+  const stageSize = 220;
+  const naturalWidth = image.naturalWidth || size;
+  const naturalHeight = image.naturalHeight || size;
+  const baseScale = Math.max(stageSize / naturalWidth, stageSize / naturalHeight) * zoom;
+  const sourceSize = size / baseScale;
+  const centerX = naturalWidth / 2 - offsetX / baseScale;
+  const centerY = naturalHeight / 2 - offsetY / baseScale;
+  const sx = Math.max(0, Math.min(naturalWidth - sourceSize, centerX - sourceSize / 2));
+  const sy = Math.max(0, Math.min(naturalHeight - sourceSize, centerY - sourceSize / 2));
+  const sw = Math.min(sourceSize, naturalWidth - sx);
+  const sh = Math.min(sourceSize, naturalHeight - sy);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f8f4ef';
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, size, size);
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 export function showClearAllMessagesModal(container, state) {
