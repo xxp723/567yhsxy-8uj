@@ -2668,6 +2668,18 @@ async function performMaskSwitch(container, state, db, eventBus, newMaskId) {
   /* 更新面具ID */
   state.activeMaskId = newMaskId;
 
+  /* [区域标注·已完成·本次面具持久化修复] 将新激活面具写回档案应用的 IndexedDB 记录，避免下次进入闲谈时回到默认面具 */
+  try {
+    const latestArchive = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
+    const nextArchiveData = {
+      ...(latestArchive && typeof latestArchive === 'object' ? latestArchive : {}),
+      activeMaskId: newMaskId
+    };
+    await dbPut(db, ARCHIVE_DB_RECORD_ID, nextArchiveData);
+  } catch (_) {
+    // 保持界面流程继续执行，避免面具切换被持久化失败阻断
+  }
+
   /* [修改5] 加载新面具数据 */
   await loadMaskData(state, db, newMaskId);
 
