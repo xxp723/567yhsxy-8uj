@@ -2732,6 +2732,30 @@ function handleInput(e, state, container, db) {
      [区域标注·已修改] 聊天设置输入按联系人独立持久化
      说明：当前指令、自定义思维链统一写入“当前面具 + 当前聊天对象”的 IndexedDB 记录。
      ========================================================================== */
+  /* ==========================================================================
+     [区域标注·已完成·当前会话备注输入持久化]
+     说明：
+     1. 备注只写入当前会话 session.remark（DB.js / IndexedDB），不改 contacts/contact.name。
+     2. 备注仅用于本地 UI 显示，不写入 chatPromptSettings，AI 不可见。
+     3. 输入不做长度限制；随输入实时保存并同步聊天页顶部昵称与聊天列表名称。
+     ========================================================================== */
+  if (target.matches('[data-role="msg-session-remark"]')) {
+    const currentSession = (state.sessions || []).find(item => String(item.id) === String(state.currentChatId));
+    if (!currentSession) return;
+    currentSession.remark = target.value ?? '';
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+    const remarkDisplayName = String(currentSession.remark ?? '').length
+      ? String(currentSession.remark)
+      : String(currentSession.name || '聊天');
+
+    const topNameEl = container.querySelector('.msg-top-bar__name');
+    if (topNameEl) topNameEl.textContent = remarkDisplayName;
+
+    refreshPanel(container, state, 'chatList');
+    return;
+  }
+
   if (target.matches('[data-role="msg-current-command"]')) {
     state.chatPromptSettings.currentCommand = target.value || '';
     dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);

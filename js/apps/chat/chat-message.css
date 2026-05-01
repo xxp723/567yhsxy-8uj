@@ -1281,6 +1281,37 @@
   background: rgba(255, 255, 255, 0.94);
 }
 
+/* ==========================================================================
+   [区域标注·已完成·当前会话备注输入框样式]
+   说明：
+   1. 仅作用于聊天设置页头像板块下方的“备注”输入框（data-role="msg-session-remark"）。
+   2. 延续闲谈设置页输入控件视觉风格，与主题 UI 保持统一。
+   3. 仅样式层修改，不涉及任何持久化逻辑。
+   ========================================================================== */
+.msg-settings-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(74, 52, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.86);
+  color: #4A342A;
+  font-size: 13px;
+  line-height: 1.4;
+  font-family: inherit;
+  outline: none;
+  padding: 11px 12px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.msg-settings-input:focus {
+  border-color: rgba(74, 52, 42, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.msg-settings-input::placeholder {
+  color: rgba(74, 52, 42, 0.35);
+}
+
 /* ===== 闲谈应用：聊天设置数字输入板块 START ===== */
 .msg-settings-number-grid {
   display: grid;

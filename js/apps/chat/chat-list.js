@@ -41,7 +41,14 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
 
   /* [区域标注] 过滤会话列表 */
   let filtered = chatSessions.filter(s => {
-    if (keyword && !(s.name || '').toLowerCase().includes(keyword)) return false;
+    /* ========================================================================
+       [区域标注·已完成·当前会话备注显示名]
+       说明：
+       1. 聊天列表显示名与搜索关键字优先使用 session.remark，其次回退 session.name。
+       2. 备注仅用于本地 UI 展示，不写入 AI 提示词。
+       ======================================================================== */
+    const displayName = String(s.remark ?? '').length ? String(s.remark) : String(s.name || '');
+    if (keyword && !displayName.toLowerCase().includes(keyword)) return false;
     return true;
   });
 
@@ -68,7 +75,7 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
           : escapeHtml((session.name || '?').charAt(0).toUpperCase())}
       </div>
       <div class="chat-item__info">
-        <div class="chat-item__name">${escapeHtml(session.name || '未命名')}</div>
+        <div class="chat-item__name">${escapeHtml(String(session.remark ?? '').length ? String(session.remark) : (session.name || '未命名'))}</div>
         <div class="chat-item__last-msg">${escapeHtml(session.lastMessage || '')}</div>
       </div>
       <div class="chat-item__meta">

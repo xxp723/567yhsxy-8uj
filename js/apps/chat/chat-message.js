@@ -357,7 +357,13 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
 /* ========================================================================== */
 export function renderChatMessage(chatSession, messages, options = {}) {
   const session = chatSession || {};
-  const name = session.name || '聊天';
+  /* ========================================================================
+     [区域标注·已完成·当前会话备注显示名]
+     说明：
+     1. 聊天界面显示名优先使用当前会话备注，其次使用原联系人名。
+     2. 备注仅用于本地 UI 显示，不用于 AI 提示词上下文。
+     ======================================================================== */
+  const name = String(session.remark ?? '').length ? String(session.remark) : (session.name || '聊天');
   const msgs = messages || [];
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
@@ -558,6 +564,24 @@ export function renderChatMessage(chatSession, messages, options = {}) {
               ${MSG_ICONS.link}<span>URL链接</span>
             </button>
           </div>
+        </section>
+
+        <!-- ==================================================================
+             [区域标注·已完成·当前会话备注输入框]
+             说明：
+             1. 备注仅作用于当前会话显示名（聊天页/聊天列表），不改通讯录联系人原始名称。
+             2. 输入内容不做长度限制；持久化由 index.js 写入 sessions（DB.js / IndexedDB）。
+             3. 备注仅本地可见，不写入 AI 可见提示词上下文。
+             ================================================================== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-card__title">备注</div>
+          <input
+            class="msg-settings-input"
+            data-role="msg-session-remark"
+            type="text"
+            placeholder="输入当前会话备注（仅本地显示）"
+            value="${escapeHtml(session.remark || '')}">
+          <div class="msg-settings-card__desc">仅对当前会话生效，AI 不可见。</div>
         </section>
 
         <section class="msg-settings-card">
