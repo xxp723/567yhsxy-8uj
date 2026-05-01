@@ -200,24 +200,48 @@ function hasReadableValue(value) {
   return false;
 }
 
+/* ========================================================================
+   [区域标注·已完成·本次需求1] 档案长文本字段不过滤修复
+   说明：
+   1. 角色档案/用户面具的 personalitySetting 是有效长文本，不再因超过 1200 字被误判为媒体字段。
+   2. 配角档案的 basicSetting、关系备注等文本字段也允许长文本进入 prompt。
+   3. 头像、图片、base64、文件、blob 等媒体字段仍继续过滤，避免把不可读大资源发给 AI。
+   ======================================================================== */
+function isArchivePromptTextField(key) {
+  const safeKey = String(key || '').trim();
+  return [
+    'personalitySetting',
+    'basicSetting',
+    'description',
+    'scenario',
+    'notes',
+    'remark',
+    'ownerNote',
+    'targetNote',
+    'content'
+  ].includes(safeKey);
+}
+
 function isLikelyLargeMediaField(key, value) {
   const safeKey = String(key || '').toLowerCase();
   const safeValue = String(value || '');
+
+  if (isArchivePromptTextField(key)) return false;
+
   return (
     ['avatar', 'cover', 'image', 'img', 'photo', 'base64', 'file', 'blob'].some(token => safeKey.includes(token)) ||
-    safeValue.startsWith('data:image/') ||
-    safeValue.length > 1200
+    safeValue.startsWith('data:image/')
   );
 }
 
 function labelizeKey(key) {
   const labels = {
     id: 'ID',
-    name: '名称',
+    name: '姓名',
     nickname: '昵称',
     signature: '个性签名',
     description: '描述',
-    basicSetting: '基础设定',
+    basicSetting: '基本设定',
     personality: '性格',
     firstMessage: '开场白',
     greetings: '开场白',
@@ -239,6 +263,20 @@ function labelizeKey(key) {
     externalContextEnabled: '外部上下文注入'
   };
   return labels[key] || key;
+}
+
+/* ========================================================================
+   [区域标注·已完成·本次需求1] 档案字段按对象类型显示标签
+   说明：
+   1. personalitySetting 是档案应用复用字段。
+   2. 角色档案中显示为“人物设定”，用户面具中显示为“用户设定”。
+   3. 配角档案只使用姓名、性别、联系方式、基本设定四项，其中 basicSetting 显示为“基本设定”。
+   ======================================================================== */
+function labelizeArchivePromptKey(key, entityType = '') {
+  if (key === 'personalitySetting' && entityType === 'mask') return '用户设定';
+  if (key === 'personalitySetting' && entityType === 'character') return '人物设定';
+  if (key === 'basicSetting' && entityType === 'supporting') return '基本设定';
+  return labelizeKey(key);
 }
 
 /* ==========================================================================
@@ -343,7 +381,7 @@ function getCharacterPromptFieldValue(character, key) {
   return character[key];
 }
 
-function getCharacterPromptFieldEntries(character, keys = []) {
+function getCharacterPromptFieldEntries(character, keys = [], entityType = 'character') {
   const seenLabels = new Set();
 
   return keys
@@ -351,7 +389,7 @@ function getCharacterPromptFieldEntries(character, keys = []) {
       const value = getCharacterPromptFieldValue(character, key);
       if (!hasReadableValue(value) || isLikelyLargeMediaField(key, value)) return null;
 
-      const label = labelizeKey(key);
+      const label = labelizeArchivePromptKey(key, entityType);
       const formatted = formatReadableValue(value);
       if (!formatted) return null;
 
@@ -524,12 +562,15 @@ function getCurrentMask(context = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次需求1] 用户面具/角色关系网络格式化修复
+   [区域标注·已完成·本次需求1] 用户面具/角色/配角关系网络档案详情注入修复
    说明：
    1. 读取档案应用写入 IndexedDB 的 masks / characters / supportingRoles / relations。
    2. 同时支持当前对象作为 owner 或 target 的双向关系，避免关系网络为空。
-   3. 只发送关系对象类型、名称、关系标签、当前视角备注；不发送开场白或世界书名称。
-   4. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+   3. 关系网络会发送关系对象类型、名称、关系标签、当前视角备注，并补充关系对象档案摘要。
+   4. 角色档案只注入姓名、性别、年龄、身份、联系方式、个性签名、人物设定。
+   5. 用户面具只注入姓名、性别、年龄、身份、联系方式、个性签名、用户设定。
+   6. 配角档案只注入姓名、性别、联系方式、基本设定四项，禁止编造或补充不存在字段。
+   7. 不使用 localStorage/sessionStorage，不写双份存储兜底。
    ========================================================================== */
 function getArchiveEntityListByType(context = {}, type = '') {
   const archive = context.archiveData || {};
@@ -542,6 +583,34 @@ function getArchiveEntityListByType(context = {}, type = '') {
 function getArchiveEntityName(context = {}, type = '', id = '') {
   const entity = getArchiveEntityListByType(context, type).find(item => String(item?.id || '') === String(id || ''));
   return entity?.name || entity?.nickname || '未命名';
+}
+
+function getArchiveEntityPromptFieldsByType(type = '') {
+  if (type === 'mask') {
+    return ['name', 'gender', 'age', 'identity', 'contact', 'signature', 'personalitySetting'];
+  }
+
+  if (type === 'character') {
+    return ['name', 'gender', 'age', 'identity', 'contact', 'signature', 'personalitySetting'];
+  }
+
+  if (type === 'supporting') {
+    return ['name', 'gender', 'contact', 'basicSetting'];
+  }
+
+  return [];
+}
+
+function formatArchiveEntitySummaryForPrompt(context = {}, type = '', id = '') {
+  const entity = getArchiveEntityListByType(context, type).find(item => String(item?.id || '') === String(id || ''));
+  const keys = getArchiveEntityPromptFieldsByType(type);
+  if (!entity || !keys.length) return '';
+
+  const lines = getCharacterPromptFieldEntries(entity, keys, type)
+    .map(entry => `  ${entry.label}：${entry.formatted}`)
+    .filter(Boolean);
+
+  return lines.length ? `  关系对象档案：\n${lines.join('\n')}` : '';
 }
 
 function getRelationDisplayText(type = '', custom = '') {
@@ -577,8 +646,12 @@ function formatArchiveRelationNetworkForEntity(context = {}, entityType = '', en
         ? getRelationDisplayText(item.ownerRelationType, item.ownerRelationCustom)
         : getRelationDisplayText(item.targetRelationType, item.targetRelationCustom);
       const note = normalizePlainText(isOwnerSide ? item.ownerNote : item.targetNote);
+      const counterpartSummary = formatArchiveEntitySummaryForPrompt(context, counterpartType, counterpartId);
 
-      return `- 与${counterpartTypeLabel}「${counterpartName}」：${relationLabel}${note ? `；当前视角备注：${note}` : ''}`;
+      return [
+        `- 与${counterpartTypeLabel}「${counterpartName}」：${relationLabel}${note ? `；当前视角备注：${note}` : ''}`,
+        counterpartSummary
+      ].filter(Boolean).join('\n');
     })
     .filter(Boolean);
 
@@ -591,8 +664,8 @@ function formatUserPersonaRelationNetwork(context = {}, mask = null) {
 }
 
 /* ==========================================================================
-   角色卡绑定关系网络格式化
-   说明：读取档案应用写入 IndexedDB 的 relations，注入当前要扮演角色的关系网。
+   [区域标注·已完成·本次需求1] 角色卡绑定关系网络格式化
+   说明：读取档案应用写入 IndexedDB 的 relations，注入当前要扮演角色的关系网与关系对象档案摘要。
    ========================================================================== */
 function formatCharacterRelationNetwork(context = {}, character = null) {
   const characterId = String(character?.id || getCurrentCharacterId(context)).trim();
@@ -732,9 +805,10 @@ export function getWorldBookBeforeChar(context = {}) {
    说明：
    1. 本区域告诉 AI 要扮演哪个角色，并发送该角色的档案字段与绑定关系网。
    2. 只发送姓名、性别、年龄、身份、联系方式、个性签名、人物设定和关系网络。
-   3. 不发送角色开场白 greetings，不发送角色绑定世界书名称 boundWorldBooks。
-   4. 若未匹配到当前聊天角色档案，本区域会保持为空而不是编造档案内容。
-   5. 本区域只读取 DB.js / IndexedDB 已有档案数据，不使用 localStorage/sessionStorage。
+   3. personalitySetting 在角色档案中显示为“人物设定”，长文本不再因超过 1200 字被误过滤。
+   4. 不发送角色开场白 greetings，不发送角色绑定世界书名称 boundWorldBooks。
+   5. 若未匹配到当前聊天角色档案，本区域会保持为空而不是编造档案内容。
+   6. 本区域只读取 DB.js / IndexedDB 已有档案数据，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function getCharacterCard(context = {}) {
   const character = context.currentCharacter || getCurrentCharacter(context);
@@ -748,13 +822,14 @@ export function getCharacterCard(context = {}) {
         'contact',
         'signature',
         'personalitySetting'
-      ])
+      ], 'character')
         .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')
     : '';
 
   return createPromptSection('角色卡人设及其绑定关系网络', [
     character ? '这是你，不是 AI助手，这是你要扮演的角色。' : '',
+    character ? '以下“人物设定”是当前角色的核心事实；用户询问年龄、身份、经历、关系时必须优先读取本区域，禁止编造。' : '',
     character ? '人物设定如含 YAML/Markdown，按结构化角色事实读取。' : '',
     /* 角色档案性别硬约束与“双性”释义注入 */
     createArchiveGenderPromptNote(character, '当前聊天对象/角色档案'),
@@ -764,26 +839,26 @@ export function getCharacterCard(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 3] 用户面具身份及其绑定关系网络
+   [提示词区域 3·已完成·本次需求1] 用户面具身份及其绑定关系网络
    说明：
-   1. 只发送姓名、昵称、性别、年龄、身份、联系方式、个性签名、用户设定和绑定关系网络。
-   2. 用户设定读取档案应用实际保存字段 personalitySetting，避免用户面具设定传给 AI 时为空。
-   3. 不发送未提到的其它面具字段，不使用 localStorage/sessionStorage。
-   4. 若当前面具未匹配到有效档案，本区域保持为空而不是编造面具内容。
+   1. 只发送姓名、性别、年龄、身份、联系方式、个性签名、用户设定和绑定关系网络。
+   2. 用户设定读取档案应用实际保存字段 personalitySetting，并显示为“用户设定”。
+   3. personalitySetting 长文本不再因超过 1200 字被误过滤。
+   4. 不发送昵称 nickname、头像或未提到的其它面具字段，不使用 localStorage/sessionStorage。
+   5. 若当前面具未匹配到有效档案，本区域保持为空而不是编造面具内容。
    ========================================================================== */
 export function getUserPersona(context = {}) {
   const mask = context.currentMask || getCurrentMask(context);
   const personaText = mask && typeof mask === 'object'
     ? getCharacterPromptFieldEntries(mask, [
         'name',
-        'nickname',
         'gender',
         'age',
         'identity',
         'contact',
         'signature',
         'personalitySetting'
-      ])
+      ], 'mask')
         .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')
     : '';
