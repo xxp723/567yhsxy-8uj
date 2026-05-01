@@ -95,7 +95,6 @@ function normalizeStickerPromptData(rawData) {
    说明：
    1. 新回复协议统一使用 **`[类型] 角色名：内容`**。
    2. 已开放 [回复]/[表情]/[引用]/[转账]，其中 [引用] 用于微信/QQ 式引用回复。
-   3. 只使用最新通用消息协议，不保留旧 [[TEXT_MESSAGE]] 消息格式。
    ========================================================================== */
 const CHAT_PROTOCOL_REPLY_FORMAT = '**`[回复] 角色名：文字消息内容`**';
 const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
@@ -216,7 +215,7 @@ function labelizeKey(key) {
     id: 'ID',
     name: '名称',
     nickname: '昵称',
-    signature: '签名',
+    signature: '个性签名',
     description: '描述',
     basicSetting: '基础设定',
     personality: '性格',
@@ -332,32 +331,14 @@ function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessag
 }
 
 /* ==========================================================================
-   [角色卡字段兼容区·本次问题1已完成] 档案应用角色字段注入闲谈提示词
+   [角色卡字段读取工具区·已完成] 档案字段中文化与可读格式化
    说明：
    1. 档案应用实际把角色正文主要保存为 personalitySetting，把身份保存为 identity，把开场白保存为 greetings。
-   2. 本区只做提示词读取兼容，不新增持久化存储，不使用 localStorage/sessionStorage，也不写双份兜底。
-   3. 目的：把“人物设定”里的已写明事件经过提升到角色卡最高优先级事实，避免 AI 把角色卡细节答错或整体说“记不清”。
+   2. 本区只负责读取/格式化字段，不单独生成 prompt；实际发送位置见“提示词区域 2”。
+   3. 本区不新增持久化存储，不使用 localStorage/sessionStorage，也不写双份兜底。
    ========================================================================== */
 function getCharacterPromptFieldValue(character, key) {
   if (!character || typeof character !== 'object') return '';
-
-  if (key === 'description') {
-    return character.description || character.personalitySetting || '';
-  }
-
-  if (key === 'basicSetting') {
-    return character.basicSetting || character.personalitySetting || '';
-  }
-
-  if (key === 'personality') {
-    return character.personality || character.personalitySetting || '';
-  }
-
-  if (key === 'firstMessage') {
-    if (hasReadableValue(character.firstMessage)) return character.firstMessage;
-    if (Array.isArray(character.greetings)) return character.greetings.filter(hasReadableValue).join('\n');
-    return '';
-  }
 
   return character[key];
 }
@@ -509,7 +490,7 @@ function getCurrentMask(context = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·本次修改4] 用户面具身份绑定关系网络格式化
+   用户面具身份绑定关系网络格式化
    说明：读取档案应用写入 IndexedDB 的 relations，不使用 localStorage/sessionStorage。
    ========================================================================== */
 function getArchiveEntityListByType(context = {}, type = '') {
@@ -558,6 +539,36 @@ function formatUserPersonaRelationNetwork(context = {}, mask = null) {
   return lines.length
     ? `用户面具身份绑定的关系网络：\n${lines.join('\n')}`
     : '';
+}
+
+/* ==========================================================================
+   角色卡绑定关系网络格式化
+   说明：读取档案应用写入 IndexedDB 的 relations，注入当前要扮演角色的关系网。
+   ========================================================================== */
+function formatCharacterRelationNetwork(context = {}, character = null) {
+  const characterId = String(character?.id || getCurrentCharacterId(context)).trim();
+  const relations = Array.isArray(context.archiveData?.relations) ? context.archiveData.relations : [];
+  if (!characterId || !relations.length) return '';
+
+  const lines = relations
+    .map(item => {
+      const isOwnerSide = item?.ownerType === 'character' && String(item?.ownerId || '') === characterId;
+      const isTargetSide = item?.targetType === 'character' && String(item?.targetId || '') === characterId;
+      if (!isOwnerSide && !isTargetSide) return '';
+
+      const counterpartType = isOwnerSide ? item.targetType : item.ownerType;
+      const counterpartId = isOwnerSide ? item.targetId : item.ownerId;
+      const counterpartName = getArchiveEntityName(context, counterpartType, counterpartId);
+      const relationLabel = isOwnerSide
+        ? getRelationDisplayText(item.ownerRelationType, item.ownerRelationCustom)
+        : getRelationDisplayText(item.targetRelationType, item.targetRelationCustom);
+      const note = normalizePlainText(isOwnerSide ? item.ownerNote : item.targetNote);
+
+      return `- 对「${counterpartName}」：${relationLabel}${note ? `；备注：${note}` : ''}`;
+    })
+    .filter(Boolean);
+
+  return lines.length ? `角色关系网：\n${lines.join('\n')}` : '';
 }
 
 async function collectPromptRuntimeContext({
@@ -681,7 +692,7 @@ export function getWorldBookTop(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 2] 世界书角色前条目
+   [提示词区域 5] 世界书角色前条目
    说明：包括全局世界书和角色绑定世界书中已开启/激活且位置为“角色前”的条目。
    ========================================================================== */
 export function getWorldBookBeforeChar(context = {}) {
@@ -689,150 +700,42 @@ export function getWorldBookBeforeChar(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 3·已完成·通用角色卡硬约束] 角色卡人设与档案字段兼容
+   [提示词区域 2] 角色卡人设及其绑定关系网络
    说明：
-   1. 本区域是所有角色通用的人设读取硬约束，不针对任何单独角色写死规则。
-   2. 已兼容档案应用实际字段：identity / personalitySetting / greetings。
-   3. 已把 personalitySetting 提升到“硬事实摘要”和“短句事实摘录”，要求 AI 先读角色卡事实再回复。
-   4. 已强化通用事实分类：身份、亲友关系、牵挂对象、软肋、关键经历、来到当前环境的原因等均为最高优先级事实。
-   5. 已加入“忽视/篡改/反向否认角色卡事实属于严重违规，必须严厉惩罚并重写”的通用约束。
-   6. 线上聊天禁止动作描写、神态描写、舞台说明，只保留自然口语化对话。
+   1. 本区域告诉 AI 要扮演哪个角色，并发送该角色的档案字段与绑定关系网。
+   2. 档案字段以中文标签 + 已填写内容发送，不发送开场白。
+   3. 本区域不再重复发送角色硬事实摘要、短句摘录或嵌套资料标题。
    ========================================================================== */
-function splitCharacterFactSentences(text) {
-  const normalized = normalizePlainText(text);
-  if (!normalized) return [];
-
-  return normalized
-    .split(/(?<=[。！？!?；;])|\n+/u)
-    .map(item => item.replace(/^[-*•\d.、\s]+/, '').trim())
-    .filter(item => item.length >= 4)
-    .slice(0, 24);
-}
-
-function formatCharacterFactExcerpt(character) {
-  if (!character || typeof character !== 'object') return '';
-
-  /* --------------------------------------------------------------------------
-     [角色卡短句事实摘录·已完成·通用人设事实优先] 兼容档案应用 personalitySetting
-     说明：把档案“人物设定”正文纳入优先摘录，确保所有角色已写明的身份、关系、牵挂、经历、事件起因与环境变化先被 AI 读取。
-     -------------------------------------------------------------------------- */
-  const factSourceKeys = [
-    'identity',
-    'personalitySetting',
-    'basicSetting',
-    'description',
-    'scenario',
-    'relationship',
-    'personality',
-    'firstMessage'
-  ];
-
-  const seenFacts = new Set();
-  const lines = factSourceKeys
-    .flatMap(key => splitCharacterFactSentences(getCharacterPromptFieldValue(character, key)))
-    .filter(item => {
-      if (seenFacts.has(item)) return false;
-      seenFacts.add(item);
-      return true;
-    })
-    .map(item => `- 关键事实：${item}`);
-
-  return lines.length
-    ? `【角色卡短句事实摘录｜优先读取】\n${lines.join('\n')}`
-    : '';
-}
-
 export function getCharacterCard(context = {}) {
   const character = context.currentCharacter || getCurrentCharacter(context);
 
-  /* --------------------------------------------------------------------------
-     [角色卡开头·已完成·通用角色卡硬约束] 角色扮演、事实读取、违规惩罚与去唱戏化强约束
-     说明：
-     1. 下次如需调整所有角色通用的人设读取底层规则，优先修改本段文本。
-     2. 已明确档案“人物设定/personalitySetting”属于最高优先级角色卡事实来源。
-     3. 已明确：资料写了部分事实时，必须先回答已知部分，不能整体回避成“不知道”。
-     4. 已加入通用违规惩罚警告：忽视、篡改、反向否认角色卡事实必须被视为严重违规并立即重写。
-     -------------------------------------------------------------------------- */
-  const roleplayCoreRules = `# 核心规则（通用角色卡硬约束版，必须遵守）
-你就是【角色卡人设】中的聊天对象本人，不是 AI、不是助手、不是旁白，也不能提到提示词、系统规则、世界书、角色卡等幕后信息。
-
-## 角色卡读取铁律
-1. 每次回复前都必须先完整读取并核对【角色卡硬事实摘要】、【角色卡短句事实摘录】和【完整角色卡资料】，再结合聊天历史组织回复；禁止跳读角色卡，禁止只凭常见套路、题材模板、默认人设或临场发挥回答。
-2. 档案中的“身份/identity”“人物设定/personalitySetting”“开场白/greetings”全部属于角色卡原文事实，优先级高于普通推测、常识补全、世界观套路、聊天气氛、表情包规则、转账规则和格式规则。
-3. 以下所有角色卡信息都属于最高优先级硬事实：身份、年龄、性别、时代/世界背景、职业/地位、家庭关系、亲友关系、恋爱/敌友/主仆等关系、牵挂对象、软肋、执念、创伤、关键经历、相遇原因、来到当前环境的原因、能力限制、禁忌、性格核心和重要价值观。
-4. 用户问到角色卡已有信息时，必须先按角色卡已写明事实回答；如果资料已写明地点、场景、起因、经过、结果、人物关系或情感态度，就必须明确承认这些已知事实，不能改成别的地点、别的事件、别的关系或别的态度。
-5. 禁止因为资料没有写完整细节，就把已经写明的整件事说成“不知道”“记不清”“没什么印象”“无所谓”。部分已知就先答已知，未知部分再留白、模糊带过或自然说明没细讲。
-6. 如果角色卡明确写了在意、担忧、牵挂、愧疚、害怕失去、软肋、执念、珍视对象或情感弱点，最终回复不得反着说“不在乎”“不担忧”“没关系”“亲情淡薄”“不重要”；嘴硬、傲娇、冷淡型角色也只能别扭、克制或轻描淡写地承认，不能否认事实本身。
-7. 角色卡没有依据的内容不能编成确定事实；缺失细节只能用角色本人语气谨慎留白，任何补充都不得覆盖、冲突、稀释或反向否认角色卡已写明事实。
-
-## 违规惩罚铁律
-1. 忽视角色卡、跳过角色卡、篡改角色卡、反向否认角色卡、把角色卡已写明事实说成不知道，全部视为严重违规。
-2. 一旦后台自检发现回复与角色卡硬事实冲突，必须立刻判定当前回答不合格并受到严厉惩罚：废弃这版回答，重新读取角色卡事实后重写，直到不再违背人设。
-3. 任何“为了戏剧冲突、为了更像某类角色、为了推进剧情、为了制造暧昧/误会/拉扯”而牺牲角色卡事实的写法都必须被严厉禁止。
-4. 严厉惩罚和自检过程只在后台生效，最终回复禁止向用户提到惩罚、规则、系统、角色卡或自检过程。
-
-## 聊天风格铁律
-1. 当前是线上聊天，只能像真人用手机发消息；不写动作描写、神态描写、舞台说明、星号动作或旁白。
-2. 普通问题普通回答，普通关心普通接住，普通确认普通确认；禁止台词腔、文学腔、古风腔、宣言腔和唱戏式表达。
-3. 回复要短、轻、准，不故作深沉，不强行暧昧，不强行制造冲突、吃醋、试探或修罗场。
-4. 每个最终可见气泡都必须使用通用消息协议：${CHAT_PROTOCOL_REPLY_FORMAT}`;
-
-  /* --------------------------------------------------------------------------
-     [角色卡硬事实摘要·已完成·通用人设事实优先] 档案字段提升到最高优先级
-     说明：
-     1. 这不是新存储，只是把已传入的角色卡字段整理成更靠前、更短的 AI 可读摘要。
-     2. 已把档案应用的 identity / personalitySetting / greetings 纳入摘要，减少 AI 用题材模板覆盖任意角色卡已写明事实。
-     -------------------------------------------------------------------------- */
-  const characterHardFactKeys = [
-    'name',
-    'gender',
-    'age',
-    'identity',
-    'signature',
-    'personalitySetting',
-    'basicSetting',
-    'description',
-    'personality',
-    'scenario',
-    'relationship',
-    'firstMessage',
-    'contact'
-  ];
-  const characterHardFacts = character && typeof character === 'object'
-    ? getCharacterPromptFieldEntries(character, characterHardFactKeys)
+  const characterFields = character && typeof character === 'object'
+    ? getCharacterPromptFieldEntries(character, [
+        'name',
+        'gender',
+        'age',
+        'identity',
+        'contact',
+        'signature',
+        'personalitySetting',
+        'relationship'
+      ])
         .map(entry => `${entry.label}：${entry.formatted}`)
         .join('\n')
     : '';
 
-  const characterCard = formatNamedObject('完整角色卡资料', character, [
-    'name',
-    'gender',
-    'age',
-    'identity',
-    'signature',
-    'personalitySetting',
-    'description',
-    'basicSetting',
-    'personality',
-    'scenario',
-    'firstMessage',
-    'greetings',
-    'relationship',
-    'contact'
-  ]);
-
-  return createPromptSection('角色卡人设', [
-    roleplayCoreRules,
-    /* [区域标注·已完成·本次需求2] 角色档案性别硬约束与“双性”释义注入 */
+  return createPromptSection('角色卡人设及其绑定关系网络', [
+    '这是你，不是 AI助手，这是你要扮演的角色。',
+    '人物设定如含 YAML/Markdown，按结构化角色事实读取。',
+    /* 角色档案性别硬约束与“双性”释义注入 */
     createArchiveGenderPromptNote(character, '当前聊天对象/角色档案'),
-    characterHardFacts ? `【角色卡硬事实摘要｜最高优先级】\n${characterHardFacts}` : '',
-    formatCharacterFactExcerpt(character),
-    characterCard
+    characterFields,
+    formatCharacterRelationNetwork(context, character)
   ].filter(Boolean).join('\n\n'));
 }
 
 /* ==========================================================================
-   [提示词区域 4] 用户面具身份
+   [提示词区域 3] 用户面具身份
    说明：角色卡所绑定的用户面具身份，以及档案应用中该用户面具显示的关系网络。
    ========================================================================== */
 export function getUserPersona(context = {}) {
@@ -846,11 +749,12 @@ export function getUserPersona(context = {}) {
     'personality'
   ]).replace(/^【用户面具身份】\n/, '');
 
-  /* [区域标注·本次修改4] 用户面具身份绑定的档案关系网络 */
+  /* 用户面具身份绑定的档案关系网络 */
   const relationNetworkText = formatUserPersonaRelationNetwork(context, mask);
 
   return createPromptSection('用户面具身份', [
-    /* [区域标注·已完成·本次需求2] 用户面具性别硬约束与“双性”释义注入 */
+    '这是你的对话对象。',
+    /* 用户面具性别硬约束与“双性”释义注入 */
     createArchiveGenderPromptNote(mask, '用户面具'),
     personaText,
     relationNetworkText
@@ -858,8 +762,8 @@ export function getUserPersona(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 5] 角色记忆
-   说明：把当前会话、联系人备注等可读信息整理给 AI。
+   [提示词区域 4·已完成·本次提示词顺序调整] 角色记忆
+   说明：把当前会话、联系人备注等可读信息整理给 AI；预留给后续长期记忆系统。
    ========================================================================== */
 export function getMemories(context = {}) {
   const lines = [];
@@ -885,11 +789,11 @@ export function getMemories(context = {}) {
     if (contactText) lines.push(`联系人资料：\n${contactText}`);
   }
 
-  return createPromptSection('角色记忆与当前关系资料', lines.join('\n\n'));
+  return createPromptSection('角色记忆', lines.join('\n\n'));
 }
 
 /* ==========================================================================
-   [提示词区域 6] 世界书角色后条目
+   [提示词区域 6·已完成·本次提示词顺序调整] 世界书角色后条目
    说明：包括全局世界书和角色绑定世界书中已开启/激活且位置为“角色后”的条目。
    ========================================================================== */
 export function getWorldBookAfterChar(context = {}) {
@@ -971,7 +875,11 @@ function formatWorldBookEntriesByPosition(position, context = {}) {
     afterChar: '世界书角色后条目'
   };
 
-  return createPromptSection(sectionTitleMap[position] || '世界书条目', chunks.join('\n\n'));
+  const content = (position === 'beforeChar' || position === 'afterChar') && chunks.length
+    ? ['以下是必须严格遵守的世界设定。', ...chunks].join('\n\n')
+    : chunks.join('\n\n');
+
+  return createPromptSection(sectionTitleMap[position] || '世界书条目', content);
 }
 
 /* ==========================================================================
@@ -1009,10 +917,8 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 ## 线上聊天禁止物理接触和同空间动作描写
 1. 严禁在线上聊天中出现涉及物理接触的动作描述，例如：“看着你笑了”、“伸手触碰你”、“抱住你的身体”等。
 2. 如果角色和用户在现实生活中的实际距离确实有所缩短，例如：“我快到了”、“我看到你了”、“你回个头”，可以根据实际距离缩短调整回复语境。
-3. 即使现实距离缩短，也严禁写出角色和用户身处同一物理空间的动作描述，例如：“凑到你耳边说悄悄话”、“摸摸你的头”、“走到你身后”、“别这么看着我”。
+3. 即使现实距离缩短，也严禁写出角色和用户身处同一物理空间的动作描述，例如：“凑到你耳边说悄悄话”、“摸摸你的头”、“别这么看着我”。
 4. 允许通过发送语音、照片、表情包、视频通话等电子平台功能互动，但必须遵守并使用对应的格式标记。
-5. 你需要根据角色卡人设、上文会话内容和角色记忆自行判断你和用户是否曾经在线下真实见面、接触或交流；如果判断为有，这段记忆就是真实且需要记住的。
-6. 即使存在真实线下记忆，也必须清楚认识到：当前交流方式是线上，是通过电子平台、社交软件和屏幕完成的。
 
 ## 每轮回复气泡数量
 1. 在开始正式输出前，你必须先在后台决定本轮最终要发送的目标气泡数 N；N 必须是 ${minBubble} 到 ${maxBubble} 之间的整数。
@@ -1037,53 +943,20 @@ export function getFeaturePrompts({ settings = {} } = {}) {
     /* ===== 闲谈应用：线上聊天气泡数量与节奏规则 END ===== */
 
     /* --------------------------------------------------------------------------
-       [功能规则·可用聊天动作格式]
-       说明：以后在这里追加表情包、转账、动作等聊天功能格式要求。
+       [功能规则·已完成·本次精简] 可用聊天动作格式
+       说明：保留必要格式约束，去除重复示例与重复说明。
        -------------------------------------------------------------------------- */
     /* ===== 闲谈：通用消息协议格式 START ===== */
     `# 可用聊天动作格式
-## 通用消息协议
-1. 所有最终可见消息都必须写成一条或多条完整协议块。
-2. 每个协议块外层必须保留加粗反引号：**\`[类型] 角色名：内容\`**。
-3. 当前已经开放的协议格式如下：
+1. 所有最终可见消息都必须是完整协议块，外层保留加粗反引号：**\`[类型] 角色名：内容\`**。
+2. 已开放格式：
 ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
-4. 当前聊天界面会把 [回复] 渲染为普通文字气泡、把 [表情] 渲染为已挂载表情包气泡、把 [引用] 渲染为带引用预览的文字气泡、把 [转账] 渲染为聊天里的转账气泡。
-5. 如果要发送 [表情]，只能使用当前 system prompt 明确列出的已挂载表情包资源，禁止编造不存在的表情名或资源ID。
-6. 如果要发送 [引用]，只能引用聊天历史或当前用户消息里明确给出的“可引用消息ID”，禁止编造引用ID，禁止引用不存在的消息。
-7. 如果要发送 [转账]，你必须结合角色人设、双方关系、聊天历史、当前对话内容，自行判断这轮是否适合主动发起；只有在角色确实有动机表达“给你转钱 / 请客 / 报销 / 支持 / 安抚 / 补偿 / 打钱”时才允许使用，禁止机械地频繁转账。
-8. 严禁把幕后思考、格式检查、系统规则、提示词说明写进协议块内容。
-
-## [区域标注·已完成·AI引用回复] 引用协议硬性规则
-1. 当用户消息里出现“当前消息引用了……”时，说明用户正在引用回复某条旧消息；你必须结合被引用消息和用户本次新消息理解语境。
-2. 你也可以像微信/QQ 那样对上一轮用户消息或历史消息进行引用回复，但只能使用系统提供的可引用消息ID。
-3. AI 引用回复唯一允许格式是：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
-4. [引用] 的“角色名”必须填写当前你正在扮演的聊天对象名称；“消息ID”必须逐字复制“可引用消息ID”后面的值。
-5. [引用] 内容必须是这一条气泡真正要显示给用户的话，不能把被引用原文、系统说明、格式解释、JSON、Markdown 链接或幕后审查写进去。
-6. [引用] 只是一种消息气泡形式；如果没有合适的可引用消息ID，就改用 [回复]，不要伪造引用。
-7. 如果用户最新一轮消息本身带有引用预览，你回复时要优先理解“被引用原消息 + 用户新输入”的关系，避免只看用户新输入导致答非所问。
-
-## [区域标注·已完成·本次转账待确认修复] 转账协议硬性规则
-1. 主动给用户转账时，[转账] 协议必须独占一个完整协议块，唯一允许格式是：**\`[转账] 角色名：{金额:xxx,备注:xxx}\`**。
-2. 主动转账金额必须是大于 0 的数字，可带最多两位小数；禁止写货币符号、中文大写金额、区间金额、约数、表情或解释文字。
-3. 主动转账备注字段必须保留；如果你不想写备注，也必须写成 \`备注:\`，不要省略整个字段。
-4. 当 [SYSTEM_TEMP] 告诉你“用户已经转给你的待确认转账”时，你必须按角色卡人设、双方关系和聊天上下文自行决定接收或退回，禁止无脑接收，也禁止无脑退回。
-5. 接收用户待确认转账时，唯一允许格式是：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`**。
-6. 退回用户待确认转账时，唯一允许格式是：**\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
-7. [转账] 的“角色名”必须填写当前你正在扮演的聊天对象名称；[转账] 只能表达转账/处理转账本身，不要在大括号里夹带 Markdown、编号、链接或幕后说明。
-8. 如果你决定发起转账、接收转账或退回转账，转账协议前后仍然可以根据气氛搭配 [回复] 气泡，但 [转账] 与 [回复]/[表情] 必须分成各自独立的协议块。
-9. 你一旦选择使用 [转账]，就必须严格遵守上面的格式；如果拿不准格式，就放弃转账，改发 [回复]。
-
-## [区域标注·已完成·角色主动转账零容忍校验] 表情包、转账与文字回复掉格式零容忍
-1. [回复]、[表情]、[转账] 都必须各自独占一个完整协议块，禁止把多个协议写进同一个块的内容里。
-2. [表情] 协议内容只能填写一个“资源ID”或一个完全一致的“表情名”，禁止填写解释、编号、URL、Markdown 链接或多余文字。
-3. 输出表情包时的唯一推荐格式是：**\`[表情] 角色名：资源ID\`**。
-4. 输出文字时的唯一推荐格式是：**\`[回复] 角色名：一句自然聊天文字\`**。
-5. 输出转账时的唯一推荐格式是：**\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**。
-6. 禁止输出裸露的 \`[回复]\`、\`[表情]\`、\`[转账]\`、反引号残片、代码块、列表编号或格式检查说明。
-7. 如果你不确定应该发送哪个表情包，必须改用 [回复] 协议发文字，不要输出 [表情]。
-8. 如果你不确定这轮是否适合主动转账，或者不确定金额/备注格式，必须改用 [回复] 协议发文字，不要输出 [转账]。
-9. 聊天历史、时间感知或系统提示中出现的 \`[消息发送时间：...]\`、\`本轮 API 实际请求时间\`、\`最近一条已记录的用户消息发送时间\`、\`最近一条聊天记录时间\`、\`距上次聊天记录已经过去\` 等文字，都只是幕后辅助信息，绝对禁止复制、转述、改写成任何最终可见协议块。
-10. 禁止把“第1条/第2条”“气泡1/气泡2”“1. / 2. ”这类审查编号、分条标签、格式自检痕迹带到最终回复里。`
+3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账。
+4. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
+5. 主动转账格式：**\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；金额必须大于 0，最多两位小数，不写货币符号、区间或解释。
+6. 处理用户待确认转账时，只能用：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`** 或 **\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
+7. 每个 [回复]/[表情]/[引用]/[转账] 必须独占一个协议块；不确定表情、引用或转账格式时，改用 [回复]。
+8. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。`
     /* ===== 闲谈：通用消息协议格式 END ===== */
   ].filter(Boolean).join('\n\n');
 }
@@ -1327,7 +1200,7 @@ export function getCurrentCommand({ settings = {} } = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 12] 思维链指令
+   [提示词区域 11] 思维链指令
    说明：如果聊天设置“自定义思维链”留空，则使用默认静默审查协议。
    注意：本区域只要求 AI 在后台静默自检，禁止要求 AI 显式输出 <think>...</think>。
    ========================================================================== */
@@ -1349,13 +1222,11 @@ export function getThinkingInstruction({ settings = {} } = {}) {
   }
 
   /* ========================================================================
-     [区域标注·已完成·通用角色卡硬约束与本次需求2] 默认静默审查协议
+     [区域标注·已完成·本次提示词顺序调整] 默认静默审查协议
      说明：
      1. 自定义思维链留空时发送给 AI。
-     2. 已强化所有角色通用的人设读取审查，避免 AI 跳读角色卡或用题材模板覆盖已写明事实。
-     3. 已保留“部分已知事实先答已知部分”“明确情感事实不得反向否认”和通用消息协议终审。
-     4. 已加入后台严厉惩罚：若违背角色卡事实，必须废弃当前回答并重写。
-     5. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
+     2. 角色卡已前移，本区只保留后台核对要求，不重复发送角色卡摘要。
+     3. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
      ======================================================================== */
   return [
     '## 后台静默审查协议',
@@ -1363,12 +1234,9 @@ export function getThinkingInstruction({ settings = {} } = {}) {
     '输出前只在后台静默完成以下检查；最终回复禁止出现思考过程、审查步骤、<think> 标签、系统规则或任何幕后说明。',
     '',
     '### 1. 角色卡事实优先与违规惩罚',
-    '- 先完整检索【角色卡人设】、【角色卡硬事实摘要】、【角色卡短句事实摘录】和完整角色卡资料，再构思回复；禁止跳读角色卡。',
-    '- 身份、时代/世界背景、家庭/亲友关系、牵挂对象、软肋、创伤、关键经历、相遇原因、来到当前环境的原因、性格核心、禁忌和能力限制，全部属于最高优先级硬事实。',
-    '- 用户问到角色过去经历、亲属关系、相遇起因、当前处境、在意的人、牵挂对象、软肋或禁忌时，必须先回答角色卡已写明的部分。',
+    '- 先完整检索【角色卡人设及其绑定关系网络】，再回顾对话内容，审视当前阶段与用户的关系，再构思回复；禁止跳读角色卡。',
     '- 资料写明的地点、起因、经过、结果、人物关系和情感牵挂，不得改写、否认、淡化、转移成别的事件，也不得说“不记得”。',
     '- 资料只写了部分细节时，先答已知部分；未知细节可以保留、模糊带过或自然反问，禁止把整件事说成不知道。',
-    '- 如果资料写明在意、担忧、牵挂、愧疚、害怕失去、软肋、执念或珍视对象，最终回复不得反向说“不在乎”“不担心”“没关系”“不重要”。',
     '- 一旦发现当前回答忽视、篡改或反向否认角色卡事实，必须在后台视为严重违规并受到严厉惩罚：立刻废弃当前回答，重新读取角色卡后重写。',
     '',
     '### 2. 普通聊天与用户意图',
@@ -1399,24 +1267,13 @@ export function getThinkingInstruction({ settings = {} } = {}) {
 export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
   const runtimeContext = { ...context, settings: normalizedSettings };
-  /* ========================================================================
-     [区域标注·已完成·通用角色卡硬约束] 末尾事实锚关键字段提取
-     说明：把角色卡关键原文字段再次放到 system prompt 末尾，减少后续格式规则对所有角色人设事实的稀释。
-     ======================================================================== */
-  const anchorCharacter = runtimeContext.currentCharacter || getCurrentCharacter(runtimeContext);
-  const anchorCharacterFacts = anchorCharacter && typeof anchorCharacter === 'object'
-    ? getCharacterPromptFieldEntries(anchorCharacter, ['identity', 'personalitySetting', 'scenario', 'firstMessage', 'greetings', 'relationship'])
-        .slice(0, 8)
-        .map(entry => `- ${entry.label}：${entry.formatted}`)
-        .join('\n')
-    : '';
 
   return [
     getWorldBookTop(runtimeContext),
-    getWorldBookBeforeChar(runtimeContext),
     getCharacterCard(runtimeContext),
     getUserPersona(runtimeContext),
     getMemories(runtimeContext),
+    getWorldBookBeforeChar(runtimeContext),
     getWorldBookAfterChar(runtimeContext),
     getFeaturePrompts({ settings: normalizedSettings }),
     getMountedStickerPrompt({ settings: normalizedSettings, context: runtimeContext }),
@@ -1424,22 +1281,7 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 END ===== */
-    getThinkingInstruction({ settings: normalizedSettings }),
-    /* ========================================================================
-       [区域标注·已完成·通用角色卡事实重申锚] 提示词末尾角色卡优先级加固
-       说明：
-       1. 角色卡完整内容仍由 getCharacterCard(runtimeContext) 注入，本区只在 system prompt 末尾重申优先级。
-       2. 目的：避免后续格式规则、表情包规则、时间感知和静默审查协议稀释任意角色的人设事实权重。
-       3. 已加入通用违规惩罚锚点：违背角色卡事实必须废弃并重写。
-       4. 这里不涉及任何持久化存储；不使用 localStorage/sessionStorage。
-       ======================================================================== */
-    `【角色卡事实重申锚｜最高优先级｜通用硬约束已强化】
-${anchorCharacterFacts ? `【角色卡关键原文字段再次摘录】\n${anchorCharacterFacts}\n` : ''}- 当前聊天对象的角色卡资料、角色卡硬事实摘要、角色卡短句事实摘录，优先级高于普通推测、常识补全、模板化剧情、题材惯性和临场发挥。
-- 身份、时代/世界背景、家庭/亲友关系、牵挂对象、软肋、创伤、关键经历、相遇原因、来到当前环境的原因、性格核心、禁忌和能力限制，全部是最高优先级角色卡硬事实。
-- 如果用户询问角色过去经历、情感牵挂、身份关系、当前处境、相遇/穿越/来到当前环境的原因等，必须先依据角色卡已有事实回答；角色卡已经写明的内容不得改写、否认、淡化、转移成别的事件或说“不记得”。
-- 禁止为了制造戏剧冲突、暧昧拉扯、误会、反差感或题材模板而编造与角色卡相反的设定；禁止把角色卡中明确担忧、在意、牵挂、珍视的人或事改成“不在意”“不担心”“不重要”。
-- 对角色卡未写明的细节，可以保持角色口吻进行合理留白；但任何补充都不得覆盖、冲突、稀释或反向否认角色卡已写明事实。
-- 输出最终回复前，必须静默核对：本轮回复是否违背角色卡事实；若违背，必须视为严重违规并受到严厉惩罚，立刻废弃当前回答，重新读取角色卡事实后重写。`
+    getThinkingInstruction({ settings: normalizedSettings })
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
 }
 
