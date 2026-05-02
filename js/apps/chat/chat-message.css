@@ -1988,7 +1988,8 @@
    说明：
    1. 仅服务聊天设置页顶部“当前会话联系人头像”板块和头像裁剪弹窗。
    2. 视觉沿用闲谈应用暖色卡片 / 应用内弹窗风格，不使用原生浏览器弹窗。
-   3. 样式层不涉及任何持久化存储；保存逻辑只写当前 session.avatar 到 DB.js / IndexedDB。
+   3. 头像裁剪弹窗底部保存按钮已改为小号紧凑面积，避免占满底部。
+   4. 样式层不涉及任何持久化存储；保存逻辑只写当前 session.avatar 到 DB.js / IndexedDB。
    ========================================================================== */
 .msg-settings-avatar-card {
   display: flex;
@@ -2135,9 +2136,15 @@
 .msg-avatar-crop-footer {
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .msg-avatar-crop-footer .chat-modal-btn {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 32px;
+  padding: 7px 14px;
+  border-radius: 14px;
+  font-size: 12px;
 }

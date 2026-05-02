@@ -1763,26 +1763,48 @@ export async function mount(container, context) {
   const collectInputValue = (scopeEl, role) => normalizeString(scopeEl.querySelector(`[data-role="${role}"]`)?.value);
   const collectTextareaValue = (scopeEl, role) => normalizeString(scopeEl.querySelector(`[data-role="${role}"]`)?.value);
 
-  /* [区域标注·已完成·本次需求2] 性别选择框与自定义小弹窗工具
+  /* [区域标注·已完成·本次需求2/3] 性别主题 UI 弹窗与自定义小弹窗工具
      说明：
      1. 用户面具 / 角色档案 / 配角档案编辑页共用本区。
-     2. 不使用浏览器原生 prompt/alert/confirm；自定义性别用档案应用内的小弹窗样式。
-     3. 不新增持久化结构；最终仍把性别作为字符串写入 db.js / IndexedDB。 */
+     2. 性别选择已移除原生 select，统一改为档案应用内主题 UI 弹窗；自定义性别也继续使用应用内小弹窗。
+     3. 自定义性别弹窗的保存 / 删除按钮已改为小号紧凑尺寸，具体样式见 archive.css 的 archive-gender-custom-actions。
+     4. 不新增持久化结构；最终仍把性别作为字符串写入 db.js / IndexedDB。 */
   const buildGenderSelectHtml = (currentGender = '') => {
     const safeGender = normalizeString(currentGender);
     const isPreset = ARCHIVE_GENDER_PRESET_OPTIONS.includes(safeGender);
     const selectedValue = isPreset ? safeGender : (safeGender ? '自定义' : '男');
     const customValue = isPreset ? '' : safeGender;
+    const storedValue = customValue || selectedValue;
+    const displayValue = customValue || selectedValue;
 
     return `
       <label class="archive-gender-select-row archive-relation-picker-row">
         <span>性别</span>
-        <input data-role="gender-value" type="hidden" value="${escapeHtml(customValue || selectedValue)}">
-        <select data-role="gender" aria-label="性别">
-          ${ARCHIVE_GENDER_PRESET_OPTIONS.map((option) => `
-            <option value="${escapeHtml(option)}" ${selectedValue === option ? 'selected' : ''}>${escapeHtml(option)}</option>
-          `).join('')}
-        </select>
+        <input data-role="gender-value" type="hidden" value="${escapeHtml(storedValue)}">
+        <button class="archive-relation-picker-trigger" type="button" data-action="gender-picker-open" aria-label="选择性别">
+          <span data-role="gender-trigger-text">${escapeHtml(displayValue)}</span>
+          <i>${icon.chevronRight}</i>
+        </button>
+        <div class="archive-relation-picker-modal hidden" data-role="gender-picker-modal">
+          <div class="archive-relation-picker-modal__panel">
+            <div class="archive-relation-picker-modal__header">
+              <strong>选择性别</strong>
+              <button class="archive-character-paper__icon-btn" type="button" data-action="gender-picker-close" aria-label="关闭">${icon.close}</button>
+            </div>
+            <div class="archive-relation-picker-modal__list" data-role="gender-picker-options">
+              ${ARCHIVE_GENDER_PRESET_OPTIONS.map((option) => `
+                <button
+                  type="button"
+                  class="archive-relation-picker-option ${selectedValue === option ? 'is-active' : ''}"
+                  data-action="gender-picker-pick"
+                  data-value="${escapeHtml(option)}"
+                >
+                  <strong>${escapeHtml(option)}</strong>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
         <div class="archive-relation-picker-modal hidden" data-role="gender-custom-modal">
           <div class="archive-relation-picker-modal__panel">
             <div class="archive-relation-picker-modal__header">
@@ -1792,7 +1814,7 @@ export async function mount(container, context) {
             <div class="archive-form-row" style="margin:0;">
               <input data-role="gender-custom-input" type="text" value="${escapeHtml(customValue)}" placeholder="请输入自定义性别">
             </div>
-            <div class="archive-modal-actions" style="margin-top:10px;">
+            <div class="archive-modal-actions archive-gender-custom-actions" style="margin-top:10px;">
               <button type="button" class="ui-button danger" data-action="gender-custom-delete">${icon.remove}<span>删除</span></button>
               <button type="button" class="ui-button primary" data-action="gender-custom-save">${icon.check}<span>保存</span></button>
             </div>
@@ -1803,20 +1825,37 @@ export async function mount(container, context) {
   };
 
   const collectGenderValue = (scopeEl) => {
-    const selectValue = normalizeString(scopeEl.querySelector('[data-role="gender"]')?.value);
     const hiddenValue = normalizeString(scopeEl.querySelector('[data-role="gender-value"]')?.value);
-    return selectValue === '自定义'
-      ? (hiddenValue && hiddenValue !== '自定义' ? hiddenValue : '未设定')
-      : (selectValue || '未设定');
+    return hiddenValue && hiddenValue !== '自定义' ? hiddenValue : '未设定';
   };
 
   const bindGenderSelectEvents = (scopeEl) => {
-    const select = scopeEl.querySelector('[data-role="gender"]');
     const hidden = scopeEl.querySelector('[data-role="gender-value"]');
+    const triggerText = scopeEl.querySelector('[data-role="gender-trigger-text"]');
+    const pickerModal = scopeEl.querySelector('[data-role="gender-picker-modal"]');
     const customModal = scopeEl.querySelector('[data-role="gender-custom-modal"]');
     const customInput = scopeEl.querySelector('[data-role="gender-custom-input"]');
 
-    if (!select || !hidden || !customModal || !customInput) return;
+    if (!hidden || !triggerText || !pickerModal || !customModal || !customInput) return;
+
+    const syncGenderTrigger = () => {
+      const value = normalizeString(hidden.value) || '男';
+      triggerText.textContent = value === '自定义' ? '自定义' : value;
+      pickerModal.querySelectorAll('[data-action="gender-picker-pick"]').forEach((button) => {
+        const option = normalizeString(button.getAttribute('data-value'));
+        const activeValue = ARCHIVE_GENDER_PRESET_OPTIONS.includes(value) ? value : '自定义';
+        button.classList.toggle('is-active', option === activeValue);
+      });
+    };
+
+    const openPickerModal = () => {
+      syncGenderTrigger();
+      pickerModal.classList.remove('hidden');
+    };
+
+    const closePickerModal = () => {
+      pickerModal.classList.add('hidden');
+    };
 
     const openCustomModal = () => {
       customModal.classList.remove('hidden');
@@ -1828,27 +1867,45 @@ export async function mount(container, context) {
       customModal.classList.add('hidden');
     };
 
-    select.addEventListener('change', () => {
-      const value = normalizeString(select.value);
-      if (value === '自定义') {
-        hidden.value = normalizeString(hidden.value) && !ARCHIVE_GENDER_PRESET_OPTIONS.includes(hidden.value)
-          ? normalizeString(hidden.value)
-          : '自定义';
-        openCustomModal();
-        return;
-      }
-      hidden.value = value;
-      closeCustomModal();
-    });
-
     scopeEl.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action');
       if (!action) return;
 
+      if (action === 'gender-picker-open') {
+        openPickerModal();
+        return;
+      }
+
+      if (action === 'gender-picker-close') {
+        closePickerModal();
+        return;
+      }
+
+      if (action === 'gender-picker-pick') {
+        const value = normalizeString(event.target.closest('[data-value]')?.getAttribute('data-value'));
+        if (!value) return;
+
+        if (value === '自定义') {
+          hidden.value = normalizeString(hidden.value) && !ARCHIVE_GENDER_PRESET_OPTIONS.includes(hidden.value)
+            ? normalizeString(hidden.value)
+            : '自定义';
+          syncGenderTrigger();
+          closePickerModal();
+          openCustomModal();
+          return;
+        }
+
+        hidden.value = value;
+        syncGenderTrigger();
+        closePickerModal();
+        closeCustomModal();
+        return;
+      }
+
       if (action === 'gender-custom-close') {
         if (normalizeString(hidden.value) === '自定义') {
-          select.value = '男';
           hidden.value = '男';
+          syncGenderTrigger();
         }
         closeCustomModal();
         return;
@@ -1860,19 +1917,21 @@ export async function mount(container, context) {
           notify('请填写自定义性别', 'error');
           return;
         }
-        select.value = '自定义';
         hidden.value = customValue;
+        syncGenderTrigger();
         closeCustomModal();
         return;
       }
 
       if (action === 'gender-custom-delete') {
         customInput.value = '';
-        select.value = '男';
         hidden.value = '男';
+        syncGenderTrigger();
         closeCustomModal();
       }
     });
+
+    syncGenderTrigger();
   };
 
   const bindAvatarFormEvents = (scopeEl) => {
@@ -1968,7 +2027,7 @@ export async function mount(container, context) {
             </div>
           </div>
 
-          <!-- [区域标注·已完成·本次需求2] 双列字段模块：性别已从输入框改为选择框，支持男/女/双性/无性别/自定义 -->
+          <!-- [区域标注·已完成·本次需求3] 双列字段模块：性别已从原生选择框改为主题 UI 弹窗，支持男/女/双性/无性别/自定义 -->
           <div class="archive-form-row archive-form-row--two">
             <label><span>姓名</span><input data-role="name" type="text" value="${escapeHtml(currentItem?.name || '')}" /></label>
             ${buildGenderSelectHtml(currentItem?.gender || '')}
@@ -2178,7 +2237,7 @@ export async function mount(container, context) {
             </div>
           </div>
 
-          <!-- [区域标注·已完成·本次需求2] 配角档案性别已从输入框改为选择框，支持男/女/双性/无性别/自定义 -->
+          <!-- [区域标注·已完成·本次需求3] 配角档案性别已从原生选择框改为主题 UI 弹窗，支持男/女/双性/无性别/自定义 -->
           <div class="archive-form-row archive-form-row--two">
             <label><span>姓名</span><input data-role="name" type="text" value="${escapeHtml(currentItem?.name || '')}" /></label>
             ${buildGenderSelectHtml(currentItem?.gender || '')}

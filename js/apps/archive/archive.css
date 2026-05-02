@@ -1413,7 +1413,11 @@
   min-height: 86px;
 }
 
-/* [修改标注·本次问题1] 关系主体/对象自定义选择器（非原生 select） */
+/* [区域标注·已完成·本次需求2/3] 档案性别/关系主题 UI 选择器（非原生 select）
+   说明：
+   1. 用户面具 / 角色档案 / 配角档案的“性别”已复用本主题弹窗样式，不再使用浏览器原生 select。
+   2. 关系主体/对象选择器继续复用本样式。
+   3. 自定义性别弹窗保存/删除按钮的小号尺寸见下方 archive-gender-custom-actions。 */
 .archive-relation-picker-row {
   position: relative;
   overflow: visible;
@@ -1538,6 +1542,30 @@
 .archive-relation-picker-option.is-active {
   border-color: rgba(127, 92, 62, 0.34);
   background: rgba(247, 238, 224, 0.96);
+}
+
+/* [区域标注·已完成·本次需求2] 自定义性别弹窗小号操作按钮
+   说明：仅作用于“自定义性别”弹窗内的保存/删除按钮，缩小按钮面积，不影响档案其它弹窗底部按钮。 */
+.archive-gender-custom-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-gender-custom-actions .ui-button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.archive-gender-custom-actions .ui-button svg {
+  width: 13px;
+  height: 13px;
 }
 
 .archive-form-row input:focus,
