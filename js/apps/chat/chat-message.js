@@ -354,7 +354,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      说明：
      1. user_withdraw_system 是用户撤回消息后插入的中间系统小字。
      2. 是否让 AI 看见撤回原文由消息对象 withdrawnVisibleToAi 控制，并随 currentMessages 写入 DB.js / IndexedDB。
-     3. 本渲染区只显示“用户撤回了一条消息”，不展示撤回原文，避免界面泄露用户选择。
+     3. 本渲染区只显示“你撤回了一条消息”，不展示撤回原文，避免界面泄露用户选择。
      ======================================================================== */
   const isUserWithdrawSystemMessage = String(msg?.type || '') === 'user_withdraw_system';
   const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage;
@@ -2050,13 +2050,13 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   /* ========================================================================
      [区域标注·已完成·用户消息撤回] 撤回系统小字发送给 AI 的文本规则
      说明：
-     1. withdrawnVisibleToAi=false：只给 AI 发送“用户撤回了一条消息”，不发送撤回原文。
-     2. withdrawnVisibleToAi=true：给 AI 发送撤回提示与撤回原文，让 AI 可结合当前情景回应。
+     1. withdrawnVisibleToAi=false：只给 AI 发送“当前对话中的用户撤回了一条消息”，不发送撤回原文。
+     2. withdrawnVisibleToAi=true：给 AI 发送撤回提示与撤回原文，让 AI 知道是当前对话的用户撤回消息并结合情景回应。
      3. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const getAiVisibleContentForMessage = (item = {}) => {
     if (String(item?.type || '') === 'user_withdraw_system') {
-      const base = String(item.content || '用户撤回了一条消息').trim() || '用户撤回了一条消息';
+      const base = '当前对话中的用户撤回了一条消息';
       if (!item.withdrawnVisibleToAi) return base;
       const withdrawnText = String(item.withdrawnContent || '').trim();
       return withdrawnText ? `${base}\n撤回的消息内容：${withdrawnText}` : base;
@@ -2946,12 +2946,12 @@ export function showUserWithdrawMessageModal(container, message = {}) {
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">撤回后聊天界面会显示“用户撤回了一条消息”。请选择下一轮 AI 回复时是否允许 AI 看见这条被撤回的原文。</div>
+      <div class="chat-modal-hint">撤回后聊天界面会显示“你撤回了一条消息”。请选择下一轮对方回复时是否允许对方看见这条被撤回的原文。</div>
       <div class="msg-withdrawn-content">${escapeHtml(getMessageDisplayTextForQuote(message) || '（空消息）')}</div>
     </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="0" type="button">撤回，AI 不可见</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="1" type="button">${MSG_ICONS.withdraw}<span>撤回，AI 可见</span></button>
+    <div class="chat-modal-footer msg-user-withdraw-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary msg-user-withdraw-modal-btn" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="0" type="button">撤回，对方不可见</button>
+      <button class="chat-modal-btn chat-modal-btn--primary msg-user-withdraw-modal-btn" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="1" type="button">撤回，对方可见</button>
     </div>
   `;
 

@@ -1674,7 +1674,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        [区域标注·已完成·用户消息撤回] 确认撤回用户消息并写入 IndexedDB
        说明：
        1. 删除被撤回的用户原消息，并在原位置插入 user_withdraw_system 系统小字。
-       2. withdrawnVisibleToAi=false 时，后续 AI 只收到“用户撤回了一条消息”提示，不收到原文。
+       2. withdrawnVisibleToAi=false 时，后续 AI 只收到“当前对话中的用户撤回了一条消息”提示，不收到原文。
        3. withdrawnVisibleToAi=true 时，后续 AI 会收到撤回提示与撤回原文，用于下一轮自然回应。
        4. 当前聊天记录与会话摘要统一只通过 DB.js / IndexedDB 持久化，不使用 localStorage/sessionStorage。
        ======================================================================== */
@@ -1702,7 +1702,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         id: `user_withdraw_system_${now}_${Math.random().toString(16).slice(2)}`,
         role: 'user',
         type: 'user_withdraw_system',
-        content: '用户撤回了一条消息',
+        content: '你撤回了一条消息',
         withdrawnContent: withdrawnText,
         withdrawnVisibleToAi,
         withdrawnAt: now,
