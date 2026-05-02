@@ -2048,18 +2048,18 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     || null;
   const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
   /* ========================================================================
-     [区域标注·已完成·用户消息撤回] 撤回系统小字发送给 AI 的文本规则
+     [区域标注·已完成·本次用户撤回互动提示词增强] 撤回系统小字发送给 AI 的文本规则
      说明：
-     1. withdrawnVisibleToAi=false：只给 AI 发送“当前对话中的用户撤回了一条消息”，不发送撤回原文。
-     2. withdrawnVisibleToAi=true：给 AI 发送撤回提示与撤回原文，让 AI 知道是当前对话的用户撤回消息并结合情景回应。
+     1. withdrawnVisibleToAi=false：只提示对方刚撤回且你看不见原文，引导 AI 用“你刚才撤回了什么”这类短句互动。
+     2. withdrawnVisibleToAi=true：提示对方刚撤回且你看得见原文，引导 AI 用“你撤的晚了，我都看见了”这类短句互动，并附撤回原文。
      3. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const getAiVisibleContentForMessage = (item = {}) => {
     if (String(item?.type || '') === 'user_withdraw_system') {
-      const base = '当前对话中的用户撤回了一条消息';
+      const base = '当前对话对象刚撤回了一条消息；你看不见原文。请用一句自然互动回应，例如“你刚才撤回了什么”。';
       if (!item.withdrawnVisibleToAi) return base;
       const withdrawnText = String(item.withdrawnContent || '').trim();
-      return withdrawnText ? `${base}\n撤回的消息内容：${withdrawnText}` : base;
+      return withdrawnText ? `当前对话对象刚撤回了一条消息；你看得见原文。可用一句自然互动回应，例如“你撤的晚了，我都看见了”。\n撤回的消息内容：${withdrawnText}` : base;
     }
     return String(item.content || '').trim();
   };
@@ -2959,8 +2959,8 @@ export function showUserWithdrawMessageModal(container, message = {}) {
 }
 
 /* ========================================================================
-   [AI本轮撤回查看弹窗]
-   说明：用户点击 AI 撤回系统提示后查看原文；应用内弹窗，不使用原生浏览器弹窗。
+   [区域标注·已完成·本次撤回弹窗称谓文案调整] 对方撤回查看弹窗
+   说明：你点击对方撤回系统提示后查看原文；应用内弹窗，不使用原生浏览器弹窗。
    ======================================================================== */
 export function showAiWithdrawnMessageModal(container, message = {}) {
   const mask = container.querySelector('[data-role="modal-mask"]');
@@ -2968,13 +2968,13 @@ export function showAiWithdrawnMessageModal(container, message = {}) {
   if (!mask || !panel) return;
 
   panel.innerHTML = `
-    <!-- [AI本轮撤回查看弹窗] -->
+    <!-- [区域标注·已完成·本次撤回弹窗称谓文案调整] 对方撤回查看弹窗 -->
     <div class="chat-modal-header">
       <span>撤回的消息</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">这条内容已被 AI 撤回；用户可查看原文，后续 AI 只能看到自己撤回了什么。</div>
+      <div class="chat-modal-hint">这条内容已被对方撤回；你可查看原文，后续对方只能看到自己撤回了什么。</div>
       <div class="msg-withdrawn-content">${escapeHtml(message.withdrawnContent || message.aiVisibleWithdrawnSummary || '')}</div>
     </div>
     <div class="chat-modal-footer">
