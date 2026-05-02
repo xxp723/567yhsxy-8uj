@@ -289,6 +289,14 @@ export async function mount(container, context) {
     deleteConfirmMessageId: '',
     /* ===== 闲谈：删除消息二次确认 END ===== */
     /* ========================================================================
+       [区域标注·已完成·消息回溯] 气泡功能栏回溯二次确认状态
+       说明：
+       1. 仅运行时保存当前等待“确认回溯”的消息 ID。
+       2. 确认后删除该消息之后的所有消息（含系统小字），并统一写入 DB.js / IndexedDB。
+       3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       ======================================================================== */
+    rewindConfirmMessageId: '',
+    /* ========================================================================
        [区域标注·已完成·引用回复] 当前输入栏待引用对象
        说明：仅运行时保存；发送消息时 quote 字段随消息对象写入 DB.js / IndexedDB。
        ======================================================================== */
@@ -773,10 +781,12 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     const clickedAction = String(target?.dataset?.action || '');
     const clickedMessageId = String(target?.dataset?.messageId || '');
     const previousDeleteConfirmId = state.deleteConfirmMessageId;
+    const previousRewindConfirmId = state.rewindConfirmMessageId;
     const shouldOnlyClose = !['msg-bubble-select', 'msg-system-tip-select'].includes(clickedAction) || clickedMessageId === openedMessageId;
     state.selectedMessageId = '';
     state.deleteConfirmMessageId = '';
-    refreshMessageBubbleRows(container, state, [openedMessageId, previousDeleteConfirmId, clickedMessageId]);
+    state.rewindConfirmMessageId = '';
+    refreshMessageBubbleRows(container, state, [openedMessageId, previousDeleteConfirmId, previousRewindConfirmId, clickedMessageId]);
     if (shouldOnlyClose) return;
   }
 
@@ -1577,11 +1587,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.multiSelectMode = false;
       state.selectedMessageIds = [];
       state.selectedMessageId = messageId;
       state.deleteConfirmMessageId = '';
-      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      state.rewindConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
       break;
     }
@@ -1595,11 +1607,13 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (!messageId) break;
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.multiSelectMode = false;
       state.selectedMessageIds = [];
       state.selectedMessageId = messageId;
       state.deleteConfirmMessageId = '';
-      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      state.rewindConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       break;
     }
 
@@ -1772,9 +1786,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.pendingQuote = createQuotePayloadFromMessage(message, session, state.profile || {});
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
+      state.rewindConfirmMessageId = '';
       state.coffeeDockOpen = false;
       state.stickerPanelOpen = false;
 
@@ -1782,7 +1798,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (!syncPendingQuoteComposer(container, state)) {
         renderCurrentChatMessage(container, state, { keepScroll: true });
       } else {
-        refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+        refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       }
       break;
     }
@@ -1839,9 +1855,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
-      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      state.rewindConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       break;
     }
 
@@ -1887,9 +1905,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.selectedMessageId = '';
       state.deleteConfirmMessageId = '';
-      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      state.rewindConfirmMessageId = '';
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       break;
     }
 
@@ -1902,9 +1922,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
       state.deleteConfirmMessageId = state.deleteConfirmMessageId === messageId ? '' : messageId;
+      state.rewindConfirmMessageId = '';
       state.selectedMessageId = messageId;
-      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, messageId]);
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 END ===== */
       break;
     }
@@ -1938,6 +1960,50 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
     /* ===== 闲谈：删除消息二次确认 END ===== */
+
+    /* ========================================================================
+       [区域标注·已完成·消息回溯] 消息气泡功能栏 — 回溯二次确认
+       说明：
+       1. 第一次点击只进入确认态，避免误触。
+       2. 再次点击“取消”会关闭确认态，不删除任何消息。
+       3. 只刷新相关气泡行，不重绘整页，避免页面闪屏。
+       ======================================================================== */
+    case 'msg-bubble-rewind': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      if (!messageId) break;
+      const previousSelectedId = state.selectedMessageId;
+      const previousDeleteConfirmId = state.deleteConfirmMessageId;
+      const previousRewindConfirmId = state.rewindConfirmMessageId;
+      state.selectedMessageId = messageId;
+      state.deleteConfirmMessageId = '';
+      state.rewindConfirmMessageId = state.rewindConfirmMessageId === messageId ? '' : messageId;
+      refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·消息回溯] 确认回溯并写入 IndexedDB
+       说明：
+       1. 保留当前点击气泡，删除其后的所有消息，包括中间系统小字提示。
+       2. 同步刷新当前会话最近消息摘要，并通过 persistCurrentMessages/dbPut 写入 DB.js / IndexedDB。
+       3. 不使用 localStorage/sessionStorage，不写任何双份兜底存储。
+       ======================================================================== */
+    case 'msg-bubble-confirm-rewind': {
+      const messageId = String(target.dataset.messageId || state.rewindConfirmMessageId || state.selectedMessageId || '');
+      if (!messageId || state.rewindConfirmMessageId !== messageId) break;
+      const messageIndex = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
+      if (messageIndex < 0) break;
+
+      state.currentMessages = (state.currentMessages || []).slice(0, messageIndex + 1);
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      refreshCurrentMessageListOnly(container, state);
+      break;
+    }
 
     /* ==========================================================================
        [区域标注·已完成·系统提示小字删除] 系统提示小字 — 确认删除

@@ -1770,6 +1770,36 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·消息回溯按钮]
+   说明：
+   1. 仅作用于单击用户/AI 消息气泡后出现的功能栏“回溯 / 确认回溯”按钮。
+   2. 点击“回溯”只进入二次确认态；点击“确认回溯”后由 index.js 删除当前气泡之后的所有消息并写入 DB.js / IndexedDB。
+   3. 使用应用内按钮样式与 IconPark 风格图标，不使用原生浏览器弹窗，不涉及 localStorage/sessionStorage。
+   ========================================================================== */
+.msg-bubble-toolbar__btn--rewind {
+  color: #6d4a34;
+  background: rgba(139, 92, 50, 0.09);
+}
+
+.msg-bubble-toolbar__btn--rewind:active {
+  background: rgba(139, 92, 50, 0.17);
+}
+
+.msg-bubble-toolbar__btn--rewind.is-confirming {
+  color: #8b5a2b;
+  background: rgba(170, 122, 78, 0.18);
+}
+
+.msg-bubble-toolbar__btn--confirm-rewind {
+  color: #fffaf4;
+  background: #8b5a2b;
+}
+
+.msg-bubble-toolbar__btn--confirm-rewind:active {
+  background: #744821;
+}
+
+/* ==========================================================================
    [区域标注·已完成·系统提示小字删除]
    说明：单击中间系统提示小字后显示删除/确认删除操作区；不使用原生浏览器弹窗。
    ========================================================================== */

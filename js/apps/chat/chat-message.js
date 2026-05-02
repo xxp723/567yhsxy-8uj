@@ -160,6 +160,11 @@ const MSG_ICONS = {
   broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* ========================================================================
+     [区域标注·已完成·消息回溯] IconPark — 气泡功能栏回溯按钮图标
+     说明：用于从当前消息气泡向后删除聊天记录；仅更新当前消息数组并写入 DB.js / IndexedDB。
+     ======================================================================== */
+  rewind: `<svg viewBox="0 0 48 48" fill="none"><path d="M21 14L8 24l13 10V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M40 14L27 24l13 10V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
      [区域标注·已完成·用户消息撤回] IconPark — 用户气泡撤回按钮图标
      说明：仅用于用户方消息气泡功能栏；不涉及任何持久化存储读写。
      ======================================================================== */
@@ -315,6 +320,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   /* ===== 闲谈：删除消息二次确认 START ===== */
   const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
   /* ===== 闲谈：删除消息二次确认 END ===== */
+  /* ========================================================================
+     [区域标注·已完成·消息回溯] 气泡回溯确认态
+     说明：点击“回溯”后先显示“确认回溯”，再次确认才删除当前气泡之后的所有消息。
+     ======================================================================== */
+  const rewindConfirmMessageId = String(options.rewindConfirmMessageId || '');
 
   const messageId = String(msg?.id || '');
   const isUser = msg?.role === 'user';
@@ -324,6 +334,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   /* ===== 闲谈：删除消息二次确认 START ===== */
   const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
   /* ===== 闲谈：删除消息二次确认 END ===== */
+  /* ========================================================================
+     [区域标注·已完成·消息回溯] 当前气泡是否处于回溯二次确认
+     说明：仅运行时状态，不做任何额外持久化；确认后由 index.js 写入 IndexedDB。
+     ======================================================================== */
+  const isRewindConfirming = isToolbarOpen && rewindConfirmMessageId === messageId;
   const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
   /* ========================================================================
      [区域标注·已完成·AI识图图片消息渲染 + AI图片点击放大]
@@ -478,6 +493,18 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
               </button>
             ` : ''}
             <!-- ===== 闲谈：删除消息二次确认 END ===== -->
+            <!-- ==================================================================
+                 [区域标注·已完成·消息回溯] 气泡功能栏回溯入口
+                 说明：点击后只进入确认态；确认后删除当前气泡之后的所有消息（包含系统小字），并保存到 DB.js / IndexedDB。
+                 ================================================================== -->
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--rewind ${isRewindConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.rewind}<span>${isRewindConfirming ? '取消' : '回溯'}</span>
+            </button>
+            ${isRewindConfirming ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-rewind" data-action="msg-bubble-confirm-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认回溯</span>
+              </button>
+            ` : ''}
             <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.multiSelect}<span>多选</span>
             </button>
@@ -550,6 +577,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   /* ===== 闲谈：删除消息二次确认 START ===== */
   const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
   /* ===== 闲谈：删除消息二次确认 END ===== */
+  /* ========================================================================
+     [区域标注·已完成·消息回溯] 聊天消息页回溯确认态
+     说明：传给单条气泡渲染；确认按钮由当前选中气泡的功能栏显示。
+     ======================================================================== */
+  const rewindConfirmMessageId = String(options.rewindConfirmMessageId || '');
   const multiSelectMode = Boolean(options.multiSelectMode);
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
   const selectedCount = selectedMessageIds.length;
@@ -1869,6 +1901,8 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     selectedMessageIds: state.selectedMessageIds,
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: state.deleteConfirmMessageId,
+    /* [区域标注·已完成·消息回溯] 渲染气泡回溯二次确认态 */
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
     /* [区域标注·已完成·引用回复] 渲染输入栏待引用预览 */
     pendingQuote: state.pendingQuote,
     /* ======================================================================
@@ -1917,6 +1951,7 @@ export function appendCurrentMessageBubble(container, state, message) {
     selectedMessageIds: state.selectedMessageIds,
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
     pendingQuote: state.pendingQuote
     /* ===== 闲谈：删除消息二次确认 END ===== */
   }));
@@ -1945,7 +1980,8 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
       selectedMessageId: state.selectedMessageId,
       multiSelectMode: state.multiSelectMode,
       selectedMessageIds: state.selectedMessageIds,
-      deleteConfirmMessageId: state.deleteConfirmMessageId
+      deleteConfirmMessageId: state.deleteConfirmMessageId,
+      rewindConfirmMessageId: state.rewindConfirmMessageId
     });
   });
 
@@ -1969,7 +2005,8 @@ export function refreshCurrentMessageListOnly(container, state) {
         selectedMessageId: state.selectedMessageId,
         multiSelectMode: state.multiSelectMode,
         selectedMessageIds: state.selectedMessageIds,
-        deleteConfirmMessageId: state.deleteConfirmMessageId
+        deleteConfirmMessageId: state.deleteConfirmMessageId,
+        rewindConfirmMessageId: state.rewindConfirmMessageId
       })).join('')
     : `<div class="msg-empty"></div>`;
   listArea.scrollTop = previousScrollTop;
@@ -1995,6 +2032,11 @@ export function resetMessageSelectionState(state) {
   /* ===== 闲谈：删除消息二次确认 START ===== */
   state.deleteConfirmMessageId = '';
   /* ===== 闲谈：删除消息二次确认 END ===== */
+  /* ========================================================================
+     [区域标注·已完成·消息回溯] 重置气泡回溯确认态
+     说明：仅清空运行时确认态，不涉及持久化；真正回溯由 index.js 写入 IndexedDB。
+     ======================================================================== */
+  state.rewindConfirmMessageId = '';
 }
 
 
