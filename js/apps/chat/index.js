@@ -100,7 +100,9 @@ import {
   buildChatAvatarFromCropModal,
   createQuotePayloadFromMessage,
   syncPendingQuoteComposer,
-  syncStickerInputSuggestions
+  syncStickerInputSuggestions,
+  syncChatMessageSearchPanel,
+  scrollToChatSearchResult
 } from './chat-message.js';
 import {
   renderProfile,
@@ -316,6 +318,15 @@ export async function mount(container, context) {
        说明：仅运行时保存；发送消息时 quote 字段随消息对象写入 DB.js / IndexedDB。
        ======================================================================== */
     pendingQuote: null,
+    /* ========================================================================
+       [区域标注·已完成·聊天记录搜索] 消息页搜索运行时状态
+       说明：
+       1. 仅在当前聊天消息页运行时保存搜索框开合与关键词，不做持久化存储。
+       2. 搜索范围包含用户与 AI 消息气泡；点击结果后回滚到对应消息位置。
+       3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗或原生选择器。
+       ======================================================================== */
+    chatMessageSearchOpen: false,
+    chatMessageSearchKeyword: '',
     /* [修改4] 用于子页面导航的堆栈标记 */
     subPageView: null,              // null | 'wallet' | 'sticker' | 'chatDaysDetail'
     /* [区域标注·本次需求2] 表情包独立页多选删除运行时状态 */
@@ -646,6 +657,9 @@ async function openChatMessage(container, state, db, chatId) {
   state.stickerPanelGroupId = 'all';
   state.coffeeDockOpen = false;
   state.pendingQuote = null;
+  /* [区域标注·已完成·聊天记录搜索] 进入会话时重置搜索框，避免上一个聊天的关键词残留 */
+  state.chatMessageSearchOpen = false;
+  state.chatMessageSearchKeyword = '';
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
@@ -746,6 +760,9 @@ function closeChatMessage(container, state) {
   state.stickerPanelGroupId = 'all';
   state.coffeeDockOpen = false;
   state.pendingQuote = null;
+  /* [区域标注·已完成·聊天记录搜索] 退出消息页时清空搜索运行时状态，不写任何持久化存储 */
+  state.chatMessageSearchOpen = false;
+  state.chatMessageSearchKeyword = '';
 
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -1502,6 +1519,29 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-magic':
       await retryLatestAiReply(container, state, db, settingsManager);
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·聊天记录搜索] 顶栏放大镜按钮：打开/关闭搜索框
+       说明：
+       1. 点击放大镜后，搜索框从顶栏下方浮现；再次点击会清空关键词并关闭。
+       2. 搜索仅使用当前 state.currentMessages 运行时数据，不读写任何持久化存储。
+       3. 结果点击跳转逻辑见 jump-msg-search-result；界面局部同步，避免页面闪屏。
+       ======================================================================== */
+    case 'toggle-msg-search':
+      state.chatMessageSearchOpen = !state.chatMessageSearchOpen;
+      if (!state.chatMessageSearchOpen) state.chatMessageSearchKeyword = '';
+      syncChatMessageSearchPanel(container, state);
+      break;
+
+    /* ========================================================================
+       [区域标注·已完成·聊天记录搜索] 搜索结果气泡点击：回滚到对应消息位置
+       说明：点击透明结果框内任意命中气泡后，聊天消息列表平滑滚动到该消息气泡。
+       ======================================================================== */
+    case 'jump-msg-search-result': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      if (messageId) scrollToChatSearchResult(container, messageId);
+      break;
+    }
 
     /* [区域标注·本次需求] 聊天消息页面 — 三点设置按钮：进入独立聊天设置页 */
     case 'msg-more': {
@@ -3075,6 +3115,19 @@ function handleInput(e, state, container, db) {
   }
 
   /* [区域标注] 聊天列表搜索输入 */
+  if (target.matches('[data-role="msg-search-input"]')) {
+    /* ========================================================================
+       [区域标注·已完成·聊天记录搜索] 搜索框输入：实时命中聊天记录
+       说明：
+       1. 不限制输入字数；用户与 AI 消息均由 chat-message.js 根据当前消息列表匹配。
+       2. 只局部刷新顶栏下方搜索结果面板，不重绘整个聊天页，避免闪屏。
+       3. 仅保存为运行时状态，不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    state.chatMessageSearchKeyword = target.value || '';
+    syncChatMessageSearchPanel(container, state);
+    return;
+  }
+
   if (target.matches('[data-role="chat-search-input"]')) {
     state.chatSearchKeyword = target.value || '';
     refreshPanel(container, state, 'chatList');

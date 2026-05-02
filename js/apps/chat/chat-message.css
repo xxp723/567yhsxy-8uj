@@ -169,6 +169,205 @@
   height: 14px;
 }
 
+/* ========================================================================
+   [区域标注·已完成·聊天记录搜索] 顶栏放大镜按钮与下滑搜索面板
+   说明：
+   1. 仅作用于聊天消息界面顶栏“三点”左侧的 IconPark 放大镜按钮。
+   2. 搜索框从顶栏下边框向下浮现，结果区为透明框，可上下滑动查看所有命中气泡。
+   3. 本区域只负责 UI 样式；搜索状态仅在 index.js 运行时保存，不使用 localStorage/sessionStorage。
+   ======================================================================== */
+.msg-top-bar__search {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.msg-top-bar__search:active {
+  opacity: 0.72;
+  transform: scale(0.94);
+}
+
+.msg-top-bar__search.is-active {
+  background: rgba(74, 52, 42, 0.1);
+  color: #4A342A;
+}
+
+.msg-top-bar__search svg {
+  width: 14px;
+  height: 14px;
+}
+
+.msg-search-panel {
+  flex-shrink: 0;
+  padding: 0 12px;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-12px);
+  overflow: hidden;
+  pointer-events: none;
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease, padding 0.18s ease;
+  position: relative;
+  z-index: 9;
+}
+
+.msg-search-panel.is-open {
+  max-height: min(44vh, 320px);
+  opacity: 1;
+  transform: translateY(0);
+  padding: 0 12px 10px;
+  pointer-events: auto;
+}
+
+.msg-search-panel__box {
+  min-height: 42px;
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.94);
+  border: 1px solid rgba(74, 52, 42, 0.09);
+  box-shadow: 0 10px 24px rgba(74, 52, 42, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.msg-search-panel__icon {
+  width: 18px;
+  height: 18px;
+  color: rgba(74, 52, 42, 0.52);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.msg-search-panel__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.msg-search-panel__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #4A342A;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 10px 0;
+}
+
+.msg-search-panel__input::placeholder {
+  color: rgba(74, 52, 42, 0.34);
+}
+
+.msg-search-panel__results {
+  margin-top: 8px;
+  max-height: min(32vh, 232px);
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 22px;
+  background: rgba(255, 252, 247, 0.34);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 10px 24px rgba(74, 52, 42, 0.07);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-search-result {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg-search-result--user {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.msg-search-result__meta {
+  max-width: 78%;
+  padding: 0 8px;
+  color: rgba(74, 52, 42, 0.46);
+  font-size: 10px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.msg-search-result__bubble {
+  max-width: 78%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: 16px;
+  color: #4A342A;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(74, 52, 42, 0.07);
+  box-shadow: 0 6px 14px rgba(74, 52, 42, 0.06);
+}
+
+.msg-search-result--user .msg-search-result__bubble {
+  background: rgba(200, 184, 154, 0.4);
+}
+
+.msg-search-result:active .msg-search-result__bubble {
+  transform: scale(0.985);
+  background: rgba(255, 252, 247, 0.86);
+}
+
+.msg-search-panel__empty {
+  border-radius: 17px;
+  background: rgba(255, 252, 247, 0.48);
+  color: rgba(74, 52, 42, 0.48);
+  padding: 14px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.msg-bubble-row.is-search-target .msg-bubble,
+.msg-transfer-system-row.is-search-target .msg-transfer-system-row__text {
+  box-shadow: 0 0 0 3px rgba(170, 122, 78, 0.24), 0 10px 24px rgba(74, 52, 42, 0.13);
+  animation: msgSearchTargetPulse 1.45s ease-out;
+}
+
+@keyframes msgSearchTargetPulse {
+  0% {
+    transform: scale(1);
+  }
+  32% {
+    transform: scale(1.025);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* ==========================================================================
    [区域标注·本次需求] 聊天会话主容器
    说明：三点设置页打开时隐藏该容器，显示独立设置页。

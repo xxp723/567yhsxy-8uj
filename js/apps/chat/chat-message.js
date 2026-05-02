@@ -139,6 +139,11 @@ const MSG_ICONS = {
   /* ======================================================================== */
   image: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 10h36v28H6V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 30l7-8l6 6l5-5l8 9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="18" r="3" stroke="currentColor" stroke-width="3"/></svg>`,
   more: `<svg viewBox="0 0 48 48" fill="none"><circle cx="12" cy="24" r="3" fill="currentColor"/><circle cx="24" cy="24" r="3" fill="currentColor"/><circle cx="36" cy="24" r="3" fill="currentColor"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·聊天记录搜索] IconPark — 顶栏搜索按钮图标
+     说明：用于聊天消息界面顶栏三点按钮左侧的聊天记录搜索入口；仅运行时筛选当前消息数组，不涉及持久化存储。
+     ======================================================================== */
+  search: `<svg viewBox="0 0 48 48" fill="none"><path d="M21 38c9.389 0 17-7.611 17-17S30.389 4 21 4S4 11.611 4 21s7.611 17 17 17Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M33 33l11 11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   emptyChat: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`,
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
   wallet: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 14h36v28H6V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M10 14V8h26v6" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 28h10v8H32a4 4 0 0 1 0-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
@@ -256,6 +261,81 @@ function renderQuotePreview(quote = {}, variant = 'bubble') {
       <div class="msg-quote-preview__body">
         <span class="msg-quote-preview__sender">${escapeHtml(senderName)}</span>
         <span class="msg-quote-preview__text">${escapeHtml(text)}</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ========================================================================
+   [区域标注·已完成·聊天记录搜索] 搜索匹配与面板渲染工具
+   说明：
+   1. 只搜索当前运行时 currentMessages，用户与 AI 消息都纳入范围。
+   2. 不写入 IndexedDB，不使用 localStorage/sessionStorage，不做双份存储兜底。
+   3. 搜索框不限制输入字数；输入时局部刷新结果框，避免聊天页整页重绘闪屏。
+   ======================================================================== */
+function getChatSearchMessageText(message = {}) {
+  const baseText = getMessageDisplayTextForQuote(message);
+  const quoteText = String(message?.quote?.text || '').trim();
+  return [baseText, quoteText].filter(Boolean).join(' ');
+}
+
+function getChatSearchMatches(messages = [], keyword = '') {
+  const query = String(keyword || '').trim().toLowerCase();
+  if (!query) return [];
+  return (Array.isArray(messages) ? messages : [])
+    .map((message, index) => ({
+      message,
+      index,
+      text: getChatSearchMessageText(message)
+    }))
+    .filter(item => String(item.text || '').toLowerCase().includes(query));
+}
+
+function renderChatSearchResultBubble(item = {}, session = {}, userProfile = {}) {
+  const message = item.message || {};
+  const isUser = message.role === 'user';
+  const senderName = isUser
+    ? String(userProfile?.nickname || '我')
+    : String(session?.remark || session?.name || '对方');
+  const text = getChatSearchMessageText(message) || '（空消息）';
+
+  return `
+    <button class="msg-search-result ${isUser ? 'msg-search-result--user' : 'msg-search-result--other'}"
+            data-action="jump-msg-search-result"
+            data-message-id="${escapeHtml(message.id || '')}"
+            type="button">
+      <span class="msg-search-result__meta">${escapeHtml(senderName)} · 第 ${Number(item.index || 0) + 1} 条</span>
+      <span class="msg-search-result__bubble">${escapeHtml(text)}</span>
+    </button>
+  `;
+}
+
+function renderChatMessageSearchPanelHtml(session = {}, messages = [], options = {}) {
+  const searchOpen = Boolean(options.chatSearchOpen);
+  const keyword = String(options.chatSearchKeyword || '');
+  const matches = getChatSearchMatches(messages, keyword);
+  const userProfile = options.userProfile || {};
+
+  return `
+    <!-- ======================================================================
+         [区域标注·已完成·聊天记录搜索] 顶栏下浮搜索框与命中结果
+         说明：点击顶栏放大镜后从顶栏下边框向下浮现；搜索仅使用当前运行时消息数组，不涉及持久化存储。
+         ====================================================================== -->
+    <div class="msg-search-panel ${searchOpen ? 'is-open' : ''}" data-role="msg-search-panel">
+      <div class="msg-search-panel__box">
+        <span class="msg-search-panel__icon">${MSG_ICONS.search}</span>
+        <input class="msg-search-panel__input"
+               data-role="msg-search-input"
+               type="text"
+               value="${escapeHtml(keyword)}"
+               placeholder="搜索聊天记录">
+      </div>
+      <div class="msg-search-panel__results" data-role="msg-search-results">
+        ${keyword
+          ? (matches.length
+              ? matches.map(item => renderChatSearchResultBubble(item, session, userProfile)).join('')
+              : `<div class="msg-search-panel__empty">没有命中“${escapeHtml(keyword)}”</div>`)
+          : `<div class="msg-search-panel__empty">输入关键字后，用户与 AI 的相关消息会显示在这里。</div>`}
       </div>
     </div>
   `;
@@ -680,9 +760,12 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <span class="msg-top-bar__status">${isSending ? '正在回复...' : '在线'}</span>
         </div>
       </div>
+      <button class="msg-top-bar__search ${options.chatSearchOpen ? 'is-active' : ''}" data-action="toggle-msg-search" type="button" aria-label="搜索聊天记录">${MSG_ICONS.search}</button>
       <button class="msg-top-bar__more" data-action="msg-more" type="button">${MSG_ICONS.more}</button>
     </div>
   `;
+
+  const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
 
   /* ==========================================================================
      [区域标注] 消息列表区域
@@ -994,6 +1077,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     <div class="msg-page">
       <div class="${conversationClassName}" data-role="msg-conversation">
         ${topBarHtml}
+        ${searchPanelHtml}
         <div class="${listAreaClassName}" data-role="msg-list">${messagesHtml}</div>
         ${multiSelectBarHtml}
         ${multiSelectMode ? '' : inputBarHtml}
@@ -1984,7 +2068,13 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     chatConsoleEnabled: state.chatConsoleEnabled,
     chatConsoleExpanded: state.chatConsoleExpanded,
     chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
-    chatConsoleLogs: state.chatConsoleLogs
+    chatConsoleLogs: state.chatConsoleLogs,
+    /* ======================================================================
+       [区域标注·已完成·聊天记录搜索] 搜索面板渲染参数
+       说明：仅运行时 UI 状态，不写入任何持久化存储。
+       ====================================================================== */
+    chatSearchOpen: state.chatMessageSearchOpen,
+    chatSearchKeyword: state.chatMessageSearchKeyword
     /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 
@@ -2660,6 +2750,58 @@ function renderChatConsoleDockHtml({
   `;
 }
 
+export function syncChatMessageSearchPanel(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const conversation = msgWrap?.querySelector('[data-role="msg-conversation"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!conversation || !session) return false;
+
+  const existingPanel = conversation.querySelector('[data-role="msg-search-panel"]');
+  const nextHtml = renderChatMessageSearchPanelHtml(session, state.currentMessages, {
+    userProfile: state.profile,
+    chatSearchOpen: state.chatMessageSearchOpen,
+    chatSearchKeyword: state.chatMessageSearchKeyword
+  });
+
+  if (existingPanel) {
+    existingPanel.outerHTML = nextHtml;
+  } else {
+    conversation.querySelector('.msg-top-bar')?.insertAdjacentHTML('afterend', nextHtml);
+  }
+
+  const searchBtn = conversation.querySelector('[data-action="toggle-msg-search"]');
+  if (searchBtn) searchBtn.classList.toggle('is-active', Boolean(state.chatMessageSearchOpen));
+
+  if (state.chatMessageSearchOpen) {
+    window.setTimeout(() => {
+      const input = conversation.querySelector('[data-role="msg-search-input"]');
+      if (input) {
+        input.focus();
+        const len = String(input.value || '').length;
+        input.setSelectionRange(len, len);
+      }
+    }, 30);
+  }
+
+  return true;
+}
+
+export function scrollToChatSearchResult(container, messageId = '') {
+  const safeMessageId = String(messageId || '').trim();
+  if (!safeMessageId) return false;
+
+  const listArea = container.querySelector('[data-role="msg-list"]');
+  const row = listArea?.querySelector(`[data-message-id="${CSS.escape(safeMessageId)}"]`);
+  if (!listArea || !row) return false;
+
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  row.classList.remove('is-search-target');
+  window.setTimeout(() => row.classList.add('is-search-target'), 20);
+  window.setTimeout(() => row.classList.remove('is-search-target'), 1700);
+  return true;
+}
+
+/* ========================================================================== */
 export function syncChatConsoleDock(container, state) {
   const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
   const shell = msgWrap?.querySelector('.msg-input-shell');
