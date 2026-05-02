@@ -383,12 +383,14 @@ function getVisibleStickerPanelItems(rawData, groupId = 'all') {
 }
 
 /* ========================================================================
-   [区域标注·已完成·输入框表情包名称联想] 输入关键词关联表情包工具
+   [区域标注·已完成·本次输入框表情包联想按命中显示与防闪屏修复] 输入关键词关联表情包工具
    说明：
    1. 用户在聊天输入框打字时，只按表情包名称包含关系联想：输入“哭”匹配名称含“哭”的表情包，输入“哭哭”只匹配名称含“哭哭”的表情包。
-   2. 联想结果直接来自当前运行时 state.stickerData / IndexedDB 已加载数据，不读取 localStorage/sessionStorage，不做双份存储兜底。
-   3. 本区域只做展示与局部 DOM 同步，不过滤长文本字段，不使用 isLikelyLargeMediaField 之类逻辑。
-   4. 下次如需修改匹配数量、空状态或布局，优先修改本区域。
+   2. 只有存在命中的表情包时才显示联想窗口；无输入或无命中时直接隐藏，不显示空状态。
+   3. 联想窗口只展示表情包列表，不再显示“关联表情包”标题和右侧关联词文字。
+   4. 输入变化时优先局部更新已有 scroller 内容，不反复删除并重建整个窗口，避免输入时闪屏。
+   5. 联想结果直接来自当前运行时 state.stickerData / IndexedDB 已加载数据，不读取 localStorage/sessionStorage，不做双份存储兜底。
+   6. 本区域只做展示与局部 DOM 同步，不过滤长文本字段，不使用 isLikelyLargeMediaField 之类逻辑。
    ======================================================================== */
 function getStickerInputSuggestionItems(rawData, keyword = '') {
   const query = String(keyword || '').trim().toLowerCase();
@@ -399,30 +401,28 @@ function getStickerInputSuggestionItems(rawData, keyword = '') {
     .slice(0, 12);
 }
 
+function renderStickerInputSuggestItemsHtml(items = []) {
+  return (Array.isArray(items) ? items : []).map(item => `
+    <button class="msg-sticker-suggest__item"
+            data-action="send-msg-sticker"
+            data-sticker-id="${escapeHtml(item.id)}"
+            type="button"
+            title="${escapeHtml(item.name)}">
+      <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+      <span>${escapeHtml(item.name)}</span>
+    </button>
+  `).join('');
+}
+
 function renderStickerInputSuggestDockHtml(keyword = '', rawData = {}) {
   const query = String(keyword || '').trim();
   const items = getStickerInputSuggestionItems(rawData, query);
-  if (!query) return '';
+  if (!query || !items.length) return '';
 
   return `
     <div class="msg-sticker-suggest" data-role="msg-sticker-suggest" data-suggest-keyword="${escapeHtml(query)}">
-      <div class="msg-sticker-suggest__head">
-        <span class="msg-sticker-suggest__title">关联表情包</span>
-        <span class="msg-sticker-suggest__keyword">${escapeHtml(query)}</span>
-      </div>
       <div class="msg-sticker-suggest__scroller">
-        ${items.length
-          ? items.map(item => `
-              <button class="msg-sticker-suggest__item"
-                      data-action="send-msg-sticker"
-                      data-sticker-id="${escapeHtml(item.id)}"
-                      type="button"
-                      title="${escapeHtml(item.name)}">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
-                <span>${escapeHtml(item.name)}</span>
-              </button>
-            `).join('')
-          : `<div class="msg-sticker-suggest__empty">没有名称包含“${escapeHtml(query)}”的表情包</div>`}
+        ${renderStickerInputSuggestItemsHtml(items)}
       </div>
     </div>
   `;
@@ -433,15 +433,31 @@ export function syncStickerInputSuggestions(container, state, keyword = '') {
   const shell = msgWrap?.querySelector('.msg-input-shell');
   if (!shell) return false;
 
-  shell.querySelector('[data-role="msg-sticker-suggest"]')?.remove();
+  const query = String(keyword || '').trim();
+  const items = getStickerInputSuggestionItems(state.stickerData, query);
+  const existingSuggest = shell.querySelector('[data-role="msg-sticker-suggest"]');
 
-  const html = renderStickerInputSuggestDockHtml(keyword, state.stickerData);
-  if (!html) return true;
+  if (!query || !items.length) {
+    existingSuggest?.remove();
+    return true;
+  }
+
+  const nextItemsHtml = renderStickerInputSuggestItemsHtml(items);
+  if (existingSuggest) {
+    existingSuggest.dataset.suggestKeyword = query;
+    const scroller = existingSuggest.querySelector('.msg-sticker-suggest__scroller');
+    if (scroller) {
+      scroller.innerHTML = nextItemsHtml;
+      return true;
+    }
+    existingSuggest.outerHTML = renderStickerInputSuggestDockHtml(query, state.stickerData);
+    return true;
+  }
 
   const inputBar = shell.querySelector('.msg-input-bar');
   if (!inputBar) return false;
 
-  inputBar.insertAdjacentHTML('beforebegin', html);
+  inputBar.insertAdjacentHTML('beforebegin', renderStickerInputSuggestDockHtml(query, state.stickerData));
   return true;
 }
 
@@ -880,8 +896,8 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       })}
 
       <!-- ====================================================================
-           [区域标注·已完成·输入框表情包名称联想] 输入时联想结果挂载点
-           说明：初始渲染保持为空，输入事件由 syncStickerInputSuggestions 局部插入/移除，不重绘聊天页，避免闪屏。
+           [区域标注·已完成·本次输入框表情包联想按命中显示与防闪屏修复] 输入时联想结果挂载点
+           说明：初始渲染保持为空；输入事件由 syncStickerInputSuggestions 按命中结果局部插入/更新/移除，不重绘聊天页，不反复重建已有窗口，避免闪屏。
            ==================================================================== -->
 
       <div class="msg-input-bar">
