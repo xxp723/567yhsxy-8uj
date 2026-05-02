@@ -71,12 +71,32 @@ export class DesktopEditMode {
     this.desktopEditStoreName = 'appsData';
     this.desktopEditStoreAppId = 'desktop-edit-mode';
 
+    /* ==========================================================================
+       [区域标注·本次需求1·桌面布局首屏同步加载入口]
+       说明：
+       - 构造阶段只绑定基础对象，不再提前异步读取桌面布局。
+       - 由 main.js 在 IndexedDB 初始化、桌面基础 DOM 渲染完成后显式 await 初始化。
+       - 避免刷新时先显示默认桌面，稍后才套用已保存布局造成“先出几个、再出几个”。
+       ========================================================================== */
+    this.desktopEditModeReady = false;
+
     this.refreshAppearanceSnapshotFromStore();
     this.bindEvents();
-    this.loadLayout();
-    this.loadDockState();
     this.initToolbarDrag();
     this.initManagedWidgetModal();
+  }
+
+  /* ==========================================================================
+     [区域标注·本次需求1·桌面布局首屏同步加载入口]
+     说明：
+     - 只读取 db.js / IndexedDB 中的桌面编辑布局与 Dock 状态。
+     - main.js 会等待这里完成后再进入可见完成态，确保桌面图标一次性按最新布局出现。
+     ========================================================================== */
+  async initializeAfterDesktopRender() {
+    if (this.desktopEditModeReady) return;
+    await this.loadLayout();
+    await this.loadDockState();
+    this.desktopEditModeReady = true;
   }
 
   // [模块标注] 桌面编辑态 IndexedDB 持久化模块：所有桌面编辑数据只写入 db.js 对应的 IndexedDB，不再保留 localStorage 读写或双份兜底
@@ -96,9 +116,9 @@ export class DesktopEditMode {
     }
   }
 
-  persistDesktopEditDbValue(key, value) {
+  async persistDesktopEditDbValue(key, value) {
     if (!this.db) return;
-    this.db.put(this.desktopEditStoreName, {
+    await this.db.put(this.desktopEditStoreName, {
       id: this.buildDesktopEditDbId(key),
       appId: this.desktopEditStoreAppId,
       key,
@@ -167,8 +187,8 @@ export class DesktopEditMode {
     });
 
     if (this.btnDone) {
-      this.btnDone.addEventListener('click', () => {
-        this.saveLayout();
+      this.btnDone.addEventListener('click', async () => {
+        await this.saveLayout();
         this.exitEditMode();
         this.showToast('布局已保存');
       });
@@ -1340,9 +1360,9 @@ export class DesktopEditMode {
     });
   }
 
-  saveDockState() {
+  async saveDockState() {
     this.dockState = this.dedupeDockState(this.dockState || []);
-    this.persistDesktopEditDbValue('miniphone_dock_layout', this.dockState);
+    await this.persistDesktopEditDbValue('miniphone_dock_layout', this.dockState);
     this.savedDockSnapshot = [...this.dockState];
   }
 
@@ -2759,18 +2779,24 @@ export class DesktopEditMode {
     this.applyLayoutToDOM(true);
   }
 
-  saveLayout() {
+  async saveLayout() {
     this.updateLayoutDataFromDOM();
 
     // [模块标注] 保存前一致性模块：保存前再次清理唯一性与重叠问题，避免重叠被写入已保存桌面
     this.sanitizeLayoutForUniquenessAndOverlap();
     this.applyLayoutToDOM();
 
-    this.persistDesktopEditDbValue('miniphone_desktop_layout', this.layout);
+    /* ==========================================================================
+       [区域标注·本次需求1·桌面布局保存同步确认]
+       说明：
+       - 保存桌面布局与 Dock 状态时等待 db.js / IndexedDB 写入完成。
+       - 避免点“完成”后立刻刷新时，新布局尚未写完而下次仍短暂套用旧布局。
+       ========================================================================== */
+    await this.persistDesktopEditDbValue('miniphone_desktop_layout', this.layout);
     this.savedLayoutSnapshot = this.cloneLayout(this.layout);
 
     // 同步保存 Dock 可见状态
-    this.saveDockState();
+    await this.saveDockState();
   }
 
   initDefaultLayout() {

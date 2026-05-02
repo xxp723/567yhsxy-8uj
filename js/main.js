@@ -142,6 +142,16 @@ class MiniPhoneApp {
       const desktopState = await this.desktopConfig.getConfig();
       this.desktop.render(desktopState);
 
+      /* ==========================================================================
+         [区域标注·本次需求1·桌面应用一次性加载修复]
+         说明：
+         - 桌面基础 DOM 渲染后，立即等待 DesktopEditMode 从 db.js / IndexedDB 读取已保存布局。
+         - 在启动完成与防白屏遮罩移除前套用最新布局，避免刷新后先显示默认几个应用，
+           随后才出现其它应用的分段加载现象。
+         - 不使用 localStorage/sessionStorage，不写双份兜底存储。
+         ========================================================================== */
+      await this.desktopEditMode.initializeAfterDesktopRender();
+
       // 6) 绑定交互
       this.gestures.bind();
       this.dragDrop.bind();
