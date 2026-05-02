@@ -177,7 +177,9 @@ const I = {
   /* [修改标注·需求6-改] 放大/全屏图标 - IconPark FullScreen */
   expand: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 6h12M6 6v12M42 6H30M42 6v12M6 42h12M6 42V30M42 42H30M42 42V30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   /* [修改标注·需求6-改] 收缩/退出全屏图标 - IconPark OffScreen */
-  shrink: '<svg viewBox="0 0 48 48" fill="none"><path d="M18 6v12H6M30 6v12h12M18 42V30H6M30 42V30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  shrink: '<svg viewBox="0 0 48 48" fill="none"><path d="M18 6v12H6M30 6v12h12M18 42V30H6M30 42V30h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  /* [修改标注·已完成·本次角色卡世界书手动重新同步按钮] 重新同步图标 - IconPark Refresh */
+  refresh: '<svg viewBox="0 0 48 48" fill="none"><path d="M39 16V6h-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 24a16 16 0 0 1-27.3 11.3M9 32v10h10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24A16 16 0 0 1 35.3 12.7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 
 const POS_LABELS = { top: '置顶', beforeChar: '角色前', afterChar: '角色后' };
@@ -305,18 +307,19 @@ export async function mount(container, context) {
       };
     }).filter(Boolean);
   });
-  /* [修改标注·需求1] 将档案角色卡绑定世界书导入世情局部板块，并保留原有状态字段 */
+  /* ======================================================================
+     [修改标注·已完成·本次世界书保存同步修复] 自动同步只补绑定，不覆盖用户编辑
+     说明：
+     1. 角色卡来源世界书首次出现时，仍会自动导入到世情局部板块。
+     2. 已存在的角色卡来源世界书再次被档案同步发现时，只补齐绑定/来源信息。
+     3. 不再用角色卡 raw 覆盖 existed.entries / existed.enabled，避免用户在世情中保存的条目内容、触发设置、开关与递归设置被旧数据覆盖。
+     4. 如需主动恢复角色卡原始世界书，请使用标题栏“重新同步”按钮；该按钮会走应用内确认弹窗。
+     ====================================================================== */
   const importArchiveWorldBook = ({ characterId = null, sourceKey = '', name = '', raw = null }) => {
     if (!raw || typeof raw !== 'object') return false;
     const safeSourceKey = sourceKey || uid('archivewb');
     const existed = S.books.find((book) => book.archiveSourceCharacterId === characterId && book.archiveSourceKey === safeSourceKey);
     if (existed) {
-      const nextBook = parseTavWB(raw, name || existed.name || '角色卡世界书');
-      if (!nextBook) return false;
-
-      existed.name = nextBook.name || existed.name;
-      existed.entries = Array.isArray(nextBook.entries) ? nextBook.entries : existed.entries;
-      existed.enabled = typeof nextBook.enabled === 'boolean' ? nextBook.enabled : existed.enabled;
       existed.type = 'local';
       existed.archiveSourceCharacterId = characterId || existed.archiveSourceCharacterId || null;
       existed.archiveSourceKey = safeSourceKey;
@@ -344,6 +347,65 @@ export async function mount(container, context) {
       if (importArchiveWorldBook(item)) changed = true;
     });
     if (changed) save();
+  };
+  /* ======================================================================
+     [修改标注·已完成·本次角色卡世界书手动重新同步按钮] 主动覆盖同步工具
+     说明：
+     1. 只在用户点击标题栏重新同步按钮并通过应用内确认弹窗后执行。
+     2. 覆盖范围限定为当前这一本角色卡来源世界书，不影响其它世界书，也不修改闲谈/档案应用文件。
+     3. 覆盖后只通过 DB.js / IndexedDB 保存到 worldbook::all-books，不使用 localStorage/sessionStorage。
+     ====================================================================== */
+  const findArchiveWorldBookSource = (book) => {
+    if (!book?.archiveSourceCharacterId || !book?.archiveSourceKey) return null;
+    return archiveBoundBooks().find((item) => (
+      item.characterId === book.archiveSourceCharacterId &&
+      item.sourceKey === book.archiveSourceKey &&
+      item.raw &&
+      typeof item.raw === 'object'
+    )) || null;
+  };
+
+  const canManualResyncArchiveWorldBook = (book) => !!findArchiveWorldBookSource(book);
+
+  const overwriteBookFromArchiveSource = (book) => {
+    const source = findArchiveWorldBookSource(book);
+    if (!book || !source) return false;
+
+    const nextBook = parseTavWB(source.raw, source.name || book.name || '角色卡世界书');
+    if (!nextBook) return false;
+
+    book.name = nextBook.name || book.name;
+    book.enabled = typeof nextBook.enabled === 'boolean' ? nextBook.enabled : book.enabled;
+    book.entries = Array.isArray(nextBook.entries) ? nextBook.entries : [];
+    book.type = 'local';
+    book.archiveSourceCharacterId = source.characterId || book.archiveSourceCharacterId || null;
+    book.archiveSourceKey = source.sourceKey || book.archiveSourceKey || null;
+    book.boundCharacterIds = source.characterId ? [source.characterId] : [];
+
+    save();
+    return true;
+  };
+
+  const openArchiveWorldBookResyncConfirm = (book) => {
+    if (!canManualResyncArchiveWorldBook(book)) {
+      toast('未找到角色卡原始世界书', 'error');
+      return;
+    }
+
+    openMod({
+      title: '重新同步世界书',
+      body: '<p class="wb-modal-hint">将使用角色卡原始世界书覆盖当前这本世界书。你在世情中对此书做过的条目内容和设置修改会被替换。</p>',
+      okTxt: '确认同步',
+      danger: true,
+      onOk: () => {
+        if (!overwriteBookFromArchiveSource(book)) {
+          toast('重新同步失败', 'error');
+          return false;
+        }
+        render();
+        toast('已从角色卡重新同步', 'success');
+      }
+    });
   };
   const curBooks = () => S.books.filter(b => b.type === S.tab);
   const findBook = id => S.books.find(b => b.id === id);
@@ -551,7 +613,9 @@ export async function mount(container, context) {
       const bookName = book ? book.name : '世界书';
       const left = document.createElement('span'); left.className = 'wb-header-left';
       /* [修改标注·已完成·本次世情手动保存按钮] 返回按钮右侧增加“保存”按钮，用于强制同步当前世界书条目与设置到 IndexedDB。 */
-      left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button><button class="wb-header-btn" data-a="savebook" title="保存世界书">' + I.save + '</button>';
+      /* [修改标注·已完成·本次角色卡世界书手动重新同步按钮] 角色卡来源世界书额外显示“重新同步”按钮；用户确认后才覆盖当前书。 */
+      const resyncBtn = book && canManualResyncArchiveWorldBook(book) ? '<button class="wb-header-btn" data-a="resyncarchivewb" title="从角色卡重新同步">' + I.refresh + '</button>' : '';
+      left.innerHTML = '<button class="wb-header-btn" data-a="goback" title="返回上一级">' + I.back + '</button><button class="wb-header-btn" data-a="savebook" title="保存世界书">' + I.save + '</button>' + resyncBtn;
       header.appendChild(left);
       /* [本次修改标注·仅限需求2] 打开世界书后，点击标题中的世界书名称直接返回桌面 */
       renderHomeTitle(bookName);
@@ -666,6 +730,7 @@ export async function mount(container, context) {
     if (a === 'ob') { const id = ev.target.closest('[data-a="ob"]').dataset.id; S.openId = id; S.sOpen = false; S.sQ = ''; S.expEnt.clear(); render(); return; }
     if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
     if (a === 'savebook') { void saveCurrentWorldBookNow(); return; }
+    if (a === 'resyncarchivewb') { const book = findBook(S.openId); if (book) openArchiveWorldBookResyncConfirm(book); return; }
     if (a === 'gohome') { closeToDesktop(); return; }
     if (a === 'tg') { S.tab = ev.target.closest('[data-a="tg"]').dataset.tab; S.openId = null; render(); return; }
     if (a === 'na') { openNewBookMod(); return; }
@@ -734,6 +799,7 @@ export async function mount(container, context) {
     if (a === 'gohome') { closeToDesktop(); return; }
     if (a === 'goback') { S.openId = null; S.sOpen = false; S.sQ = ''; render(); return; }
     if (a === 'savebook') { void saveCurrentWorldBookNow(); return; }
+    if (a === 'resyncarchivewb') { const book = findBook(S.openId); if (book) openArchiveWorldBookResyncConfirm(book); return; }
     if (a === 'imp') { $fi.click(); return; }
     if (a === 'expall') { exportAll(); return; }
     if (a === 'ts') { S.sOpen = !S.sOpen; if (!S.sOpen) { S.sQ = ''; S.sBooks.clear(); S.sEntries.clear(); } render(); return; }
