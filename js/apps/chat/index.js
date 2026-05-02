@@ -1543,6 +1543,31 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
+       [区域标注·已完成·AI图片点击放大]
+       说明：
+       1. 仅作用于 AI 发送的图片消息（chat-message.js 渲染时才加本 action）。
+       2. 点击图片本体局部切换 is-zoomed，不打开弹窗、不加暗色遮罩、不重绘聊天页，避免闪屏。
+       3. 只使用运行时 DOM class/aria-expanded，不涉及任何持久化存储。
+       ========================================================================== */
+    case 'msg-ai-image-toggle-zoom': {
+      const imageBubble = target.closest('[data-role="msg-ai-image-bubble"]');
+      if (!imageBubble) break;
+
+      const listArea = container.querySelector('[data-role="msg-list"]');
+      listArea?.querySelectorAll('[data-role="msg-ai-image-bubble"].is-zoomed').forEach(item => {
+        if (item !== imageBubble) {
+          item.classList.remove('is-zoomed');
+          item.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      const nextZoomed = !imageBubble.classList.contains('is-zoomed');
+      imageBubble.classList.toggle('is-zoomed', nextZoomed);
+      imageBubble.setAttribute('aria-expanded', nextZoomed ? 'true' : 'false');
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·已完成·气泡两排功能区] 单击消息气泡 — 显示气泡上方功能栏
        说明：再次点击当前气泡或消息页非功能区区域的关闭逻辑已统一放在 handleClick 顶部。
        ========================================================================== */

@@ -326,13 +326,15 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   /* ===== 闲谈：删除消息二次确认 END ===== */
   const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
   /* ========================================================================
-     [区域标注·已完成·AI识图图片消息渲染] 图片消息类型判断
+     [区域标注·已完成·AI识图图片消息渲染 + AI图片点击放大]
      说明：
-     1. type:image 的消息来自咖啡功能区“图片”板块。
+     1. type:image 的消息来自咖啡功能区“图片”板块或 AI 生图结果。
      2. imageUrl 会随当前聊天记录写入 DB.js / IndexedDB，并在 prompt.js 中作为视觉输入发送给 AI。
-     3. 不使用 localStorage/sessionStorage，也不保留双份存储兜底。
+     3. AI 发送的图片额外带 data-action="msg-ai-image-toggle-zoom"，点击时只切换图片本体放大状态。
+     4. 不使用 localStorage/sessionStorage，也不保留双份存储兜底；不使用原生弹窗或弹窗容器。
      ======================================================================== */
   const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
+  const isAiZoomableImage = isImageMessage && isAssistant;
   /* ========================================================================
      [区域标注·已完成·本次转账显示优化] 转账消息类型与状态表现
      说明：
@@ -373,8 +375,14 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
       `
     : (isImageMessage
         ? `
-          <div class="msg-image-bubble" title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
-            <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
+          <!-- ==================================================================
+               [区域标注·已完成·AI图片点击放大入口]
+               说明：仅 AI 图片带点击放大 data-action；点击后由 index.js 局部切换 class，不重绘聊天页，避免闪屏。
+               ================================================================== -->
+          <div class="msg-image-bubble ${isAiZoomableImage ? 'msg-image-bubble--ai-zoomable' : ''}"
+               ${isAiZoomableImage ? `data-role="msg-ai-image-bubble" data-action="msg-ai-image-toggle-zoom" data-message-id="${escapeHtml(messageId)}" aria-expanded="false"` : ''}
+               title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
+            <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" decoding="async">
           </div>
         `
         : (isTransferMessage

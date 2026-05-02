@@ -210,38 +210,12 @@ function hasReadableValue(value) {
 }
 
 /* ========================================================================
-   [区域标注·已完成·本次需求1] 档案长文本字段不过滤修复
+   [区域标注·已完成·本次要求：移除长文本字段过滤]
    说明：
-   1. 角色档案/用户面具的 personalitySetting 是有效长文本，不再因超过 1200 字被误判为媒体字段。
-   2. 配角档案的 basicSetting、关系备注等文本字段也允许长文本进入 prompt。
-   3. 头像、图片、base64、文件、blob 等媒体字段仍继续过滤，避免把不可读大资源发给 AI。
+   1. 已删除 isLikelyLargeMediaField(key, value) 一类字段名/长文本过滤逻辑。
+   2. 角色档案、用户面具、配角档案、关系备注等可读字段不再因字段名、长度或媒体特征被本区过滤。
+   3. 本模块仍只做 hasReadableValue 空值判断；不使用 localStorage/sessionStorage，不写双份存储兜底。
    ======================================================================== */
-function isArchivePromptTextField(key) {
-  const safeKey = String(key || '').trim();
-  return [
-    'personalitySetting',
-    'basicSetting',
-    'description',
-    'scenario',
-    'notes',
-    'remark',
-    'ownerNote',
-    'targetNote',
-    'content'
-  ].includes(safeKey);
-}
-
-function isLikelyLargeMediaField(key, value) {
-  const safeKey = String(key || '').toLowerCase();
-  const safeValue = String(value || '');
-
-  if (isArchivePromptTextField(key)) return false;
-
-  return (
-    ['avatar', 'cover', 'image', 'img', 'photo', 'base64', 'file', 'blob'].some(token => safeKey.includes(token)) ||
-    safeValue.startsWith('data:image/')
-  );
-}
 
 function labelizeKey(key) {
   const labels = {
@@ -289,8 +263,11 @@ function labelizeArchivePromptKey(key, entityType = '') {
 }
 
 /* ==========================================================================
-   [区域标注] AI 可读文本格式化工具
-   说明：避免 [object Object]，并跳过头像/图片/base64 等不可读大字段。
+   [区域标注·已完成·本次要求：AI 可读文本格式化不做长文本过滤]
+   说明：
+   1. 避免 [object Object]，递归整理已传入的可读字段。
+   2. 已移除字段名/长度/媒体特征过滤，不再用 isLikelyLargeMediaField 一类逻辑排除长文本。
+   3. 本区域不涉及持久化存储；不使用 localStorage/sessionStorage。
    ========================================================================== */
 function formatReadableValue(value, indent = 0) {
   const pad = '  '.repeat(indent);
@@ -312,7 +289,7 @@ function formatReadableValue(value, indent = 0) {
 
   if (typeof value === 'object') {
     return Object.entries(value)
-      .filter(([key, val]) => hasReadableValue(val) && !isLikelyLargeMediaField(key, val))
+      .filter(([, val]) => hasReadableValue(val))
       .map(([key, val]) => {
         const formatted = formatReadableValue(val, indent + 1);
         if (!formatted) return '';
@@ -396,7 +373,7 @@ function getCharacterPromptFieldEntries(character, keys = [], entityType = 'char
   return keys
     .map(key => {
       const value = getCharacterPromptFieldValue(character, key);
-      if (!hasReadableValue(value) || isLikelyLargeMediaField(key, value)) return null;
+      if (!hasReadableValue(value)) return null;
 
       const label = labelizeArchivePromptKey(key, entityType);
       const formatted = formatReadableValue(value);
@@ -441,7 +418,7 @@ function formatNamedObject(title, source, preferredKeys = []) {
 
   const lines = [];
   preferredKeys.forEach(key => {
-    if (Object.prototype.hasOwnProperty.call(source, key) && hasReadableValue(source[key]) && !isLikelyLargeMediaField(key, source[key])) {
+    if (Object.prototype.hasOwnProperty.call(source, key) && hasReadableValue(source[key])) {
       const value = formatReadableValue(source[key]);
       if (value) lines.push(`${labelizeKey(key)}：${value}`);
     }
@@ -449,7 +426,7 @@ function formatNamedObject(title, source, preferredKeys = []) {
 
   Object.entries(source).forEach(([key, value]) => {
     if (preferredKeys.includes(key)) return;
-    if (!hasReadableValue(value) || isLikelyLargeMediaField(key, value)) return;
+    if (!hasReadableValue(value)) return;
     const formatted = formatReadableValue(value);
     if (formatted) lines.push(`${labelizeKey(key)}：${formatted}`);
   });
