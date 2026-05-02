@@ -159,6 +159,11 @@ const MSG_ICONS = {
   close: `<svg viewBox="0 0 48 48" fill="none"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   broom: `<svg viewBox="0 0 48 48" fill="none"><path d="M30 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 9l12 12L18 42H8v-10L27 9Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 32l4 4M19 25l4 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   undo: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 14H6v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 24c3-9 10-14 20-14c8 0 14 3 18 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M42 34c-3 5-8 8-14 8c-8 0-14-3-18-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·用户消息撤回] IconPark — 用户气泡撤回按钮图标
+     说明：仅用于用户方消息气泡功能栏；不涉及任何持久化存储读写。
+     ======================================================================== */
+  withdraw: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 12H8v10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22c4-9 12-14 23-12c8 2 13 8 13 16c0 10-8 17-18 17c-5 0-10-2-14-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 18L21 28M21 18l10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注·已完成·气泡功能区复制] IconPark — 复制按钮图标 */
   copy: `<svg viewBox="0 0 48 48" fill="none"><path d="M16 16V8h24v24h-8" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 16h24v24H8V16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   /* ========================================================================
@@ -215,7 +220,7 @@ function getMessageDisplayTextForQuote(message = {}) {
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
-  if (type === 'transfer_system' || type === 'ai_withdraw_system') return String(message?.content || '系统提示').trim();
+  if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system') return String(message?.content || '系统提示').trim();
   return String(message?.content || '').trim();
 }
 
@@ -344,7 +349,15 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 撤回原文随该消息对象写入当前聊天记录（DB.js / IndexedDB），用户可点开看，AI 上文只读取“撤回了什么”摘要。
      ======================================================================== */
   const isAiWithdrawSystemMessage = String(msg?.type || '') === 'ai_withdraw_system';
-  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage;
+  /* ========================================================================
+     [区域标注·已完成·用户消息撤回] 用户撤回系统提示小字渲染
+     说明：
+     1. user_withdraw_system 是用户撤回消息后插入的中间系统小字。
+     2. 是否让 AI 看见撤回原文由消息对象 withdrawnVisibleToAi 控制，并随 currentMessages 写入 DB.js / IndexedDB。
+     3. 本渲染区只显示“用户撤回了一条消息”，不展示撤回原文，避免界面泄露用户选择。
+     ======================================================================== */
+  const isUserWithdrawSystemMessage = String(msg?.type || '') === 'user_withdraw_system';
+  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage;
   const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
   const isTransferAccepted = transferStatus === 'accepted';
   /* ========================================================================
@@ -438,6 +451,15 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-favorite" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.favorite}<span>收藏</span>
             </button>
+            ${isUser ? `
+              <!-- ==================================================================
+                   [区域标注·已完成·用户消息撤回] 用户方消息气泡撤回入口
+                   说明：只给用户消息显示撤回按钮；点击后由 index.js 打开应用内弹窗，不使用原生 confirm/prompt。
+                   ================================================================== -->
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--withdraw" data-action="msg-bubble-withdraw" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.withdraw}<span>撤回</span>
+              </button>
+            ` : ''}
             <!-- ===== 闲谈：删除消息二次确认 START ===== -->
             <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
               ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
@@ -1999,18 +2021,58 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   }
 
   /* 用户最新一轮消息 = 消息末尾往前连续的 user 消息组，而不是最后一条 user 消息 */
-  const currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
+  let currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
+  /* ========================================================================
+     [区域标注·已完成·用户消息撤回] 最近撤回事件并入下一轮 AI 请求
+     说明：
+     1. 用户可能撤回较早位置的气泡，但撤回行为发生在当前时刻；下一轮 AI 仍必须收到这条撤回提示。
+     2. withdrawnAt / timestamp 晚于最近 AI 消息的 user_withdraw_system 会并入 currentRoundMessages。
+     3. 这里只组装请求上下文，不新增存储；消息对象仍随 currentMessages 写入 DB.js / IndexedDB。
+     ======================================================================== */
+  const latestAssistantTimestamp = normalized
+    .filter(item => item.role === 'assistant')
+    .reduce((max, item) => Math.max(max, Number(item?.timestamp || 0) || 0), 0);
+  const currentRoundIdSet = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
+  const recentWithdrawMessages = normalized
+    .filter(item => (
+      String(item?.type || '') === 'user_withdraw_system'
+      && !currentRoundIdSet.has(String(item?.id || ''))
+      && (Number(item?.withdrawnAt || item?.timestamp || 0) || 0) > latestAssistantTimestamp
+    ));
+  if (recentWithdrawMessages.length) {
+    currentRoundMessages = [...currentRoundMessages, ...recentWithdrawMessages]
+      .sort((a, b) => (Number(a?.timestamp || a?.withdrawnAt || 0) || 0) - (Number(b?.timestamp || b?.withdrawnAt || 0) || 0));
+  }
   const latestUserMessage = [...currentRoundMessages].reverse().find(item => Number(item?.timestamp || 0) > 0)
     || [...normalized].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0)
     || null;
   const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
+  /* ========================================================================
+     [区域标注·已完成·用户消息撤回] 撤回系统小字发送给 AI 的文本规则
+     说明：
+     1. withdrawnVisibleToAi=false：只给 AI 发送“用户撤回了一条消息”，不发送撤回原文。
+     2. withdrawnVisibleToAi=true：给 AI 发送撤回提示与撤回原文，让 AI 可结合当前情景回应。
+     3. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const getAiVisibleContentForMessage = (item = {}) => {
+    if (String(item?.type || '') === 'user_withdraw_system') {
+      const base = String(item.content || '用户撤回了一条消息').trim() || '用户撤回了一条消息';
+      if (!item.withdrawnVisibleToAi) return base;
+      const withdrawnText = String(item.withdrawnContent || '').trim();
+      return withdrawnText ? `${base}\n撤回的消息内容：${withdrawnText}` : base;
+    }
+    return String(item.content || '').trim();
+  };
+
   const userInput = currentRoundMessages.map((item, index) => {
-    const content = String(item.content || '').trim();
+    const content = getAiVisibleContentForMessage(item);
     return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
   }).join('\n');
 
   const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
-  const previous = latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized;
+  const currentRoundMessageIds = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
+  const previous = (latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized)
+    .filter(item => !currentRoundMessageIds.has(String(item?.id || '')));
   /* [区域标注·已修改] 强化时间感知：即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。 */
   const conversationTimeContext = {
     latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
@@ -2023,7 +2085,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
        ====================================================================== */
     id: item.id || '',
     role: item.role,
-    content: item.content,
+    content: getAiVisibleContentForMessage(item),
     quote: item.quote || null,
     type: item.type || '',
     stickerUrl: item.stickerUrl || '',
@@ -2056,7 +2118,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
          ====================================================================== */
       id: item.id || '',
       role: item.role,
-      content: item.content,
+      content: getAiVisibleContentForMessage(item),
       quote: item.quote || null,
       type: item.type || '',
       stickerUrl: item.stickerUrl || '',
@@ -2863,6 +2925,38 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
   mask.classList.remove('is-hidden');
 }
 
+
+/* ========================================================================
+   [区域标注·已完成·用户消息撤回] 用户消息撤回确认弹窗
+   说明：
+   1. 使用闲谈应用内 chat-modal 样式，不使用浏览器原生弹窗或原生选择器。
+   2. 用户可选择“AI 不可见 / AI 可见”；真正撤回和 IndexedDB 持久化由 index.js 处理。
+   3. 点击撤回按钮只打开本弹窗，不重绘聊天页，避免闪屏。
+   ======================================================================== */
+export function showUserWithdrawMessageModal(container, message = {}) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const messageId = String(message?.id || '').trim();
+  if (!mask || !panel || !messageId) return;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·用户消息撤回] 应用内撤回确认弹窗 -->
+    <div class="chat-modal-header">
+      <span>撤回消息</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">撤回后聊天界面会显示“用户撤回了一条消息”。请选择下一轮 AI 回复时是否允许 AI 看见这条被撤回的原文。</div>
+      <div class="msg-withdrawn-content">${escapeHtml(getMessageDisplayTextForQuote(message) || '（空消息）')}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="0" type="button">撤回，AI 不可见</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-user-withdraw-message" data-message-id="${escapeHtml(messageId)}" data-ai-visible="1" type="button">${MSG_ICONS.withdraw}<span>撤回，AI 可见</span></button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
+}
 
 /* ========================================================================
    [AI本轮撤回查看弹窗]

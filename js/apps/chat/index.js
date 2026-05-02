@@ -87,6 +87,7 @@ import {
   showClearAllMessagesModal,
   showAiFormatRepairTypeModal,
   showAiWithdrawnMessageModal,
+  showUserWithdrawMessageModal,
   showAiFormatRepairResultModal,
   showEditMessageModal,
   showForwardMessagesModal,
@@ -1651,6 +1652,73 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-edit': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (messageId) showEditMessageModal(container, state, messageId);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·用户消息撤回] 消息气泡功能栏 → 打开撤回确认弹窗
+       说明：
+       1. 只允许撤回用户方消息；AI 消息不显示也不处理该入口。
+       2. 弹窗使用闲谈应用内统一样式，不使用浏览器原生弹窗/选择器。
+       3. 真正删除原气泡与写入系统小字在 confirm-user-withdraw-message 中完成。
+       ======================================================================== */
+    case 'msg-bubble-withdraw': {
+      const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (!message || message.role !== 'user' || String(message.type || '') === 'user_withdraw_system') break;
+      showUserWithdrawMessageModal(container, message);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·用户消息撤回] 确认撤回用户消息并写入 IndexedDB
+       说明：
+       1. 删除被撤回的用户原消息，并在原位置插入 user_withdraw_system 系统小字。
+       2. withdrawnVisibleToAi=false 时，后续 AI 只收到“用户撤回了一条消息”提示，不收到原文。
+       3. withdrawnVisibleToAi=true 时，后续 AI 会收到撤回提示与撤回原文，用于下一轮自然回应。
+       4. 当前聊天记录与会话摘要统一只通过 DB.js / IndexedDB 持久化，不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    case 'confirm-user-withdraw-message': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      const messageIndex = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
+      if (messageIndex < 0) break;
+
+      const sourceMessage = state.currentMessages[messageIndex];
+      if (!sourceMessage || sourceMessage.role !== 'user' || String(sourceMessage.type || '') === 'user_withdraw_system') break;
+
+      const now = Date.now();
+      const withdrawnVisibleToAi = String(target.dataset.aiVisible || '0') === '1';
+      const withdrawnText = String(
+        sourceMessage.type === 'sticker'
+          ? `[表情包] ${sourceMessage.stickerName || sourceMessage.content || ''}`
+          : (sourceMessage.type === 'image'
+              ? `[图片] ${sourceMessage.imageName || sourceMessage.content || ''}`
+              : (sourceMessage.type === 'transfer'
+                  ? `[转账] ${sourceMessage.transferDisplayAmount || sourceMessage.content || ''}`
+                  : (sourceMessage.content || '')))
+      ).trim();
+
+      state.currentMessages.splice(messageIndex, 1, {
+        id: `user_withdraw_system_${now}_${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        type: 'user_withdraw_system',
+        content: '用户撤回了一条消息',
+        withdrawnContent: withdrawnText,
+        withdrawnVisibleToAi,
+        withdrawnAt: now,
+        originalMessageId: messageId,
+        timestamp: now
+      });
+
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      closeModal(container);
+      refreshCurrentMessageListOnly(container, state);
       break;
     }
 
