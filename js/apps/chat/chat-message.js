@@ -2732,7 +2732,7 @@ export function showChatAvatarUrlModal(container) {
   if (!mask || !panel) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·当前会话头像URL输入弹窗] -->
+    <!-- [区域标注·已完成·当前会话头像URL输入弹窗按钮缩小去图标] -->
     <div class="chat-modal-header">
       <span>头像 URL</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -2744,7 +2744,7 @@ export function showChatAvatarUrlModal(container) {
     </div>
     <div class="chat-modal-footer">
       <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-chat-avatar-url" type="button">${MSG_ICONS.link}<span>继续</span></button>
+      <button class="chat-modal-btn chat-modal-btn--primary msg-avatar-url-modal-btn" data-action="confirm-chat-avatar-url" type="button">继续</button>
     </div>
   `;
 
@@ -2759,7 +2759,7 @@ export function showChatAvatarCropModal(container, { imageUrl = '', source = 'lo
   if (!mask || !panel || !safeImageUrl) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·当前会话头像裁剪弹窗] -->
+    <!-- [区域标注·已完成·当前会话头像裁剪弹窗按钮缩小去图标] -->
     <div class="chat-modal-header">
       <span>裁剪头像</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -2784,7 +2784,7 @@ export function showChatAvatarCropModal(container, { imageUrl = '', source = 'lo
     <div class="chat-modal-footer msg-avatar-crop-footer">
       <button class="chat-modal-btn chat-modal-btn--secondary" data-action="save-chat-avatar-original" type="button">原图头像</button>
       <button class="chat-modal-btn chat-modal-btn--secondary" data-action="save-chat-avatar-compressed" type="button">自动压缩图片</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="save-chat-avatar-cropped" type="button">${MSG_ICONS.check}<span>保存使用</span></button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="save-chat-avatar-cropped" type="button">保存使用</button>
     </div>
   `;
 
