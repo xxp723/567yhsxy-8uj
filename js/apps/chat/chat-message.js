@@ -267,11 +267,13 @@ function renderQuotePreview(quote = {}, variant = 'bubble') {
 }
 
 /* ========================================================================
-   [区域标注·已完成·聊天记录搜索] 搜索匹配与面板渲染工具
+   [区域标注·已完成·聊天记录搜索输入法与浮层修复] 搜索匹配与面板渲染工具
    说明：
    1. 只搜索当前运行时 currentMessages，用户与 AI 消息都纳入范围。
    2. 不写入 IndexedDB，不使用 localStorage/sessionStorage，不做双份存储兜底。
-   3. 搜索框不限制输入字数；输入时局部刷新结果框，避免聊天页整页重绘闪屏。
+   3. 搜索框不限制输入字数；输入时只局部刷新结果框，不替换正在输入的 input DOM。
+   4. 已修复移动端输入法因 input 被 outerHTML 重建而每输入一个字就失焦/收起的问题。
+   5. 搜索浮层由 CSS 覆盖在顶栏下方，不挤压消息列表，避免页面整体上移与触摸穿透。
    ======================================================================== */
 function getChatSearchMessageText(message = {}) {
   const baseText = getMessageDisplayTextForQuote(message);
@@ -310,16 +312,29 @@ function renderChatSearchResultBubble(item = {}, session = {}, userProfile = {})
   `;
 }
 
-function renderChatMessageSearchPanelHtml(session = {}, messages = [], options = {}) {
-  const searchOpen = Boolean(options.chatSearchOpen);
+function renderChatMessageSearchResultsHtml(session = {}, messages = [], options = {}) {
   const keyword = String(options.chatSearchKeyword || '');
   const matches = getChatSearchMatches(messages, keyword);
   const userProfile = options.userProfile || {};
 
+  return keyword
+    ? (matches.length
+        ? matches.map(item => renderChatSearchResultBubble(item, session, userProfile)).join('')
+        : `<div class="msg-search-panel__empty">没有命中“${escapeHtml(keyword)}”</div>`)
+    : `<div class="msg-search-panel__empty">输入关键字后，用户与 AI 的相关消息会显示在这里。</div>`;
+}
+
+function renderChatMessageSearchPanelHtml(session = {}, messages = [], options = {}) {
+  const searchOpen = Boolean(options.chatSearchOpen);
+  const keyword = String(options.chatSearchKeyword || '');
+
   return `
     <!-- ======================================================================
-         [区域标注·已完成·聊天记录搜索] 顶栏下浮搜索框与命中结果
-         说明：点击顶栏放大镜后从顶栏下边框向下浮现；搜索仅使用当前运行时消息数组，不涉及持久化存储。
+         [区域标注·已完成·聊天记录搜索输入法与浮层修复] 顶栏下浮搜索框与命中结果
+         说明：
+         1. 点击顶栏放大镜后从顶栏下边框向下浮现；搜索仅使用当前运行时消息数组。
+         2. 输入时只替换 data-role="msg-search-results" 内容，不替换 input DOM，避免输入法被关闭。
+         3. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
          ====================================================================== -->
     <div class="msg-search-panel ${searchOpen ? 'is-open' : ''}" data-role="msg-search-panel">
       <div class="msg-search-panel__box">
@@ -331,11 +346,7 @@ function renderChatMessageSearchPanelHtml(session = {}, messages = [], options =
                placeholder="搜索聊天记录">
       </div>
       <div class="msg-search-panel__results" data-role="msg-search-results">
-        ${keyword
-          ? (matches.length
-              ? matches.map(item => renderChatSearchResultBubble(item, session, userProfile)).join('')
-              : `<div class="msg-search-panel__empty">没有命中“${escapeHtml(keyword)}”</div>`)
-          : `<div class="msg-search-panel__empty">输入关键字后，用户与 AI 的相关消息会显示在这里。</div>`}
+        ${renderChatMessageSearchResultsHtml(session, messages, options)}
       </div>
     </div>
   `;
@@ -2783,30 +2794,50 @@ export function syncChatMessageSearchPanel(container, state) {
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!conversation || !session) return false;
 
-  const existingPanel = conversation.querySelector('[data-role="msg-search-panel"]');
-  const nextHtml = renderChatMessageSearchPanelHtml(session, state.currentMessages, {
+  const searchOptions = {
     userProfile: state.profile,
     chatSearchOpen: state.chatMessageSearchOpen,
     chatSearchKeyword: state.chatMessageSearchKeyword
-  });
+  };
 
-  if (existingPanel) {
-    existingPanel.outerHTML = nextHtml;
-  } else {
-    conversation.querySelector('.msg-top-bar')?.insertAdjacentHTML('afterend', nextHtml);
+  let panel = conversation.querySelector('[data-role="msg-search-panel"]');
+  if (!panel) {
+    conversation.querySelector('.msg-top-bar')?.insertAdjacentHTML(
+      'afterend',
+      renderChatMessageSearchPanelHtml(session, state.currentMessages, searchOptions)
+    );
+    panel = conversation.querySelector('[data-role="msg-search-panel"]');
   }
+
+  if (!panel) return false;
+
+  /* ======================================================================
+     [区域标注·已完成·聊天记录搜索输入法与浮层修复] 搜索面板局部同步
+     说明：
+     1. 输入过程中禁止 outerHTML 替换整个搜索面板，尤其不能替换正在输入的 input。
+     2. 这里只同步开合 class、必要的 input value 与结果列表 innerHTML，移动端输入法可连续输入/删除。
+     3. 搜索状态仅为运行时 UI 状态，不读写 IndexedDB/localStorage/sessionStorage。
+     ====================================================================== */
+  panel.classList.toggle('is-open', Boolean(state.chatMessageSearchOpen));
 
   const searchBtn = conversation.querySelector('[data-action="toggle-msg-search"]');
   if (searchBtn) searchBtn.classList.toggle('is-active', Boolean(state.chatMessageSearchOpen));
 
-  if (state.chatMessageSearchOpen) {
+  const input = panel.querySelector('[data-role="msg-search-input"]');
+  const keyword = String(state.chatMessageSearchKeyword || '');
+  if (input && input.value !== keyword) input.value = keyword;
+
+  const results = panel.querySelector('[data-role="msg-search-results"]');
+  if (results) {
+    results.innerHTML = renderChatMessageSearchResultsHtml(session, state.currentMessages, searchOptions);
+  }
+
+  if (state.chatMessageSearchOpen && input && document.activeElement !== input) {
     window.setTimeout(() => {
-      const input = conversation.querySelector('[data-role="msg-search-input"]');
-      if (input) {
-        input.focus();
-        const len = String(input.value || '').length;
-        input.setSelectionRange(len, len);
-      }
+      if (!state.chatMessageSearchOpen || document.activeElement === input) return;
+      input.focus({ preventScroll: true });
+      const len = String(input.value || '').length;
+      input.setSelectionRange(len, len);
     }, 30);
   }
 

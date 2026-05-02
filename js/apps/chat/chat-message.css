@@ -170,11 +170,13 @@
 }
 
 /* ========================================================================
-   [区域标注·已完成·聊天记录搜索] 顶栏放大镜按钮与下滑搜索面板
+   [区域标注·已完成·聊天记录搜索输入法与浮层修复] 顶栏放大镜按钮与下滑搜索面板
    说明：
    1. 仅作用于聊天消息界面顶栏“三点”左侧的 IconPark 放大镜按钮。
    2. 搜索框从顶栏下边框向下浮现，结果区为透明框，可上下滑动查看所有命中气泡。
-   3. 本区域只负责 UI 样式；搜索状态仅在 index.js 运行时保存，不使用 localStorage/sessionStorage。
+   3. 搜索面板改为绝对浮层覆盖在消息列表上方，不参与 flex 高度计算，避免页面整体上移。
+   4. 本区域只负责 UI 样式；搜索状态仅在 index.js 运行时保存，不使用 localStorage/sessionStorage。
+   5. 配合 chat-message.js 的局部结果刷新，输入时不重建 input，避免移动端输入法被关闭。
    ======================================================================== */
 .msg-top-bar__search {
   width: 28px;
@@ -207,23 +209,24 @@
 }
 
 .msg-search-panel {
-  flex-shrink: 0;
-  padding: 0 12px;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 64px;
+  z-index: 18;
   max-height: 0;
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-10px);
   overflow: hidden;
   pointer-events: none;
-  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease, padding 0.18s ease;
-  position: relative;
-  z-index: 9;
+  touch-action: manipulation;
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
 .msg-search-panel.is-open {
-  max-height: min(44vh, 320px);
+  max-height: min(46vh, 336px);
   opacity: 1;
   transform: translateY(0);
-  padding: 0 12px 10px;
   pointer-events: auto;
 }
 
@@ -275,8 +278,10 @@
 
 .msg-search-panel__results {
   margin-top: 8px;
-  max-height: min(32vh, 232px);
+  max-height: min(34vh, 248px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 8px;
   border-radius: 22px;
   background: rgba(255, 252, 247, 0.34);
