@@ -5,15 +5,15 @@ import { Logger } from '../../utils/Logger.js';
  * 用途: 设置应用 - 生图 API 配置页
  * 说明:
  * 1) 本页只处理 settings.imageApi 配置，持久化通过 SettingsStore -> DB.js / IndexedDB。
- * 2) 禁止 localStorage/sessionStorage，不做双份存储兜底。
+ * 2) 禁止浏览器本地键值存储，不做双份存储兜底。
  * 3) 硅基流动兼容接口地址仅作为内部常量使用，不在 UI 中暴露。
  * 4) 模型选择使用应用内弹窗，不使用浏览器原生选择器。
  */
 
-/* ===== 设置：生图 API 内部接口常量 START =====
+/* ===== 设置：生图 API 内部接口常量（已完成） START =====
    说明：硅基流动兼容接口地址只在请求函数内部使用；不要渲染到页面。 */
 const SILICONFLOW_IMAGE_BASE_URL = 'https://api.siliconflow.cn/v1';
-/* ===== 设置：生图 API 内部接口常量 END ===== */
+/* ===== 设置：生图 API 内部接口常量（已完成） END ===== */
 
 const IMAGE_MODEL_KEYWORDS = [
   'image',
@@ -49,6 +49,8 @@ const ICONS = {
   unselected: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/></svg>`,
   // IconPark: check / 成功
   ok: `<svg viewBox="0 0 48 48" fill="none" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path d="M10 25L20 34L38 14" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // IconPark: delete / 删除预览
+  delete: `<svg viewBox="0 0 48 48" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M9 10H39" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M20 20V33" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M28 20V33" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M14 10L16 39H32L34 10" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M19 10V6H29V10" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   // IconPark: close-one / 错误
   error: `<svg viewBox="0 0 48 48" fill="none" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M18 18L30 30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M30 18L18 30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
@@ -70,6 +72,7 @@ function getDefaultImageApiSettings() {
   return {
     version: 1,
     provider: 'siliconflow',
+    enabled: false,
     apiKey: '',
     model: '',
     availableModels: [],
@@ -86,6 +89,7 @@ function normalizeImageApiSettings(input) {
   return {
     version: 1,
     provider: 'siliconflow',
+    enabled: Boolean(source.enabled),
     apiKey: String(source.apiKey || '').trim(),
     model,
     availableModels: uniqueStrings([...(Array.isArray(source.availableModels) ? source.availableModels : []), model]),
@@ -108,7 +112,7 @@ function isImageGenerationModel(item) {
 
   return IMAGE_MODEL_KEYWORDS.some((keyword) => id.includes(keyword) || typeText.includes(keyword));
 }
-/* ===== 设置：生图模型过滤模块 END ===== */
+/* ===== 设置：生图模型过滤模块（已完成） END ===== */
 
 function renderModelTrigger(api) {
   const hasModels = api.availableModels.length > 0;
@@ -197,6 +201,74 @@ export function renderImageApiSection({ current }) {
             color: var(--c-text-main, #4A342A);
             font-size: 14px;
             font-weight: 700;
+          }
+          #settings-image-api .image-api-head--preview {
+            align-items: center;
+          }
+          #settings-image-api .image-api-delete-preview {
+            width: 34px;
+            height: 34px;
+            border: 1px solid rgba(125, 90, 68, 0.14);
+            border-radius: 999px;
+            background: rgba(215, 201, 184, 0.22);
+            color: var(--c-text-main, #4A342A);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          }
+          #settings-image-api .image-api-enable-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 18px;
+            background: rgba(215, 201, 184, 0.18);
+            border: 1px solid rgba(125, 90, 68, 0.12);
+          }
+          #settings-image-api .image-api-enable-row__text {
+            display: grid;
+            gap: 4px;
+            min-width: 0;
+          }
+          #settings-image-api .image-api-enable-row__title {
+            color: var(--c-text-main, #4A342A);
+            font-size: 13px;
+            font-weight: 700;
+          }
+          #settings-image-api .image-api-enable-row__desc {
+            color: rgba(74, 52, 42, 0.62);
+            font-size: 11px;
+            line-height: 1.5;
+          }
+          #settings-image-api .image-api-switch {
+            width: 52px;
+            height: 30px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(125, 90, 68, 0.22);
+            padding: 3px;
+            flex: 0 0 auto;
+            cursor: pointer;
+            transition: background 0.18s ease;
+          }
+          #settings-image-api .image-api-switch__knob {
+            display: block;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #fffdf8;
+            box-shadow: 0 2px 8px rgba(84, 58, 44, 0.22);
+            transform: translateX(0);
+            transition: transform 0.18s ease;
+          }
+          #settings-image-api .image-api-switch.is-on {
+            background: var(--c-text-main, #4A342A);
+          }
+          #settings-image-api .image-api-switch.is-on .image-api-switch__knob {
+            transform: translateX(22px);
           }
           #settings-image-api .image-api-badge {
             padding: 6px 10px;
@@ -467,7 +539,7 @@ export function renderImageApiSection({ current }) {
           }
         </style>
 
-        <!-- ===== 设置：生图 API 配置界面 START =====
+        <!-- ===== 设置：生图 API 配置界面（已完成） START =====
              说明：本区域用于配置硅基流动兼容生图接口；UI 不展示接口 URL。 -->
         <section class="ui-card image-api-card">
           <div class="image-api-head">
@@ -477,6 +549,19 @@ export function renderImageApiSection({ current }) {
             </h3>
             <span class="image-api-badge">硅基流动兼容接口</span>
           </div>
+
+          <!-- ===== 设置：生图 API 启用开关（已完成） START =====
+               说明：点击滑动开关后立即写入 SettingsStore -> DB.js / IndexedDB；不依赖“保存设置”。 -->
+          <div class="image-api-enable-row">
+            <div class="image-api-enable-row__text">
+              <span class="image-api-enable-row__title">启用生图API</span>
+              <span class="image-api-enable-row__desc">开启后小手机网页才会使用这里配置的生图 API。</span>
+            </div>
+            <button class="image-api-switch ${api.enabled ? 'is-on' : ''}" type="button" role="switch" aria-checked="${api.enabled ? 'true' : 'false'}" data-action="toggle-image-api-enabled">
+              <span class="image-api-switch__knob"></span>
+            </button>
+          </div>
+          <!-- ===== 设置：生图 API 启用开关（已完成） END ===== -->
 
           <div class="image-api-field">
             <label class="image-api-label" for="image-api-key">API Key</label>
@@ -514,17 +599,23 @@ export function renderImageApiSection({ current }) {
         </section>
 
         <section class="ui-card image-api-card">
-          <div class="image-api-head">
+          <div class="image-api-head image-api-head--preview">
             <h3 class="image-api-title">
               <span class="image-api-icon-inline">${ICONS.image}</span>
               <span>生图预览</span>
             </h3>
+            <!-- ===== 设置：生图预览删除按钮（已完成） START =====
+                 说明：点击后立即清空 previewImage 并写入 IndexedDB，减少不必要的数据存储。 -->
+            <button class="image-api-delete-preview" type="button" data-action="delete-image-api-preview" aria-label="删除预览生图">
+              <span class="image-api-icon-inline">${ICONS.delete}</span>
+            </button>
+            <!-- ===== 设置：生图预览删除按钮（已完成） END ===== -->
           </div>
           <div id="image-api-preview" class="image-api-preview">
             ${api.previewImage ? `<img src="${escapeHtml(api.previewImage)}" alt="生图预览">` : '<span>测试生图后会在这里显示预览</span>'}
           </div>
         </section>
-        <!-- ===== 设置：生图 API 配置界面 END ===== -->
+        <!-- ===== 设置：生图 API 配置界面（已完成） END ===== -->
 
         ${renderImageModelModal(api)}
       </div>
@@ -536,6 +627,7 @@ function collectImageApiFromForm(container, fallback) {
   const normalizedFallback = normalizeImageApiSettings(fallback);
   return normalizeImageApiSettings({
     ...normalizedFallback,
+    enabled: normalizedFallback.enabled,
     apiKey: container.querySelector('#image-api-key')?.value || '',
     model: container.querySelector('[data-role="image-api-selected-model"]')?.dataset?.model || normalizedFallback.model,
     availableModels: normalizedFallback.availableModels,
@@ -658,11 +750,36 @@ export function bindImageApiEvents(container, { settings }) {
       '[data-action="choose-image-api-model"]',
       '[data-action="fetch-image-api-models"]',
       '[data-action="save-image-api-settings"]',
-      '[data-action="test-image-api-generate"]'
+      '[data-action="test-image-api-generate"]',
+      '[data-action="toggle-image-api-enabled"]',
+      '[data-action="delete-image-api-preview"]'
     ].join(', '));
     if (!target) return;
 
     const action = target.getAttribute('data-action');
+
+    if (action === 'toggle-image-api-enabled') {
+      const enabled = !target.classList.contains('is-on');
+      const snapshot = collectImageApiFromForm(container, currentImageApiCache);
+      currentImageApiCache = normalizeImageApiSettings({ ...snapshot, enabled });
+      await settings.update({ imageApi: currentImageApiCache });
+      target.classList.toggle('is-on', enabled);
+      target.setAttribute('aria-checked', enabled ? 'true' : 'false');
+      setResult(container, 'success', enabled ? '生图 API 已启用' : '生图 API 已关闭');
+      Logger.info(enabled ? '生图 API 已启用' : '生图 API 已关闭');
+      return;
+    }
+
+    if (action === 'delete-image-api-preview') {
+      const snapshot = collectImageApiFromForm(container, currentImageApiCache);
+      currentImageApiCache = normalizeImageApiSettings({ ...snapshot, previewImage: '' });
+      await settings.update({ imageApi: currentImageApiCache });
+      const preview = container.querySelector('#image-api-preview');
+      if (preview) preview.innerHTML = '<span>测试生图后会在这里显示预览</span>';
+      setResult(container, 'success', '已删除预览生图并清理存储');
+      Logger.info('生图 API 预览图已删除');
+      return;
+    }
 
     if (action === 'open-image-api-model-modal') {
       openModelModal(container, currentImageApiCache);
