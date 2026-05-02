@@ -16,10 +16,26 @@
   <script>
     (() => {
       document.documentElement.setAttribute('data-booting-fullscreen-check', '1');
+
+      /* ==========================================================================
+         [区域标注·本次反馈修复·桌面静态布局防闪旧]
+         说明：
+         - index.html 内置静态桌面只用于基础占位和 file:// 预览。
+         - HTTP 模块启动时，先隐藏桌面与 Dock，等 main.js 读取 db.js/IndexedDB
+           并套用最新桌面编辑布局后再显示。
+         - 禁止使用 localStorage/sessionStorage，不写双份兜底存储。
+         ========================================================================== */
+      document.documentElement.setAttribute('data-desktop-layout-booting', '1');
     })();
   </script>
   <style id="boot-fullscreen-guard">
     html[data-booting-fullscreen-check="1"] body {
+      visibility: hidden;
+    }
+
+    /* [区域标注·本次反馈修复·桌面静态布局防闪旧] 隐藏静态桌面，直到最新 IndexedDB 布局套用完成 */
+    html[data-desktop-layout-booting="1"] #desktop-container,
+    html[data-desktop-layout-booting="1"] #dock-container {
       visibility: hidden;
     }
   </style>

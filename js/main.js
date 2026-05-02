@@ -152,6 +152,16 @@ class MiniPhoneApp {
          ========================================================================== */
       await this.desktopEditMode.initializeAfterDesktopRender();
 
+      /* ==========================================================================
+         [区域标注·本次反馈修复·桌面静态布局防闪旧]
+         说明：
+         - index.html 的静态桌面会在模块启动前存在，可能短暂显示旧布局。
+         - 必须等 db.js / IndexedDB 中的最新桌面编辑布局与 Dock 状态套用完成后，
+           才移除启动隐藏标记，让用户直接看到最新桌面。
+         - 禁止使用 localStorage/sessionStorage，不写双份兜底存储。
+         ========================================================================== */
+      this.revealDesktopAfterLatestLayoutReady();
+
       // 6) 绑定交互
       this.gestures.bind();
       this.dragDrop.bind();
@@ -173,10 +183,15 @@ class MiniPhoneApp {
       this.eventBus.emit('app:ready', { time: Date.now() });
       window.__MINIPHONE_APP_READY__ = true;
     } catch (error) {
+      this.revealDesktopAfterLatestLayoutReady();
       window.__MINIPHONE_PERSISTENT_KV__ = null;
       Logger.error('MiniPhone 启动失败', error);
       window.__MINIPHONE_APP_READY__ = false;
     }
+  }
+
+  revealDesktopAfterLatestLayoutReady() {
+    document.documentElement.removeAttribute('data-desktop-layout-booting');
   }
 
   setupClock() {
