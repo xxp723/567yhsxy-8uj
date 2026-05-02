@@ -690,6 +690,7 @@ export async function mount(container, context) {
         value: normalized,
         updatedAt: Date.now()
       });
+      emitArchiveDataChanged();
     } catch (_) {
       // 忽略 IndexedDB 写入失败，避免阻断 UI
     }
@@ -930,6 +931,19 @@ export async function mount(container, context) {
     context.eventBus?.emit('archive:active-mask-changed', {
       maskId: activeMask?.id || '',
       mask: activeMask
+    });
+  };
+
+  /* ========================================================================
+     [区域标注·已完成·档案联系人解绑/删除后闲谈级联清理通知]
+     说明：
+     1. 档案保存绑定关系、删除角色或规范化角色绑定后，通知闲谈应用同步清理已失效联系人。
+     2. 只发送当前标准化档案数据，不读写额外存储；持久化仍仅由 DB.js / IndexedDB 完成。
+     3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不新增双份存储兜底。
+     ======================================================================== */
+  const emitArchiveDataChanged = () => {
+    context.eventBus?.emit('archive:data-changed', {
+      data: state.data
     });
   };
 

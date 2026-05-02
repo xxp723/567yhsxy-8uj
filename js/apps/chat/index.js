@@ -206,6 +206,135 @@ function syncMessageInputAutoHeight(input) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·档案联系人解绑/删除后闲谈级联清理]
+   说明：
+   1. 当档案应用取消当前面具绑定角色，或删除已绑定角色后，闲谈会同步清理该联系人。
+   2. 清理范围仅限当前面具下的通讯录、聊天列表、隐藏列表、朋友圈、收藏来源、当前聊天消息与聊天设置。
+   3. 持久化统一只写 DB.js / IndexedDB，不使用 localStorage/sessionStorage，不写双份兜底存储。
+   4. 不使用长文本字段过滤逻辑；只按联系人/角色 ID 与旧数据名称做精确级联清理。
+   ========================================================================== */
+async function syncArchiveBoundContactCleanup(container, state, db, archiveData) {
+  const safeArchive = archiveData && typeof archiveData === 'object' ? archiveData : {};
+  const masks = Array.isArray(safeArchive.masks) ? safeArchive.masks : [];
+  const activeMask = masks.find(mask => String(mask?.id || '') === String(state.activeMaskId || '')) || null;
+  const boundRoleIds = new Set(Array.isArray(activeMask?.roleBindingIds) ? activeMask.roleBindingIds.map(String) : []);
+  const contacts = normalizeContacts(state.contacts);
+  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+  const hiddenChatIds = Array.isArray(state.hiddenChatIds) ? state.hiddenChatIds.map(String) : [];
+  const moments = Array.isArray(state.moments) ? state.moments : [];
+  const favoriteData = normalizeFavoriteData(state.favoriteData);
+
+  const removedContactIds = new Set();
+  const removedContactNames = new Set();
+
+  contacts.forEach(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const roleId = String(contact?.roleId || contactId).trim();
+    if (!roleId || !boundRoleIds.has(roleId)) {
+      if (contactId) removedContactIds.add(contactId);
+      if (roleId) removedContactIds.add(roleId);
+      const name = String(contact?.name || '').trim();
+      if (name) removedContactNames.add(name);
+    }
+  });
+
+  sessions.forEach(session => {
+    const sessionId = String(session?.id || '').trim();
+    const roleId = String(session?.roleId || sessionId).trim();
+    const type = String(session?.type || 'private');
+    if (type !== 'group' && roleId && !boundRoleIds.has(roleId)) {
+      if (sessionId) removedContactIds.add(sessionId);
+      if (roleId) removedContactIds.add(roleId);
+      const name = String(session?.name || '').trim();
+      if (name) removedContactNames.add(name);
+    }
+  });
+
+  if (!removedContactIds.size) {
+    state.contacts = contacts;
+    state.sessions = sessions;
+    state.hiddenChatIds = hiddenChatIds;
+    state.moments = moments;
+    state.favoriteData = favoriteData;
+    return false;
+  }
+
+  const isRemovedId = value => removedContactIds.has(String(value || '').trim());
+  const isRemovedName = value => {
+    const name = String(value || '').trim();
+    return !!name && removedContactNames.has(name);
+  };
+
+  const nextContacts = contacts.filter(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const roleId = String(contact?.roleId || contactId).trim();
+    return !isRemovedId(contactId) && !isRemovedId(roleId);
+  });
+
+  const nextSessions = sessions.filter(session => {
+    const sessionId = String(session?.id || '').trim();
+    const roleId = String(session?.roleId || sessionId).trim();
+    return !isRemovedId(sessionId) && !isRemovedId(roleId);
+  });
+
+  const nextHiddenChatIds = hiddenChatIds.filter(id => !isRemovedId(id));
+
+  const nextMoments = moments
+    .filter(moment => {
+      const authorIds = [
+        moment?.authorId,
+        moment?.authorRoleId,
+        moment?.roleId,
+        moment?.contactId,
+        moment?.userId
+      ];
+      return !authorIds.some(isRemovedId) && !isRemovedName(moment?.authorName);
+    })
+    .map(moment => ({
+      ...moment,
+      likes: Array.isArray(moment?.likes)
+        ? moment.likes.filter(like => {
+            if (typeof like === 'string') return !isRemovedId(like) && !isRemovedName(like);
+            return ![like?.id, like?.roleId, like?.contactId, like?.userId].some(isRemovedId) && !isRemovedName(like?.name || like?.authorName);
+          })
+        : moment?.likes,
+      comments: Array.isArray(moment?.comments)
+        ? moment.comments.filter(comment => (
+            ![comment?.authorId, comment?.authorRoleId, comment?.roleId, comment?.contactId, comment?.userId].some(isRemovedId)
+            && !isRemovedName(comment?.authorName)
+          ))
+        : moment?.comments
+    }));
+
+  const nextFavoriteData = normalizeFavoriteData({
+    ...favoriteData,
+    items: favoriteData.items.filter(item => !isRemovedId(item?.sourceChatId))
+  });
+
+  const removedIds = Array.from(removedContactIds);
+  state.contacts = nextContacts;
+  state.sessions = nextSessions;
+  state.hiddenChatIds = nextHiddenChatIds;
+  state.moments = nextMoments;
+  state.favoriteData = nextFavoriteData;
+  if (isRemovedId(state.currentChatId)) {
+    closeChatMessage(container, state);
+  }
+
+  await Promise.all([
+    dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+    dbPut(db, DATA_KEY_HIDDEN_CHAT_IDS(state.activeMaskId), state.hiddenChatIds),
+    dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments),
+    dbPut(db, DATA_KEY_FAVORITES(state.activeMaskId), state.favoriteData),
+    ...removedIds.map(id => dbPut(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + id, [])),
+    ...removedIds.map(id => dbPut(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, id), null))
+  ]);
+
+  return true;
+}
+
+/* ==========================================================================
    [区域标注] mount — 应用挂载入口
    说明：由 AppManager 调用，接收容器元素和上下文
    ========================================================================== */
@@ -350,6 +479,8 @@ export async function mount(container, context) {
     chatConsoleLogs: []
   };
 
+  await syncArchiveBoundContactCleanup(container, state, db, archiveData);
+
   /* [修改4·修改6] 根据当前面具构建 profile 数据 */
   buildProfileFromMask(state);
 
@@ -437,6 +568,8 @@ export async function mount(container, context) {
     /* 加载新面具的数据 */
     await loadMaskData(state, db, newMaskId);
 
+    await syncArchiveBoundContactCleanup(container, state, db, freshData);
+
     /* 重建 profile */
     buildProfileFromMask(state);
 
@@ -444,6 +577,32 @@ export async function mount(container, context) {
     container.innerHTML = buildAppShell(state);
   };
   eventBus.on('archive:active-mask-changed', onMaskChanged);
+
+  /* ========================================================================
+     [区域标注·已完成·档案联系人解绑/删除后闲谈级联清理事件]
+     说明：
+     1. 档案应用保存绑定关系或删除角色后，会通知闲谈刷新档案缓存。
+     2. 闲谈只清理当前面具下已经不再绑定的联系人及其相关显示数据。
+     3. 全程仅使用 DB.js / IndexedDB，不使用浏览器同步键值存储。
+     ======================================================================== */
+  const onArchiveDataChanged = async (payload) => {
+    if (state.destroyed) return;
+    const freshData = (payload?.data && typeof payload.data === 'object')
+      ? payload.data
+      : ((await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID)) || {});
+    const freshMasks = Array.isArray(freshData.masks) ? freshData.masks : [];
+    state.archiveMasks = freshMasks;
+    state.archiveCharacters = Array.isArray(freshData.characters) ? freshData.characters : [];
+    state.archiveSupportingRoles = Array.isArray(freshData.supportingRoles) ? freshData.supportingRoles : [];
+    state.archiveRelations = Array.isArray(freshData.relations) ? freshData.relations : [];
+
+    const changed = await syncArchiveBoundContactCleanup(container, state, db, freshData);
+    if (!changed) return;
+
+    buildProfileFromMask(state);
+    container.innerHTML = buildAppShell(state);
+  };
+  eventBus.on('archive:data-changed', onArchiveDataChanged);
 
   /* [区域标注] 返回实例（含 destroy 清理函数） */
   return {
@@ -480,6 +639,7 @@ export async function mount(container, context) {
       container.removeEventListener('pointerleave', chatListLongPressHandlers.pointerleave);
       container.removeEventListener('contextmenu', chatListLongPressHandlers.contextmenu);
       eventBus.off('archive:active-mask-changed', onMaskChanged);
+      eventBus.off('archive:data-changed', onArchiveDataChanged);
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
     }
@@ -2935,6 +3095,9 @@ async function loadMaskData(state, db, maskId) {
   state.contactGroups = normalizeContactGroups(contactGroups);
   state.activeContactGroupId = 'all';
   state.moments = moments || [];
+  state.currentChatId = null;
+  state.currentMessages = [];
+  resetMessageSelectionState(state);
   /* [区域标注·已完成·本次钱包需求] 切换面具时同步加载对应钱包数据 */
   state.walletData = normalizeWalletData(walletData);
   state.walletDraftCurrency = '';
