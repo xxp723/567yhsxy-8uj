@@ -921,6 +921,130 @@
   height: 13px;
 }
 
+/* ========================================================================
+   [区域标注·已完成·输入框表情包名称联想] 输入栏上方联想表情包
+   说明：
+   1. 用户在聊天输入框输入文字时显示，按表情包名称包含输入关键词进行关联。
+   2. 结果横向滑动，点击表情包项直接按现有 send-msg-sticker 流程发送到消息界面。
+   3. 仅为展示样式，不涉及任何持久化存储；数据来源仍由 JS 运行时从 DB.js / IndexedDB 加载。
+   4. 保持闲谈暖色主题与底部输入栏风格统一，不使用浏览器原生弹窗或选择器。
+   ======================================================================== */
+.msg-sticker-suggest {
+  position: relative;
+  z-index: 3;
+  margin: 0 8px -4px;
+  padding: 9px 10px 12px;
+  border-radius: 18px 18px 10px 10px;
+  background: rgba(255, 252, 247, 0.97);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-bottom-color: rgba(74, 52, 42, 0.04);
+  box-shadow: 0 12px 26px rgba(74, 52, 42, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: msgStickerSuggestPop 0.16s ease-out;
+}
+
+@keyframes msgStickerSuggestPop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.msg-sticker-suggest__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.msg-sticker-suggest__title {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: rgba(74, 52, 42, 0.72);
+}
+
+.msg-sticker-suggest__keyword {
+  max-width: 46%;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.08);
+  color: rgba(74, 52, 42, 0.62);
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-sticker-suggest__scroller {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1px;
+}
+
+.msg-sticker-suggest__item {
+  flex: 0 0 70px;
+  min-width: 0;
+  border: none;
+  border-radius: 15px;
+  background: rgba(74, 52, 42, 0.055);
+  color: #4A342A;
+  padding: 7px 6px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-sticker-suggest__item:active {
+  background: rgba(74, 52, 42, 0.13);
+  transform: scale(0.95);
+}
+
+.msg-sticker-suggest__item img {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.msg-sticker-suggest__item span {
+  width: 100%;
+  font-size: 10px;
+  line-height: 1.2;
+  color: rgba(74, 52, 42, 0.68);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-sticker-suggest__empty {
+  flex: 1 0 100%;
+  border-radius: 14px;
+  background: rgba(74, 52, 42, 0.045);
+  color: rgba(74, 52, 42, 0.48);
+  padding: 12px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* ==========================================================================
    [区域标注·本次需求] 咖啡按钮升起功能区
    说明：点击底栏最左侧咖啡按钮后，从输入栏上边框升起的圆角长方形功能区。

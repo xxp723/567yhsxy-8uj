@@ -99,7 +99,8 @@ import {
   updateChatAvatarCropPreview,
   buildChatAvatarFromCropModal,
   createQuotePayloadFromMessage,
-  syncPendingQuoteComposer
+  syncPendingQuoteComposer,
+  syncStickerInputSuggestions
 } from './chat-message.js';
 import {
   renderProfile,
@@ -1079,11 +1080,18 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       refreshPanel(container, state, 'chatList');
       break;
 
-    /* [区域标注] 聊天消息页面 — 发送按钮 */
+    /* ========================================================================
+       [区域标注·已完成·输入框表情包名称联想] 聊天消息页面 — 发送按钮
+       说明：
+       1. 发送文字或仅触发 AI 回复前，清空输入框并局部移除联想表情包条。
+       2. 不重绘聊天消息页，避免输入栏与页面闪屏。
+       3. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
+       ======================================================================== */
     case 'msg-send': {
       const input = container.querySelector('[data-role="msg-input"]');
       const value = String(input?.value || '').trim();
       if (input) input.value = '';
+      syncStickerInputSuggestions(container, state, '');
 
       await addChatConsoleLog(container, state, db, 'info', value ? `发送消息：${value}` : '发送触发：仅请求 AI 回复');
 
@@ -1455,8 +1463,19 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     case 'send-msg-sticker':
-      /* [区域标注·本次需求1] 点选表情包只发送，不触发 AI；用户点击纸飞机后才调用 API */
+      /* ========================================================================
+         [区域标注·已完成·输入框表情包名称联想] 点选联想/面板表情包后发送
+         说明：
+         1. 点选表情包只发送表情包消息，不触发 AI；用户点击纸飞机后才调用 API。
+         2. 若来自输入框联想条，发送后清空输入框并局部移除联想结果。
+         3. 本区域不新增持久化存储，不使用 localStorage/sessionStorage。
+         ======================================================================== */
       await sendStickerMessage(container, state, db, target.dataset.stickerId, settingsManager, { triggerAi: false });
+      {
+        const input = container.querySelector('[data-role="msg-input"]');
+        if (input) input.value = '';
+        syncStickerInputSuggestions(container, state, '');
+      }
       break;
 
     /* [区域标注·本次需求] 聊天消息页面 — 魔法棒按钮：删除最新 AI 回复并重新回复 */
@@ -3021,6 +3040,19 @@ function refreshFavoriteSearchResultsOnly(container, state) {
 function handleInput(e, state, container, db) {
   const target = e.target;
 
+  /* ========================================================================
+     [区域标注·已完成·输入框表情包名称联想] 聊天消息输入框实时联想
+     说明：
+     1. 用户在消息输入框输入文字时，按表情包名称包含关系局部显示匹配结果。
+     2. 例如输入“哭”匹配名称含“哭”的表情包；输入“哭哭”只匹配名称含“哭哭”的表情包。
+     3. 只调用 syncStickerInputSuggestions 局部插入/移除联想条，不重绘聊天页，避免闪屏。
+     4. 本区域只读取运行时 state.stickerData，不写持久化存储，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  if (target.matches('[data-role="msg-input"]')) {
+    syncStickerInputSuggestions(container, state, target.value || '');
+    return;
+  }
+
   /* [区域标注] 聊天列表搜索输入 */
   if (target.matches('[data-role="chat-search-input"]')) {
     state.chatSearchKeyword = target.value || '';
@@ -3293,6 +3325,7 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   e.preventDefault();
   const value = target.value;
   target.value = '';
+  syncStickerInputSuggestions(container, state, '');
   /* ===== 闲谈应用：回车只发送用户消息 START ===== */
   await sendMessage(container, state, db, value, settingsManager, { triggerAi: false });
   /* ===== 闲谈应用：回车只发送用户消息 END ===== */
