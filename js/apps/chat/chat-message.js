@@ -22,16 +22,16 @@ import { chat } from './prompt.js';
 import { getVisibleChatSessions } from './chat-list.js';
 
 /* ========================================================================
-   [区域标注·已完成·本次控制台日志开关增强] 聊天控制台日志存储键与工具
+   [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天控制台日志存储键与工具
    说明：
    1. 与 index.js 保持同一 IndexedDB 键规则，严格只走 DB.js（dbPut）。
    2. 日志队列最多 500 条，超出自动删除旧日志。
-   3. 仅在聊天设置开关开启时记录。
+   3. 控制台开关只控制聊天页日志抽屉是否显示；当前会话日志始终在后台记录，方便用户随时打开查看。
    ======================================================================== */
 const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
 
 function appendChatConsoleRuntimeLog(state, level, text) {
-  if (!state?.chatConsoleEnabled || !state?.currentChatId) return false;
+  if (!state?.currentChatId) return false;
   const payload = String(text || '').trim();
   if (!payload) return false;
   const ts = Date.now();
@@ -538,9 +538,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const chatConsoleExpanded = Boolean(options.chatConsoleExpanded);
   const chatConsoleWarnErrorOnly = Boolean(options.chatConsoleWarnErrorOnly);
   const chatConsoleLogs = Array.isArray(options.chatConsoleLogs) ? options.chatConsoleLogs : [];
-  const visibleConsoleLogs = chatConsoleWarnErrorOnly
-    ? chatConsoleLogs.filter(item => String(item?.level || '').toLowerCase() === 'warn' || String(item?.level || '').toLowerCase() === 'error')
-    : chatConsoleLogs;
+  const visibleConsoleLogs = getVisibleChatConsoleLogs(chatConsoleLogs, chatConsoleWarnErrorOnly);
 
   /* ==========================================================================
      [区域标注] 聊天顶部栏
@@ -663,36 +661,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       ` : ''}
 
       <!-- ====================================================================
-           [区域标注·已完成·本次控制台日志开关] 聊天页底栏上方日志抽屉
-           说明：开关开启后显示；点击后抽屉上展开，支持仅看警告错误、查看全部、清空、复制。
+           [区域标注·已完成·本次控制台持久显示与防闪屏修复] 聊天页底栏上方日志抽屉
+           说明：开关仅控制显示；日志始终后台记录。抽屉开关/筛选/清空由局部 DOM 同步，避免整页重绘闪屏。
            ==================================================================== -->
-      ${chatConsoleEnabled ? `
-        <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
-          <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
-            <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
-            <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
-          </button>
-          <div class="msg-console-dock__panel">
-            <div class="msg-console-dock__toolbar">
-              <button class="msg-console-dock__btn ${chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-warn-error" type="button">${MSG_ICONS.warning}<span>仅 warn/error</span></button>
-              <button class="msg-console-dock__btn ${!chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-all" type="button"><span>查看全部</span></button>
-              <button class="msg-console-dock__btn" data-action="clear-chat-console-logs" type="button">${MSG_ICONS.broom}<span>清空日志</span></button>
-              <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
-            </div>
-            <div class="msg-console-dock__list" data-role="msg-console-list">
-              ${visibleConsoleLogs.length
-                ? visibleConsoleLogs.map(item => `
-                    <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
-                      <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
-                      <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>
-                      <span class="msg-console-log__text">${escapeHtml(String(item?.text || ''))}</span>
-                    </div>
-                  `).join('')
-                : `<div class="msg-console-dock__empty">目前没有日志资料。</div>`}
-            </div>
-          </div>
-        </div>
-      ` : ''}
+      ${renderChatConsoleDockHtml({
+        chatConsoleEnabled,
+        chatConsoleExpanded,
+        chatConsoleWarnErrorOnly,
+        visibleConsoleLogs
+      })}
 
       <div class="msg-input-bar">
         <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
@@ -1757,7 +1734,15 @@ export async function sendStickerMessage(container, state, db, stickerId, settin
     dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
   ]);
 
-  renderCurrentChatMessage(container, state);
+  /* ========================================================================
+     [区域标注·已完成·本次表情包发送防闪屏修复] 表情包消息局部追加
+     说明：
+     1. 点选表情包后只增量追加当前表情包气泡，不再 renderCurrentChatMessage 整页重绘。
+     2. 表情包面板与咖啡面板只同步 class 开关，避免发送瞬间闪屏。
+     3. 消息与会话仍只写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  appendCurrentMessageBubble(container, state, stickerMessage);
+  syncMessageDockOpenState(container, state);
 
   /* ========================================================================
      [区域标注·本次需求1] 发送表情包后禁止立即调用 API
@@ -2385,6 +2370,88 @@ export function updateCurrentChatSendingUi(container, state) {
   msgWrap.querySelectorAll('[data-role="msg-input"], [data-action="msg-magic"], [data-action="msg-send"]').forEach(el => {
     el.toggleAttribute('disabled', Boolean(state.isAiSending));
   });
+}
+
+/* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次控制台持久显示与防闪屏修复] 控制台抽屉局部渲染工具
+   说明：
+   1. 与完整 renderChatMessage 复用同一 HTML 结构，保证主题 UI 风格一致。
+   2. 开关关闭只移除抽屉 DOM，不清空 state.chatConsoleLogs；日志继续后台记录。
+   3. 展开/关闭、筛选、清空日志时仅替换抽屉区域，避免聊天页整页重绘闪屏。
+   ========================================================================== */
+function getVisibleChatConsoleLogs(chatConsoleLogs = [], warnErrorOnly = false) {
+  const logs = Array.isArray(chatConsoleLogs) ? chatConsoleLogs : [];
+  return warnErrorOnly
+    ? logs.filter(item => String(item?.level || '').toLowerCase() === 'warn' || String(item?.level || '').toLowerCase() === 'error')
+    : logs;
+}
+
+function renderChatConsoleDockHtml({
+  chatConsoleEnabled = false,
+  chatConsoleExpanded = false,
+  chatConsoleWarnErrorOnly = false,
+  visibleConsoleLogs = []
+} = {}) {
+  if (!chatConsoleEnabled) return '';
+
+  return `
+    <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
+      <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
+        <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
+        <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
+      </button>
+      <div class="msg-console-dock__panel">
+        <div class="msg-console-dock__toolbar">
+          <button class="msg-console-dock__btn ${chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-warn-error" type="button">${MSG_ICONS.warning}<span>仅 warn/error</span></button>
+          <button class="msg-console-dock__btn ${!chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-all" type="button"><span>查看全部</span></button>
+          <button class="msg-console-dock__btn" data-action="clear-chat-console-logs" type="button">${MSG_ICONS.broom}<span>清空日志</span></button>
+          <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
+        </div>
+        <div class="msg-console-dock__list" data-role="msg-console-list">
+          ${visibleConsoleLogs.length
+            ? visibleConsoleLogs.map(item => `
+                <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
+                  <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
+                  <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>
+                  <span class="msg-console-log__text">${escapeHtml(String(item?.text || ''))}</span>
+                </div>
+              `).join('')
+            : `<div class="msg-console-dock__empty">目前没有日志资料。</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function syncChatConsoleDock(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const shell = msgWrap?.querySelector('.msg-input-shell');
+  if (!shell) return false;
+
+  const existingDock = shell.querySelector('[data-role="msg-console-dock"]');
+  const visibleLogs = getVisibleChatConsoleLogs(state.chatConsoleLogs, state.chatConsoleWarnErrorOnly);
+  const nextHtml = renderChatConsoleDockHtml({
+    chatConsoleEnabled: state.chatConsoleEnabled,
+    chatConsoleExpanded: state.chatConsoleExpanded,
+    chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
+    visibleConsoleLogs: visibleLogs
+  });
+
+  if (!nextHtml) {
+    existingDock?.remove();
+    return true;
+  }
+
+  if (existingDock) {
+    existingDock.outerHTML = nextHtml;
+    return true;
+  }
+
+  const inputBar = shell.querySelector('.msg-input-bar');
+  if (!inputBar) return false;
+  inputBar.insertAdjacentHTML('beforebegin', nextHtml);
+  return true;
 }
 
 /* ========================================================================== */

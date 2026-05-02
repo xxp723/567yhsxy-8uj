@@ -81,6 +81,7 @@ import {
   refreshCurrentSessionLastMessage,
   retryLatestAiReply,
   syncMessageDockOpenState,
+  syncChatConsoleDock,
   renderMsgStickerPanelGrid,
   syncMountedStickerGroupButtons,
   showClearAllMessagesModal,
@@ -131,10 +132,14 @@ import {
 import { renderMoments } from './moments.js';
 
 /* ========================================================================
-   [区域标注·已完成·本次控制台日志开关] 聊天日志存储键（IndexedDB）
-   说明：严格使用 DB.js，不使用 localStorage/sessionStorage。
+   [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
+   说明：
+   1. 严格使用 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   2. chat_console 保存当前会话日志；chat_console_enabled 只保存用户是否显示聊天页控制台抽屉。
+   3. 日志后台记录不依赖显示开关，用户手动关闭开关才隐藏抽屉。
    ======================================================================== */
 const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
+const DATA_KEY_CHAT_CONSOLE_ENABLED = (maskId, chatId) => `chat_console_enabled::${maskId || 'default'}::${chatId || 'none'}`;
 
 function normalizeChatConsoleLogs(logs) {
   return Array.isArray(logs)
@@ -157,8 +162,17 @@ async function persistCurrentChatConsoleLogs(state, db) {
   );
 }
 
+async function persistCurrentChatConsoleEnabled(state, db) {
+  if (!state?.currentChatId) return;
+  await dbPut(
+    db,
+    DATA_KEY_CHAT_CONSOLE_ENABLED(state.activeMaskId, state.currentChatId),
+    Boolean(state.chatConsoleEnabled)
+  );
+}
+
 async function addChatConsoleLog(container, state, db, level, text) {
-  if (!state?.currentChatId || !state?.chatConsoleEnabled) return;
+  if (!state?.currentChatId) return;
   const ts = Date.now();
   const entry = {
     id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
@@ -170,7 +184,7 @@ async function addChatConsoleLog(container, state, db, level, text) {
   if (!entry.text) return;
   state.chatConsoleLogs = [...state.chatConsoleLogs, entry].slice(-500);
   await persistCurrentChatConsoleLogs(state, db);
-  renderCurrentChatMessage(container, state, { keepScroll: true });
+  syncChatConsoleDock(container, state);
 }
 
 /* ==========================================================================
@@ -289,8 +303,11 @@ export async function mount(container, context) {
     stickerPreviewClickTimer: 0,
 
     /* ========================================================================
-       [区域标注·已完成·本次控制台日志开关] 聊天页控制台日志状态
-       说明：日志队列最多 500 条；持久化只走 DB.js / IndexedDB。
+       [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天页控制台日志状态
+       说明：
+       1. chatConsoleEnabled 仅表示控制台抽屉是否显示，按当前会话写入 IndexedDB。
+       2. chatConsoleLogs 始终后台记录当前会话日志，最多 500 条。
+       3. 禁止 localStorage/sessionStorage，也不做双份存储兜底。
        ======================================================================== */
     chatConsoleEnabled: false,
     chatConsoleExpanded: false,
@@ -624,7 +641,15 @@ async function openChatMessage(container, state, db, chatId) {
   if (bottomTab) bottomTab.style.display = 'none';
   panels.forEach(p => p.style.display = 'none');
 
+  /* ========================================================================
+     [区域标注·已完成·本次控制台持久显示与后台记录修复] 进入会话时恢复控制台状态
+     说明：
+     1. 日志和显示开关均按“当前面具 + 当前会话”从 IndexedDB 读取。
+     2. 不再因退出/重进聊天页面把已开启的控制台重置为关闭。
+     3. 抽屉展开态仍为运行时临时状态，进入页面默认收起以保持界面稳定。
+     ======================================================================== */
   state.chatConsoleLogs = normalizeChatConsoleLogs(await dbGet(db, DATA_KEY_CHAT_CONSOLE(state.activeMaskId, chatId)));
+  state.chatConsoleEnabled = Boolean(await dbGet(db, DATA_KEY_CHAT_CONSOLE_ENABLED(state.activeMaskId, chatId)));
   state.chatConsoleExpanded = false;
 
   if (msgWrap) {
@@ -1955,33 +1980,39 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ========================================================================
-       [区域标注·已完成·本次控制台日志开关] 日志开关与抽屉操作
+       [区域标注·已完成·本次控制台持久显示与防闪屏修复] 日志开关与抽屉操作
+       说明：
+       1. 开关状态按当前会话写入 IndexedDB；退出再进入不会自动关闭。
+       2. 当前会话日志始终后台记录，开关关闭只隐藏抽屉，不停止记录。
+       3. 展开/收起、筛选、清空均局部同步控制台 DOM，避免整页重绘闪屏。
        ======================================================================== */
     case 'toggle-chat-console':
       state.chatConsoleEnabled = !state.chatConsoleEnabled;
       if (!state.chatConsoleEnabled) state.chatConsoleExpanded = false;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      await persistCurrentChatConsoleEnabled(state, db);
+      syncChatConsoleDock(container, state);
+      target.classList.toggle('is-on', state.chatConsoleEnabled);
       break;
 
     case 'toggle-chat-console-expand':
       state.chatConsoleExpanded = !state.chatConsoleExpanded;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncChatConsoleDock(container, state);
       break;
 
     case 'set-chat-console-filter-warn-error':
       state.chatConsoleWarnErrorOnly = true;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncChatConsoleDock(container, state);
       break;
 
     case 'set-chat-console-filter-all':
       state.chatConsoleWarnErrorOnly = false;
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncChatConsoleDock(container, state);
       break;
 
     case 'clear-chat-console-logs':
       state.chatConsoleLogs = [];
       await persistCurrentChatConsoleLogs(state, db);
-      renderCurrentChatMessage(container, state, { keepScroll: true });
+      syncChatConsoleDock(container, state);
       break;
 
     case 'copy-chat-console-logs': {
