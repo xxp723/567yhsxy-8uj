@@ -1159,11 +1159,36 @@ export async function sendMessage(container, state, db, content, settingsManager
     if (hasAppliedPendingTransferDecision) {
       refreshCurrentMessageListOnly(container, state);
     }
-    const aiMessages = buildAiReplyMessages(rawAiText, state);
+
+    /* ========================================================================
+       [区域标注·已完成·AI生图] AI 生图结果转为聊天图片消息
+       说明：
+       1. prompt.js 已根据 AI 的 [图片] 协议调用设置应用中已开启的生图 API。
+       2. 这里仅把 generatedImages 转成 type:image 的 assistant 消息，随 currentMessages 写入 DB.js / IndexedDB。
+       3. 不使用 localStorage/sessionStorage，不保存双份图片缓存，也不显示原始 [图片] 协议文本。
+       ======================================================================== */
+    const generatedImageMessages = (Array.isArray(result?.generatedImages) ? result.generatedImages : [])
+      .map((item, imageIndex) => ({
+        role: 'assistant',
+        type: 'image',
+        content: `[图片] ${String(item?.imageName || item?.prompt || 'AI 生图').trim()}`,
+        imageUrl: String(item?.imageUrl || '').trim(),
+        imageName: String(item?.imageName || item?.prompt || 'AI 生图').trim(),
+        imageSource: 'ai_generated',
+        imagePrompt: String(item?.prompt || '').trim(),
+        imageRoleName: String(item?.roleName || session?.name || '对方').trim(),
+        imageGeneratedAt: Date.now() + imageIndex
+      }))
+      .filter(item => item.imageUrl);
+
+    const aiMessages = [
+      ...buildAiReplyMessages(rawAiText, state),
+      ...generatedImageMessages
+    ];
     if (!aiMessages.length) {
       appendChatConsoleRuntimeLog(state, 'warn', '解析后无可显示消息');
     } else {
-      appendChatConsoleRuntimeLog(state, 'info', `解析完成：${aiMessages.length} 条消息`);
+      appendChatConsoleRuntimeLog(state, 'info', `解析完成：${aiMessages.length} 条消息${generatedImageMessages.length ? `，含AI生图 ${generatedImageMessages.length} 张` : ''}`);
     }
     for (let index = 0; index < aiMessages.length; index += 1) {
       const message = {
@@ -1176,7 +1201,9 @@ export async function sendMessage(container, state, db, content, settingsManager
           ? message.stickerName || message.content || '表情包'
           : (message.type === 'transfer'
               ? message.transferDisplayAmount || message.content || '转账'
-              : message.content || '')
+              : (message.type === 'image'
+                  ? message.imageName || message.content || 'AI 生图'
+                  : message.content || ''))
       ).trim();
       if (index > 0) await sleep(getAiBubbleDelayMs(visibleText, index));
       state.currentMessages.push(message);
@@ -1187,14 +1214,18 @@ export async function sendMessage(container, state, db, content, settingsManager
           ? `AI消息[${index + 1}]：表情包 ${message.stickerName || ''}`.trim()
           : (message.type === 'transfer'
               ? `AI消息[${index + 1}]：转账 ${message.transferDisplayAmount || message.content || ''}`.trim()
-              : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`)
+              : (message.type === 'image'
+                  ? `AI消息[${index + 1}]：AI生图 ${message.imageName || ''}`.trim()
+                  : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`))
       );
       hasRenderedAiBubble = true;
       session.lastMessage = message.type === 'sticker'
         ? `[表情包] ${message.stickerName || '未命名表情包'}`
         : (message.type === 'transfer'
             ? `[转账] ${message.transferDisplayAmount || message.content || '¥0.00'}`
-            : (message.content || '（AI 没有返回内容）'));
+            : (message.type === 'image'
+                ? `[图片] ${message.imageName || 'AI 生图'}`
+                : (message.content || '（AI 没有返回内容）')));
       session.lastTime = Date.now();
       await persistCurrentMessages(state, db);
       await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
@@ -1205,7 +1236,9 @@ export async function sendMessage(container, state, db, content, settingsManager
       ? `[表情包] ${aiMessages[aiMessages.length - 1]?.stickerName || '未命名表情包'}`
       : (aiMessages[aiMessages.length - 1]?.type === 'transfer'
           ? `[转账] ${aiMessages[aiMessages.length - 1]?.transferDisplayAmount || aiMessages[aiMessages.length - 1]?.content || '¥0.00'}`
-          : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）'));
+          : (aiMessages[aiMessages.length - 1]?.type === 'image'
+              ? `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`
+              : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）')));
     session.lastTime = Date.now();
   } catch (error) {
     appendChatConsoleRuntimeLog(state, 'error', `API 调用失败：${error?.message || '未知错误'}`);
@@ -1519,7 +1552,11 @@ export function extractAiProtocolBlocks(rawText) {
      2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  /* ========================================================================
+     [区域标注·已完成·AI生图] 通用协议解析器识别 [图片]
+     说明：[图片] 协议只作为生图触发信号，不作为原始文本气泡展示；图片消息由 generatedImages 转成 type:image 后落库。
+     ======================================================================== */
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -1563,6 +1600,7 @@ export function buildAiReplyMessages(rawText, state) {
   }
 
   const builtMessages = [];
+  let hasImageGenerationProtocol = false;
   protocolBlocks.forEach(block => {
     if (block.type === '撤回') {
       /* ======================================================================
@@ -1627,6 +1665,18 @@ export function buildAiReplyMessages(rawText, state) {
       return;
     }
 
+    if (block.type === '图片') {
+      /* ======================================================================
+         [区域标注·已完成·AI生图] 丢弃原始 [图片] 协议文本
+         说明：
+         1. 真正图片消息来自 prompt.js 返回的 generatedImages，并在 sendMessage 中转成 type:image。
+         2. 这里不把 [图片] 协议内容显示为普通文本，避免聊天界面露出协议或生图提示词。
+         3. 如果本轮只有 [图片] 协议，函数返回空数组，让 generatedImages 独立成为本轮消息。
+         ====================================================================== */
+      hasImageGenerationProtocol = true;
+      return;
+    }
+
     if (block.type === '转账') {
       const transferPayload = parseAiTransferProtocolPayload(block.content);
       if (transferPayload) {
@@ -1669,6 +1719,8 @@ export function buildAiReplyMessages(rawText, state) {
       });
     });
   });
+
+  if (!builtMessages.length && hasImageGenerationProtocol) return [];
 
   return enforceAiReplyMessageCount(
     builtMessages.length

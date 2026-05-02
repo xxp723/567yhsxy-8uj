@@ -8,6 +8,12 @@
  * 4. 提示词函数会把已传入/已从 IndexedDB 读取到的有效信息整理成 AI 可读文本。
  */
 
+import {
+  buildChatImageGenerationPrompt,
+  generateImagesFromChatReply,
+  getChatImageApiSettings
+} from './chat-image-generation.js';
+
 /* ==========================================================================
    [区域标注] API 服务商基础信息
    说明：与设置应用 js/apps/settings/api.js 的主 API 配置结构保持一致。
@@ -95,7 +101,7 @@ function normalizeStickerPromptData(rawData) {
    [区域标注·已完成·AI本轮撤回通用协议]
    说明：
    1. 新回复协议统一使用 **`[类型] 角色名：内容`**。
-   2. 已开放 [回复]/[表情]/[引用]/[转账]/[撤回]，其中 [引用] 用于微信/QQ 式引用回复。
+   2. 已开放 [回复]/[表情]/[引用]/[转账]/[撤回]/[图片]，其中 [图片] 由 chat-image-generation.js 调用设置应用生图 API。
    3. [撤回] 只允许撤回 AI 本轮已输出的消息；多条撤回必须逐条输出撤回协议并逐行生成系统小字。
    ========================================================================== */
 const CHAT_PROTOCOL_REPLY_FORMAT = '**`[回复] 角色名：文字消息内容`**';
@@ -105,7 +111,7 @@ const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
   '**`[引用] 角色名：{引用ID:xxx}文字消息内容`**',
   '**`[转账] 角色名：{金额:xxx,备注:xxx}`**',
   '**`[撤回] 角色名：{目标:上一条}`**',
-  '**`[图片] 角色名：图片描述或资源ID`**',
+  '**`[图片] 角色名：给生图模型的画面描述`**',
   '**`[语音] 角色名：{时长:xx}语音转写文本`**'
 ];
 /* ===== 闲谈：通用消息协议格式 END ===== */
@@ -1079,13 +1085,14 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 1. 所有最终可见消息都必须是完整协议块，外层保留加粗反引号：**\`[类型] 角色名：内容\`**。
 2. 已开放格式：
 ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
-3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账；[撤回] 只用于撤回本轮回复中你自己已经输出的上一条消息。
+3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账；[撤回] 只用于撤回本轮回复中你自己已经输出的上一条消息；[图片] 只在【AI生图能力】允许时使用，并由独立模块调用设置应用生图 API。
 4. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
 5. 主动转账格式：**\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；金额必须大于 0，最多两位小数，不写货币符号、区间或解释。
 6. 处理用户待确认转账时，只能用：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`** 或 **\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
 7. 撤回格式只能用：**\`[撤回] 角色名：{目标:上一条}\`**；撤回后不要重复展示被撤回正文，也不要解释撤回原因。
-8. 每个 [回复]/[表情]/[引用]/[转账]/[撤回] 必须独占一个协议块；不确定表情、引用、转账或撤回格式时，改用 [回复]。
-9. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。
+8. 图片格式只能用：**\`[图片] 角色名：给生图模型的画面描述\`**；画面描述必须结合角色人设、当前会话、用户指令和生活场景，禁止写 URL、资源ID、API 说明或幕后描述。
+9. 每个 [回复]/[表情]/[引用]/[转账]/[撤回]/[图片] 必须独占一个协议块；不确定表情、引用、转账、撤回或生图格式时，改用 [回复]。
+10. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。
 
 # AI本轮撤回硬约束
 1. 你必须根据角色设定、会话历史、当前用户消息和你本轮已经写出的消息判断是否需要撤回；只有当角色真实会后悔、说错、冲动发出又收回、误发或临时改变表达时，才允许使用 [撤回]。
@@ -1429,6 +1436,14 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     getWorldBookAfterChar(runtimeContext),
     getFeaturePrompts({ settings: normalizedSettings }),
     getMountedStickerPrompt({ settings: normalizedSettings, context: runtimeContext }),
+    /* ======================================================================
+       [区域标注·已完成·AI生图] 闲谈生图提示词接入
+       说明：
+       1. 独立逻辑位于 chat-image-generation.js。
+       2. 只读取设置应用已保存到 DB.js / IndexedDB 的 imageApi 配置。
+       3. 未开启或配置不完整时，明确禁止 AI 输出 [图片] 协议。
+       ====================================================================== */
+    buildChatImageGenerationPrompt({ imageApi: runtimeContext.imageApi }),
     getExternalContext({ enabled: normalizedSettings.externalContextEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
@@ -1705,12 +1720,21 @@ export async function chat({
     conversationTimeContext
   });
 
+  /* ========================================================================
+     [区域标注·已完成·AI生图] 读取设置应用生图 API 配置
+     说明：
+     1. 通过 settingsManager.getAll() 读取 imageApi；底层为 DB.js / IndexedDB。
+     2. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+     3. 仅用于本轮提示词允许 [图片] 协议，以及主 API 返回后调用生图模型。
+     ======================================================================== */
+  const imageApi = await getChatImageApiSettings(settingsManager);
+
   const messages = buildChatMessages({
     userInput,
     history,
     currentUserRoundMessages,
     settings: chatSettings,
-    context: promptContext
+    context: { ...promptContext, imageApi }
   });
 
   const profile = await getPrimaryApiConfig(settingsManager);
@@ -1739,9 +1763,22 @@ export async function chat({
       throw new Error(`不支持的主 API 服务商：${profile.provider}`);
   }
 
+  /* ========================================================================
+     [区域标注·已完成·AI生图] 主 API 回复后调用生图模块
+     说明：
+     1. AI 若输出 [图片] 协议，由 chat-image-generation.js 调用设置应用已启用的生图模型。
+     2. 本函数只返回 generatedImages；真正聊天记录持久化由 chat-message.js 写入当前消息数组到 DB.js / IndexedDB。
+     3. 不使用 localStorage/sessionStorage，不保留额外缓存或双份存储兜底。
+     ======================================================================== */
+  const generatedImages = await generateImagesFromChatReply({
+    text: rawText,
+    imageApi
+  });
+
   return {
     messages,
     rawText,
-    text: stripThinkBlocks(rawText)
+    text: stripThinkBlocks(rawText),
+    generatedImages
   };
 }
