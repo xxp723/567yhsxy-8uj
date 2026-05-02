@@ -621,7 +621,7 @@ export async function mount(container, context) {
   };
 
   const syncCharacterImageShapes = async () => {
-    const profileItems = [...state.data.masks, ...state.data.characters];
+    const profileItems = [...state.data.masks, ...state.data.characters, ...state.data.supportingRoles];
     const tasks = profileItems
       .map((item) => normalizeString(item.avatar))
       .filter(Boolean)
@@ -630,7 +630,7 @@ export async function mount(container, context) {
 
     if (!tasks.length) return;
     await Promise.all(tasks);
-    if (state.activeTab === 'mask' || state.activeTab === 'character') {
+    if (state.activeTab === 'mask' || state.activeTab === 'character' || state.activeTab === 'supporting') {
       renderContent();
     }
   };
@@ -964,9 +964,9 @@ export async function mount(container, context) {
     return shape === 'portrait' ? 'is-portrait' : 'is-square';
   };
 
-  // [模块标注] 档案摘要列表模块：
-  // 用户面具 / 角色档案 / 配角档案在板块中显示摘要卡；
-  // 其中用户面具 / 角色档案支持根据上传图片比例自动切换为竖版卡或正方卡。
+  // [区域标注·已完成·本次需求1] 旧横向紧凑摘要列表模块：
+  // 用户面具 / 配角档案已改为 renderArchiveTwoColumnProfileList 双列上下滚动列表，不再使用本横向列表。
+  // 本函数仅作为历史兼容工具保留，避免误以为本次需求仍未修改。
   const renderCompactProfileList = (items, selectedId, actionName, emptyLabel, enableShapeMode = false) => `
     <div class="archive-compact-list ${enableShapeMode ? 'archive-compact-list--shape-aware' : ''}">
       ${items.map((item) => {
@@ -1128,12 +1128,21 @@ export async function mount(container, context) {
     </article>
   `;
 
-  // [模块标注] 角色档案双列错落卡片列表模块：
-  // 改为两列错落分布（masonry式）网格，支持上下滚动。移除底部默认展示详情的行为。
-  // [模块标注] 角色档案双列错落卡片列表模块：
-  // 所有偶数列（0-based 奇数 index）卡片向下偏移，形成错落效果
-  const renderCharacterProfileList = (items) => `
-    <div class="archive-character-grid" aria-label="角色档案列表">
+  /* ========================================================================
+     [区域标注·已完成·本次需求1] 用户面具/角色档案/配角档案双列上下滚动列表模块
+     说明：
+     1. 三个档案板块主列表统一使用 .archive-character-grid 双列瀑布流结构。
+     2. 用户面具、配角档案不再使用 .archive-compact-list 横向滑动列表。
+     3. 点击行为保持原有逻辑：面具 open-mask-detail、角色 show-character-detail、配角 open-supporting-detail。
+     4. 本区域仅调整档案主列表布局，不涉及 IndexedDB 持久化、弹窗、图标或其它板块逻辑。
+     ======================================================================== */
+  const renderArchiveTwoColumnProfileList = (items, {
+    actionName,
+    ariaLabel,
+    emptyAvatarLabel = '头像',
+    unnamedLabel = '未命名'
+  }) => `
+    <div class="archive-character-grid" aria-label="${escapeHtml(ariaLabel)}">
       ${items.map((item, index) => {
         const shapeClass = resolveProfileCardShapeClass(item);
         const staggerClass = index % 2 === 1 ? 'is-staggered-top' : '';
@@ -1141,12 +1150,12 @@ export async function mount(container, context) {
           <button
             class="archive-character-grid-card ${shapeClass} ${staggerClass}"
             type="button"
-            data-action="show-character-detail"
+            data-action="${actionName}"
             data-id="${item.id}"
-            aria-label="查看${escapeHtml(item.name || '未命名角色')}档案"
+            aria-label="查看${escapeHtml(item.name || unnamedLabel)}档案"
           >
             <div class="archive-character-grid-card__media ${item.avatar ? 'has-image' : ''}">
-              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || '角色头像')}">` : `<span>${icon.docDetail}</span>`}
+              ${item.avatar ? `<img src="${escapeHtml(item.avatar)}" alt="${escapeHtml(item.name || emptyAvatarLabel)}">` : `<span>${icon.docDetail}</span>`}
             </div>
             <div class="archive-character-grid-card__meta">
               <strong>${escapeHtml(item.name || '未命名')}</strong>
@@ -1156,6 +1165,13 @@ export async function mount(container, context) {
       }).join('')}
     </div>
   `;
+
+  const renderCharacterProfileList = (items) => renderArchiveTwoColumnProfileList(items, {
+    actionName: 'show-character-detail',
+    ariaLabel: '角色档案列表',
+    emptyAvatarLabel: '角色头像',
+    unnamedLabel: '未命名角色'
+  });
 
   // [模块标注] 角色档案复古纸质详情模块：
   // [模块标注] 角色档案详情关闭返回模块
@@ -1406,7 +1422,12 @@ export async function mount(container, context) {
 
     return `
       <section class="archive-character-panel">
-        ${renderCompactProfileList(list, '', 'open-mask-detail', '面具头像', true)}
+        ${renderArchiveTwoColumnProfileList(list, {
+          actionName: 'open-mask-detail',
+          ariaLabel: '用户面具列表',
+          emptyAvatarLabel: '面具头像',
+          unnamedLabel: '未命名面具'
+        })}
       </section>
     `;
   };
@@ -1469,7 +1490,12 @@ export async function mount(container, context) {
 
     return `
       <section class="archive-character-panel">
-        ${renderCompactProfileList(list, '', 'open-supporting-detail', '配角头像')}
+        ${renderArchiveTwoColumnProfileList(list, {
+          actionName: 'open-supporting-detail',
+          ariaLabel: '配角档案列表',
+          emptyAvatarLabel: '配角头像',
+          unnamedLabel: '未命名配角'
+        })}
       </section>
     `;
   };
