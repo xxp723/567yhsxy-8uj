@@ -153,11 +153,12 @@ class MiniPhoneApp {
       await this.desktopEditMode.initializeAfterDesktopRender();
 
       /* ==========================================================================
-         [区域标注·本次反馈修复·桌面静态布局防闪旧]
+         [区域标注·本次反馈修复·桌面直接显示最新配置]
          说明：
-         - index.html 的静态桌面会在模块启动前存在，可能短暂显示旧布局。
+         - index.html 启动期会隐藏整机界面，避免出现“只有状态栏、电量，
+           桌面区域空白”的中间态。
          - 必须等 db.js / IndexedDB 中的最新桌面编辑布局与 Dock 状态套用完成后，
-           才移除启动隐藏标记，让用户直接看到最新桌面。
+           才移除启动隐藏标记，让用户一次性看到完整最新桌面。
          - 禁止使用 localStorage/sessionStorage，不写双份兜底存储。
          ========================================================================== */
       this.revealDesktopAfterLatestLayoutReady();

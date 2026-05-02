@@ -33,9 +33,15 @@
       visibility: hidden;
     }
 
-    /* [区域标注·本次反馈修复·桌面静态布局防闪旧] 隐藏静态桌面，直到最新 IndexedDB 布局套用完成 */
-    html[data-desktop-layout-booting="1"] #desktop-container,
-    html[data-desktop-layout-booting="1"] #dock-container {
+    /* ==========================================================================
+       [区域标注·本次反馈修复·桌面直接显示最新配置]
+       说明：
+       - 不再只隐藏桌面与 Dock，避免出现“只有状态栏、电量，桌面空白”的中间态。
+       - 启动期整机界面保持不可见，等 main.js 已经通过 db.js / IndexedDB
+         套用最新桌面布局与 Dock 状态后，一次性显示完整最新桌面。
+       - 禁止使用 localStorage/sessionStorage，不写双份兜底存储。
+       ========================================================================== */
+    html[data-desktop-layout-booting="1"] body {
       visibility: hidden;
     }
   </style>
