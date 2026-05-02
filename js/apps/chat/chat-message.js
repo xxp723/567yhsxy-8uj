@@ -804,7 +804,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       <div class="msg-input-bar">
         <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
         <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
-        <input type="text" class="msg-input-bar__input" placeholder="输入消息..." data-role="msg-input" ${isSending ? 'disabled' : ''}>
+        <!-- ==================================================================
+             [区域标注·已完成·聊天输入框一至三行自适应]
+             说明：输入控件改为 textarea；初始一行，内容增多时最高三行，超出后输入框内部滚动。
+             ================================================================== -->
+        <textarea class="msg-input-bar__input" rows="1" placeholder="输入消息..." data-role="msg-input" ${isSending ? 'disabled' : ''}></textarea>
         <button class="msg-input-bar__icon-btn" data-action="msg-magic" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.magicWand}</button>
         <button class="msg-input-bar__icon-btn msg-input-bar__send-btn" data-action="msg-send" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.send}</button>
       </div>

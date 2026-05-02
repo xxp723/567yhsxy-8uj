@@ -1304,18 +1304,30 @@
   height: 14px;
 }
 
-/* [区域标注·本次需求5] 文字输入框：保持原有圆角输入框风格 */
+/* ==========================================================================
+   [区域标注·已完成·聊天输入框一至三行自适应，图标按钮尺寸保持不变]
+   说明：
+   1. 仅作用于聊天消息页底部文字输入框，不修改咖啡/表情/魔法棒/纸飞机图标按钮尺寸。
+   2. 输入框初始显示一行；内容超过一行后随内容增高，最高显示三行。
+   3. 内容超过三行后只在输入框内部上下滚动，保持底栏主题风格并避免页面闪屏。
+   ========================================================================== */
 .msg-input-bar__input {
   flex: 1;
   min-width: 0;
-  padding: 9px 14px;
+  min-height: 36px;
+  max-height: 76px;
+  padding: 8px 14px;
   border: 1px solid rgba(74, 52, 42, 0.1);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.7);
   font-size: 14px;
+  line-height: 20px;
   color: #4A342A;
   outline: none;
   font-family: inherit;
+  resize: none;
+  overflow-y: auto;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 

@@ -848,7 +848,7 @@ export function renderImageApiSection({ current }) {
           <div class="image-api-enable-row">
             <div class="image-api-enable-row__text">
               <span class="image-api-enable-row__title">启用生图API</span>
-              <span class="image-api-enable-row__desc">开启后小手机网页才会使用这里配置的生图 API。</span>
+              <span class="image-api-enable-row__desc">开启后才会真正启用配置的生图 API。</span>
             </div>
             <button class="image-api-switch ${api.enabled ? 'is-on' : ''}" type="button" role="switch" aria-checked="${api.enabled ? 'true' : 'false'}" data-action="toggle-image-api-enabled">
               <span class="image-api-switch__knob"></span>
@@ -867,7 +867,7 @@ export function renderImageApiSection({ current }) {
           <div class="image-api-field image-api-field--openai-url ${showOpenAiBaseUrl ? '' : 'hidden'}" data-role="image-api-openai-url-field">
             <label class="image-api-label" for="image-api-base-url">API 地址</label>
             <input id="image-api-base-url" class="image-api-input" type="text" value="${escapeHtml(api.baseUrl || IMAGE_API_PROVIDER_META.openai.defaultBaseUrl)}" placeholder="例如：https://api.openai.com/v1 或其它兼容接口地址" autocomplete="off">
-            <span class="image-api-hint">如果服务商要求地址以 /v1 结尾，请直接填到这里；代码会清理末尾多余斜杠后再拼接 /models 与 /images/generations。</span>
+            <span class="image-api-hint">如果服务商要求地址以 /v1 结尾，请直接填到这里；后台会清理末尾多余斜杠后再拼接 /models 与 /images/generations。</span>
           </div>
 
           <div class="image-api-field">

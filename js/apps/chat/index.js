@@ -190,6 +190,20 @@ async function addChatConsoleLog(container, state, db, level, text) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·聊天输入框一至三行自适应]
+   说明：
+   1. 仅同步闲谈消息页底部 data-role="msg-input" 的 textarea 高度。
+   2. 初始一行，输入内容增多时最高三行；超过三行后 textarea 内部滚动。
+   3. 不涉及任何持久化存储，不使用 localStorage/sessionStorage，不改变图标按钮尺寸。
+   ========================================================================== */
+function syncMessageInputAutoHeight(input) {
+  if (!input?.matches?.('[data-role="msg-input"]')) return;
+  input.style.height = 'auto';
+  const maxHeight = Number.parseFloat(window.getComputedStyle(input).maxHeight) || 76;
+  input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`;
+}
+
+/* ==========================================================================
    [区域标注] mount — 应用挂载入口
    说明：由 AppManager 调用，接收容器元素和上下文
    ========================================================================== */
@@ -1090,7 +1104,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-send': {
       const input = container.querySelector('[data-role="msg-input"]');
       const value = String(input?.value || '').trim();
-      if (input) input.value = '';
+      if (input) {
+        input.value = '';
+        syncMessageInputAutoHeight(input);
+      }
       syncStickerInputSuggestions(container, state, '');
 
       await addChatConsoleLog(container, state, db, 'info', value ? `发送消息：${value}` : '发送触发：仅请求 AI 回复');
@@ -1473,7 +1490,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       await sendStickerMessage(container, state, db, target.dataset.stickerId, settingsManager, { triggerAi: false });
       {
         const input = container.querySelector('[data-role="msg-input"]');
-        if (input) input.value = '';
+        if (input) {
+          input.value = '';
+          syncMessageInputAutoHeight(input);
+        }
         syncStickerInputSuggestions(container, state, '');
       }
       break;
@@ -3049,6 +3069,7 @@ function handleInput(e, state, container, db) {
      4. 本区域只读取运行时 state.stickerData，不写持久化存储，不使用 localStorage/sessionStorage。
      ======================================================================== */
   if (target.matches('[data-role="msg-input"]')) {
+    syncMessageInputAutoHeight(target);
     syncStickerInputSuggestions(container, state, target.value || '');
     return;
   }
@@ -3304,8 +3325,8 @@ async function handleChange(e, state, container, db) {
 }
 
 /* ==========================================================================
-   [区域标注·本次需求] 聊天输入框回车发送
-   说明：用户在输入法中点击“回车”后发送消息；Shift+Enter 不处理（当前为单行输入框）。
+   [区域标注·已完成·聊天输入框一至三行自适应]
+   说明：Enter 仍沿用原发送行为；Shift+Enter 保留 textarea 原生换行，用于手动输入多行。
    ========================================================================== */
 async function handleKeydown(e, state, container, db, settingsManager) {
   const target = e.target;
@@ -3325,6 +3346,7 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   e.preventDefault();
   const value = target.value;
   target.value = '';
+  syncMessageInputAutoHeight(target);
   syncStickerInputSuggestions(container, state, '');
   /* ===== 闲谈应用：回车只发送用户消息 START ===== */
   await sendMessage(container, state, db, value, settingsManager, { triggerAi: false });
