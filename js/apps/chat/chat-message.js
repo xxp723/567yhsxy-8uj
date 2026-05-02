@@ -2328,18 +2328,29 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     || null;
   const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
   /* ========================================================================
-     [区域标注·已完成·本次用户撤回互动提示词增强] 撤回系统小字发送给 AI 的文本规则
+     [AI撤回时间感知增强] 撤回系统小字发送给 AI 的文本规则
      说明：
-     1. withdrawnVisibleToAi=false：只提示对方刚撤回且你看不见原文，引导 AI 用“你刚才撤回了什么”这类短句互动。
-     2. withdrawnVisibleToAi=true：提示对方刚撤回且你看得见原文，引导 AI 用“你撤的晚了，我都看见了”这类短句互动，并附撤回原文。
-     3. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
+     1. user_withdraw_system 必须把系统提示小字自身的发送时间传给 AI，避免 AI 把早上的撤回提示误认成当前刚发生。
+     2. withdrawnVisibleToAi=false：只提示对方在指定时间撤回且你看不见原文，引导 AI 结合本轮 API 实际请求时间判断“刚才/之前”。
+     3. withdrawnVisibleToAi=true：提示对方在指定时间撤回且你看得见原文，并附撤回原文；禁止默认使用“刚才/刚刚”。
+     4. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
      ======================================================================== */
+  const formatWithdrawSystemTipTimeForAi = (timestamp) => {
+    const value = Number(timestamp || 0) || 0;
+    if (!value) return '未知时间';
+    const date = new Date(value);
+    const pad = number => String(number).padStart(2, '0');
+    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  };
+
   const getAiVisibleContentForMessage = (item = {}) => {
     if (String(item?.type || '') === 'user_withdraw_system') {
-      const base = '当前对话对象刚撤回了一条消息；你看不见原文。请用一句自然互动回应，例如“你刚才撤回了什么”。';
+      const systemTipTime = formatWithdrawSystemTipTimeForAi(item.withdrawnAt || item.timestamp);
+      const timeAwareInstruction = `【系统提示小字发送时间：${systemTipTime}】当前对话对象在上述时间撤回了一条消息。请务必把这个时间当作撤回系统提示小字发生的时间，并结合“本轮 API 实际请求时间”判断间隔；如果已经过去较久，不要说“刚才/刚刚撤回”，应改用“之前撤回的消息”等符合时间差的表达。`;
+      const base = `${timeAwareInstruction}\n你看不见撤回原文。可用一句自然互动回应，例如“您之前撤回的消息我看到了，撤回了什么呀？”`;
       if (!item.withdrawnVisibleToAi) return base;
       const withdrawnText = String(item.withdrawnContent || '').trim();
-      return withdrawnText ? `当前对话对象刚撤回了一条消息；你看得见原文。可用一句自然互动回应，例如“你撤的晚了，我都看见了”。\n撤回的消息内容：${withdrawnText}` : base;
+      return withdrawnText ? `${timeAwareInstruction}\n你看得见撤回原文。若间隔较久，可用一句自然互动回应，例如“您之前撤回的消息我看到了”。\n撤回的消息内容：${withdrawnText}` : base;
     }
     return String(item.content || '').trim();
   };
