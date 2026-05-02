@@ -630,17 +630,18 @@ async function openChatMessage(container, state, db, chatId) {
   state.chatPromptSettings = normalizeChatPromptSettings(await dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, chatId)));
   /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
 
-  /* [区域标注] 隐藏主界面元素，显示消息页面 */
+  /* ========================================================================
+     [区域标注·已完成·本次进入聊天防闪屏修复] 消息页预渲染后再切换显示
+     说明：
+     1. 先读取当前会话的控制台状态，并在 msgWrap 仍隐藏时完成消息页 DOM 渲染。
+     2. 再同一批次隐藏聊天列表/底栏并显示消息页，避免先显示空白容器造成闪屏。
+     3. 本区域只调整进入聊天页的显示顺序，不新增任何持久化存储逻辑。
+     ======================================================================== */
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
   const bottomTab = container.querySelector('[data-role="bottom-tab"]');
   const panels = container.querySelectorAll('.chat-panel');
   const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-
-  if (topBar) topBar.style.display = 'none';
-  if (subTabs) subTabs.style.display = 'none';
-  if (bottomTab) bottomTab.style.display = 'none';
-  panels.forEach(p => p.style.display = 'none');
 
   /* ========================================================================
      [区域标注·已完成·本次控制台持久显示与后台记录修复] 进入会话时恢复控制台状态
@@ -654,8 +655,17 @@ async function openChatMessage(container, state, db, chatId) {
   state.chatConsoleExpanded = false;
 
   if (msgWrap) {
-    msgWrap.style.display = 'flex';
+    msgWrap.style.display = 'none';
     renderCurrentChatMessage(container, state);
+  }
+
+  if (topBar) topBar.style.display = 'none';
+  if (subTabs) subTabs.style.display = 'none';
+  if (bottomTab) bottomTab.style.display = 'none';
+  panels.forEach(p => p.style.display = 'none');
+
+  if (msgWrap) {
+    msgWrap.style.display = 'flex';
   }
 
   /* [区域标注] 滚动到消息底部 */

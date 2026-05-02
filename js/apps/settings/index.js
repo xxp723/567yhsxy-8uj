@@ -14,6 +14,7 @@ import {
 import { Logger } from '../../utils/Logger.js';
 import { Registry } from '../../core/logic/Registry.js';
 import { renderApiSection, bindApiEvents } from './api.js';
+import { renderImageApiSection, bindImageApiEvents } from './image-api.js';
 import { renderDataSection, bindDataEvents } from './data.js';
 import { renderLogsSection, bindLogsEvents } from './logs.js';
 
@@ -25,6 +26,7 @@ const {
 const ICONS = {
   appearance: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M24 4V24L39.5 37" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 4C24 4 36.2 8.4 39.5 37" fill="none" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="14" r="3" fill="#F97066"/><circle cx="10" cy="26" r="3" fill="#47B881"/><circle cx="16" cy="36" r="3" fill="#6C6EC7"/><circle cx="30" cy="16" r="3" fill="#FFCB47"/></svg>`,
   api: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M40 12L24 4L8 12V36L24 44L40 36V12Z" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M24 44V24" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 12L24 24" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12L24 24" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 4V14" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  imageApi: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="8" width="36" height="32" rx="4" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M6 34L16 24L24 31L31 22L42 34" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="18" r="4" fill="none" stroke="#333" stroke-width="3"/></svg>`,
   data: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M42 6H6V20H42V6Z" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M42 28H6V42H42V28Z" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><circle cx="13" cy="13" r="2" fill="#333"/><circle cx="13" cy="35" r="2" fill="#333"/><path d="M21 13H35" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M21 35H35" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M24 20V28" stroke="#333" stroke-width="3" stroke-linecap="round"/></svg>`,
   logs: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="8" y="4" width="32" height="40" rx="2" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M16 16H32" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M16 24H32" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M16 32H24" stroke="#333" stroke-width="3" stroke-linecap="round"/></svg>`,
   ui: `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect x="6" y="6" width="36" height="36" rx="3" fill="none" stroke="#333" stroke-width="3" stroke-linejoin="round"/><path d="M6 18H42" stroke="#333" stroke-width="3" stroke-linecap="round"/><path d="M18 18V42" stroke="#333" stroke-width="3" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#F97066"/><circle cx="19" cy="12" r="2" fill="#FFCB47"/><circle cx="26" cy="12" r="2" fill="#47B881"/></svg>`,
@@ -200,6 +202,9 @@ export async function mount(container, context) {
       <!-- 首页 -->
       <div id="settings-home" class="settings-home">
         <div class="settings-cards-grid">
+          <!-- ===== 设置：首页卡片排序（已完成·本次生图API） START =====
+               说明：顺序为外观设置、API设置、生图API、数据设置、查看日志；
+               在两列布局中“生图API”位于外观设置下方，“数据设置”位于API设置下方，“查看日志”位于生图API下方。 -->
           <div class="settings-card" data-page="appearance">
             <div class="settings-card__icon">${ICONS.appearance}</div>
             <h3 class="settings-card__title">外观设置</h3>
@@ -207,6 +212,10 @@ export async function mount(container, context) {
           <div class="settings-card" data-page="api">
             <div class="settings-card__icon">${ICONS.api}</div>
             <h3 class="settings-card__title">API设置</h3>
+          </div>
+          <div class="settings-card" data-page="image-api">
+            <div class="settings-card__icon">${ICONS.imageApi}</div>
+            <h3 class="settings-card__title">生图API</h3>
           </div>
           <div class="settings-card" data-page="data">
             <div class="settings-card__icon">${ICONS.data}</div>
@@ -216,11 +225,13 @@ export async function mount(container, context) {
             <div class="settings-card__icon">${ICONS.logs}</div>
             <h3 class="settings-card__title">查看日志</h3>
           </div>
+          <!-- ===== 设置：首页卡片排序（已完成·本次生图API） END ===== -->
         </div>
       </div>
 
       ${renderAppearanceSections({ current, icons: ICONS, apps })}
       ${renderApiSection({ current })}
+      ${renderImageApiSection({ current })}
       ${renderDataSection()}
       ${renderLogsSection()}
     </div>
@@ -241,6 +252,7 @@ export async function mount(container, context) {
       'appearance-widget-custom': '自定义',
       'appearance-font': '字体设置',
       api: 'API设置',
+      'image-api': '生图API',
       data: '数据设置',
       logs: '查看日志'
     };
@@ -256,6 +268,7 @@ export async function mount(container, context) {
       'appearance-widget-custom': 'appearance-widget',
       'appearance-font': 'appearance',
       api: 'home',
+      'image-api': 'home',
       data: 'home',
       logs: 'home'
     };
@@ -293,6 +306,7 @@ export async function mount(container, context) {
   // 绑定拆分后的模块事件
   bindAppearanceEvents(container, { settings, eventBus, current, icons: ICONS, apps });
   bindApiEvents(container, { settings });
+  bindImageApiEvents(container, { settings });
   bindDataEvents(container, { settings });
   bindLogsEvents(container);
 
