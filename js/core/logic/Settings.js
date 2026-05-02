@@ -101,80 +101,117 @@ export class Settings {
     return next;
   }
 
+  /* ========================================================================
+     [修改标注·已完成·本次数据设置全量导入导出与清空]
+     说明：
+     1. “设置 > 数据设置”的导出/导入/清空以 DB.js 当前 IndexedDB 对象仓库为唯一数据源。
+     2. 仓库列表动态读取当前数据库 objectStoreNames；以后新应用只要写入 DB.js 管理的 IndexedDB，
+        其新增对象仓库或 appsData 记录都会自动进入全量导出、导入和清空流程。
+     3. 导入 appsData 时原样 put 记录，不再通过 AppDataStore.set 重建，避免丢失记录上的其它字段。
+     4. 不使用 localStorage/sessionStorage，不写双份存储兜底，也不做长文本或大媒体字段过滤。
+     ======================================================================== */
+  async getFullBackupStoreNames() {
+    const indexedDb = await this.store.db.init();
+    return Array.from(indexedDb.objectStoreNames);
+  }
+
   /**
-   * 导出所有核心数据（桌面配置、设置、记忆、应用私有数据、错误日志）
+   * 导出小手机网页全部 IndexedDB 数据（包含当前 DB.js 已注册的全部对象仓库）
    */
   async exportAllData() {
-    const settings = await this.store.getSettings();
-    const desktop = await this.desktopStore.getConfig();
-    const memories = await this.memoryStore.getAllMemories();
-    const appsData = await this.appDataStore.getAll();
+    const stores = {};
+    const storeNames = await this.getFullBackupStoreNames();
 
-    let logs = [];
-    try {
-      logs = await Logger.getErrorLogs();
-    } catch {
-      logs = [];
+    for (const storeName of storeNames) {
+      stores[storeName] = await this.store.db.getAll(storeName);
     }
 
     return {
       meta: {
         app: 'MiniPhone',
-        version: 1,
+        version: 3,
+        type: 'indexeddb-full-backup',
+        stores: storeNames,
         exportedAt: Date.now()
       },
+      stores,
       data: {
-        settings,
-        desktop,
-        memories,
-        appsData,
-        logs
+        settings: stores.settings?.find((item) => item?.id === this.store.recordId) || null,
+        desktop: stores.desktop?.find((item) => item?.id === this.desktopStore.recordId) || null,
+        memories: stores.memories || [],
+        appsData: stores.appsData || []
       }
     };
   }
 
+  normalizeLegacyBackupToStores(backup) {
+    if (backup?.stores && typeof backup.stores === 'object') {
+      return backup.stores;
+    }
+
+    if (!backup?.data || typeof backup.data !== 'object') {
+      throw new Error('导入数据格式错误');
+    }
+
+    const { settings, desktop, memories, appsData } = backup.data;
+    return {
+      desktop: desktop ? [{ id: this.desktopStore.recordId, ...desktop }] : [],
+      settings: settings ? [{ id: this.store.recordId, ...settings }] : [],
+      memories: Array.isArray(memories) ? memories : [],
+      appsData: Array.isArray(appsData) ? appsData : []
+    };
+  }
+
   /**
-   * 导入数据（可按需覆盖）
+   * 导入小手机网页全部 IndexedDB 数据（可按需覆盖）
    * @param {any} backup
    * @param {{overwrite?: boolean}} options
    */
   async importAllData(backup, options = {}) {
     const { overwrite = true } = options;
-    if (!backup || !backup.data) {
-      throw new Error('导入数据格式错误');
-    }
-
-    const { settings, desktop, memories, appsData, logs } = backup.data;
+    const storeNames = await this.getFullBackupStoreNames();
+    const importableStoreNames = new Set(storeNames);
+    const stores = this.normalizeLegacyBackupToStores(backup);
 
     if (overwrite) {
-      await this.memoryStore.clearAll();
-      await this.appDataStore.db.clear('appsData');
-    }
-
-    if (settings) await this.store.saveSettings(settings);
-    if (desktop) await this.desktopStore.saveConfig(desktop);
-
-    if (Array.isArray(memories)) {
-      for (const item of memories) {
-        await this.memoryStore.setMemory(item.key, item.value, item.sourceApp || 'import');
+      for (const storeName of storeNames) {
+        await this.store.db.clear(storeName);
       }
     }
 
-    if (Array.isArray(appsData)) {
-      for (const item of appsData) {
-        await this.appDataStore.set(item.appId, item.key, item.value);
+    for (const [storeName, records] of Object.entries(stores)) {
+      if (!importableStoreNames.has(storeName) || !Array.isArray(records)) continue;
+
+      for (const record of records) {
+        if (!record || typeof record !== 'object') continue;
+        await this.store.db.put(storeName, record);
       }
     }
 
-    if (Array.isArray(logs)) {
-      await Logger.saveErrorLog(logs.slice(0, 200));
-    }
-
-    Logger.info('导入数据完成');
+    Logger.info('全量数据导入完成');
     if (this.eventBus) {
       this.eventBus.emit('settings:imported', {});
       this.eventBus.emit('desktop:changed', {});
       this.eventBus.emit('memory:updated', { sourceApp: 'import' });
+    }
+
+    return true;
+  }
+
+  /**
+   * 清空小手机网页全部 IndexedDB 数据，刷新后由现有初始化流程回到默认初始状态。
+   */
+  async clearAllData() {
+    const storeNames = await this.getFullBackupStoreNames();
+
+    for (const storeName of storeNames) {
+      await this.store.db.clear(storeName);
+    }
+
+    if (this.eventBus) {
+      this.eventBus.emit('settings:cleared', {});
+      this.eventBus.emit('desktop:changed', {});
+      this.eventBus.emit('memory:updated', { sourceApp: 'clear-all' });
     }
 
     return true;

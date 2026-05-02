@@ -41,9 +41,9 @@ export class AppManager {
     this.bindEvents();
 
     /* ==========================================================================
-       [区域标注·本次需求4] 应用模块空闲预热
-       说明：不改变任何持久化逻辑；仅在浏览器空闲时提前 import 应用入口，
-             让除闲谈外的其它应用点击后也能更快响应、减少“点了没反应”的体感。
+       [区域标注·本次需求2·非关键应用空闲预热]
+       说明：不改变任何持久化逻辑；仅在浏览器空闲时提前 import 应用入口。
+             设置/世情/档案/闲谈这 4 个点名应用由 main.js 在桌面渲染前执行关键预热。
        ========================================================================== */
     this.scheduleModuleWarmup();
   }
@@ -83,21 +83,21 @@ export class AppManager {
     const openingTask = (async () => {
       try {
         /* ==========================================================================
-           [区域标注·本次需求4] 先打开窗口再加载模块，提升所有应用的点击响应速度
-           说明：旧逻辑会等动态 import 完成后才打开窗口，容易造成“其它应用点不进去”的体感。
-                 现在普通应用会立即出现窗口；闲谈应用在打开窗口前先加载专属 CSS，避免闪过全局样式。
+           [区域标注·本次需求2·点击后先开窗口再挂载]
+           说明：旧逻辑会等动态 import 完成后才打开窗口，容易造成“点了没反应”的体感。
+                 现在窗口先响应；设置/世情/档案/闲谈会在启动阶段额外预热入口模块和关键 CSS。
            ========================================================================== */
         const modulePromise = this.loadModule(appMeta);
 
         if (appId === 'chat') {
-          /* [区域标注·本次需求1] 闲谈首屏样式预加载：窗口显示前先确保 chat.css 可用 */
+          /* [区域标注·本次需求2·闲谈样式兜底预加载] 窗口显示前确保 chat.css 可用，避免无样式闪烁。 */
           await this.preloadChatCriticalStyles();
         }
 
         const contentEl = this.windowManager.open(appMeta);
 
         if (appId === 'chat') {
-          /* [区域标注·本次需求1] 清空全局 loading，避免闲谈进入时闪过全局 CSS/加载样式 */
+          /* [区域标注·本次需求2·闲谈加载提示清理] 清空全局 loading，避免闲谈进入时闪过全局 CSS/加载样式。 */
           contentEl.innerHTML = '';
         }
 
@@ -134,17 +134,17 @@ export class AppManager {
   }
 
   /* ==========================================================================
-     [区域标注·本次需求1] 闲谈应用关键 CSS 预加载
+     [区域标注·本次需求2·闲谈应用关键 CSS 预加载]
      说明：只预加载闲谈自己的样式，不写任何持久化数据。
-   ========================================================================== */
+     ========================================================================== */
   async preloadChatCriticalStyles() {
     await this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css');
   }
 
   /* ==========================================================================
-     [区域标注·本次需求1] 通用 CSS 预加载工具
-     说明：与闲谈应用内部 loadCSS 使用同一 link id，避免重复插入样式表。
-   ========================================================================== */
+     [区域标注·本次需求2·通用 CSS 预加载工具]
+     说明：与应用内部 loadCSS 使用同一 link id，避免重复插入样式表。
+     ========================================================================== */
   preloadStylesheet(href, id) {
     return new Promise((resolve) => {
       const existing = document.getElementById(id);
@@ -177,9 +177,32 @@ export class AppManager {
   }
 
   /* ==========================================================================
-     [区域标注·本次需求4] 空闲时预热应用入口模块
+     [区域标注·本次需求2·四个常用应用点击即进预热]
+     说明：
+     - 仅预热用户点名的设置、世情、档案、闲谈四个应用。
+     - 只提前加载入口模块和关键 CSS；不 mount、不读写持久化数据。
+     - 持久化仍统一使用项目 DB/IndexedDB 链路，不引入浏览器同步存储。
+     ========================================================================== */
+  async warmupCriticalApps(appIds = ['settings', 'worldbook', 'archive', 'chat']) {
+    const cssTasks = [
+      this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css'),
+      this.preloadStylesheet('./js/apps/chat/chat-message.css', 'chat-msg-css'),
+      this.preloadStylesheet('./js/apps/archive/archive.css', 'archive-app-css'),
+      this.preloadStylesheet('./js/apps/worldbook/worldbook.css', 'worldbook-app-css')
+    ];
+
+    const moduleTasks = appIds
+      .map((appId) => this.registry.get(appId))
+      .filter(Boolean)
+      .map((appMeta) => this.loadModule(appMeta));
+
+    await Promise.allSettled([...cssTasks, ...moduleTasks]);
+  }
+
+  /* ==========================================================================
+     [区域标注·本次需求2·非关键应用空闲预热]
      说明：只做动态 import 缓存，不挂载应用、不读写持久化数据。
-   ========================================================================== */
+     ========================================================================== */
   scheduleModuleWarmup() {
     const run = () => {
       void this.warmupRegisteredAppModules();
@@ -195,7 +218,8 @@ export class AppManager {
 
   async warmupRegisteredAppModules() {
     try {
-      const apps = this.registry.getAll();
+      const criticalAppIds = new Set(['settings', 'worldbook', 'archive', 'chat']);
+      const apps = this.registry.getAll().filter((appMeta) => !criticalAppIds.has(appMeta.id));
       await Promise.allSettled(apps.map((appMeta) => this.loadModule(appMeta)));
     } catch (error) {
       Logger.warn('应用模块预热失败', error);

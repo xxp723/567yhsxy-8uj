@@ -113,6 +113,16 @@ class MiniPhoneApp {
       // 3) 初始化逻辑层数据
       await this.settings.initDefaults();
       await this.registry.initDefaults();
+
+      /* ==========================================================================
+         [区域标注·本次需求2·设置世情档案闲谈点击即进预热]
+         说明：
+         - Registry 初始化后立即预热用户点名的 4 个应用入口模块与关键 CSS。
+         - 这里只做资源加载缓存，不 mount 应用、不读写业务数据。
+         - 持久化仍统一走项目 DB/IndexedDB 链路，不引入浏览器同步存储。
+         ========================================================================== */
+      await this.appManager.warmupCriticalApps(['settings', 'worldbook', 'archive', 'chat']);
+
       await this.desktopConfig.initDefaults();
       await this.globalMemory.init();
 
