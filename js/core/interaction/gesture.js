@@ -2,13 +2,14 @@
  * 文件名: js/core/interaction/gesture.js
  * 用途: iOS 风格左侧边缘侧滑返回手势。
  * 说明:
- * - 仅在触摸起点距离屏幕左边缘 20px 以内时进入候选状态。
+ * - 在应用屏幕左侧内部安全区域进入候选状态，避免手机系统物理边缘手势抢占。
  * - 向右滑动时以淡入淡出为主要视觉反馈，不再把页面整体直接右移。
  * - 松手时超过屏幕宽度 30% 自动完成返回，否则回弹。
  * - 返回动作优先复用当前页面已有返回按钮，避免无内部历史时退出到手机系统桌面。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
  * - 已增加应用内左侧手势热区与横向过度滚动控制，减少系统/浏览器边缘手势抢占。
  * - 已修正为以 #screen-root 应用屏幕左边缘为参照，不再误用浏览器视口最左侧。
+ * - 已增加项目内仿系统侧滑提示层，不依赖手机系统原生返回提示。
  * 位置: /js/core/interaction/gesture.js
  * 架构层: 交互层（Interaction Layer）
  */
@@ -16,13 +17,16 @@
 /* ==========================================================================
    [区域标注·本次需求·iOS侧滑返回手势配置区·已完成]
    说明：
-   - EDGE_ACTIVATE_WIDTH 控制左边缘触发范围：20px。
+   - EDGE_ACTIVATE_WIDTH 控制应用内安全触发区宽度。
+   - EDGE_SAFE_INSET 控制触发区向应用屏幕内部偏移，避免手机物理边缘被系统抢占。
    - COMPLETE_RATIO 控制完成返回阈值：屏幕宽度 30%。
    - EDGE_GUARD_Z_INDEX 控制透明热区层级，确保在应用 UI 内优先接收触摸。
+   - INDICATOR_Z_INDEX 控制仿系统侧滑提示层级。
    - 热区位置基于 #screen-root 的 getBoundingClientRect() 动态计算。
    - 以下配置均为运行时交互参数，不涉及任何持久化存储。
    ========================================================================== */
-const EDGE_ACTIVATE_WIDTH = 20;
+const EDGE_ACTIVATE_WIDTH = 44;
+const EDGE_SAFE_INSET = 10;
 const COMPLETE_RATIO = 0.3;
 const DIRECTION_LOCK_DISTANCE = 8;
 const MAX_VISUAL_TRANSLATE_RATIO = 0.96;
@@ -31,6 +35,7 @@ const MOVE_TRANSITION = 'none';
 const RELEASE_TRANSITION = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, filter 220ms ease';
 const COMPLETE_TRANSITION = 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease, filter 240ms ease';
 const EDGE_GUARD_Z_INDEX = '2147483646';
+const INDICATOR_Z_INDEX = '2147483645';
 
 /**
  * iOS 风格边缘返回手势。
@@ -59,6 +64,7 @@ export class EdgeBackGesture {
     this.isAnimating = false;
     this.previousInlineStyle = null;
     this.edgeGuardEl = null;
+    this.edgeIndicatorEl = null;
     this.previousRootOverscrollStyle = null;
 
     this.onTouchStart = this.onTouchStart.bind(this);
@@ -72,6 +78,7 @@ export class EdgeBackGesture {
     if (!this.surfaceEl) return;
 
     this.installEdgeGestureGuards();
+    this.installEdgeGestureIndicator();
 
     document.addEventListener('touchstart', this.onTouchStart, { passive: false, capture: true });
     document.addEventListener('touchmove', this.onTouchMove, { passive: false, capture: true });
@@ -90,6 +97,7 @@ export class EdgeBackGesture {
     window.removeEventListener('resize', this.updateEdgeGuardPosition);
     window.removeEventListener('scroll', this.updateEdgeGuardPosition);
     window.removeEventListener('orientationchange', this.updateEdgeGuardPosition);
+    this.removeEdgeGestureIndicator();
     this.removeEdgeGestureGuards();
     this.resetVisualState();
     this.resetTouchState();
@@ -99,7 +107,7 @@ export class EdgeBackGesture {
     if (this.isAnimating || event.touches.length !== 1) return;
 
     const touch = event.touches[0];
-    if (!touch || !this.isWithinSurfaceLeftEdge(touch)) return;
+    if (!touch || !this.isWithinSurfaceSafeGestureArea(touch)) return;
     if (this.isFromEdgeGuard(event.target)) {
       event.preventDefault();
     }
@@ -179,17 +187,18 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·以应用屏幕为边缘参照·已完成]
+     [区域标注·本次反馈修复·应用内安全触发区·已完成]
      说明：
      - MiniPhone 手机外壳可能居中显示，#screen-root 左边缘不等于浏览器视口 left: 0。
-     - 这里用 #screen-root.getBoundingClientRect() 判断触摸是否位于应用屏幕左侧 20px。
-     - 解决“没有从浏览器最左侧开始滑动时完全无反应”的问题。
+     - 手机物理最左边缘容易被系统原生返回手势抢占，网页 JS 无法稳定接管。
+     - 这里改为 #screen-root 内部靠左安全区域：从左侧向内偏移 EDGE_SAFE_INSET 后开始捕获。
+     - 解决“项目手势很难触发、触发的是手机系统原生桌面返回”的问题。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
-  isWithinSurfaceLeftEdge(touch) {
+  isWithinSurfaceSafeGestureArea(touch) {
     const rect = this.surfaceEl.getBoundingClientRect();
-    const edgeLeft = rect.left;
-    const edgeRight = rect.left + EDGE_ACTIVATE_WIDTH;
+    const edgeLeft = rect.left + EDGE_SAFE_INSET;
+    const edgeRight = edgeLeft + EDGE_ACTIVATE_WIDTH;
     const edgeTop = rect.top;
     const edgeBottom = rect.bottom;
 
@@ -205,8 +214,8 @@ export class EdgeBackGesture {
      [区域标注·本次反馈修复·应用内左侧手势热区·已完成]
      说明：
      - 手机物理最边缘可能被系统手势抢占，网页无法 100% 禁止。
-     - 这里在 #screen-root 应用画面内部左侧 20px 创建透明热区，并设置 touch-action: none，
-       让从应用内侧边缘开始的滑动尽量先被网页接收。
+     - 这里在 #screen-root 应用画面内部靠左安全区域创建透明热区，并设置 touch-action: none，
+       让从应用内部左侧开始的滑动尽量先被网页接收，避开手机物理边缘系统手势。
      - 热区跟随 #screen-root 的实际位置和尺寸，不再固定在浏览器视口 left: 0。
      - 同时设置 overscroll-behavior-x: none，减少浏览器横向导航/回弹干扰。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
@@ -248,10 +257,90 @@ export class EdgeBackGesture {
     if (!this.edgeGuardEl || !this.surfaceEl) return;
 
     const rect = this.surfaceEl.getBoundingClientRect();
-    this.edgeGuardEl.style.left = `${rect.left}px`;
+    this.edgeGuardEl.style.left = `${rect.left + EDGE_SAFE_INSET}px`;
     this.edgeGuardEl.style.top = `${rect.top}px`;
     this.edgeGuardEl.style.height = `${rect.height}px`;
     this.edgeGuardEl.style.width = `${EDGE_ACTIVATE_WIDTH}px`;
+    this.updateEdgeGestureIndicatorPosition(rect);
+  }
+
+  /* ==========================================================================
+     [区域标注·本次反馈修复·自定义仿系统侧滑提示·已完成]
+     说明：
+     - 用户截图里的深色弧形箭头属于手机系统/浏览器原生手势提示，网页无法直接控制。
+     - 这里创建项目内自定义提示层：深色半胶囊背景 + 白色返回箭头。
+     - 手势过程中根据滑动进度淡入/轻微位移，完成或回弹时淡出。
+     - 图标为内联 SVG，按 IconPark 风格线性箭头绘制，不使用浏览器原生图标/弹窗/选择器。
+     ========================================================================== */
+  installEdgeGestureIndicator() {
+    if (this.edgeIndicatorEl) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'miniphone-edge-back-gesture-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    indicator.style.position = 'fixed';
+    indicator.style.left = '0';
+    indicator.style.top = '0';
+    indicator.style.width = '38px';
+    indicator.style.height = '72px';
+    indicator.style.borderRadius = '0 38px 38px 0';
+    indicator.style.background = 'rgba(18, 18, 22, 0.72)';
+    indicator.style.backdropFilter = 'blur(10px)';
+    indicator.style.webkitBackdropFilter = 'blur(10px)';
+    indicator.style.display = 'flex';
+    indicator.style.alignItems = 'center';
+    indicator.style.justifyContent = 'center';
+    indicator.style.color = '#fff';
+    indicator.style.opacity = '0';
+    indicator.style.transform = 'translate3d(-18px, -50%, 0) scale(0.94)';
+    indicator.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+    indicator.style.pointerEvents = 'none';
+    indicator.style.zIndex = INDICATOR_Z_INDEX;
+    indicator.style.boxShadow = '8px 0 24px rgba(0, 0, 0, 0.18)';
+    indicator.innerHTML = `
+      <svg width="26" height="26" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M30 12L18 24L30 36" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+
+    document.body.appendChild(indicator);
+    this.edgeIndicatorEl = indicator;
+    this.updateEdgeGestureIndicatorPosition();
+  }
+
+  updateEdgeGestureIndicatorPosition(surfaceRect = this.surfaceEl.getBoundingClientRect()) {
+    if (!this.edgeIndicatorEl || !surfaceRect) return;
+
+    this.edgeIndicatorEl.style.left = `${surfaceRect.left}px`;
+    this.edgeIndicatorEl.style.top = `${surfaceRect.top + surfaceRect.height / 2}px`;
+  }
+
+  updateEdgeGestureIndicator(progress) {
+    if (!this.edgeIndicatorEl) return;
+
+    const clampedProgress = Math.max(0, Math.min(1, progress));
+    const opacity = Math.min(1, clampedProgress * 1.35);
+    const translateX = -18 + clampedProgress * 18;
+    const scale = 0.94 + clampedProgress * 0.06;
+
+    this.edgeIndicatorEl.style.transition = MOVE_TRANSITION;
+    this.edgeIndicatorEl.style.opacity = String(opacity);
+    this.edgeIndicatorEl.style.transform = `translate3d(${translateX}px, -50%, 0) scale(${scale})`;
+  }
+
+  hideEdgeGestureIndicator() {
+    if (!this.edgeIndicatorEl) return;
+
+    this.edgeIndicatorEl.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+    this.edgeIndicatorEl.style.opacity = '0';
+    this.edgeIndicatorEl.style.transform = 'translate3d(-18px, -50%, 0) scale(0.94)';
+  }
+
+  removeEdgeGestureIndicator() {
+    if (this.edgeIndicatorEl) {
+      this.edgeIndicatorEl.remove();
+      this.edgeIndicatorEl = null;
+    }
   }
 
   removeEdgeGestureGuards() {
@@ -326,6 +415,7 @@ export class EdgeBackGesture {
     const opacity = 1 - progress * 0.22;
     const brightness = 1 - progress * 0.04;
 
+    this.updateEdgeGestureIndicator(progress);
     this.surfaceEl.style.transition = MOVE_TRANSITION;
     this.surfaceEl.style.transform = `scale(${scale})`;
     this.surfaceEl.style.opacity = String(opacity);
@@ -357,10 +447,12 @@ export class EdgeBackGesture {
     this.surfaceEl.style.opacity = '0.72';
     this.surfaceEl.style.boxShadow = 'none';
     this.surfaceEl.style.filter = 'brightness(0.96)';
+    this.updateEdgeGestureIndicator(1);
 
     window.setTimeout(() => {
       backButton.click();
       window.setTimeout(() => {
+        this.hideEdgeGestureIndicator();
         this.resetVisualState();
         this.resetTouchState();
         this.isAnimating = false;
@@ -411,6 +503,7 @@ export class EdgeBackGesture {
     this.surfaceEl.style.opacity = '1';
     this.surfaceEl.style.boxShadow = 'none';
     this.surfaceEl.style.filter = 'brightness(1)';
+    this.hideEdgeGestureIndicator();
 
     window.setTimeout(() => {
       this.resetVisualState();
