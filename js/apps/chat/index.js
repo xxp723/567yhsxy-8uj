@@ -1688,16 +1688,34 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        3. 结果点击跳转逻辑见 jump-msg-search-result；界面局部同步，避免页面闪屏。
        ======================================================================== */
     case 'toggle-msg-search':
+      /* ========================================================================
+         [聊天记录搜索防穿透修复]
+         说明：
+         1. 搜索按钮只控制闲谈消息页搜索面板，不允许点击事件继续冒泡到桌面层。
+         2. 配合 chat-message.js 中“只滚动消息列表容器”的定位修复，避免触发桌面编辑模式的“添加应用与组件”窗口。
+         3. 本区域仅处理运行时 UI 事件，不涉及任何持久化存储。
+         ======================================================================== */
+      e.preventDefault();
+      e.stopPropagation();
       state.chatMessageSearchOpen = !state.chatMessageSearchOpen;
       if (!state.chatMessageSearchOpen) state.chatMessageSearchKeyword = '';
       syncChatMessageSearchPanel(container, state);
       break;
 
     /* ========================================================================
-       [区域标注·已完成·聊天记录搜索] 搜索结果气泡点击：回滚到对应消息位置
+       [聊天记录搜索] 搜索结果气泡点击：回滚到对应消息位置
        说明：点击透明结果框内任意命中气泡后，聊天消息列表平滑滚动到该消息气泡。
        ======================================================================== */
     case 'jump-msg-search-result': {
+      /* ========================================================================
+         [聊天记录搜索结果点击防穿透修复]
+         说明：
+         1. 点击搜索结果后只回滚当前聊天消息列表，不让点击事件冒泡到桌面编辑模式。
+         2. 回滚定位由 chat-message.js 限定在 data-role="msg-list" 容器内完成。
+         3. 不使用原生弹窗，不读写任何持久化存储。
+         ======================================================================== */
+      e.preventDefault();
+      e.stopPropagation();
       const messageId = String(target.dataset.messageId || '').trim();
       if (messageId) scrollToChatSearchResult(container, messageId);
       break;
@@ -3280,12 +3298,14 @@ function handleInput(e, state, container, db) {
   /* [区域标注] 聊天列表搜索输入 */
   if (target.matches('[data-role="msg-search-input"]')) {
     /* ========================================================================
-       [区域标注·已完成·聊天记录搜索] 搜索框输入：实时命中聊天记录
+       [区域标注·已完成·聊天记录搜索文案与防穿透修复] 搜索框输入：实时命中聊天记录
        说明：
-       1. 不限制输入字数；用户与 AI 消息均由 chat-message.js 根据当前消息列表匹配。
+       1. 不限制输入字数；你与对方的消息均由 chat-message.js 根据当前消息列表匹配。
        2. 只局部刷新顶栏下方搜索结果面板，不重绘整个聊天页，避免闪屏。
-       3. 仅保存为运行时状态，不使用 localStorage/sessionStorage。
+       3. 输入事件不冒泡到桌面层，避免搜索浮层操作误触发“添加应用与组件”窗口。
+       4. 仅保存为运行时状态，不使用 localStorage/sessionStorage。
        ======================================================================== */
+    e.stopPropagation();
     state.chatMessageSearchKeyword = target.value || '';
     syncChatMessageSearchPanel(container, state);
     return;

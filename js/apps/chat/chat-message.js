@@ -267,13 +267,14 @@ function renderQuotePreview(quote = {}, variant = 'bubble') {
 }
 
 /* ========================================================================
-   [区域标注·已完成·聊天记录搜索输入法与浮层修复] 搜索匹配与面板渲染工具
+   [区域标注·已完成·聊天记录搜索文案与回滚定位修复] 搜索匹配与面板渲染工具
    说明：
-   1. 只搜索当前运行时 currentMessages，用户与 AI 消息都纳入范围。
+   1. 只搜索当前运行时 currentMessages，你与对方的消息都纳入范围。
    2. 不写入 IndexedDB，不使用 localStorage/sessionStorage，不做双份存储兜底。
    3. 搜索框不限制输入字数；输入时只局部刷新结果框，不替换正在输入的 input DOM。
    4. 已修复移动端输入法因 input 被 outerHTML 重建而每输入一个字就失焦/收起的问题。
    5. 搜索浮层由 CSS 覆盖在顶栏下方，不挤压消息列表，避免页面整体上移与触摸穿透。
+   6. 本次已将空状态说明文字改为“输入关键字后，你与对方的相关消息都会显示在这里。”。
    ======================================================================== */
 function getChatSearchMessageText(message = {}) {
   const baseText = getMessageDisplayTextForQuote(message);
@@ -321,7 +322,7 @@ function renderChatMessageSearchResultsHtml(session = {}, messages = [], options
     ? (matches.length
         ? matches.map(item => renderChatSearchResultBubble(item, session, userProfile)).join('')
         : `<div class="msg-search-panel__empty">没有命中“${escapeHtml(keyword)}”</div>`)
-    : `<div class="msg-search-panel__empty">输入关键字后，用户与 AI 的相关消息会显示在这里。</div>`;
+    : `<div class="msg-search-panel__empty">输入关键字后，你与对方的相关消息都会显示在这里。</div>`;
 }
 
 function renderChatMessageSearchPanelHtml(session = {}, messages = [], options = {}) {
@@ -330,11 +331,12 @@ function renderChatMessageSearchPanelHtml(session = {}, messages = [], options =
 
   return `
     <!-- ======================================================================
-         [区域标注·已完成·聊天记录搜索输入法与浮层修复] 顶栏下浮搜索框与命中结果
+         [区域标注·已完成·聊天记录搜索文案与回滚定位修复] 顶栏下浮搜索框与命中结果
          说明：
          1. 点击顶栏放大镜后从顶栏下边框向下浮现；搜索仅使用当前运行时消息数组。
          2. 输入时只替换 data-role="msg-search-results" 内容，不替换 input DOM，避免输入法被关闭。
-         3. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
+         3. 空状态文案已按本次需求更新为“你与对方”的说明。
+         4. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
          ====================================================================== -->
     <div class="msg-search-panel ${searchOpen ? 'is-open' : ''}" data-role="msg-search-panel">
       <div class="msg-search-panel__box">
@@ -2852,7 +2854,23 @@ export function scrollToChatSearchResult(container, messageId = '') {
   const row = listArea?.querySelector(`[data-message-id="${CSS.escape(safeMessageId)}"]`);
   if (!listArea || !row) return false;
 
-  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  /* ======================================================================
+     [区域标注·已完成·聊天记录搜索回滚定位修复]
+     说明：
+     1. 禁止使用 row.scrollIntoView()，它会连带滚动外层页面/桌面层，造成聊天顶栏被顶上去。
+     2. 只计算目标气泡相对 data-role="msg-list" 的位置，并滚动消息列表容器自身。
+     3. 不触碰桌面编辑模式、不触发“添加应用与组件”窗口，不涉及任何持久化存储。
+     ====================================================================== */
+  const listRect = listArea.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const nextScrollTop = listArea.scrollTop
+    + (rowRect.top - listRect.top)
+    - ((listArea.clientHeight - rowRect.height) / 2);
+
+  listArea.scrollTo({
+    top: Math.max(0, Math.min(nextScrollTop, listArea.scrollHeight - listArea.clientHeight)),
+    behavior: 'smooth'
+  });
   row.classList.remove('is-search-target');
   window.setTimeout(() => row.classList.add('is-search-target'), 20);
   window.setTimeout(() => row.classList.remove('is-search-target'), 1700);

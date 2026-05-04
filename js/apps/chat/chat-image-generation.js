@@ -118,7 +118,7 @@ export function getEffectiveChatImageBaseUrl(imageApi) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次需求1] 闲谈 AI 生图提示词
+   闲谈 AI 生图提示词
    说明：
    1. 由 prompt.js 调用并拼进 system prompt。
    2. 只有生图 API 已开启且配置完整时，才允许 AI 输出 [图片] 协议。
