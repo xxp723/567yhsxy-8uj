@@ -1,15 +1,15 @@
 /**
  * 文件名: js/core/interaction/gesture.js
- * 用途: iOS 风格左侧边缘侧滑返回手势。
+ * 用途: 小手机网页内全局 iOS 风格左侧边缘侧滑返回手势。
  * 说明:
  * - 在应用屏幕左侧内部安全区域进入候选状态，避免手机系统物理边缘手势抢占。
- * - 向右滑动时以淡入淡出为主要视觉反馈，不再把页面整体直接右移。
+ * - 向右滑动时以项目内系统风格贴边手势把手 + 淡入淡出为主要视觉反馈，不改变页面大小。
  * - 松手时超过屏幕宽度 30% 自动完成返回，否则回弹。
- * - 返回动作优先复用当前页面已有返回按钮，避免无内部历史时退出到手机系统桌面。
+ * - 返回动作只解析并触发小手机网页内当前应用的真实可见返回入口，不调用 history.back()。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
  * - 已增加应用内左侧手势热区与横向过度滚动控制，减少系统/浏览器边缘手势抢占。
  * - 已修正为以 #screen-root 应用屏幕左边缘为参照，不再误用浏览器视口最左侧。
- * - 已增加项目内仿系统侧滑提示层，不依赖手机系统原生返回提示。
+ * - 已增加项目内系统风格贴边手势把手，不依赖手机系统原生返回提示。
  * 位置: /js/core/interaction/gesture.js
  * 架构层: 交互层（Interaction Layer）
  */
@@ -21,7 +21,7 @@
    - EDGE_SAFE_INSET 控制触发区向应用屏幕内部偏移，避免手机物理边缘被系统抢占。
    - COMPLETE_RATIO 控制完成返回阈值：屏幕宽度 30%。
    - EDGE_GUARD_Z_INDEX 控制透明热区层级，确保在应用 UI 内优先接收触摸。
-   - INDICATOR_Z_INDEX 控制仿系统侧滑提示层级。
+   - INDICATOR_Z_INDEX 控制系统风格贴边手势把手层级。
    - 热区位置基于 #screen-root 的 getBoundingClientRect() 动态计算。
    - 以下配置均为运行时交互参数，不涉及任何持久化存储。
    ========================================================================== */
@@ -29,11 +29,9 @@ const EDGE_ACTIVATE_WIDTH = 44;
 const EDGE_SAFE_INSET = 10;
 const COMPLETE_RATIO = 0.3;
 const DIRECTION_LOCK_DISTANCE = 8;
-const MAX_VISUAL_TRANSLATE_RATIO = 0.96;
-const RUBBER_BAND_POWER = 0.82;
 const MOVE_TRANSITION = 'none';
-const RELEASE_TRANSITION = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, filter 220ms ease';
-const COMPLETE_TRANSITION = 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease, filter 240ms ease';
+const RELEASE_TRANSITION = 'opacity 220ms ease, filter 220ms ease';
+const COMPLETE_TRANSITION = 'opacity 240ms ease, filter 240ms ease';
 const EDGE_GUARD_Z_INDEX = '2147483646';
 const INDICATOR_Z_INDEX = '2147483645';
 
@@ -42,7 +40,7 @@ const INDICATOR_Z_INDEX = '2147483645';
  */
 export class EdgeBackGesture {
   /**
-   * @param {HTMLElement} surfaceEl 需要跟随手指移动的页面根元素
+   * @param {HTMLElement} surfaceEl 需要提供手势反馈的小手机屏幕根元素
    */
   constructor(surfaceEl = document.getElementById('screen-root')) {
     this.surfaceEl = surfaceEl || document.body;
@@ -265,12 +263,14 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·自定义仿系统侧滑提示·已完成]
+     [区域标注·本次反馈修复·系统风格贴边手势把手·已完成]
      说明：
-     - 用户截图里的深色弧形箭头属于手机系统/浏览器原生手势提示，网页无法直接控制。
-     - 这里创建项目内自定义提示层：深色半胶囊背景 + 白色返回箭头。
+     - 用户截图里的深色箭头属于手机系统/浏览器原生手势提示，网页无法直接控制。
+     - 这里创建项目内自定义提示层：贴边窄型深色磨砂把手 + 白色返回箭头。
+     - 不再使用大半圆形，改为更接近系统边缘返回提示的窄长悬浮样式。
      - 手势过程中根据滑动进度淡入/轻微位移，完成或回弹时淡出。
      - 图标为内联 SVG，按 IconPark 风格线性箭头绘制，不使用浏览器原生图标/弹窗/选择器。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   installEdgeGestureIndicator() {
     if (this.edgeIndicatorEl) return;
@@ -281,25 +281,25 @@ export class EdgeBackGesture {
     indicator.style.position = 'fixed';
     indicator.style.left = '0';
     indicator.style.top = '0';
-    indicator.style.width = '38px';
-    indicator.style.height = '72px';
-    indicator.style.borderRadius = '0 38px 38px 0';
-    indicator.style.background = 'rgba(18, 18, 22, 0.72)';
-    indicator.style.backdropFilter = 'blur(10px)';
-    indicator.style.webkitBackdropFilter = 'blur(10px)';
+    indicator.style.width = '28px';
+    indicator.style.height = '86px';
+    indicator.style.borderRadius = '0 22px 22px 0';
+    indicator.style.background = 'linear-gradient(90deg, rgba(18, 18, 22, 0.86), rgba(18, 18, 22, 0.56))';
+    indicator.style.backdropFilter = 'blur(14px) saturate(1.15)';
+    indicator.style.webkitBackdropFilter = 'blur(14px) saturate(1.15)';
     indicator.style.display = 'flex';
     indicator.style.alignItems = 'center';
     indicator.style.justifyContent = 'center';
     indicator.style.color = '#fff';
     indicator.style.opacity = '0';
-    indicator.style.transform = 'translate3d(-18px, -50%, 0) scale(0.94)';
+    indicator.style.transform = 'translate3d(-12px, -50%, 0)';
     indicator.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
     indicator.style.pointerEvents = 'none';
     indicator.style.zIndex = INDICATOR_Z_INDEX;
-    indicator.style.boxShadow = '8px 0 24px rgba(0, 0, 0, 0.18)';
+    indicator.style.boxShadow = '6px 0 18px rgba(0, 0, 0, 0.16)';
     indicator.innerHTML = `
-      <svg width="26" height="26" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M30 12L18 24L30 36" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M30 12L18 24L30 36" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
 
@@ -320,12 +320,11 @@ export class EdgeBackGesture {
 
     const clampedProgress = Math.max(0, Math.min(1, progress));
     const opacity = Math.min(1, clampedProgress * 1.35);
-    const translateX = -18 + clampedProgress * 18;
-    const scale = 0.94 + clampedProgress * 0.06;
+    const translateX = -12 + clampedProgress * 12;
 
     this.edgeIndicatorEl.style.transition = MOVE_TRANSITION;
     this.edgeIndicatorEl.style.opacity = String(opacity);
-    this.edgeIndicatorEl.style.transform = `translate3d(${translateX}px, -50%, 0) scale(${scale})`;
+    this.edgeIndicatorEl.style.transform = `translate3d(${translateX}px, -50%, 0)`;
   }
 
   hideEdgeGestureIndicator() {
@@ -333,7 +332,7 @@ export class EdgeBackGesture {
 
     this.edgeIndicatorEl.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
     this.edgeIndicatorEl.style.opacity = '0';
-    this.edgeIndicatorEl.style.transform = 'translate3d(-18px, -50%, 0) scale(0.94)';
+    this.edgeIndicatorEl.style.transform = 'translate3d(-12px, -50%, 0)';
   }
 
   removeEdgeGestureIndicator() {
@@ -389,7 +388,6 @@ export class EdgeBackGesture {
 
     this.previousInlineStyle = {
       transition: this.surfaceEl.style.transition,
-      transform: this.surfaceEl.style.transform,
       opacity: this.surfaceEl.style.opacity,
       boxShadow: this.surfaceEl.style.boxShadow,
       filter: this.surfaceEl.style.filter,
@@ -397,39 +395,41 @@ export class EdgeBackGesture {
       touchAction: this.surfaceEl.style.touchAction
     };
 
-    this.surfaceEl.style.willChange = 'transform, opacity, filter';
+    this.surfaceEl.style.willChange = 'opacity, filter';
     this.surfaceEl.style.touchAction = 'pan-y';
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·淡入淡出侧滑反馈·已完成]
+     [区域标注·本次反馈修复·移除页面缩放避免黑框·已完成]
      说明：
      - 手势确认后才应用视觉反馈，避免普通触摸造成页面闪屏。
-     - 按用户反馈，本区域不再把页面整体向右推开，避免露出黑底。
-     - 右滑过程改为当前界面轻微淡出、轻微缩放与亮度变化，形成淡入淡出式返回反馈。
+     - 按用户反馈，本区域不再把页面整体向右推开，也不再使用 scale 缩小页面。
+     - 右滑过程只做当前界面轻微淡出与亮度变化，不改变页面尺寸，避免边缘出现黑框。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   applyDragVisual(deltaX) {
     const width = this.getSurfaceWidth();
     const progress = Math.min(1, deltaX / (width * COMPLETE_RATIO));
-    const scale = 1 - progress * 0.018;
-    const opacity = 1 - progress * 0.22;
-    const brightness = 1 - progress * 0.04;
+    const opacity = 1 - progress * 0.18;
+    const brightness = 1 - progress * 0.035;
 
     this.updateEdgeGestureIndicator(progress);
     this.surfaceEl.style.transition = MOVE_TRANSITION;
-    this.surfaceEl.style.transform = `scale(${scale})`;
     this.surfaceEl.style.opacity = String(opacity);
     this.surfaceEl.style.boxShadow = 'none';
     this.surfaceEl.style.filter = `brightness(${brightness})`;
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·复用页面返回按钮·已完成]
+     [区域标注·本次反馈修复·小手机全局内部返回解析·已完成]
      说明：
-     - 超过屏幕宽度 30% 后播放淡出完成动画，再触发当前活动窗口已有返回按钮。
-     - 页面上的返回按钮仍可正常点击；侧滑只是复用同一个按钮逻辑作为并存触发入口。
-     - 不再无条件调用 history.back()，避免 PWA/手机浏览器在无内部历史时返回手机系统桌面。
-     - 如果当前页面没有可用返回按钮，则回弹，不退出应用。
+     - 超过屏幕宽度 30% 后播放淡出完成动画，再触发当前活动应用内真实可见的返回入口。
+     - 返回解析作用于整个小手机网页内的当前活动应用，不只适配聊天界面。
+     - 优先触发页面内上一级按钮，再退到窗口级 .app-window__back。
+     - 明确排除 go-home/gohome/close-window 等会直接回桌面或关闭应用的入口。
+     - 不调用 history.back()，避免 PWA/手机浏览器在无内部历史时返回手机系统桌面。
+     - 如果当前页面没有可用返回入口，则回弹，不退出应用。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   completeBackGesture() {
     const backButton = this.getActiveBackButton();
@@ -443,10 +443,9 @@ export class EdgeBackGesture {
     this.isTracking = false;
 
     this.surfaceEl.style.transition = COMPLETE_TRANSITION;
-    this.surfaceEl.style.transform = 'scale(0.982)';
-    this.surfaceEl.style.opacity = '0.72';
+    this.surfaceEl.style.opacity = '0.78';
     this.surfaceEl.style.boxShadow = 'none';
-    this.surfaceEl.style.filter = 'brightness(0.96)';
+    this.surfaceEl.style.filter = 'brightness(0.965)';
     this.updateEdgeGestureIndicator(1);
 
     window.setTimeout(() => {
@@ -464,29 +463,79 @@ export class EdgeBackGesture {
      [区域标注·本次需求·未达阈值回弹区·已完成]
      说明：
      - 未超过 30% 阈值时执行回弹动画并恢复原有内联样式。
-     - 清理过程集中处理，防止残留 transform/transition 造成下一帧闪烁。
+     - 清理过程集中处理，防止残留 transition/opacity/filter 造成下一帧闪烁。
      ========================================================================== */
   getSurfaceWidth() {
     const rect = this.surfaceEl.getBoundingClientRect();
     return Math.max(1, rect.width || window.innerWidth);
   }
 
+  getActiveWindow() {
+    return this.surfaceEl.querySelector('.app-window.is-active') || this.surfaceEl.querySelector('.app-window');
+  }
+
   getActiveBackButton() {
-    const activeWindow = this.surfaceEl.querySelector('.app-window.is-active');
-    const backButton = activeWindow?.querySelector('.app-window__back');
+    const activeWindow = this.getActiveWindow();
+    if (!activeWindow) return null;
 
-    if (!(backButton instanceof HTMLButtonElement)) return null;
-    if (backButton.disabled) return null;
+    const pageButton = this.findInternalBackControl(activeWindow);
+    if (pageButton) return pageButton;
 
-    const style = window.getComputedStyle(backButton);
+    const windowBackButton = activeWindow.querySelector('.app-window__back');
+    return this.isUsableBackControl(windowBackButton, { allowWindowBack: true }) ? windowBackButton : null;
+  }
+
+  findInternalBackControl(activeWindow) {
+    const selectors = [
+      '[data-action*="settings-back" i]',
+      '[data-action*="msg-back" i]',
+      '[data-action*="back" i]',
+      '[data-action*="return" i]',
+      '[data-a="goback" i]',
+      '[data-a*="back" i]',
+      '[aria-label*="返回"]',
+      '[title*="返回"]',
+      'button[class*="back" i]',
+      '[role="button"][class*="back" i]',
+      'button[data-action*="close-mask-detail" i]',
+      'button[data-action*="close-character-detail" i]',
+      'button[data-action*="close-supporting-detail" i]',
+      'button[data-action*="close-" i][aria-label*="返回"]'
+    ];
+
+    const candidates = selectors.flatMap((selector) => {
+      try {
+        return Array.from(activeWindow.querySelectorAll(selector));
+      } catch (_) {
+        return [];
+      }
+    });
+
+    const uniqueCandidates = Array.from(new Set(candidates));
+    return uniqueCandidates.find((candidate) => this.isUsableBackControl(candidate, { allowWindowBack: false })) || null;
+  }
+
+  isUsableBackControl(control, { allowWindowBack = false } = {}) {
+    if (!(control instanceof HTMLElement)) return false;
+    if (!allowWindowBack && control.classList.contains('app-window__back')) return false;
+    if (control.closest('[data-edge-back-gesture-guard="true"]')) return false;
+    if (control.matches('.app-window__close, [data-action="close-window"], [data-action="go-home"], [data-a="gohome"]')) return false;
+    if (control.matches('[data-action*="modal" i], [data-action*="picker" i], [aria-modal="true"] *')) return false;
+    if ('disabled' in control && control.disabled) return false;
+    if (control.getAttribute('aria-disabled') === 'true') return false;
+
+    const rect = control.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+
+    const style = window.getComputedStyle(control);
     const opacity = Number.parseFloat(style.opacity || '0');
 
-    if (style.display === 'none') return null;
-    if (style.visibility === 'hidden') return null;
-    if (style.pointerEvents === 'none') return null;
-    if (!Number.isFinite(opacity) || opacity <= 0.05) return null;
+    if (style.display === 'none') return false;
+    if (style.visibility === 'hidden') return false;
+    if (style.pointerEvents === 'none') return false;
+    if (!Number.isFinite(opacity) || opacity <= 0.05) return false;
 
-    return backButton;
+    return true;
   }
 
   reboundGesture() {
@@ -499,7 +548,6 @@ export class EdgeBackGesture {
     this.isTracking = false;
 
     this.surfaceEl.style.transition = RELEASE_TRANSITION;
-    this.surfaceEl.style.transform = 'scale(1)';
     this.surfaceEl.style.opacity = '1';
     this.surfaceEl.style.boxShadow = 'none';
     this.surfaceEl.style.filter = 'brightness(1)';
@@ -516,7 +564,6 @@ export class EdgeBackGesture {
     if (!this.previousInlineStyle || !this.surfaceEl) return;
 
     this.surfaceEl.style.transition = this.previousInlineStyle.transition;
-    this.surfaceEl.style.transform = this.previousInlineStyle.transform;
     this.surfaceEl.style.opacity = this.previousInlineStyle.opacity;
     this.surfaceEl.style.boxShadow = this.previousInlineStyle.boxShadow;
     this.surfaceEl.style.filter = this.previousInlineStyle.filter;
