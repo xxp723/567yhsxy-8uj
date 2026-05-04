@@ -5,7 +5,7 @@
  * - 在应用屏幕左侧内部安全区域进入候选状态，避免手机系统物理边缘手势抢占。
  * - 向右滑动时以项目内系统风格贴边手势把手为视觉反馈，不改变页面内容样式，无淡入淡出。
  * - 松手时超过屏幕宽度 30% 自动完成返回，否则回弹。
- * - 返回动作只解析并触发小手机网页内当前应用的真实可见返回入口，不调用 history.back()。
+ * - 返回动作优先触发当前应用内真实可见的上一级入口；应用总界面兜底关闭当前应用回到小手机桌面，不调用 history.back()。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
  * - 已增加应用内左侧手势热区与横向过度滚动控制，减少系统/浏览器边缘手势抢占。
  * - 已修正为以 #screen-root 应用屏幕左边缘为参照，不再误用浏览器视口最左侧。
@@ -410,20 +410,21 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
-     [区域标注·二次反馈修复·直接返回无淡出动画·已完成]
+     [区域标注·本次反馈修复·全局应用返回桌面·已完成]
      说明：
      - 超过屏幕宽度 30% 后立即触发返回，不播放任何页面淡出/变暗动画，减少闪屏。
      - 返回解析作用于整个小手机网页内的当前活动应用，不只适配聊天界面。
-     - 优先触发页面内上一级按钮。
-     - 若无应用内部返回入口，退到窗口级 .app-window__back（回到小手机桌面）。
+     - 优先触发页面内真实可见的上一级按钮。
+     - 若当前处于应用总界面、没有页面级返回入口，则点击窗口级 .app-window__close，
+       复用项目已有 app:close 生命周期关闭当前应用并回到小手机桌面。
      - 不调用 history.back()，避免 PWA/手机浏览器在无内部历史时返回手机系统桌面。
-     - 如果连窗口级返回都没有，才回弹，不退出应用。
+     - 如果连窗口级关闭入口都没有，才回弹，不退出应用。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   completeBackGesture() {
-    const backButton = this.getActiveBackButton();
+    const returnControl = this.getActiveBackButton();
 
-    if (!backButton) {
+    if (!returnControl) {
       this.reboundGesture();
       return;
     }
@@ -432,7 +433,7 @@ export class EdgeBackGesture {
     this.isTracking = false;
 
     this.hideEdgeGestureIndicator();
-    backButton.click();
+    returnControl.click();
 
     window.setTimeout(() => {
       this.resetVisualState();
@@ -451,16 +452,33 @@ export class EdgeBackGesture {
     return Math.max(1, rect.width || window.innerWidth);
   }
 
+  /* ==========================================================================
+     [区域标注·本次反馈修复·当前活动窗口识别·已完成]
+     说明：
+     - 优先使用 .app-window.is-active 作为当前应用窗口。
+     - 如果状态类没有及时同步，则从所有真实可见的 .app-window 中取最后一个，
+       适配窗口层后追加者位于更上层的结构。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
   getActiveWindow() {
-    return this.surfaceEl.querySelector('.app-window.is-active') || this.surfaceEl.querySelector('.app-window');
+    const activeWindow = this.surfaceEl.querySelector('.app-window.is-active');
+    if (this.isVisibleElement(activeWindow)) return activeWindow;
+
+    const visibleWindows = Array.from(this.surfaceEl.querySelectorAll('.app-window')).filter((win) =>
+      this.isVisibleElement(win)
+    );
+
+    return visibleWindows.at(-1) || null;
   }
 
   /* ==========================================================================
-     [区域标注·二次反馈修复·返回到桌面支持·已完成]
+     [区域标注·本次反馈修复·全局应用返回桌面·已完成]
      说明：
-     - 优先找应用内部的页面级返回按钮（如"返回"、data-action="back"等）。
-     - 若没有找到内部返回按钮，回退到窗口级 .app-window__back，实现返回小手机桌面。
-     - 不再排除窗口级返回按钮，确保用户可以从应用侧滑回到桌面。
+     - 函数名保留 getActiveBackButton，实际返回“当前侧滑应触发的返回/关闭控件”。
+     - 优先找应用内部的页面级返回按钮（如"返回"、data-action="back/go-profile/goback"等）。
+     - 若没有找到内部返回按钮，说明大概率处于应用总界面：
+       此时回退到窗口级 .app-window__close，复用项目已有 app:close 流程回到小手机桌面。
+     - 不再依赖默认隐藏且 pointer-events:none 的 .app-window__back。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   getActiveBackButton() {
@@ -470,8 +488,8 @@ export class EdgeBackGesture {
     const pageButton = this.findInternalBackControl(activeWindow);
     if (pageButton) return pageButton;
 
-    const windowBackButton = activeWindow.querySelector('.app-window__back');
-    return this.isUsableBackControl(windowBackButton, { allowWindowBack: true }) ? windowBackButton : null;
+    const windowCloseButton = activeWindow.querySelector('.app-window__close');
+    return this.isUsableWindowCloseControl(windowCloseButton) ? windowCloseButton : null;
   }
 
   findInternalBackControl(activeWindow) {
@@ -480,6 +498,8 @@ export class EdgeBackGesture {
       '[data-action*="msg-back" i]',
       '[data-action*="back" i]',
       '[data-action*="return" i]',
+      '[data-action="go-profile" i]',
+      '[data-action*="go-profile" i]',
       '[data-a="goback" i]',
       '[data-a*="back" i]',
       '[aria-label*="返回"]',
@@ -489,7 +509,9 @@ export class EdgeBackGesture {
       'button[data-action*="close-mask-detail" i]',
       'button[data-action*="close-character-detail" i]',
       'button[data-action*="close-supporting-detail" i]',
-      'button[data-action*="close-" i][aria-label*="返回"]'
+      'button[data-action*="close-" i][aria-label*="返回"]',
+      '[data-action*="close-" i][title*="返回"]',
+      '[data-action*="close-" i][aria-label*="返回"]'
     ];
 
     const candidates = selectors.flatMap((selector) => {
@@ -510,18 +532,46 @@ export class EdgeBackGesture {
     if (control.closest('[data-edge-back-gesture-guard="true"]')) return false;
     if (control.matches('.app-window__close, [data-action="close-window"], [data-action="go-home"], [data-a="gohome"]')) return false;
     if (control.matches('[data-action*="modal" i], [data-action*="picker" i], [aria-modal="true"] *')) return false;
+
+    return this.isVisibleUsableControl(control);
+  }
+
+  /* ==========================================================================
+     [区域标注·本次反馈修复·应用总界面关闭兜底·已完成]
+     说明：
+     - 仅当没有页面级返回入口时，才允许使用 .app-window__close 作为回桌面兜底。
+     - 该按钮由 Window.js 原有逻辑触发 app:close，避免手势模块直接删除窗口 DOM。
+     - 仍检查按钮是否真实可见、可点击、未禁用，避免误触不可用控件。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
+  isUsableWindowCloseControl(control) {
+    if (!(control instanceof HTMLElement)) return false;
+    if (!control.classList.contains('app-window__close')) return false;
+    if (control.closest('[data-edge-back-gesture-guard="true"]')) return false;
+
+    return this.isVisibleUsableControl(control);
+  }
+
+  isVisibleUsableControl(control) {
+    if (!(control instanceof HTMLElement)) return false;
     if ('disabled' in control && control.disabled) return false;
     if (control.getAttribute('aria-disabled') === 'true') return false;
 
-    const rect = control.getBoundingClientRect();
+    return this.isVisibleElement(control, { requirePointerEvents: true });
+  }
+
+  isVisibleElement(element, { requirePointerEvents = false } = {}) {
+    if (!(element instanceof HTMLElement)) return false;
+
+    const rect = element.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
 
-    const style = window.getComputedStyle(control);
+    const style = window.getComputedStyle(element);
     const opacity = Number.parseFloat(style.opacity || '0');
 
     if (style.display === 'none') return false;
     if (style.visibility === 'hidden') return false;
-    if (style.pointerEvents === 'none') return false;
+    if (requirePointerEvents && style.pointerEvents === 'none') return false;
     if (!Number.isFinite(opacity) || opacity <= 0.05) return false;
 
     return true;
