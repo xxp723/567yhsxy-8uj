@@ -522,11 +522,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      说明：
      1. type:image 的消息来自咖啡功能区“图片”板块或 AI 生图结果。
      2. imageUrl 会随当前聊天记录写入 DB.js / IndexedDB，并在 prompt.js 中作为视觉输入发送给 AI。
-     3. AI 发送的图片额外带 data-action="msg-ai-image-toggle-zoom"，点击时只切换图片本体放大状态。
-     4. 不使用 localStorage/sessionStorage，也不保留双份存储兜底；不使用原生弹窗或弹窗容器。
+     3. 所有图片消息（AI 生成/发送图片）统一支持单击居中放大，交由 index.js 的消息页媒体预览层处理。
+     4. 不使用 localStorage/sessionStorage，也不保留双份存储兜底；不使用原生弹窗或原生选择器。
      ======================================================================== */
   const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
-  const isAiZoomableImage = isImageMessage && isAssistant;
+  const isZoomableImage = isImageMessage;
   /* ========================================================================
      [区域标注·已完成·本次转账显示优化] 转账消息类型与状态表现
      说明：
@@ -579,11 +579,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
     : (isImageMessage
         ? `
           <!-- ==================================================================
-               [区域标注·已完成·AI图片点击放大入口]
-               说明：仅 AI 图片带点击放大 data-action；点击后由 index.js 局部切换 class，不重绘聊天页，避免闪屏。
+               [区域标注·已完成·图片单击居中放大入口]
+               说明：AI生成图片/发送图片统一挂载 data-action，由 index.js 打开消息页中间预览层，仅放大，不改聊天背景。
                ================================================================== -->
-          <div class="msg-image-bubble ${isAiZoomableImage ? 'msg-image-bubble--ai-zoomable' : ''}"
-               ${isAiZoomableImage ? `data-role="msg-ai-image-bubble" data-action="msg-ai-image-toggle-zoom" data-message-id="${escapeHtml(messageId)}" aria-expanded="false"` : ''}
+          <div class="msg-image-bubble ${isZoomableImage ? 'msg-image-bubble--zoomable' : ''}"
+               ${isZoomableImage ? `data-role="msg-media-zoom-trigger" data-action="msg-media-open-zoom" data-media-kind="image" data-media-src="${escapeHtml(msg?.imageUrl || '')}" data-media-alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" data-message-id="${escapeHtml(messageId)}"` : ''}
                title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
             <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" decoding="async">
           </div>
@@ -604,7 +604,13 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             `
             : (isHtmlCardMessage
                 ? `
-                  <div class="msg-html-card-bubble" data-role="msg-html-card-bubble">
+                  <div class="msg-html-card-bubble"
+                       data-role="msg-media-zoom-trigger"
+                       data-action="msg-media-open-zoom"
+                       data-media-kind="html-card"
+                       data-media-srcdoc="${escapeHtml(htmlCardSrcdoc)}"
+                       data-media-alt="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"
+                       data-message-id="${escapeHtml(messageId)}">
                     <div class="msg-html-card-bubble__header">
                       <span class="msg-html-card-bubble__badge">HTML卡片</span>
                       <span class="msg-html-card-bubble__hint">可点击互动</span>

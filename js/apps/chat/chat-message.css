@@ -636,11 +636,11 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI生图/识图图片消息局部放大样式]
+   [区域标注·已完成·图片/HTML卡片单击居中放大] 图片消息触发态样式
    说明：
-   1. 仅作用于聊天消息页 type:image 图片消息气泡，包含用户识图图片与 AI 生图结果。
-   2. 图片内容随聊天消息写入 DB.js / IndexedDB；样式层不涉及任何浏览器同步键值存储。
-   3. AI 图片点击后只在原气泡位置放大图片本体，不打开弹窗、不加暗色背景、不重绘聊天页，避免闪屏。
+   1. 仅作用于聊天消息页 type:image 图片消息气泡，包含 AI 生成图片与发送图片。
+   2. 单击后由消息页内部预览层居中放大，仅放大媒体内容，不改聊天消息界面背景。
+   3. 图片内容随聊天消息写入 DB.js / IndexedDB；样式层不涉及任何浏览器同步键值存储。
    ========================================================================== */
 .msg-bubble--image {
   padding: 0;
@@ -676,34 +676,112 @@
   margin: 0;
 }
 
-/* [区域标注·已完成·AI生图图片点击态] 仅 AI 图片拥有可点放大态，保持原聊天流结构 */
-.msg-ai-image-bubble {
+.msg-image-bubble--zoomable,
+.msg-html-card-bubble {
   cursor: zoom-in;
-  transform-origin: left top;
-  transition: width 0.18s ease, max-height 0.18s ease, border-radius 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-  will-change: width, max-height;
+  transition: transform 0.14s ease, box-shadow 0.18s ease;
+  will-change: transform;
 }
 
-.msg-bubble-row--right .msg-ai-image-bubble {
-  transform-origin: right top;
-}
-
-.msg-ai-image-bubble:active {
+.msg-image-bubble--zoomable:active,
+.msg-html-card-bubble:active {
   transform: scale(0.985);
 }
 
-.msg-ai-image-bubble.is-zoomed {
-  width: min(430px, 86vw);
-  max-height: min(68vh, 520px);
-  border-radius: 22px;
-  cursor: zoom-out;
-  box-shadow: 0 14px 32px rgba(74, 52, 42, 0.18);
+/* ==========================================================================
+   [区域标注·已完成·图片/HTML卡片单击居中放大] 聊天消息页媒体预览层
+   说明：
+   1. 仅服务闲谈消息页中的图片消息与 HTML 互动卡片单击居中放大。
+   2. 预览层覆盖在聊天消息页内部，关闭时不改聊天消息界面背景，不使用原生浏览器弹窗。
+   3. 使用透明背景与毛玻璃面板，只强调居中放大的媒体本体，并保持主题 UI 风格统一。
+   ========================================================================== */
+.msg-media-zoom-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 48;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 14px;
+  opacity: 0;
+  pointer-events: none;
+  background: transparent;
+  transition: opacity 0.18s ease;
 }
 
-.msg-ai-image-bubble.is-zoomed .msg-image-bubble__image {
+.msg-media-zoom-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.msg-media-zoom-overlay__panel {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: min(78vh, 620px);
+  padding: 14px;
+  border-radius: 28px;
+  background: rgba(255, 252, 247, 0.86);
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  box-shadow: 0 18px 40px rgba(74, 52, 42, 0.16);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg-media-zoom-overlay__close {
+  align-self: flex-end;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.08);
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.msg-media-zoom-overlay__close:active {
+  background: rgba(74, 52, 42, 0.16);
+  transform: scale(0.92);
+}
+
+.msg-media-zoom-overlay__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.msg-media-zoom-overlay__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.msg-media-zoom-image {
+  display: block;
+  max-width: 100%;
   max-height: min(68vh, 520px);
   object-fit: contain;
-  background: rgba(255, 252, 247, 0.88);
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.92);
+}
+
+.msg-media-zoom-frame {
+  width: min(100%, 440px);
+  height: min(64vh, 520px);
+  border: none;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(74, 52, 42, 0.06);
 }
 
 /* ==========================================================================

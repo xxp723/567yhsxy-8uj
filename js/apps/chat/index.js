@@ -733,6 +733,20 @@ function buildAppShell(state) {
       </div>
 
       <!-- ================================================================
+           [区域标注·已完成·图片/HTML卡片单击居中放大] 聊天消息页媒体预览层
+           说明：
+           1. 仅服务闲谈消息页中的图片消息与 HTML 互动卡片单击居中放大。
+           2. 预览层覆盖在聊天消息页内部，关闭时不改聊天消息界面背景，不使用原生浏览器弹窗。
+           3. 只使用运行时 DOM，不涉及 localStorage/sessionStorage 或额外持久化存储。
+           ================================================================ -->
+      <div class="msg-media-zoom-overlay" data-role="msg-media-zoom-overlay">
+        <div class="msg-media-zoom-overlay__panel">
+          <button class="msg-media-zoom-overlay__close" data-action="msg-media-close-zoom" type="button" aria-label="关闭预览">${TAB_ICONS.close}</button>
+          <div class="msg-media-zoom-overlay__body" data-role="msg-media-zoom-body"></div>
+        </div>
+      </div>
+
+      <!-- ================================================================
            [区域标注] 底部悬浮 TAB 栏（四大板块切换）
            说明：参照图片1 — 暗色圆角胶囊，选中态椭圆扩展变色
            ================================================================ -->
@@ -1032,7 +1046,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        2. 这里只把这两个返回按钮列为关闭功能区拦截白名单，并阻止事件继续冒泡到外层手势/桌面层。
        3. 本修复仅调整运行时点击处理顺序，不涉及持久化存储；仍只使用 DB.js / IndexedDB。
        ====================================================================== */
-    const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back'].includes(clickedAction);
+    const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back', 'msg-media-open-zoom', 'msg-media-close-zoom'].includes(clickedAction);
     if (shouldBypassCloseIntercept) {
       e.preventDefault();
       e.stopPropagation();
@@ -1879,27 +1893,51 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·已完成·AI图片点击放大]
+       [区域标注·已完成·图片/HTML卡片单击居中放大]
        说明：
-       1. 仅作用于 AI 发送的图片消息（chat-message.js 渲染时才加本 action）。
-       2. 点击图片本体局部切换 is-zoomed，不打开弹窗、不加暗色遮罩、不重绘聊天页，避免闪屏。
-       3. 只使用运行时 DOM class/aria-expanded，不涉及任何持久化存储。
+       1. AI 生成图片 / 发送图片 / HTML 互动卡片统一用应用内消息页预览层居中放大。
+       2. 仅放大媒体内容，不修改聊天消息界面背景，不使用原生浏览器弹窗。
+       3. 只使用运行时 DOM 同步，不涉及 localStorage/sessionStorage 或额外持久化存储。
        ========================================================================== */
-    case 'msg-ai-image-toggle-zoom': {
-      const imageBubble = target.closest('[data-role="msg-ai-image-bubble"]');
-      if (!imageBubble) break;
+    case 'msg-media-open-zoom': {
+      const mediaKind = String(target.dataset.mediaKind || '').trim();
+      const mediaSrc = String(target.dataset.mediaSrc || '').trim();
+      const mediaSrcdoc = String(target.dataset.mediaSrcdoc || '').trim();
+      const mediaAlt = String(target.dataset.mediaAlt || '').trim() || '预览内容';
+      const zoomOverlay = container.querySelector('[data-role="msg-media-zoom-overlay"]');
+      const zoomBody = container.querySelector('[data-role="msg-media-zoom-body"]');
+      if (!zoomOverlay || !zoomBody) break;
 
-      const listArea = container.querySelector('[data-role="msg-list"]');
-      listArea?.querySelectorAll('[data-role="msg-ai-image-bubble"].is-zoomed').forEach(item => {
-        if (item !== imageBubble) {
-          item.classList.remove('is-zoomed');
-          item.setAttribute('aria-expanded', 'false');
-        }
-      });
+      const isImage = mediaKind === 'image' && mediaSrc;
+      const isHtmlCard = mediaKind === 'html-card' && mediaSrcdoc;
+      if (!isImage && !isHtmlCard) break;
 
-      const nextZoomed = !imageBubble.classList.contains('is-zoomed');
-      imageBubble.classList.toggle('is-zoomed', nextZoomed);
-      imageBubble.setAttribute('aria-expanded', nextZoomed ? 'true' : 'false');
+      e.preventDefault();
+      e.stopPropagation();
+
+      zoomBody.innerHTML = isImage
+        ? `<img class="msg-media-zoom-image" src="${escapeHtml(mediaSrc)}" alt="${escapeHtml(mediaAlt)}" decoding="async">`
+        : `
+          <iframe
+            class="msg-media-zoom-frame"
+            sandbox="allow-forms allow-popups-to-escape-sandbox"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            srcdoc="${escapeHtml(mediaSrcdoc)}"
+            title="${escapeHtml(mediaAlt)}"></iframe>
+        `;
+      zoomOverlay.classList.add('is-open');
+      break;
+    }
+
+    case 'msg-media-close-zoom': {
+      const zoomOverlay = container.querySelector('[data-role="msg-media-zoom-overlay"]');
+      const zoomBody = container.querySelector('[data-role="msg-media-zoom-body"]');
+      if (!zoomOverlay || !zoomBody) break;
+      e.preventDefault();
+      e.stopPropagation();
+      zoomOverlay.classList.remove('is-open');
+      zoomBody.innerHTML = '';
       break;
     }
 
