@@ -25,6 +25,28 @@ import {
   sanitizeHtmlCardDocumentForSrcdoc
 } from './chat-html-card.js';
 
+/* ==========================================================================
+   [区域标注·已完成·HTML卡片iframe自适应高度] postMessage 高度监听器
+   说明：
+   1. iframe 内部的高度上报脚本（chat-html-card.js 注入）通过 postMessage 报告 body 实际高度。
+   2. 本监听器收到 __miniphone_card_height__ 类型消息后，找到对应 iframe 并设置其高度。
+   3. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
+   ========================================================================== */
+if (!window.__miniphone_card_height_listener__) {
+  window.__miniphone_card_height_listener__ = true;
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || data.type !== '__miniphone_card_height__' || !data.height) return;
+    const iframes = document.querySelectorAll('.msg-html-card-bubble__frame');
+    for (const iframe of iframes) {
+      if (iframe.contentWindow === event.source) {
+        iframe.style.height = Math.ceil(data.height) + 'px';
+        break;
+      }
+    }
+  });
+}
+
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天控制台日志存储键与工具
    说明：
@@ -617,7 +639,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                     </div>
                     <iframe
                       class="msg-html-card-bubble__frame"
-                      sandbox="allow-forms allow-popups-to-escape-sandbox"
+                      sandbox="allow-scripts allow-forms allow-popups-to-escape-sandbox"
                       loading="lazy"
                       referrerpolicy="no-referrer"
                       srcdoc="${escapeHtml(htmlCardSrcdoc)}"
@@ -1836,7 +1858,15 @@ export function extractAiProtocolBlocks(rawText) {
      [区域标注·已完成·AI生图] 通用协议解析器识别 [图片]
      说明：[图片] 协议只作为生图触发信号，不作为原始文本气泡展示；图片消息由 generatedImages 转成 type:image 后落库。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片协议边界修复] 通用协议正则包含 [卡片]
+     说明：
+     1. 将 [卡片] 加入通用协议正则，使 [回复] 块的内容在遇到 [卡片] 时正确截断，
+        避免 HTML 卡片原文泄漏到 [回复] 文本气泡中显示为转义 HTML。
+     2. 卡片的真正提取与渲染仍由 extractHtmlCardProtocolBlocks 处理；
+        本循环遇到 type === '卡片' 直接跳过，不重复处理。
+     ======================================================================== */
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -1993,6 +2023,12 @@ export function buildAiReplyMessages(rawText, state) {
       });
       return;
     }
+
+    /* ========================================================================
+       [区域标注·已完成·HTML卡片协议边界修复] 跳过 [卡片] 块
+       说明：[卡片] 块由 extractHtmlCardProtocolBlocks 单独处理，这里不重复入列。
+       ======================================================================== */
+    if (block.type === '卡片') return;
 
     splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach(content => {
       builtMessages.push({

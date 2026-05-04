@@ -225,17 +225,45 @@ export function buildHtmlCardDocument(html = '') {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·HTML卡片] iframe 自适应高度 postMessage 脚本片段
+   说明：
+   1. 此脚本在 sanitize 之后追加到 </body> 前，确保不被清理掉。
+   2. iframe 内部通过 postMessage 向父页面报告 body 实际高度。
+   3. 父页面（chat-message.js）中的 message 监听器据此动态设置 iframe 高度。
+   4. 使用 ResizeObserver + 初始延迟双重机制，兼容动态内容和首次渲染。
+   ========================================================================== */
+const HTML_CARD_HEIGHT_REPORTER_SCRIPT = `
+<script data-card-height-reporter="true">
+(function(){
+  function reportHeight(){
+    var h = Math.max(
+      document.body.scrollHeight || 0,
+      document.body.offsetHeight || 0,
+      document.documentElement.scrollHeight || 0
+    );
+    if(h > 0) parent.postMessage({type:'__miniphone_card_height__', height: h}, '*');
+  }
+  if(typeof ResizeObserver !== 'undefined'){
+    new ResizeObserver(function(){ reportHeight(); }).observe(document.body);
+  }
+  window.addEventListener('load', function(){ setTimeout(reportHeight, 60); });
+  setTimeout(reportHeight, 120);
+  setTimeout(reportHeight, 500);
+})();
+</script>`;
+
+/* ==========================================================================
    [区域标注·已完成·HTML卡片] iframe srcdoc 安全净化
    说明：
-   1. 移除 script、外链脚本、顶层跳转等明显危险内容。
-   2. 保留卡片内原生 HTML/CSS 互动能力。
+   1. 先移除所有外部/用户 script、事件属性、iframe嵌套、弹窗 API、顶层跳转。
+   2. 然后追加受信任的高度上报脚本（data-card-height-reporter），确保自适应高度正常工作。
    3. 不做双份存储，不引入原生浏览器弹窗。
    ========================================================================== */
 export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
   const documentHtml = buildHtmlCardDocument(html);
   if (!documentHtml) return '';
 
-  return documentHtml
+  let sanitized = documentHtml
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
     .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
@@ -248,4 +276,13 @@ export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
     .replace(/\bparent\s*\./gi, 'window.')
     .replace(/<a([^>]*?)target\s*=\s*["']?_top["']?([^>]*)>/gi, '<a$1$2>')
     .replace(/<a([^>]*?)target\s*=\s*["']?_parent["']?([^>]*)>/gi, '<a$1$2>');
+
+  /* 在 </body> 前注入高度上报脚本；若无 </body> 则追加到末尾 */
+  if (/<\/body>/i.test(sanitized)) {
+    sanitized = sanitized.replace(/<\/body>/i, HTML_CARD_HEIGHT_REPORTER_SCRIPT + '\n</body>');
+  } else {
+    sanitized += HTML_CARD_HEIGHT_REPORTER_SCRIPT;
+  }
+
+  return sanitized;
 }
