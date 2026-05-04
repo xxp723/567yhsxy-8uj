@@ -3,7 +3,7 @@
  * 用途: 小手机网页内全局 iOS 风格左侧边缘侧滑返回手势。
  * 说明:
  * - 在应用屏幕左侧内部安全区域进入候选状态，避免手机系统物理边缘手势抢占。
- * - 向右滑动时以项目内系统风格贴边手势把手 + 淡入淡出为主要视觉反馈，不改变页面大小。
+ * - 向右滑动时以项目内系统风格贴边手势把手为视觉反馈，不改变页面内容样式，无淡入淡出。
  * - 松手时超过屏幕宽度 30% 自动完成返回，否则回弹。
  * - 返回动作只解析并触发小手机网页内当前应用的真实可见返回入口，不调用 history.back()。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
@@ -30,8 +30,8 @@ const EDGE_SAFE_INSET = 10;
 const COMPLETE_RATIO = 0.3;
 const DIRECTION_LOCK_DISTANCE = 8;
 const MOVE_TRANSITION = 'none';
-const RELEASE_TRANSITION = 'opacity 220ms ease, filter 220ms ease';
-const COMPLETE_TRANSITION = 'opacity 240ms ease, filter 240ms ease';
+const RELEASE_TRANSITION = 'none';
+const COMPLETE_TRANSITION = 'none';
 const EDGE_GUARD_Z_INDEX = '2147483646';
 const INDICATOR_Z_INDEX = '2147483645';
 
@@ -263,11 +263,11 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·系统风格贴边手势把手·已完成]
+     [区域标注·二次反馈修复·紧凑半圆形手势把手·已完成]
      说明：
-     - 用户截图里的深色箭头属于手机系统/浏览器原生手势提示，网页无法直接控制。
-     - 这里创建项目内自定义提示层：贴边窄型深色磨砂把手 + 白色返回箭头。
-     - 不再使用大半圆形，改为更接近系统边缘返回提示的窄长悬浮样式。
+     - 按用户截图要求，将指示器改为紧凑的深色 D 形半圆（约 32×44px），贴在屏幕左边缘。
+     - 内含白色 < 箭头，箭头约 18px。
+     - borderRadius 改为 0 50% 50% 0，形成右侧圆弧、左侧平直的 D 字形。
      - 手势过程中根据滑动进度淡入/轻微位移，完成或回弹时淡出。
      - 图标为内联 SVG，按 IconPark 风格线性箭头绘制，不使用浏览器原生图标/弹窗/选择器。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
@@ -281,25 +281,26 @@ export class EdgeBackGesture {
     indicator.style.position = 'fixed';
     indicator.style.left = '0';
     indicator.style.top = '0';
-    indicator.style.width = '28px';
-    indicator.style.height = '86px';
-    indicator.style.borderRadius = '0 22px 22px 0';
-    indicator.style.background = 'linear-gradient(90deg, rgba(18, 18, 22, 0.86), rgba(18, 18, 22, 0.56))';
-    indicator.style.backdropFilter = 'blur(14px) saturate(1.15)';
-    indicator.style.webkitBackdropFilter = 'blur(14px) saturate(1.15)';
+    indicator.style.width = '32px';
+    indicator.style.height = '44px';
+    indicator.style.borderRadius = '0 50% 50% 0';
+    indicator.style.background = 'rgba(18, 18, 22, 0.72)';
+    indicator.style.backdropFilter = 'blur(10px) saturate(1.1)';
+    indicator.style.webkitBackdropFilter = 'blur(10px) saturate(1.1)';
     indicator.style.display = 'flex';
     indicator.style.alignItems = 'center';
     indicator.style.justifyContent = 'center';
+    indicator.style.paddingLeft = '2px';
     indicator.style.color = '#fff';
     indicator.style.opacity = '0';
-    indicator.style.transform = 'translate3d(-12px, -50%, 0)';
-    indicator.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+    indicator.style.transform = 'translate3d(-14px, -50%, 0)';
+    indicator.style.transition = 'opacity 160ms ease, transform 160ms cubic-bezier(0.22, 1, 0.36, 1)';
     indicator.style.pointerEvents = 'none';
     indicator.style.zIndex = INDICATOR_Z_INDEX;
-    indicator.style.boxShadow = '6px 0 18px rgba(0, 0, 0, 0.16)';
+    indicator.style.boxShadow = '4px 0 12px rgba(0, 0, 0, 0.18)';
     indicator.innerHTML = `
-      <svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M30 12L18 24L30 36" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M30 12L18 24L30 36" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
 
@@ -319,8 +320,8 @@ export class EdgeBackGesture {
     if (!this.edgeIndicatorEl) return;
 
     const clampedProgress = Math.max(0, Math.min(1, progress));
-    const opacity = Math.min(1, clampedProgress * 1.35);
-    const translateX = -12 + clampedProgress * 12;
+    const opacity = Math.min(1, clampedProgress * 1.5);
+    const translateX = -14 + clampedProgress * 14;
 
     this.edgeIndicatorEl.style.transition = MOVE_TRANSITION;
     this.edgeIndicatorEl.style.opacity = String(opacity);
@@ -330,9 +331,9 @@ export class EdgeBackGesture {
   hideEdgeGestureIndicator() {
     if (!this.edgeIndicatorEl) return;
 
-    this.edgeIndicatorEl.style.transition = 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+    this.edgeIndicatorEl.style.transition = 'opacity 160ms ease, transform 160ms cubic-bezier(0.22, 1, 0.36, 1)';
     this.edgeIndicatorEl.style.opacity = '0';
-    this.edgeIndicatorEl.style.transform = 'translate3d(-12px, -50%, 0)';
+    this.edgeIndicatorEl.style.transform = 'translate3d(-14px, -50%, 0)';
   }
 
   removeEdgeGestureIndicator() {
@@ -387,48 +388,36 @@ export class EdgeBackGesture {
     if (this.previousInlineStyle) return;
 
     this.previousInlineStyle = {
-      transition: this.surfaceEl.style.transition,
-      opacity: this.surfaceEl.style.opacity,
-      boxShadow: this.surfaceEl.style.boxShadow,
-      filter: this.surfaceEl.style.filter,
-      willChange: this.surfaceEl.style.willChange,
       touchAction: this.surfaceEl.style.touchAction
     };
 
-    this.surfaceEl.style.willChange = 'opacity, filter';
     this.surfaceEl.style.touchAction = 'pan-y';
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·移除页面缩放避免黑框·已完成]
+     [区域标注·二次反馈修复·取消页面淡入淡出效果·已完成]
      说明：
-     - 手势确认后才应用视觉反馈，避免普通触摸造成页面闪屏。
-     - 按用户反馈，本区域不再把页面整体向右推开，也不再使用 scale 缩小页面。
-     - 右滑过程只做当前界面轻微淡出与亮度变化，不改变页面尺寸，避免边缘出现黑框。
+     - 按用户反馈，滑动过程中完全不改变 surfaceEl 的 opacity / filter / boxShadow。
+     - 页面内容始终保持原样，仅更新边缘指示器（D形半圆把手）的显示进度。
+     - 避免任何淡入淡出、变暗、闪屏现象。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   applyDragVisual(deltaX) {
     const width = this.getSurfaceWidth();
     const progress = Math.min(1, deltaX / (width * COMPLETE_RATIO));
-    const opacity = 1 - progress * 0.18;
-    const brightness = 1 - progress * 0.035;
 
     this.updateEdgeGestureIndicator(progress);
-    this.surfaceEl.style.transition = MOVE_TRANSITION;
-    this.surfaceEl.style.opacity = String(opacity);
-    this.surfaceEl.style.boxShadow = 'none';
-    this.surfaceEl.style.filter = `brightness(${brightness})`;
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·小手机全局内部返回解析·已完成]
+     [区域标注·二次反馈修复·直接返回无淡出动画·已完成]
      说明：
-     - 超过屏幕宽度 30% 后播放淡出完成动画，再触发当前活动应用内真实可见的返回入口。
+     - 超过屏幕宽度 30% 后立即触发返回，不播放任何页面淡出/变暗动画，减少闪屏。
      - 返回解析作用于整个小手机网页内的当前活动应用，不只适配聊天界面。
-     - 优先触发页面内上一级按钮，再退到窗口级 .app-window__back。
-     - 明确排除 go-home/gohome/close-window 等会直接回桌面或关闭应用的入口。
+     - 优先触发页面内上一级按钮。
+     - 若无应用内部返回入口，退到窗口级 .app-window__back（回到小手机桌面）。
      - 不调用 history.back()，避免 PWA/手机浏览器在无内部历史时返回手机系统桌面。
-     - 如果当前页面没有可用返回入口，则回弹，不退出应用。
+     - 如果连窗口级返回都没有，才回弹，不退出应用。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
   completeBackGesture() {
@@ -442,28 +431,20 @@ export class EdgeBackGesture {
     this.isAnimating = true;
     this.isTracking = false;
 
-    this.surfaceEl.style.transition = COMPLETE_TRANSITION;
-    this.surfaceEl.style.opacity = '0.78';
-    this.surfaceEl.style.boxShadow = 'none';
-    this.surfaceEl.style.filter = 'brightness(0.965)';
-    this.updateEdgeGestureIndicator(1);
+    this.hideEdgeGestureIndicator();
+    backButton.click();
 
     window.setTimeout(() => {
-      backButton.click();
-      window.setTimeout(() => {
-        this.hideEdgeGestureIndicator();
-        this.resetVisualState();
-        this.resetTouchState();
-        this.isAnimating = false;
-      }, 120);
-    }, 150);
+      this.resetVisualState();
+      this.resetTouchState();
+      this.isAnimating = false;
+    }, 60);
   }
 
   /* ==========================================================================
-     [区域标注·本次需求·未达阈值回弹区·已完成]
+     [区域标注·二次反馈修复·未达阈值回弹区·已完成]
      说明：
-     - 未超过 30% 阈值时执行回弹动画并恢复原有内联样式。
-     - 清理过程集中处理，防止残留 transition/opacity/filter 造成下一帧闪烁。
+     - 未超过 30% 阈值时直接隐藏指示器并恢复触摸状态，不做页面动画。
      ========================================================================== */
   getSurfaceWidth() {
     const rect = this.surfaceEl.getBoundingClientRect();
@@ -474,6 +455,14 @@ export class EdgeBackGesture {
     return this.surfaceEl.querySelector('.app-window.is-active') || this.surfaceEl.querySelector('.app-window');
   }
 
+  /* ==========================================================================
+     [区域标注·二次反馈修复·返回到桌面支持·已完成]
+     说明：
+     - 优先找应用内部的页面级返回按钮（如"返回"、data-action="back"等）。
+     - 若没有找到内部返回按钮，回退到窗口级 .app-window__back，实现返回小手机桌面。
+     - 不再排除窗口级返回按钮，确保用户可以从应用侧滑回到桌面。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
   getActiveBackButton() {
     const activeWindow = this.getActiveWindow();
     if (!activeWindow) return null;
@@ -544,30 +533,15 @@ export class EdgeBackGesture {
       return;
     }
 
-    this.isAnimating = true;
     this.isTracking = false;
-
-    this.surfaceEl.style.transition = RELEASE_TRANSITION;
-    this.surfaceEl.style.opacity = '1';
-    this.surfaceEl.style.boxShadow = 'none';
-    this.surfaceEl.style.filter = 'brightness(1)';
     this.hideEdgeGestureIndicator();
-
-    window.setTimeout(() => {
-      this.resetVisualState();
-      this.resetTouchState();
-      this.isAnimating = false;
-    }, 230);
+    this.resetVisualState();
+    this.resetTouchState();
   }
 
   resetVisualState() {
     if (!this.previousInlineStyle || !this.surfaceEl) return;
 
-    this.surfaceEl.style.transition = this.previousInlineStyle.transition;
-    this.surfaceEl.style.opacity = this.previousInlineStyle.opacity;
-    this.surfaceEl.style.boxShadow = this.previousInlineStyle.boxShadow;
-    this.surfaceEl.style.filter = this.previousInlineStyle.filter;
-    this.surfaceEl.style.willChange = this.previousInlineStyle.willChange;
     this.surfaceEl.style.touchAction = this.previousInlineStyle.touchAction;
     this.previousInlineStyle = null;
   }
