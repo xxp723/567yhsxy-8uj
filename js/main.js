@@ -18,6 +18,7 @@ import { DesktopEditMode } from './core/interaction/DesktopEditMode.js';
 import { EventBus } from './core/interaction/EventBus.js';
 import { DragDrop } from './core/interaction/DragDrop.js';
 import { Gestures } from './core/interaction/Gestures.js';
+import { EdgeBackGesture } from './core/interaction/gesture.js';
 
 import { DB } from './core/data/DB.js';
 import { PersistentKV } from './core/data/PersistentKV.js';
@@ -81,6 +82,16 @@ class MiniPhoneApp {
 
     /** @type {Gestures} */
     this.gestures = new Gestures(document.getElementById('desktop-container'), this.eventBus);
+
+    /* ==========================================================================
+       [区域标注·本次需求·iOS侧滑返回手势接入·已完成]
+       说明：
+       - 只接入 js/core/interaction/gesture.js 中的左侧边缘返回手势。
+       - 手势模块本身不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+       - 不改动桌面长按、桌面分页、拖拽等其它交互逻辑。
+       ========================================================================== */
+    /** @type {EdgeBackGesture} */
+    this.edgeBackGesture = new EdgeBackGesture(document.getElementById('screen-root'));
 
     /** @type {DragDrop} */
     this.dragDrop = new DragDrop(document.getElementById('desktop-container'), this.eventBus);
@@ -165,6 +176,15 @@ class MiniPhoneApp {
 
       // 6) 绑定交互
       this.gestures.bind();
+
+      /* ==========================================================================
+         [区域标注·本次需求·iOS侧滑返回手势启用·已完成]
+         说明：
+         - 在桌面基础交互之后启用左侧边缘侧滑返回。
+         - 仅响应左边缘 20px 内起始的右滑，不影响普通滚动与内部横向滚动容器。
+         ========================================================================== */
+      this.edgeBackGesture.bind();
+
       this.dragDrop.bind();
 
       // 7) 状态栏时间刷新
