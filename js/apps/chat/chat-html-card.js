@@ -15,6 +15,63 @@
    2. 若包裹在 ```html ... ``` 代码块中会自动剥离围栏。
    3. 不做 localStorage/sessionStorage 兜底，不做长文本字段过滤。
    ========================================================================== */
+const HTML_CARD_CHAT_PROTOCOL_MARKER_REGEX = /\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+
+function getHtmlCardProtocolBoundaryIndex(text = '', markerIndex = 0) {
+  const value = String(text || '');
+  let index = Math.max(0, Math.min(Number(markerIndex || 0), value.length));
+
+  while (index > 0 && /[ \t\f\v`*_~]/.test(value.charAt(index - 1))) {
+    index -= 1;
+  }
+
+  return index;
+}
+
+function getHtmlCardChatProtocolMarkers(text = '') {
+  const value = String(text || '');
+  const markerRegex = new RegExp(HTML_CARD_CHAT_PROTOCOL_MARKER_REGEX.source, 'g');
+
+  return [...value.matchAll(markerRegex)].map(match => ({
+    type: String(match[1] || '').trim(),
+    roleName: String(match[2] || '').trim(),
+    index: Number(match.index || 0),
+    boundaryIndex: getHtmlCardProtocolBoundaryIndex(value, Number(match.index || 0)),
+    markerText: String(match[0] || '')
+  }));
+}
+
+function shouldStripHtmlCardTrailingProtocolMarker(text = '', marker = {}) {
+  const value = String(text || '');
+  const boundaryIndex = Number(marker.boundaryIndex || 0);
+  const before = value.slice(0, boundaryIndex);
+  const beforeTrimmed = before.trimEnd();
+
+  if (!beforeTrimmed || !/<[a-z][\s\S]*?>/i.test(beforeTrimmed)) return false;
+  if (/[\r\n]$/.test(before)) return true;
+
+  return beforeTrimmed.endsWith('>');
+}
+
+/* ========================================================================
+   [区域标注·已完成·HTML卡片尾部协议清理]
+   说明：
+   1. 修复 AI 把 [卡片] 后续 [回复]/[表情]/[转账]/[引用]/[撤回]/[图片] 协议继续拼在 HTML 后面，导致 iframe 底部掉格式显示的问题。
+   2. 渲染旧消息时也会在显示层截掉尾部聊天协议；不迁移、不回写、不新增任何存储。
+   3. 不使用 localStorage/sessionStorage，不做双份兜底，不按长文本字段过滤。
+   ======================================================================== */
+export function stripHtmlCardTrailingChatProtocols(raw = '') {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+
+  const trailingProtocol = getHtmlCardChatProtocolMarkers(value)
+    .find(marker => marker.type !== '卡片' && shouldStripHtmlCardTrailingProtocolMarker(value, marker));
+
+  return trailingProtocol
+    ? value.slice(0, trailingProtocol.boundaryIndex).trim()
+    : value;
+}
+
 export function normalizeHtmlCardProtocolContent(raw = '') {
   let value = String(raw || '').trim();
   if (!value) return '';
@@ -25,7 +82,7 @@ export function normalizeHtmlCardProtocolContent(raw = '') {
     .replace(/\s*```$/i, '')
     .trim();
 
-  return value;
+  return stripHtmlCardTrailingChatProtocols(value);
 }
 
 /* ==========================================================================
@@ -61,7 +118,7 @@ export function getHtmlCardFeaturePrompt() {
    说明：
    1. 从 AI 原始文本中提取 [卡片] 角色名：HTML正文。
    2. 本区域已修复“卡片后续 [回复]/[表情]/[转账]/[引用]/[撤回]/[图片] 协议被塞进 iframe”的掉格式问题。
-   3. 卡片正文只截取到下一条任意聊天协议开始处，确保聊天界面只显示一张干净的 HTML 卡片。
+   3. 卡片正文只截取到下一条任意聊天协议开始处；兼容协议头前面带 **、反引号、空格等 Markdown 残片的情况。
    4. 不涉及任何持久化存储；不使用 localStorage/sessionStorage，不做双份兜底。
    ========================================================================== */
 export function extractHtmlCardProtocolBlocks(rawText = '') {
@@ -71,21 +128,19 @@ export function extractHtmlCardProtocolBlocks(rawText = '') {
     .trim();
   if (!visibleText) return [];
 
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[卡片\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
-  const allProtocolMarkerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
-  const cardMatches = [...visibleText.matchAll(markerRegex)];
-  const protocolMatches = [...visibleText.matchAll(allProtocolMarkerRegex)];
-  if (!cardMatches.length) return [];
+  const protocolMarkers = getHtmlCardChatProtocolMarkers(visibleText);
+  const cardMarkers = protocolMarkers.filter(marker => marker.type === '卡片');
+  if (!cardMarkers.length) return [];
 
-  return cardMatches
-    .map((match) => {
-      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
-      const nextProtocolMatch = protocolMatches.find(item => Number(item.index || 0) > Number(match.index || 0));
-      const contentEnd = nextProtocolMatch ? Number(nextProtocolMatch.index || visibleText.length) : visibleText.length;
+  return cardMarkers
+    .map((marker) => {
+      const contentStart = marker.index + marker.markerText.length;
+      const nextProtocolMarker = protocolMarkers.find(item => item.index > marker.index);
+      const contentEnd = nextProtocolMarker ? nextProtocolMarker.boundaryIndex : visibleText.length;
       const html = normalizeHtmlCardProtocolContent(visibleText.slice(contentStart, contentEnd));
       return {
         type: 'card',
-        roleName: String(match[1] || '').trim(),
+        roleName: marker.roleName,
         html
       };
     })
