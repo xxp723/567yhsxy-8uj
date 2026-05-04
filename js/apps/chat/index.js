@@ -488,6 +488,14 @@ export async function mount(container, context) {
   container.innerHTML = buildAppShell(state);
 
   /* [区域标注] 绑定全局事件代理 */
+  /* ========================================================================
+     [区域标注·已完成·本次返回按钮点击修复] 消息页/设置页返回按钮捕获优先处理
+     说明：
+     1. 在普通 click 事件代理之前，用捕获阶段优先处理 msg-back 与 msg-settings-back。
+     2. 避免返回按钮点击被消息气泡工具栏关闭逻辑、长按指针逻辑或外层桌面手势层抢先消费，导致表现为点击无效。
+     3. 本区域只处理这两个返回按钮的运行时导航，不新增/修改任何持久化存储逻辑；仍严格使用 DB.js / IndexedDB。
+     ======================================================================== */
+  const navigationClickCaptureHandler = (e) => handleChatReturnClickCapture(e, state, container);
   const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta, settings);
   const inputHandler = (e) => handleInput(e, state, container, db);
   const keydownHandler = (e) => handleKeydown(e, state, container, db, settings);
@@ -508,6 +516,7 @@ export async function mount(container, context) {
   const favoriteCardLongPressHandlers = createFavoriteCardLongPressHandlers(state, container);
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
+  container.addEventListener('click', navigationClickCaptureHandler, true);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
   container.addEventListener('keydown', keydownHandler);
@@ -608,6 +617,7 @@ export async function mount(container, context) {
   return {
     destroy() {
       state.destroyed = true;
+      container.removeEventListener('click', navigationClickCaptureHandler, true);
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
       container.removeEventListener('keydown', keydownHandler);
@@ -954,6 +964,32 @@ function closeChatMessage(container, state) {
   }
 }
 
+/* ========================================================================
+   [区域标注·已完成·本次返回按钮点击修复] 捕获阶段返回导航
+   说明：
+   1. 仅拦截聊天消息页返回聊天列表按钮（data-action="msg-back"）与聊天设置页返回消息列表按钮（data-action="msg-settings-back"）。
+   2. 捕获阶段立即执行导航并 stopPropagation，防止后续气泡工具栏关闭逻辑、长按逻辑或外层桌面手势层把点击吞掉。
+   3. 本区域只修改运行时 UI 显隐/重渲染；不读写 localStorage/sessionStorage，也不新增 IndexedDB 写入。
+   ======================================================================== */
+function handleChatReturnClickCapture(e, state, container) {
+  const target = e.target?.closest?.('[data-action="msg-back"], [data-action="msg-settings-back"]');
+  if (!target || !container.contains(target)) return;
+
+  const action = String(target.dataset.action || '');
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (action === 'msg-back') {
+    closeChatMessage(container, state);
+    refreshPanel(container, state, 'chatList');
+    return;
+  }
+
+  if (action === 'msg-settings-back') {
+    renderCurrentChatMessage(container, state);
+  }
+}
+
 /* ==========================================================================
    [区域标注] 点击事件代理处理器
    说明：统一处理应用内所有按钮/列表项的点击事件
@@ -1284,9 +1320,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·返回聊天列表按钮修复]
-       说明：点击聊天消息页左上返回按钮时，立即关闭消息页并刷新聊天列表；
-             同时阻止事件冒泡到外层手势/桌面层，避免按钮表现为点击无效。
+       [区域标注·已完成·本次返回按钮点击修复] 返回聊天列表按钮兜底
+       说明：主要处理已移至 handleChatReturnClickCapture 捕获阶段；此处保留兜底，
+             确保非捕获路径下仍能关闭消息页并返回聊天列表。
        ======================================================================== */
     case 'msg-back':
       e.preventDefault();
@@ -2411,9 +2447,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·聊天设置返回消息页按钮修复]
-       说明：点击聊天设置页左上返回按钮时，重新渲染当前消息页并阻止事件冒泡；
-             不新增任何存储逻辑，不使用 localStorage/sessionStorage。
+       [区域标注·已完成·本次返回按钮点击修复] 聊天设置返回消息页按钮兜底
+       说明：主要处理已移至 handleChatReturnClickCapture 捕获阶段；此处保留兜底，
+             确保非捕获路径下仍能从设置页回到聊天消息列表。
        ======================================================================== */
     case 'msg-settings-back':
       e.preventDefault();
