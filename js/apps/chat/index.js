@@ -838,12 +838,12 @@ async function openChatMessage(container, state, db, chatId) {
   /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
 
   /* ========================================================================
-     [区域标注·已完成·本次进入聊天消息页防闪屏修复] 先渲染后切换，避免中间空白帧
+     [区域标注·已完成·本次进入聊天消息页防闪屏修复（已更新）] 先隐藏主界面再渲染消息页，下一帧显示
      说明：
-     1. 点击聊天条目后，先让消息页容器在不可见态完成渲染，不先隐藏聊天列表主界面。
-     2. 渲染完成后在同一帧内一次性切换：隐藏顶部栏/子TAB/底栏/四大面板，并显示消息页。
-     3. 去掉“先隐藏主界面再等待下一帧显示消息页”的空档，避免聊天列表进入消息页时出现白闪。
-     4. 本区域只调整 UI 切换时序；不新增任何持久化存储逻辑，不使用 localStorage/sessionStorage。
+     1. 先同步隐藏顶部栏/子TAB/底栏/四大面板，避免主界面与消息页在同一帧同时参与绘制造成闪屏。
+     2. 消息页容器先以不可见态完成渲染，再在下一帧恢复可见，避免中间布局抖动。
+     3. 仅调整进入聊天消息页的显示时序；不改其它功能，不新增任何持久化存储逻辑。
+     4. 持久化仍只使用 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -862,24 +862,23 @@ async function openChatMessage(container, state, db, chatId) {
   state.chatConsoleEnabled = Boolean(await dbGet(db, DATA_KEY_CHAT_CONSOLE_ENABLED(state.activeMaskId, chatId)));
   state.chatConsoleExpanded = false;
 
-  if (msgWrap) {
-    msgWrap.style.display = 'flex';
-    msgWrap.style.visibility = 'hidden';
-    msgWrap.style.opacity = '0';
-    msgWrap.style.pointerEvents = 'none';
-    renderCurrentChatMessage(container, state);
-    msgWrap.offsetHeight;
-  }
-
   if (topBar) topBar.style.display = 'none';
   if (subTabs) subTabs.style.display = 'none';
   if (bottomTab) bottomTab.style.display = 'none';
   panels.forEach(p => p.style.display = 'none');
 
   if (msgWrap) {
-    msgWrap.style.visibility = '';
-    msgWrap.style.opacity = '';
-    msgWrap.style.pointerEvents = '';
+    msgWrap.style.display = 'flex';
+    msgWrap.style.visibility = 'hidden';
+    msgWrap.style.opacity = '0';
+    msgWrap.style.pointerEvents = 'none';
+    renderCurrentChatMessage(container, state);
+    window.requestAnimationFrame(() => {
+      if (state.currentChatId !== chatId) return;
+      msgWrap.style.visibility = '';
+      msgWrap.style.opacity = '';
+      msgWrap.style.pointerEvents = '';
+    });
   }
 
   /* [区域标注] 滚动到消息底部 */
