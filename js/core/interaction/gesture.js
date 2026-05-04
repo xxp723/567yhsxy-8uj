@@ -8,6 +8,7 @@
  * - 返回动作调用 history.back()。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
  * - 已增加应用内左侧手势热区与横向过度滚动控制，减少系统/浏览器边缘手势抢占。
+ * - 已修正为以 #screen-root 应用屏幕左边缘为参照，不再误用浏览器视口最左侧。
  * 位置: /js/core/interaction/gesture.js
  * 架构层: 交互层（Interaction Layer）
  */
@@ -18,6 +19,7 @@
    - EDGE_ACTIVATE_WIDTH 控制左边缘触发范围：20px。
    - COMPLETE_RATIO 控制完成返回阈值：屏幕宽度 30%。
    - EDGE_GUARD_Z_INDEX 控制透明热区层级，确保在应用 UI 内优先接收触摸。
+   - 热区位置基于 #screen-root 的 getBoundingClientRect() 动态计算。
    - 以下配置均为运行时交互参数，不涉及任何持久化存储。
    ========================================================================== */
 const EDGE_ACTIVATE_WIDTH = 20;
@@ -63,6 +65,7 @@ export class EdgeBackGesture {
     this.onTouchMove = this.onTouchMove.bind(this);
     this.onTouchEnd = this.onTouchEnd.bind(this);
     this.onTouchCancel = this.onTouchCancel.bind(this);
+    this.updateEdgeGuardPosition = this.updateEdgeGuardPosition.bind(this);
   }
 
   bind() {
@@ -74,6 +77,9 @@ export class EdgeBackGesture {
     document.addEventListener('touchmove', this.onTouchMove, { passive: false, capture: true });
     document.addEventListener('touchend', this.onTouchEnd, { passive: true, capture: true });
     document.addEventListener('touchcancel', this.onTouchCancel, { passive: true, capture: true });
+    window.addEventListener('resize', this.updateEdgeGuardPosition, { passive: true });
+    window.addEventListener('scroll', this.updateEdgeGuardPosition, { passive: true });
+    window.addEventListener('orientationchange', this.updateEdgeGuardPosition, { passive: true });
   }
 
   unbind() {
@@ -81,6 +87,9 @@ export class EdgeBackGesture {
     document.removeEventListener('touchmove', this.onTouchMove, { capture: true });
     document.removeEventListener('touchend', this.onTouchEnd, { capture: true });
     document.removeEventListener('touchcancel', this.onTouchCancel, { capture: true });
+    window.removeEventListener('resize', this.updateEdgeGuardPosition);
+    window.removeEventListener('scroll', this.updateEdgeGuardPosition);
+    window.removeEventListener('orientationchange', this.updateEdgeGuardPosition);
     this.removeEdgeGestureGuards();
     this.resetVisualState();
     this.resetTouchState();
@@ -90,7 +99,7 @@ export class EdgeBackGesture {
     if (this.isAnimating || event.touches.length !== 1) return;
 
     const touch = event.touches[0];
-    if (!touch || touch.clientX > EDGE_ACTIVATE_WIDTH) return;
+    if (!touch || !this.isWithinSurfaceLeftEdge(touch)) return;
     if (this.isFromEdgeGuard(event.target)) {
       event.preventDefault();
     }
@@ -170,11 +179,35 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
+     [区域标注·本次反馈修复·以应用屏幕为边缘参照·已完成]
+     说明：
+     - MiniPhone 手机外壳可能居中显示，#screen-root 左边缘不等于浏览器视口 left: 0。
+     - 这里用 #screen-root.getBoundingClientRect() 判断触摸是否位于应用屏幕左侧 20px。
+     - 解决“没有从浏览器最左侧开始滑动时完全无反应”的问题。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
+  isWithinSurfaceLeftEdge(touch) {
+    const rect = this.surfaceEl.getBoundingClientRect();
+    const edgeLeft = rect.left;
+    const edgeRight = rect.left + EDGE_ACTIVATE_WIDTH;
+    const edgeTop = rect.top;
+    const edgeBottom = rect.bottom;
+
+    return (
+      touch.clientX >= edgeLeft &&
+      touch.clientX <= edgeRight &&
+      touch.clientY >= edgeTop &&
+      touch.clientY <= edgeBottom
+    );
+  }
+
+  /* ==========================================================================
      [区域标注·本次反馈修复·应用内左侧手势热区·已完成]
      说明：
      - 手机物理最边缘可能被系统手势抢占，网页无法 100% 禁止。
-     - 这里在应用画面内部左侧 20px 创建透明热区，并设置 touch-action: none，
+     - 这里在 #screen-root 应用画面内部左侧 20px 创建透明热区，并设置 touch-action: none，
        让从应用内侧边缘开始的滑动尽量先被网页接收。
+     - 热区跟随 #screen-root 的实际位置和尺寸，不再固定在浏览器视口 left: 0。
      - 同时设置 overscroll-behavior-x: none，减少浏览器横向导航/回弹干扰。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
@@ -199,7 +232,7 @@ export class EdgeBackGesture {
     guard.style.left = '0';
     guard.style.top = '0';
     guard.style.width = `${EDGE_ACTIVATE_WIDTH}px`;
-    guard.style.height = '100dvh';
+    guard.style.height = '0';
     guard.style.zIndex = EDGE_GUARD_Z_INDEX;
     guard.style.pointerEvents = 'auto';
     guard.style.touchAction = 'none';
@@ -208,6 +241,17 @@ export class EdgeBackGesture {
 
     document.body.appendChild(guard);
     this.edgeGuardEl = guard;
+    this.updateEdgeGuardPosition();
+  }
+
+  updateEdgeGuardPosition() {
+    if (!this.edgeGuardEl || !this.surfaceEl) return;
+
+    const rect = this.surfaceEl.getBoundingClientRect();
+    this.edgeGuardEl.style.left = `${rect.left}px`;
+    this.edgeGuardEl.style.top = `${rect.top}px`;
+    this.edgeGuardEl.style.height = `${rect.height}px`;
+    this.edgeGuardEl.style.width = `${EDGE_ACTIVATE_WIDTH}px`;
   }
 
   removeEdgeGestureGuards() {
