@@ -477,7 +477,9 @@ export class EdgeBackGesture {
      - 函数名保留 getActiveBackButton，实际返回“当前侧滑应触发的返回/关闭控件”。
      - 优先找应用内部的页面级返回按钮（如"返回"、data-action="back/go-profile/goback"等）。
      - 若没有找到内部返回按钮，说明大概率处于应用总界面：
-       此时回退到窗口级 .app-window__close，复用项目已有 app:close 流程回到小手机桌面。
+       先触发应用自己显式提供的回桌面控件（闲谈 data-action="go-home"、世情 data-a="gohome"），
+       再回退到窗口级 .app-window__close，复用项目已有 app:close 流程回到小手机桌面。
+     - 已修复闲谈/世情主界面无法侧滑回桌面：主界面不再因为隐藏/改造窗口关闭按钮而回弹。
      - 不再依赖默认隐藏且 pointer-events:none 的 .app-window__back。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
      ========================================================================== */
@@ -487,6 +489,9 @@ export class EdgeBackGesture {
 
     const pageButton = this.findInternalBackControl(activeWindow);
     if (pageButton) return pageButton;
+
+    const desktopReturnControl = this.findAppDesktopReturnControl(activeWindow);
+    if (desktopReturnControl) return desktopReturnControl;
 
     const windowCloseButton = activeWindow.querySelector('.app-window__close');
     return this.isUsableWindowCloseControl(windowCloseButton) ? windowCloseButton : null;
@@ -531,6 +536,41 @@ export class EdgeBackGesture {
     if (!allowWindowBack && control.classList.contains('app-window__back')) return false;
     if (control.closest('[data-edge-back-gesture-guard="true"]')) return false;
     if (control.matches('.app-window__close, [data-action="close-window"], [data-action="go-home"], [data-a="gohome"]')) return false;
+    if (control.matches('[data-action*="modal" i], [data-action*="picker" i], [aria-modal="true"] *')) return false;
+
+    return this.isVisibleUsableControl(control);
+  }
+
+  /* ==========================================================================
+     [区域标注·本次反馈修复·闲谈世情主界面回桌面兜底·已完成]
+     说明：
+     - 闲谈主界面使用 data-action="go-home" 触发 app:close。
+     - 世情会隐藏原窗口关闭按钮，并把标题改成 data-a="gohome"；该按钮会先 flushSave 再 app:close。
+     - 这些控件不作为“页面级返回”参与优先匹配，只在没有二级页面返回入口时作为回桌面兜底。
+     - 解决闲谈应用、世情应用在主界面侧滑只能回弹、无法回到小手机桌面的问题。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
+  findAppDesktopReturnControl(activeWindow) {
+    const selectors = [
+      '[data-action="go-home"]',
+      '[data-a="gohome"]'
+    ];
+
+    const candidates = selectors.flatMap((selector) => {
+      try {
+        return Array.from(activeWindow.querySelectorAll(selector));
+      } catch (_) {
+        return [];
+      }
+    });
+
+    const uniqueCandidates = Array.from(new Set(candidates));
+    return uniqueCandidates.find((candidate) => this.isUsableDesktopReturnControl(candidate)) || null;
+  }
+
+  isUsableDesktopReturnControl(control) {
+    if (!(control instanceof HTMLElement)) return false;
+    if (control.closest('[data-edge-back-gesture-guard="true"]')) return false;
     if (control.matches('[data-action*="modal" i], [data-action*="picker" i], [aria-modal="true"] *')) return false;
 
     return this.isVisibleUsableControl(control);
