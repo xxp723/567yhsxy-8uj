@@ -7,6 +7,7 @@
  * - 松手时超过屏幕宽度 30% 自动完成返回，否则回弹。
  * - 返回动作调用 history.back()。
  * - 纯 JS 实现，不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+ * - 已增加应用内左侧手势热区与横向过度滚动控制，减少系统/浏览器边缘手势抢占。
  * 位置: /js/core/interaction/gesture.js
  * 架构层: 交互层（Interaction Layer）
  */
@@ -16,6 +17,7 @@
    说明：
    - EDGE_ACTIVATE_WIDTH 控制左边缘触发范围：20px。
    - COMPLETE_RATIO 控制完成返回阈值：屏幕宽度 30%。
+   - EDGE_GUARD_Z_INDEX 控制透明热区层级，确保在应用 UI 内优先接收触摸。
    - 以下配置均为运行时交互参数，不涉及任何持久化存储。
    ========================================================================== */
 const EDGE_ACTIVATE_WIDTH = 20;
@@ -26,6 +28,7 @@ const RUBBER_BAND_POWER = 0.82;
 const MOVE_TRANSITION = 'none';
 const RELEASE_TRANSITION = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, box-shadow 220ms ease';
 const COMPLETE_TRANSITION = 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease, box-shadow 260ms ease';
+const EDGE_GUARD_Z_INDEX = '2147483646';
 
 /**
  * iOS 风格边缘返回手势。
@@ -53,6 +56,8 @@ export class EdgeBackGesture {
     this.isCancelled = false;
     this.isAnimating = false;
     this.previousInlineStyle = null;
+    this.edgeGuardEl = null;
+    this.previousRootOverscrollStyle = null;
 
     this.onTouchStart = this.onTouchStart.bind(this);
     this.onTouchMove = this.onTouchMove.bind(this);
@@ -63,7 +68,9 @@ export class EdgeBackGesture {
   bind() {
     if (!this.surfaceEl) return;
 
-    document.addEventListener('touchstart', this.onTouchStart, { passive: true, capture: true });
+    this.installEdgeGestureGuards();
+
+    document.addEventListener('touchstart', this.onTouchStart, { passive: false, capture: true });
     document.addEventListener('touchmove', this.onTouchMove, { passive: false, capture: true });
     document.addEventListener('touchend', this.onTouchEnd, { passive: true, capture: true });
     document.addEventListener('touchcancel', this.onTouchCancel, { passive: true, capture: true });
@@ -74,6 +81,7 @@ export class EdgeBackGesture {
     document.removeEventListener('touchmove', this.onTouchMove, { capture: true });
     document.removeEventListener('touchend', this.onTouchEnd, { capture: true });
     document.removeEventListener('touchcancel', this.onTouchCancel, { capture: true });
+    this.removeEdgeGestureGuards();
     this.resetVisualState();
     this.resetTouchState();
   }
@@ -83,6 +91,9 @@ export class EdgeBackGesture {
 
     const touch = event.touches[0];
     if (!touch || touch.clientX > EDGE_ACTIVATE_WIDTH) return;
+    if (this.isFromEdgeGuard(event.target)) {
+      event.preventDefault();
+    }
 
     /* ==========================================================================
        [区域标注·本次需求·内部横向滚动冲突判断区·已完成]
@@ -158,12 +169,73 @@ export class EdgeBackGesture {
     return Array.from(touchList || []).find((touch) => touch.identifier === this.touchId) || null;
   }
 
+  /* ==========================================================================
+     [区域标注·本次反馈修复·应用内左侧手势热区·已完成]
+     说明：
+     - 手机物理最边缘可能被系统手势抢占，网页无法 100% 禁止。
+     - 这里在应用画面内部左侧 20px 创建透明热区，并设置 touch-action: none，
+       让从应用内侧边缘开始的滑动尽量先被网页接收。
+     - 同时设置 overscroll-behavior-x: none，减少浏览器横向导航/回弹干扰。
+     - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+     ========================================================================== */
+  installEdgeGestureGuards() {
+    if (this.edgeGuardEl) return;
+
+    this.previousRootOverscrollStyle = {
+      html: document.documentElement.style.overscrollBehaviorX,
+      body: document.body.style.overscrollBehaviorX,
+      surface: this.surfaceEl.style.overscrollBehaviorX
+    };
+
+    document.documentElement.style.overscrollBehaviorX = 'none';
+    document.body.style.overscrollBehaviorX = 'none';
+    this.surfaceEl.style.overscrollBehaviorX = 'none';
+
+    const guard = document.createElement('div');
+    guard.className = 'miniphone-edge-back-gesture-guard';
+    guard.setAttribute('aria-hidden', 'true');
+    guard.setAttribute('data-edge-back-gesture-guard', 'true');
+    guard.style.position = 'fixed';
+    guard.style.left = '0';
+    guard.style.top = '0';
+    guard.style.width = `${EDGE_ACTIVATE_WIDTH}px`;
+    guard.style.height = '100dvh';
+    guard.style.zIndex = EDGE_GUARD_Z_INDEX;
+    guard.style.pointerEvents = 'auto';
+    guard.style.touchAction = 'none';
+    guard.style.background = 'transparent';
+    guard.style.webkitTapHighlightColor = 'transparent';
+
+    document.body.appendChild(guard);
+    this.edgeGuardEl = guard;
+  }
+
+  removeEdgeGestureGuards() {
+    if (this.edgeGuardEl) {
+      this.edgeGuardEl.remove();
+      this.edgeGuardEl = null;
+    }
+
+    if (this.previousRootOverscrollStyle) {
+      document.documentElement.style.overscrollBehaviorX = this.previousRootOverscrollStyle.html;
+      document.body.style.overscrollBehaviorX = this.previousRootOverscrollStyle.body;
+      this.surfaceEl.style.overscrollBehaviorX = this.previousRootOverscrollStyle.surface;
+      this.previousRootOverscrollStyle = null;
+    }
+  }
+
+  isFromEdgeGuard(target) {
+    return target instanceof Element && Boolean(target.closest('[data-edge-back-gesture-guard="true"]'));
+  }
+
   cancelTracking() {
     this.isCancelled = true;
     this.resetTouchState();
   }
 
   shouldIgnoreForHorizontalScroller(target) {
+    if (this.isFromEdgeGuard(target)) return false;
+
     let el = target instanceof Element ? target : null;
 
     while (el && el !== document.body && el !== document.documentElement) {
