@@ -20,6 +20,10 @@ import {
 } from './chat-utils.js';
 import { chat } from './prompt.js';
 import { getVisibleChatSessions } from './chat-list.js';
+import {
+  extractHtmlCardProtocolBlocks,
+  sanitizeHtmlCardDocumentForSrcdoc
+} from './chat-html-card.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天控制台日志存储键与工具
@@ -230,6 +234,7 @@ function getMessageDisplayTextForQuote(message = {}) {
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
+  if (type === 'card') return `[HTML卡片] ${String(message?.cardTitle || message?.content || '互动卡片').trim()}`;
   if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system') return String(message?.content || '系统提示').trim();
   return String(message?.content || '').trim();
 }
@@ -531,6 +536,17 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   /* ========================================================================
+     [区域标注·已完成·HTML卡片消息渲染] AI 互动 HTML 卡片消息
+     说明：
+     1. 只渲染本次新增的 html 卡片功能区域，不改动其它消息类型逻辑。
+     2. 卡片通过 sandbox iframe + srcdoc 展示，保留卡片内原生 HTML/CSS 互动，同时不污染聊天页样式。
+     3. 卡片原始 HTML 与渲染后的 srcdoc 都只保存在当前消息对象中；消息持久化仍统一走 DB.js / IndexedDB。
+     ======================================================================== */
+  const isHtmlCardMessage = String(msg?.type || '') === 'card' && String(msg?.cardHtml || msg?.content || '').trim();
+  const htmlCardSrcdoc = isHtmlCardMessage
+    ? sanitizeHtmlCardDocumentForSrcdoc(String(msg?.cardHtml || msg?.content || ''))
+    : '';
+  /* ========================================================================
      [区域标注·已完成·AI本轮撤回系统提示渲染]
      说明：
      1. transfer_system 继续用于转账系统小字。
@@ -586,7 +602,23 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                 ${isTransferAccepted ? `<span class="msg-transfer-bubble__check" aria-label="已接收">${MSG_ICONS.check}</span>` : ''}
               </div>
             `
-            : escapeHtml(msg?.content || '')));
+            : (isHtmlCardMessage
+                ? `
+                  <div class="msg-html-card-bubble" data-role="msg-html-card-bubble">
+                    <div class="msg-html-card-bubble__header">
+                      <span class="msg-html-card-bubble__badge">HTML卡片</span>
+                      <span class="msg-html-card-bubble__hint">可点击互动</span>
+                    </div>
+                    <iframe
+                      class="msg-html-card-bubble__frame"
+                      sandbox="allow-forms allow-popups-to-escape-sandbox"
+                      loading="lazy"
+                      referrerpolicy="no-referrer"
+                      srcdoc="${escapeHtml(htmlCardSrcdoc)}"
+                      title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
+                  </div>
+                `
+                : escapeHtml(msg?.content || ''))));
 
   if (isTransferSystemMessage) {
     return `
@@ -692,7 +724,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
           ${quoteHtml}
           ${bubbleInnerHtml}
         </div>
@@ -1006,6 +1038,23 @@ export function renderChatMessage(chatSession, messages, options = {}) {
               <div class="msg-settings-card__desc">开启后会向 AI 注入当前真实时间，并让角色按早中晚深夜自然聊天。</div>
             </div>
             <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             [区域标注·已完成·HTML卡片设置开关] 聊天设置页 HTML 卡片注入开关
+             说明：
+             1. 仅当此开关开启时，prompt.js 才会给 AI 注入 HTML 卡片系统提示词。
+             2. 开关样式沿用现有 iPhone 风格滑动开关；持久化由 index.js 写入 DB.js / IndexedDB。
+             3. 本区域只新增 html 卡片功能相关设置，不修改其它聊天设置行为。
+             ================================================================== -->
+        <section class="msg-settings-card">
+          <div class="msg-settings-row">
+            <div>
+              <div class="msg-settings-card__title">HTML卡片</div>
+              <div class="msg-settings-card__desc">开启后，AI 才能在最新一轮回复中按需附加可互动的北欧风 HTML 卡片。</div>
+            </div>
+            <button class="msg-ios-switch ${chatSettings.htmlCardEnabled ? 'is-on' : ''}" data-action="toggle-html-card" type="button" aria-label="HTML卡片"></button>
           </div>
         </section>
 
@@ -1802,7 +1851,8 @@ export function extractAiProtocolBlocks(rawText) {
 
 export function buildAiReplyMessages(rawText, state) {
   const protocolBlocks = extractAiProtocolBlocks(rawText);
-  if (!protocolBlocks.length) {
+  const htmlCardBlocks = extractHtmlCardProtocolBlocks(rawText);
+  if (!protocolBlocks.length && !htmlCardBlocks.length) {
     const repairedSticker = findLooseStickerTargetFromText(rawText, state);
     if (repairedSticker) {
       return enforceAiReplyMessageCount([{
@@ -1826,6 +1876,7 @@ export function buildAiReplyMessages(rawText, state) {
 
   const builtMessages = [];
   let hasImageGenerationProtocol = false;
+  let hasHtmlCardProtocol = false;
   protocolBlocks.forEach(block => {
     if (block.type === '撤回') {
       /* ======================================================================
@@ -1945,7 +1996,24 @@ export function buildAiReplyMessages(rawText, state) {
     });
   });
 
-  if (!builtMessages.length && hasImageGenerationProtocol) return [];
+  if (htmlCardBlocks.length) {
+    hasHtmlCardProtocol = true;
+    htmlCardBlocks.forEach((block, index) => {
+      const safeHtml = String(block?.html || '').trim();
+      if (!safeHtml) return;
+      builtMessages.push({
+        role: 'assistant',
+        type: 'card',
+        content: `[HTML卡片] ${String(block?.roleName || '').trim() || '互动卡片'}`,
+        cardRoleName: String(block?.roleName || '').trim(),
+        cardTitle: `${String(block?.roleName || '').trim() || '互动'}的卡片`,
+        cardHtml: safeHtml,
+        cardOrder: index
+      });
+    });
+  }
+
+  if (!builtMessages.length && (hasImageGenerationProtocol || hasHtmlCardProtocol)) return [];
 
   return enforceAiReplyMessageCount(
     builtMessages.length
@@ -2649,6 +2717,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
           if (String(message.type || '') === 'transfer') {
             return message;
           }
+          if (String(message.type || '') === 'card' && String(message.cardHtml || message.content || '').trim()) {
+            return message;
+          }
           const content = cleanAiVisibleBubbleText(message.content);
           return content ? { ...message, content } : null;
         })
@@ -2661,7 +2732,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     let bestLength = 0;
 
     normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system') return;
+      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || String(message.type || '') === 'card' || String(message.type || '') === 'transfer') return;
       const parts = splitSingleBubbleForCount(message.content);
       if (parts.length <= 1) return;
       const currentLength = String(message.content || '').length;

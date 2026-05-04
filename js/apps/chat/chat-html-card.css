@@ -1,0 +1,535 @@
+/* ======================================================================
+   [区域标注·已完成·HTML卡片独立样式文件] 闲谈应用 HTML 卡片专用样式
+   说明：
+   1. 本文件只服务“AI 在聊天消息中生成可交互 HTML 卡片”功能。
+   2. 风格采用偏北欧的浅雾面、柔和描边、低饱和阴影，并尽量贴合当前手机主题 UI。
+   3. 不包含任何存储逻辑；仅负责渲染层样式。
+   4. 单独拆分，便于后续只修改 HTML 卡片，不影响其它聊天消息样式。
+   ====================================================================== */
+
+:root {
+  --chat-html-card-bg: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(240, 244, 248, 0.96) 100%);
+  --chat-html-card-bg-strong: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 243, 247, 0.98) 100%);
+  --chat-html-card-border: rgba(120, 140, 160, 0.18);
+  --chat-html-card-border-strong: rgba(100, 122, 146, 0.28);
+  --chat-html-card-shadow: 0 10px 28px rgba(71, 85, 105, 0.12);
+  --chat-html-card-shadow-active: 0 14px 34px rgba(59, 130, 246, 0.16);
+  --chat-html-card-text: #243447;
+  --chat-html-card-text-soft: #5f7186;
+  --chat-html-card-text-faint: #8a98a8;
+  --chat-html-card-accent: #7c9ab8;
+  --chat-html-card-accent-strong: #5f83aa;
+  --chat-html-card-accent-soft: rgba(124, 154, 184, 0.14);
+  --chat-html-card-success: #4f8a72;
+  --chat-html-card-warning: #b78746;
+  --chat-html-card-danger: #b86b6b;
+  --chat-html-card-radius-xl: 22px;
+  --chat-html-card-radius-lg: 18px;
+  --chat-html-card-radius-md: 14px;
+  --chat-html-card-radius-sm: 10px;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片消息外层] 聊天气泡中的卡片承载层
+   说明：
+   1. 预留最小宽高，降低首次渲染时的尺寸抖动。
+   2. 限制最大宽度，适配小屏手机聊天界面。
+   ====================================================================== */
+.msg-html-card-wrap {
+  width: min(100%, 312px);
+  min-height: 132px;
+  border-radius: 24px;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: var(--chat-html-card-shadow);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片主体] AI 注入 HTML 的安全挂载区域
+   说明：
+   1. 统一字体、颜色、盒模型与点击反馈。
+   2. 兼容 AI 生成的常见结构：header / section / footer / button / badge / list 等。
+   ====================================================================== */
+.msg-html-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 132px;
+  padding: 14px;
+  color: var(--chat-html-card-text);
+  background: var(--chat-html-card-bg);
+  border: 1px solid var(--chat-html-card-border);
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.msg-html-card,
+.msg-html-card * {
+  box-sizing: border-box;
+}
+
+.msg-html-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.75), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(124, 154, 184, 0.08), transparent 30%);
+  pointer-events: none;
+}
+
+.msg-html-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.msg-html-card h1,
+.msg-html-card h2,
+.msg-html-card h3,
+.msg-html-card h4,
+.msg-html-card h5,
+.msg-html-card h6 {
+  margin: 0;
+  color: var(--chat-html-card-text);
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.msg-html-card h1 { font-size: 18px; }
+.msg-html-card h2 { font-size: 17px; }
+.msg-html-card h3 { font-size: 16px; }
+.msg-html-card h4,
+.msg-html-card h5,
+.msg-html-card h6 { font-size: 15px; }
+
+.msg-html-card p {
+  margin: 0;
+  color: var(--chat-html-card-text-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.msg-html-card small {
+  color: var(--chat-html-card-text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.msg-html-card strong {
+  color: var(--chat-html-card-text);
+  font-weight: 700;
+}
+
+.msg-html-card a {
+  color: var(--chat-html-card-accent-strong);
+  text-decoration: none;
+}
+
+.msg-html-card a:hover {
+  text-decoration: underline;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片布局语义类] 推荐给 AI 使用的结构类
+   说明：即使 AI 只生成部分结构，也尽量有合理显示效果。
+   ====================================================================== */
+.msg-html-card .card-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-html-card .card-header,
+.msg-html-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.msg-html-card .card-header__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msg-html-card .card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--chat-html-card-text);
+  line-height: 1.35;
+}
+
+.msg-html-card .card-subtitle {
+  font-size: 12px;
+  color: var(--chat-html-card-text-faint);
+  line-height: 1.5;
+}
+
+.msg-html-card .card-body,
+.msg-html-card section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg-html-card .card-footer,
+.msg-html-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.msg-html-card .card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.msg-html-card .card-row--stack {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.msg-html-card .card-meta {
+  font-size: 12px;
+  color: var(--chat-html-card-text-faint);
+}
+
+.msg-html-card .card-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--chat-html-card-text);
+  text-align: right;
+}
+
+.msg-html-card .card-note {
+  padding: 10px 12px;
+  border-radius: var(--chat-html-card-radius-md);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px dashed rgba(124, 154, 184, 0.28);
+  color: var(--chat-html-card-text-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.msg-html-card .card-divider,
+.msg-html-card hr {
+  border: 0;
+  height: 1px;
+  margin: 0;
+  background: linear-gradient(90deg, transparent, rgba(120, 140, 160, 0.28), transparent);
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片票据/账单列表] 账单、小票、订单明细等
+   ====================================================================== */
+.msg-html-card .card-list,
+.msg-html-card ul,
+.msg-html-card ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-html-card .card-list li,
+.msg-html-card ul li,
+.msg-html-card ol li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: var(--chat-html-card-radius-sm);
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(120, 140, 160, 0.12);
+  color: var(--chat-html-card-text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.msg-html-card .card-list__label {
+  flex: 1;
+  min-width: 0;
+  color: var(--chat-html-card-text-soft);
+}
+
+.msg-html-card .card-list__value {
+  color: var(--chat-html-card-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片状态标签] 票据状态/承诺状态/支付状态
+   ====================================================================== */
+.msg-html-card .card-badge,
+.msg-html-card .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--chat-html-card-accent-soft);
+  color: var(--chat-html-card-accent-strong);
+  border: 1px solid rgba(124, 154, 184, 0.2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.msg-html-card .badge.is-success { color: var(--chat-html-card-success); background: rgba(79, 138, 114, 0.12); border-color: rgba(79, 138, 114, 0.18); }
+.msg-html-card .badge.is-warning { color: var(--chat-html-card-warning); background: rgba(183, 135, 70, 0.12); border-color: rgba(183, 135, 70, 0.18); }
+.msg-html-card .badge.is-danger  { color: var(--chat-html-card-danger);  background: rgba(184, 107, 107, 0.12); border-color: rgba(184, 107, 107, 0.18); }
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片金额强调] 金额/编号/重要字段
+   ====================================================================== */
+.msg-html-card .card-amount {
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--chat-html-card-text);
+}
+
+.msg-html-card .card-code {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(232, 237, 243, 0.88);
+  color: #516274;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid rgba(120, 140, 160, 0.12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片交互按钮] 不使用原生按钮风格
+   说明：
+   1. 用柔和胶囊按钮，接近 iPhone / 当前主题混合风格。
+   2. 支持单个按钮和按钮组。
+   ====================================================================== */
+.msg-html-card .card-actions,
+.msg-html-card .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.msg-html-card button,
+.msg-html-card [role='button'],
+.msg-html-card .card-button {
+  appearance: none;
+  border: 1px solid rgba(124, 154, 184, 0.16);
+  outline: none;
+  background: var(--chat-html-card-bg-strong);
+  color: var(--chat-html-card-text);
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 5px 14px rgba(148, 163, 184, 0.12);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+  cursor: pointer;
+}
+
+.msg-html-card button:hover,
+.msg-html-card [role='button']:hover,
+.msg-html-card .card-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--chat-html-card-shadow-active);
+  border-color: rgba(95, 131, 170, 0.26);
+}
+
+.msg-html-card button:active,
+.msg-html-card [role='button']:active,
+.msg-html-card .card-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(71, 85, 105, 0.12);
+}
+
+.msg-html-card .card-button--primary {
+  background: linear-gradient(180deg, #89a8c6 0%, #6f8faf 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.msg-html-card .card-button--ghost {
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.msg-html-card .card-button--danger {
+  color: var(--chat-html-card-danger);
+  background: rgba(255, 245, 245, 0.92);
+  border-color: rgba(184, 107, 107, 0.14);
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片网格模块] 电影票/收据/便签双栏布局
+   ====================================================================== */
+.msg-html-card .card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.msg-html-card .card-cell {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: var(--chat-html-card-radius-md);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(120, 140, 160, 0.12);
+}
+
+.msg-html-card .card-cell__label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--chat-html-card-text-faint);
+  font-size: 11px;
+}
+
+.msg-html-card .card-cell__value {
+  display: block;
+  color: var(--chat-html-card-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片特殊视觉模块] 票券切口/便签/承诺书
+   ====================================================================== */
+.msg-html-card .ticket-cut {
+  position: relative;
+  overflow: hidden;
+}
+
+.msg-html-card .ticket-cut::before,
+.msg-html-card .ticket-cut::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: rgba(219, 228, 236, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(120, 140, 160, 0.08);
+}
+
+.msg-html-card .ticket-cut::before { left: -9px; }
+.msg-html-card .ticket-cut::after { right: -9px; }
+
+.msg-html-card .sticky-note {
+  position: relative;
+  padding-top: 16px;
+}
+
+.msg-html-card .sticky-note::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  width: 72px;
+  height: 18px;
+  border-radius: 0 0 10px 10px;
+  background: rgba(255, 240, 182, 0.52);
+  transform: rotate(-3deg);
+  box-shadow: 0 3px 8px rgba(180, 147, 63, 0.12);
+}
+
+.msg-html-card .pledge-block {
+  padding: 12px;
+  border-radius: var(--chat-html-card-radius-lg);
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px dashed rgba(120, 140, 160, 0.24);
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片兜底内容样式] AI 生成结构不完整时的兼容显示
+   ====================================================================== */
+.msg-html-card table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.msg-html-card td,
+.msg-html-card th {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.msg-html-card th {
+  color: var(--chat-html-card-text-faint);
+  font-weight: 600;
+}
+
+.msg-html-card td {
+  color: var(--chat-html-card-text-soft);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.msg-html-card img {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--chat-html-card-radius-md);
+}
+
+.msg-html-card blockquote {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(124, 154, 184, 0.42);
+  color: var(--chat-html-card-text-soft);
+  background: rgba(255, 255, 255, 0.46);
+  border-radius: 0 12px 12px 0;
+}
+
+/* ======================================================================
+   [区域标注·已完成·HTML卡片移动端适配] 小屏宽度下压缩留白与字号
+   ====================================================================== */
+@media (max-width: 420px) {
+  .msg-html-card-wrap {
+    width: min(100%, 288px);
+  }
+
+  .msg-html-card {
+    padding: 12px;
+    min-height: 124px;
+  }
+
+  .msg-html-card .card-amount {
+    font-size: 22px;
+  }
+
+  .msg-html-card .card-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -13,6 +13,7 @@ import {
   generateImagesFromChatReply,
   getChatImageApiSettings
 } from './chat-image-generation.js';
+import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
 
 /* ==========================================================================
    [区域标注] API 服务商基础信息
@@ -733,8 +734,12 @@ export function getDefaultChatPromptSettings() {
     /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
 
     /* ===== 闲谈应用：短期记忆轮数设置 START ===== */
-    shortTermMemoryRounds: 8
+    shortTermMemoryRounds: 8,
     /* ===== 闲谈应用：短期记忆轮数设置 END ===== */
+
+    /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
+    htmlCardEnabled: false,
+    /* ===== 闲谈应用：HTML卡片开关设置 END ===== */
   };
 }
 
@@ -773,8 +778,12 @@ export function normalizeChatPromptSettings(rawSettings) {
     /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
 
     /* ===== 闲谈应用：短期记忆轮数设置 START ===== */
-    shortTermMemoryRounds
+    shortTermMemoryRounds,
     /* ===== 闲谈应用：短期记忆轮数设置 END ===== */
+
+    /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
+    htmlCardEnabled: Boolean(source.htmlCardEnabled),
+    /* ===== 闲谈应用：HTML卡片开关设置 END ===== */
   };
 }
 
@@ -998,6 +1007,7 @@ export function getFeaturePrompts({ settings = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
   const minBubble = normalizedSettings.replyBubbleMin;
   const maxBubble = normalizedSettings.replyBubbleMax;
+  const htmlCardPrompt = normalizedSettings.htmlCardEnabled ? getHtmlCardFeaturePrompt() : '';
 
   return [
     /* --------------------------------------------------------------------------
@@ -1063,7 +1073,7 @@ export function getFeaturePrompts({ settings = {} } = {}) {
     `# 可用聊天动作格式
 1. 所有最终可见消息都必须是完整协议块，外层保留加粗反引号：**\`[类型] 角色名：内容\`**。
 2. 已开放格式：
-${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
+${[...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**'].map(item => `- ${item}`).join('\n')}
 3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账；[撤回] 只用于撤回本轮回复中你自己已经输出的上一条消息；[图片] 只在【AI生图能力】允许时使用，并由独立模块调用设置应用生图 API。
 4. [表情] 语义硬约束：表情包=用户发送的图片内容，不等于用户真人表情；你只能基于“这张表情包看起来像什么”来回应，禁止把它写成你正在看见用户本人神态。
 5. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
@@ -1071,8 +1081,9 @@ ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
 7. 处理用户待确认转账时，只能用：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`** 或 **\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
 8. 撤回格式只能用：**\`[撤回] 角色名：{目标:上一条}\`**；撤回后不要重复展示被撤回正文，也不要解释撤回原因。
 9. 图片格式只能用：**\`[图片] 角色名：给生图模型的画面描述\`**；画面描述必须结合角色人设、当前会话、用户指令和生活场景，禁止写 URL、资源ID、API 说明或幕后描述。
-10. 每个 [回复]/[表情]/[引用]/[转账]/[撤回]/[图片] 必须独占一个协议块；不确定表情、引用、转账、撤回或生图格式时，改用 [回复]。
-11. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。
+10. HTML 卡片格式只能用：**\`[卡片] 角色名：HTML内容\`**；只有聊天设置开启 HTML 卡片时才允许使用，且 HTML 必须是与当前对话强相关、可直接渲染的北欧风手机窄屏卡片正文。
+11. 每个 [回复]/[表情]/[引用]/[转账]/[撤回]/[图片]/[卡片] 必须独占一个协议块；不确定表情、引用、转账、撤回、生图或卡片格式时，改用 [回复]。
+12. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。
 
 # AI本轮撤回硬约束
 1. 你必须根据角色设定、会话历史、当前用户消息和你本轮已经写出的消息判断是否需要撤回；只有当角色真实会后悔、说错、冲动发出又收回、误发或临时改变表达时，才允许使用 [撤回]。
@@ -1087,8 +1098,16 @@ ${CHAT_PROTOCOL_AVAILABLE_FORMATS.map(item => `- ${item}`).join('\n')}
 2. 禁止把 Markdown 加粗符号、反引号、半截协议头、格式示例、规则说明、检查清单或“最终输出/回复格式/检查结果”等文字当成聊天内容输出。
 3. 如果你发现任一协议块缺少 **、反引号、[类型]、角色名、中文冒号或内容，必须在后台整条重写，禁止输出半成品。
 4. 如果你已经写出了类似“[回复] 角色名：内容”但外层格式不完整，也必须在后台改回完整协议块，而不是解释格式。
-5. 普通文字聊天优先使用 [回复]；不要把 [回复] 协议文本本身发给用户，用户界面只应看到协议内容解析后的自然聊天气泡。`
+5. 普通文字聊天优先使用 [回复]；不要把 [回复] 协议文本本身发给用户，用户界面只应看到协议内容解析后的自然聊天气泡。`,
     /* ===== 闲谈：通用消息协议格式 END ===== */
+
+    /* ======================================================================
+       [区域标注·已完成·HTML卡片提示词注入]
+       说明：
+       1. 只有聊天设置页开启 HTML 卡片开关后，才给 AI 注入独立卡片系统提示词。
+       2. 关闭时完全不注入，不保留双份兜底提示。
+       ====================================================================== */
+    htmlCardPrompt
   ].filter(Boolean).join('\n\n');
 }
 

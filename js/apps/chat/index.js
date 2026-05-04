@@ -348,7 +348,15 @@ export async function mount(container, context) {
   await Promise.all([
     loadCSS('./js/apps/chat/chat.css', 'chat-app-css'),
     /* [区域标注·本次需求5] 等待聊天消息页 CSS 加载完成，避免首次进入消息页时未样式化 */
-    loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css')
+    loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css'),
+    /* ======================================================================
+       [区域标注·已完成·HTML卡片独立样式预加载] 聊天 HTML 卡片专用 CSS
+       说明：
+       1. 单独拆分 chat-html-card.css，方便后续只改 HTML 卡片样式。
+       2. 挂载阶段与聊天主样式并行预加载，减少首次出现卡片时的未样式化闪屏。
+       3. 仅服务本次 HTML 卡片功能，不改其它聊天功能样式加载逻辑。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-html-card.css', 'chat-html-card-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -652,6 +660,7 @@ export async function mount(container, context) {
       eventBus.off('archive:data-changed', onArchiveDataChanged);
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
+      removeCSS('chat-html-card-css');
     }
   };
 }
@@ -2469,6 +2478,19 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.chatPromptSettings.timeAwarenessEnabled = !state.chatPromptSettings.timeAwarenessEnabled;
       await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.timeAwarenessEnabled);
+      break;
+
+    /* ========================================================================
+       [区域标注·已完成·HTML卡片开关持久化] 聊天设置页 HTML 卡片开关
+       说明：
+       1. 只把 htmlCardEnabled 写入当前“面具 + 会话对象”的 chatPromptSettings。
+       2. 持久化严格只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage，不保留双份兜底。
+       3. prompt.js 会据此决定是否注入 HTML 卡片系统提示词；本区域不改其它设置逻辑。
+       ======================================================================== */
+    case 'toggle-html-card':
+      state.chatPromptSettings.htmlCardEnabled = !state.chatPromptSettings.htmlCardEnabled;
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
+      target.classList.toggle('is-on', state.chatPromptSettings.htmlCardEnabled);
       break;
 
     /* ========================================================================
