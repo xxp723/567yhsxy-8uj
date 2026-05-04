@@ -209,11 +209,13 @@ export class EdgeBackGesture {
   }
 
   /* ==========================================================================
-     [区域标注·本次反馈修复·应用内左侧手势热区·已完成]
+     [区域标注·已完成·闲谈返回按钮点击修复·左侧手势热区不遮挡按钮]
      说明：
      - 手机物理最边缘可能被系统手势抢占，网页无法 100% 禁止。
-     - 这里在 #screen-root 应用画面内部靠左安全区域创建透明热区，并设置 touch-action: none，
-       让从应用内部左侧开始的滑动尽量先被网页接收，避开手机物理边缘系统手势。
+     - 这里保留 #screen-root 应用画面内部靠左安全区域的位置计算与 touch-action: none，
+       让从应用内部左侧开始的滑动继续由 document 捕获阶段识别。
+     - 热区改为 pointer-events:none，只提供手势区域参考，不再覆盖闲谈消息页/设置页左上角返回按钮。
+     - 解决闲谈“聊天界面返回聊天列表”和“聊天设置返回聊天消息列表”按钮点击被透明热区挡住导致不生效的问题。
      - 热区跟随 #screen-root 的实际位置和尺寸，不再固定在浏览器视口 left: 0。
      - 同时设置 overscroll-behavior-x: none，减少浏览器横向导航/回弹干扰。
      - 不涉及任何持久化存储，不使用 localStorage/sessionStorage。
@@ -241,7 +243,7 @@ export class EdgeBackGesture {
     guard.style.width = `${EDGE_ACTIVATE_WIDTH}px`;
     guard.style.height = '0';
     guard.style.zIndex = EDGE_GUARD_Z_INDEX;
-    guard.style.pointerEvents = 'auto';
+    guard.style.pointerEvents = 'none';
     guard.style.touchAction = 'none';
     guard.style.background = 'transparent';
     guard.style.webkitTapHighlightColor = 'transparent';
