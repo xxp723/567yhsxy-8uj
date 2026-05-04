@@ -57,10 +57,12 @@ export function getHtmlCardFeaturePrompt() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片] 协议块提取
+   [区域标注·已完成·HTML卡片掉格式修复] 协议块提取
    说明：
    1. 从 AI 原始文本中提取 [卡片] 角色名：HTML正文。
-   2. 这里不负责与其它协议联合切分；chat-message.js 只调用本函数处理卡片协议。
+   2. 本区域已修复“卡片后续 [回复]/[表情]/[转账]/[引用]/[撤回]/[图片] 协议被塞进 iframe”的掉格式问题。
+   3. 卡片正文只截取到下一条任意聊天协议开始处，确保聊天界面只显示一张干净的 HTML 卡片。
+   4. 不涉及任何持久化存储；不使用 localStorage/sessionStorage，不做双份兜底。
    ========================================================================== */
 export function extractHtmlCardProtocolBlocks(rawText = '') {
   const visibleText = String(rawText || '')
@@ -70,14 +72,16 @@ export function extractHtmlCardProtocolBlocks(rawText = '') {
   if (!visibleText) return [];
 
   const markerRegex = /(?:\*\*)?\s*`?\s*\[卡片\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
-  const matches = [...visibleText.matchAll(markerRegex)];
-  if (!matches.length) return [];
+  const allProtocolMarkerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const cardMatches = [...visibleText.matchAll(markerRegex)];
+  const protocolMatches = [...visibleText.matchAll(allProtocolMarkerRegex)];
+  if (!cardMatches.length) return [];
 
-  return matches
-    .map((match, index) => {
-      const nextMatch = matches[index + 1];
+  return cardMatches
+    .map((match) => {
       const contentStart = Number(match.index || 0) + String(match[0] || '').length;
-      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+      const nextProtocolMatch = protocolMatches.find(item => Number(item.index || 0) > Number(match.index || 0));
+      const contentEnd = nextProtocolMatch ? Number(nextProtocolMatch.index || visibleText.length) : visibleText.length;
       const html = normalizeHtmlCardProtocolContent(visibleText.slice(contentStart, contentEnd));
       return {
         type: 'card',
@@ -127,8 +131,8 @@ export function buildHtmlCardDocument(html = '') {
       color:var(--card-text);
     }
     body{
-      min-height:100vh;
-      padding:10px;
+      min-height:0;
+      padding:0;
     }
     .nordic-card{
       width:100%;

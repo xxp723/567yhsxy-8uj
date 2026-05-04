@@ -558,11 +558,12 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   /* ========================================================================
-     [区域标注·已完成·HTML卡片消息渲染] AI 互动 HTML 卡片消息
+     [区域标注·已完成·HTML卡片单张卡片显示修复] AI 互动 HTML 卡片消息
      说明：
-     1. 只渲染本次新增的 html 卡片功能区域，不改动其它消息类型逻辑。
-     2. 卡片通过 sandbox iframe + srcdoc 展示，保留卡片内原生 HTML/CSS 互动，同时不污染聊天页样式。
-     3. 卡片原始 HTML 与渲染后的 srcdoc 都只保存在当前消息对象中；消息持久化仍统一走 DB.js / IndexedDB。
+     1. 本区域已去掉外层“HTML卡片/可点击互动”标题栏，只显示 iframe 内真正的 HTML 卡片。
+     2. iframe 使用 sandbox + srcdoc 展示，保留卡片内原生 HTML/CSS 互动，同时不污染聊天页样式。
+     3. iframe 同时写入 frameborder/scrolling/内联 border:0，防止 CSS 加载前出现浏览器默认大边框。
+     4. 卡片原始 HTML 与渲染后的 srcdoc 都只保存在当前消息对象中；消息持久化仍统一走 DB.js / IndexedDB。
      ======================================================================== */
   const isHtmlCardMessage = String(msg?.type || '') === 'card' && String(msg?.cardHtml || msg?.content || '').trim();
   const htmlCardSrcdoc = isHtmlCardMessage
@@ -633,15 +634,18 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                        data-media-srcdoc="${escapeHtml(htmlCardSrcdoc)}"
                        data-media-alt="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"
                        data-message-id="${escapeHtml(messageId)}">
-                    <div class="msg-html-card-bubble__header">
-                      <span class="msg-html-card-bubble__badge">HTML卡片</span>
-                      <span class="msg-html-card-bubble__hint">可点击互动</span>
-                    </div>
+                    <!-- ======================================================
+                         [区域标注·已完成·HTML卡片单张卡片显示修复]
+                         说明：不再渲染额外标题栏/徽标/提示，只保留真正的 HTML 卡片 iframe。
+                         ====================================================== -->
                     <iframe
                       class="msg-html-card-bubble__frame"
                       sandbox="allow-scripts allow-forms allow-popups-to-escape-sandbox"
                       loading="lazy"
                       referrerpolicy="no-referrer"
+                      frameborder="0"
+                      scrolling="no"
+                      style="border:0;outline:0;background:transparent;"
                       srcdoc="${escapeHtml(htmlCardSrcdoc)}"
                       title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
                   </div>
