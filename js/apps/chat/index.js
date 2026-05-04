@@ -828,11 +828,12 @@ async function openChatMessage(container, state, db, chatId) {
   /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
 
   /* ========================================================================
-     [区域标注·已完成·本次进入聊天防闪屏修复] 消息页预渲染后再切换显示
+     [区域标注·已完成·本次进入聊天消息页防闪屏修复] 消息页隐藏预渲染后再一次性切换
      说明：
-     1. 先读取当前会话的控制台状态，并在 msgWrap 仍隐藏时完成消息页 DOM 渲染。
-     2. 再同一批次隐藏聊天列表/底栏并显示消息页，避免先显示空白容器造成闪屏。
-     3. 本区域只调整进入聊天页的显示顺序，不新增任何持久化存储逻辑。
+     1. 先读取当前会话的控制台状态，再让 msgWrap 以 display:flex 参与布局但保持不可见。
+     2. 在 visibility:hidden / pointer-events:none 状态下完成消息页 DOM 渲染，让浏览器先计算消息页布局。
+     3. 下一帧再统一隐藏聊天列表、顶部栏、底栏，并恢复消息页可见，避免点击联系人后出现空白闪屏。
+     4. 本区域只调整进入聊天页的运行时显示顺序，不新增任何持久化存储逻辑，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -852,8 +853,12 @@ async function openChatMessage(container, state, db, chatId) {
   state.chatConsoleExpanded = false;
 
   if (msgWrap) {
-    msgWrap.style.display = 'none';
+    msgWrap.style.display = 'flex';
+    msgWrap.style.visibility = 'hidden';
+    msgWrap.style.pointerEvents = 'none';
     renderCurrentChatMessage(container, state);
+    msgWrap.offsetHeight;
+    await new Promise(resolve => requestAnimationFrame(resolve));
   }
 
   if (topBar) topBar.style.display = 'none';
@@ -862,7 +867,8 @@ async function openChatMessage(container, state, db, chatId) {
   panels.forEach(p => p.style.display = 'none');
 
   if (msgWrap) {
-    msgWrap.style.display = 'flex';
+    msgWrap.style.visibility = '';
+    msgWrap.style.pointerEvents = '';
   }
 
   /* [区域标注] 滚动到消息底部 */
@@ -975,13 +981,17 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     const previousDeleteConfirmId = state.deleteConfirmMessageId;
     const previousRewindConfirmId = state.rewindConfirmMessageId;
     /* ======================================================================
-       聊天消息页返回按钮点击被顶部“关闭功能区”逻辑拦截修复
+       [区域标注·已完成·返回按钮拦截修复] 聊天消息页/设置页返回按钮优先导航
        说明：
-       1. 当消息功能区已打开时，点击“返回聊天列表(msg-back)”或“设置返回消息页(msg-settings-back)”必须优先执行导航。
-       2. 之前顶部关闭逻辑会先 return，导致两个返回按钮看起来“点击无效”。
-       3. 本修复仅调整运行时事件拦截顺序，不涉及持久化存储；仍只使用 DB.js / IndexedDB。
+       1. 当消息功能区已打开时，点击“返回聊天列表(msg-back)”或“设置返回消息页(msg-settings-back)”必须继续进入下方 switch 导航逻辑。
+       2. 这里只把这两个返回按钮列为关闭功能区拦截白名单，并阻止事件继续冒泡到外层手势/桌面层。
+       3. 本修复仅调整运行时点击处理顺序，不涉及持久化存储；仍只使用 DB.js / IndexedDB。
        ====================================================================== */
     const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back'].includes(clickedAction);
+    if (shouldBypassCloseIntercept) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const shouldOnlyClose = !['msg-bubble-select', 'msg-system-tip-select'].includes(clickedAction) || clickedMessageId === openedMessageId;
     state.selectedMessageId = '';
     state.deleteConfirmMessageId = '';
@@ -1273,8 +1283,14 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* [区域标注] 聊天消息页面 — 返回按钮 */
+    /* ========================================================================
+       [区域标注·已完成·返回聊天列表按钮修复]
+       说明：点击聊天消息页左上返回按钮时，立即关闭消息页并刷新聊天列表；
+             同时阻止事件冒泡到外层手势/桌面层，避免按钮表现为点击无效。
+       ======================================================================== */
     case 'msg-back':
+      e.preventDefault();
+      e.stopPropagation();
       closeChatMessage(container, state);
       refreshPanel(container, state, 'chatList');
       break;
@@ -2394,8 +2410,14 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* [区域标注·本次需求] 聊天设置页 — 返回聊天消息页 */
+    /* ========================================================================
+       [区域标注·已完成·聊天设置返回消息页按钮修复]
+       说明：点击聊天设置页左上返回按钮时，重新渲染当前消息页并阻止事件冒泡；
+             不新增任何存储逻辑，不使用 localStorage/sessionStorage。
+       ======================================================================== */
     case 'msg-settings-back':
+      e.preventDefault();
+      e.stopPropagation();
       renderCurrentChatMessage(container, state);
       break;
 
