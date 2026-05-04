@@ -974,12 +974,20 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     const clickedMessageId = String(target?.dataset?.messageId || '');
     const previousDeleteConfirmId = state.deleteConfirmMessageId;
     const previousRewindConfirmId = state.rewindConfirmMessageId;
+    /* ======================================================================
+       聊天消息页返回按钮点击被顶部“关闭功能区”逻辑拦截修复
+       说明：
+       1. 当消息功能区已打开时，点击“返回聊天列表(msg-back)”或“设置返回消息页(msg-settings-back)”必须优先执行导航。
+       2. 之前顶部关闭逻辑会先 return，导致两个返回按钮看起来“点击无效”。
+       3. 本修复仅调整运行时事件拦截顺序，不涉及持久化存储；仍只使用 DB.js / IndexedDB。
+       ====================================================================== */
+    const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back'].includes(clickedAction);
     const shouldOnlyClose = !['msg-bubble-select', 'msg-system-tip-select'].includes(clickedAction) || clickedMessageId === openedMessageId;
     state.selectedMessageId = '';
     state.deleteConfirmMessageId = '';
     state.rewindConfirmMessageId = '';
     refreshMessageBubbleRows(container, state, [openedMessageId, previousDeleteConfirmId, previousRewindConfirmId, clickedMessageId]);
-    if (shouldOnlyClose) return;
+    if (shouldOnlyClose && !shouldBypassCloseIntercept) return;
   }
 
   if (!target) return;
