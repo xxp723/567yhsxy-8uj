@@ -385,6 +385,8 @@ export async function mount(container, context) {
 
   /* [区域标注] 应用状态对象 */
   const state = {
+    /* [已完成·HTML卡片收藏] 缓存 db 引用，供 handleDoubleClick 等非闭包函数使用 */
+    _db: db,
     activePanel: 'chatList',        // 当前激活的板块
     chatSubTab: 'all',              // 聊天列表子TAB: all / private / group
     chatSearchKeyword: '',          // 聊天列表搜索词
@@ -2702,6 +2704,40 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
+       [已完成·HTML卡片收藏] 收藏页 HTML 卡片点击跳转到原消息
+       说明：
+       1. 从收藏页 HTML 卡片获取 sourceChatId 和 sourceMessageId。
+       2. 关闭收藏子页面 → 切换到聊天消息页 → 滚动到原消息位置。
+       3. 若原会话或消息不存在，在应用内弹窗提示，不使用原生浏览器弹窗。
+       ========================================================================== */
+    case 'jump-to-html-card-source': {
+      const sourceChatId = String(target.dataset.sourceChatId || '').trim();
+      const sourceMessageId = String(target.dataset.sourceMessageId || '').trim();
+      if (!sourceChatId || !sourceMessageId) {
+        renderModalNotice(container, '该收藏缺少来源信息，无法跳转');
+        break;
+      }
+      const sourceSession = state.sessions.find(s => String(s.id) === sourceChatId);
+      if (!sourceSession) {
+        renderModalNotice(container, '原聊天会话已不存在');
+        break;
+      }
+      /* 关闭收藏子页面 */
+      closeSubPage(container, state);
+      /* 打开原聊天会话 */
+      await openChatMessage(container, state, db, sourceChatId);
+      /* 校验消息是否存在 */
+      const messageExists = (state.currentMessages || []).some(m => String(m.id) === sourceMessageId);
+      if (!messageExists) {
+        renderModalNotice(container, '原消息已被删除，无法定位');
+        break;
+      }
+      /* 滚动到原消息位置 */
+      setTimeout(() => scrollToChatSearchResult(container, sourceMessageId), 120);
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·修改1] 表情包折叠栏 — 点击进入表情包子页面
        ========================================================================== */
     case 'open-sticker':
@@ -3724,7 +3760,71 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    说明：收藏卡片进入多选模式改为长按触发（见 createFavoriteCardLongPressHandlers）。
          此处仅保留表情包独立页的双击进入多选删除逻辑。
    ========================================================================== */
+/* ==========================================================================
+   [已完成·HTML卡片收藏] 双击聊天消息页 HTML 卡片气泡后台收藏到 html 固定分组
+   说明：
+   1. 在聊天消息页双击 .msg-html-card-bubble 元素，将该卡片收藏到"html"固定分组。
+   2. 收藏数据包含 favoriteKind='html-card'、cardHtml、cardTitle、sourceMessageId、sourceChatId。
+   3. 收藏后显示应用内提示弹窗（showFavoriteSavedModal），不使用原生浏览器弹窗。
+   4. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
 function handleDoubleClick(e, state, container) {
+  /* --- 聊天消息页 HTML 卡片双击收藏 --- */
+  if (state.currentChatId && !state.subPageView) {
+    const htmlCardBubble = e.target.closest('.msg-html-card-bubble');
+    if (htmlCardBubble) {
+      const messageId = String(htmlCardBubble.dataset.messageId || htmlCardBubble.closest('[data-message-id]')?.dataset?.messageId || '').trim();
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (message && String(message.type || '') === 'card') {
+        const cardHtml = String(message.cardHtml || message.content || '').trim();
+        if (cardHtml) {
+          /* 标记为已处理，防止冒泡到表情包多选逻辑 */
+          e.stopPropagation();
+          /* 异步收藏，不阻塞 UI */
+          (async () => {
+            const data = normalizeFavoriteData(state.favoriteData);
+            const now = Date.now();
+            const item = {
+              id: createUid('favorite'),
+              name: String(message.cardTitle || '[HTML卡片]').slice(0, 24),
+              groupId: 'html',
+              subGroupId: '',
+              messages: [],
+              favoriteKind: 'html-card',
+              cardHtml,
+              cardTitle: String(message.cardTitle || 'HTML 卡片'),
+              sourceMessageId: messageId,
+              sourceContextMessageIds: [],
+              sourceChatId: String(state.currentChatId || ''),
+              createdAt: now,
+              updatedAt: now
+            };
+            state.favoriteData = { ...data, items: [...data.items, item] };
+            await persistFavoriteData(state, state._db || window.__chatDb);
+            /* 使用已有弹窗基础设施显示收藏成功提示 */
+            const mask = container.querySelector('[data-role="modal-mask"]');
+            const panel = container.querySelector('[data-role="modal-panel"]');
+            if (mask && panel) {
+              panel.innerHTML = `
+                <div class="chat-modal-header">
+                  <span>已收藏</span>
+                  <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+                </div>
+                <div class="chat-modal-body" style="align-items:center;padding:18px 0 8px 0;">
+                  <p style="margin:0;font-size:14px;color:#4A342A;font-weight:600;">HTML 卡片已收藏到「html」分组</p>
+                </div>
+              `;
+              mask.classList.remove('is-hidden');
+              setTimeout(() => { if (!mask.classList.contains('is-hidden')) mask.classList.add('is-hidden'); }, 1600);
+            }
+          })();
+          return;
+        }
+      }
+    }
+  }
+
+  /* --- 表情包独立页双击进入多选删除 --- */
   if (state.subPageView !== 'sticker') return;
   if (state.stickerPreviewClickTimer) {
     window.clearTimeout(state.stickerPreviewClickTimer);

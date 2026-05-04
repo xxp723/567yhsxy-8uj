@@ -25,6 +25,8 @@ import {
 } from './chat-utils.js';
 import { chat } from './prompt.js';
 import { showFavoriteSavedModal } from './chat-message.js';
+/* [已完成·HTML卡片收藏] 导入 HTML 卡片安全净化函数，用于收藏页 iframe 展示 */
+import { sanitizeHtmlCardDocumentForSrcdoc } from './chat-html-card.js';
 
 /* ========================================================================== */
 /*   [区域标注] IconPark 图标 SVG 定义                                        */
@@ -786,9 +788,10 @@ export function renderStickerSubPage(state) {
 }
 
 /* ========================================================================== */
+/* [已完成·HTML卡片收藏] 收藏分组列表：固定 'html' 分组插入在 All 之后、自定义分组之前 */
 export function getFavoriteGroupsWithAll(state) {
   const data = normalizeFavoriteData(state.favoriteData);
-  return [{ id: 'all', name: 'All' }, ...data.groups];
+  return [{ id: 'all', name: 'All' }, { id: 'html', name: 'HTML' }, ...data.groups];
 }
 
 
@@ -802,7 +805,15 @@ export function getVisibleFavoriteItems(state) {
   const data = normalizeFavoriteData(state.favoriteData);
   const keyword = String(data.searchKeyword || '').trim().toLowerCase();
   const safeItems = Array.isArray(data.items) ? data.items.filter(item => item && typeof item === 'object') : [];
-  let items = safeItems.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all'));
+  /* [已完成·HTML卡片收藏] html 固定分组：只显示 favoriteKind === 'html-card' 的收藏项 */
+  let items;
+  if (String(data.activeGroupId || 'all') === 'html') {
+    items = safeItems.filter(item => item.favoriteKind === 'html-card');
+  } else if (String(data.activeGroupId || 'all') === 'all') {
+    items = safeItems.filter(item => item.favoriteKind !== 'html-card');
+  } else {
+    items = safeItems.filter(item => String(item.groupId || 'all') === String(data.activeGroupId || 'all') && item.favoriteKind !== 'html-card');
+  }
   if (keyword) items = items.filter(item => String(item.name || '').toLowerCase().includes(keyword));
   return [...items].sort((a, b) => {
     if (data.sortMode === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
@@ -1043,11 +1054,24 @@ export function renderFavoriteSubPage(state) {
     <button class="chat-tab-btn favorite-group-tab-btn ${data.activeGroupId === group.id ? 'is-active' : ''}"
             data-action="switch-favorite-group"
             data-favorite-group-id="${escapeHtml(group.id)}"
-            ${group.id !== 'all' ? 'data-long-press-action="delete-favorite-group"' : ''}
+            ${group.id !== 'all' && group.id !== 'html' ? 'data-long-press-action="delete-favorite-group"' : ''}
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
+  /* [已完成·HTML卡片收藏] 区分普通收藏卡片 vs HTML 卡片收藏渲染 */
+  const isHtmlGroup = String(data.activeGroupId || 'all') === 'html';
   const cardsHtml = items.length ? items.map(item => {
-    /* [区域标注·本次修复1-已完成] 收藏卡片渲染兜底：messages 统一安全数组，避免空白页 */
+    /* [已完成·HTML卡片收藏] HTML 卡片用 iframe 渲染，普通卡片沿用原逻辑 */
+    if (isHtmlGroup && item.favoriteKind === 'html-card') {
+      const safeSrcdoc = sanitizeHtmlCardDocumentForSrcdoc(item.cardHtml || '');
+      return `
+        <div class="favorite-html-card" data-action="jump-to-html-card-source" data-favorite-id="${escapeHtml(item.id)}" data-source-chat-id="${escapeHtml(item.sourceChatId || '')}" data-source-message-id="${escapeHtml(item.sourceMessageId || '')}">
+          <div class="favorite-html-card__title">${escapeHtml(item.cardTitle || item.name || 'HTML 卡片')}</div>
+          <iframe class="favorite-html-card__iframe" sandbox="allow-scripts" srcdoc="${escapeHtml(safeSrcdoc)}"></iframe>
+          <div class="favorite-html-card__time">${new Date(item.createdAt || Date.now()).toLocaleString()}</div>
+        </div>
+      `;
+    }
+    /* [区域标注·已完成] 收藏卡片渲染兜底：messages 统一安全数组，避免空白页 */
     const safeMessages = Array.isArray(item.messages) ? item.messages.filter(message => message && typeof message === 'object') : [];
     const sub = data.subGroups.find(group => String(group.id) === String(item.subGroupId));
     const preview = safeMessages.map(message => message.type === 'sticker' ? `[表情包] ${message.stickerName || message.content}` : message.content).join(' / ');

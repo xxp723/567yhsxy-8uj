@@ -3053,3 +3053,117 @@
   color: #fffdf9;
   word-break: break-all;
 }
+
+/* ==========================================================================
+   [已完成·HTML卡片收藏] 收藏页 HTML 卡片展示样式
+   说明：
+   1. 用于收藏独立页 html 固定分组下 favoriteKind='html-card' 的卡片渲染。
+   2. 卡片内嵌 iframe srcdoc 原样展示 HTML 内容，高度受限并隐藏溢出。
+   3. iframe 上层覆盖透明点击层，用于捕获跳转点击而不被 iframe 吞掉。
+   4. 色彩、圆角、阴影与现有收藏卡片保持一致。
+   ========================================================================== */
+.favorite-html-card {
+  min-width: 0;
+  min-height: 148px;
+  border: 1px solid rgba(74, 52, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #4A342A;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 6px 16px rgba(74, 52, 42, 0.055);
+  overflow: hidden;
+  transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.favorite-html-card:active {
+  transform: scale(0.97);
+  background: rgba(255, 250, 244, 0.94);
+}
+
+.favorite-html-card.is-selected {
+  background: rgba(255, 250, 244, 0.96);
+  border-color: rgba(74, 52, 42, 0.3);
+  box-shadow: 0 0 0 2px rgba(74, 52, 42, 0.08);
+}
+
+.favorite-html-card__header {
+  flex-shrink: 0;
+  padding: 10px 12px 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.favorite-html-card__badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(74, 52, 42, 0.09);
+  color: rgba(74, 52, 42, 0.68);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.favorite-html-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4A342A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-html-card__frame-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 0 0 18px 18px;
+}
+
+.favorite-html-card__frame {
+  display: block;
+  width: 100%;
+  height: 120px;
+  border: none;
+  pointer-events: none;
+  background: #fff;
+}
+
+.favorite-html-card__click-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: pointer;
+  background: transparent;
+}
+
+.favorite-html-card__check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(74, 52, 42, 0.9);
+  color: #fffaf4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.favorite-html-card__check svg {
+  width: 14px;
+  height: 14px;
+}

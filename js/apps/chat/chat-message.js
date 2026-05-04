@@ -1041,7 +1041,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <div class="msg-settings-row">
             <div>
               <div class="msg-settings-card__title">时间感知</div>
-              <div class="msg-settings-card__desc">开启后会向 AI 注入当前真实时间，并让角色按早中晚深夜自然聊天。</div>
+              <div class="msg-settings-card__desc">开启后角色会感知到真实时间。</div>
             </div>
             <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
           </div>
@@ -1058,7 +1058,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <div class="msg-settings-row">
             <div>
               <div class="msg-settings-card__title">HTML卡片</div>
-              <div class="msg-settings-card__desc">开启后，AI 才能在最新一轮回复中按需附加可互动的北欧风 HTML 卡片。</div>
+              <div class="msg-settings-card__desc">开启后，角色会在对话中发送趣味性HTML卡片。</div>
             </div>
             <button class="msg-ios-switch ${chatSettings.htmlCardEnabled ? 'is-on' : ''}" data-action="toggle-html-card" type="button" aria-label="HTML卡片"></button>
           </div>

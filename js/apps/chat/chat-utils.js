@@ -285,7 +285,8 @@ export function normalizeFavoriteData(rawData) {
         }))
         .filter(group => group.id && group.name)
     : [];
-  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  /* [已完成·HTML卡片收藏] 固定分组验证集加入 'html' */
+  const validGroupIds = new Set(['all', 'html', ...groups.map(group => group.id)]);
   const subGroups = Array.isArray(source.subGroups)
     ? source.subGroups
         .map(group => ({
@@ -315,7 +316,15 @@ export function normalizeFavoriteData(rawData) {
             : [];
           const groupId = validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all';
           const subGroupId = validSubGroupIds.has(String(item?.subGroupId || '')) ? String(item?.subGroupId || '') : '';
-          return {
+          /* [已完成·HTML卡片收藏] 扩展收藏项字段：支持 HTML 卡片收藏 */
+          const favoriteKind = String(item?.favoriteKind || '').trim();
+          const cardHtml = String(item?.cardHtml || '').trim();
+          const cardTitle = String(item?.cardTitle || '').trim();
+          const sourceMessageId = String(item?.sourceMessageId || '').trim();
+          const sourceContextMessageIds = Array.isArray(item?.sourceContextMessageIds)
+            ? item.sourceContextMessageIds.map(id => String(id || '').trim()).filter(Boolean)
+            : [];
+          const result = {
             id: String(item?.id || '').trim(),
             name: String(item?.name || '').trim(),
             groupId,
@@ -325,8 +334,17 @@ export function normalizeFavoriteData(rawData) {
             updatedAt: Number(item?.updatedAt || item?.createdAt || Date.now()),
             sourceChatId: String(item?.sourceChatId || '')
           };
+          if (favoriteKind === 'html-card') {
+            result.favoriteKind = 'html-card';
+            result.cardHtml = cardHtml;
+            result.cardTitle = cardTitle;
+            result.sourceMessageId = sourceMessageId;
+            result.sourceContextMessageIds = sourceContextMessageIds;
+          }
+          return result;
         })
-        .filter(item => item.id && item.messages.length)
+        /* [已完成·HTML卡片收藏] 过滤条件：普通收藏需要 messages，HTML 卡片收藏需要 cardHtml */
+        .filter(item => item.id && (item.messages.length || (item.favoriteKind === 'html-card' && item.cardHtml)))
     : [];
   const activeGroupId = validGroupIds.has(String(source.activeGroupId || 'all')) ? String(source.activeGroupId || 'all') : 'all';
   const sortMode = ['name', 'updatedAt', 'messageTime'].includes(String(source.sortMode || 'updatedAt')) ? String(source.sortMode || 'updatedAt') : 'updatedAt';
