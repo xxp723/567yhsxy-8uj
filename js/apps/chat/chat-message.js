@@ -25,6 +25,19 @@ import {
   sanitizeHtmlCardDocumentForSrcdoc
 } from './chat-html-card.js';
 /* ==========================================================================
+   [区域标注·已完成·礼物板块集成] 导入独立礼物模块
+   说明：
+   1. 咖啡功能区“礼物”入口、礼物消息摘要与礼物卡片渲染均来自 chat-gift.js。
+   2. 本文件只负责消息页挂载与渲染衔接，礼物功能细节请直接修改 chat-gift.js。
+   3. 持久化仍由 DB.js / IndexedDB 完成，禁止 localStorage/sessionStorage。
+   ========================================================================== */
+import {
+  getGiftMessageDisplayText,
+  isGiftMessage,
+  renderGiftBubble,
+  renderGiftFeatureButton
+} from './chat-gift.js';
+/* ==========================================================================
    [区域标注·已完成·心声面板集成] 导入心声模块提取函数
    说明：
    1. extractInnerVoiceFromRawText 从 AI 原始回复中提取 [心声]{json}[/心声] 并返回清理后文本。
@@ -303,6 +316,7 @@ function getMessageDisplayTextForQuote(message = {}) {
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
+  if (type === 'gift') return getGiftMessageDisplayText(message);
   if (type === 'card') return `[HTML卡片] ${String(message?.cardTitle || message?.content || '互动卡片').trim()}`;
   if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system' || type === 'html_card_interaction_system') return String(message?.content || '系统提示').trim();
   return String(message?.content || '').trim();
@@ -605,6 +619,11 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   /* ========================================================================
+     [区域标注·已完成·礼物消息卡片渲染]
+     说明：type=gift 的消息来自咖啡功能区“礼物”板块，卡片 UI 由 chat-gift.js 独立维护。
+     ======================================================================== */
+  const isGiftBubbleMessage = isGiftMessage(msg);
+  /* ========================================================================
      [区域标注·已完成·HTML卡片单张卡片显示修复] AI 互动 HTML 卡片消息
      说明：
      1. 本区域已去掉外层“HTML卡片/可点击互动”标题栏，只显示 iframe 内真正的 HTML 卡片。
@@ -680,7 +699,9 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                 ${isTransferAccepted ? `<span class="msg-transfer-bubble__check" aria-label="已接收">${MSG_ICONS.check}</span>` : ''}
               </div>
             `
-            : (isHtmlCardMessage
+            : (isGiftBubbleMessage
+                ? renderGiftBubble(msg)
+                : (isHtmlCardMessage
                 ? `
                   <div class="msg-html-card-bubble"
                        data-role="msg-media-zoom-trigger"
@@ -706,7 +727,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                       title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
                   </div>
                 `
-                : escapeHtml(msg?.content || ''))));
+                : escapeHtml(msg?.content || '')))));
 
   if (isTransferSystemMessage) {
     return `
@@ -812,7 +833,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
           ${quoteHtml}
           ${bubbleInnerHtml}
         </div>
@@ -925,11 +946,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
 
   /* ==========================================================================
-     [区域标注·已完成·咖啡功能区图片与转账入口] 咖啡按钮升起功能区
+     [区域标注·已完成·咖啡功能区礼物入口]
      说明：
-     1. 已保留“图片”板块，用户可通过应用内面板发送本地图片或图片 URL。
-     2. 已新增“转账”板块，点击后打开应用内转账弹窗，不使用原生浏览器弹窗。
-     3. 图片与转账消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
+     1. 已按本次需求移除原“动作”板块，新增“礼物”板块。
+     2. “礼物”入口 HTML 来自独立 chat-gift.js，后续只改礼物板块可优先定位该文件。
+     3. 图片、转账、礼物消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
   /* ========================================================================== */
   const featureDockHtml = `
     <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
@@ -939,9 +960,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
         ${MSG_ICONS.wallet}<span>转账</span>
       </button>
-      <button class="msg-feature-dock__item" type="button" data-action="msg-feature-placeholder" data-feature="action">
-        ${MSG_ICONS.bolt}<span>动作</span>
-      </button>
+      ${renderGiftFeatureButton()}
     </div>
   `;
 
@@ -2558,12 +2577,14 @@ export function refreshCurrentSessionLastMessage(state) {
 
   const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
   session.lastMessage = latest?.type === 'sticker'
-    ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
-    : (latest?.type === 'image'
+        ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
+        : (latest?.type === 'image'
         ? `[图片] ${latest?.imageName || '图片'}`
         : (latest?.type === 'transfer'
             ? `[转账] ${latest?.transferDisplayAmount || latest?.content || '¥0.00'}`
-            : (latest?.content || '')));
+            : (latest?.type === 'gift'
+                ? getGiftMessageDisplayText(latest)
+                : (latest?.content || ''))));
   session.lastTime = latest?.timestamp || Date.now();
 }
 

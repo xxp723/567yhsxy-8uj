@@ -146,6 +146,19 @@ import {
   isAssistantAvatarClick,
   getMessageIdFromAvatarClick
 } from './chat-inner-voice.js';
+/* ==========================================================================
+   [区域标注·已完成·礼物板块入口接入]
+   说明：
+   1. 咖啡功能区“礼物”弹窗、直接购买、代付请求均由独立 chat-gift.js 提供。
+   2. 本入口文件只负责事件接线与 IndexedDB 持久化流程调度，方便后续只改礼物模块。
+   3. 禁止 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+import {
+  buildGiftPayRequestText,
+  parseGiftDraftFromModal,
+  sendGiftMessage,
+  showMessageGiftModal
+} from './chat-gift.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
@@ -373,7 +386,12 @@ export async function mount(container, context) {
        [区域标注·已完成·心声面板] 加载心声面板 CSS
        说明：与聊天主样式并行预加载，避免首次打开心声面板时的未样式化闪屏。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-inner-voice.css', 'chat-inner-voice-css')
+    loadCSS('./js/apps/chat/chat-inner-voice.css', 'chat-inner-voice-css'),
+    /* ======================================================================
+       [区域标注·已完成·礼物板块独立样式预加载]
+       说明：礼物弹窗与礼物卡片样式拆分到 chat-gift.css，挂载时预加载以避免首次打开闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-gift.css', 'chat-gift-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -690,6 +708,7 @@ export async function mount(container, context) {
       removeCSS('chat-app-css');
       removeCSS('chat-msg-css');
       removeCSS('chat-html-card-css');
+      removeCSS('chat-gift-css');
     }
   };
 }
@@ -1569,6 +1588,89 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         balanceLabel: formatWalletMoney(walletDisplay.value, walletDisplay.currency.code),
         currencyCode: walletDisplay.currency.code
       });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·礼物弹窗打开]
+       说明：
+       1. 咖啡功能区“礼物”入口打开应用内弹窗，不使用原生浏览器弹窗/选择器。
+       2. 弹窗显示当前用户面具身份的钱包余额，余额来自 state.walletData（IndexedDB 已加载数据）。
+       3. 弹窗 UI 与礼物字段由 chat-gift.js 独立维护。
+       ======================================================================== */
+    case 'open-msg-gift-modal': {
+      const walletDisplay = getWalletDisplayAmount(state.walletData || {});
+      const activeMask = (state.archiveMasks || []).find(mask => String(mask?.id || '') === String(state.activeMaskId)) || {};
+      showMessageGiftModal(container, {
+        balanceLabel: formatWalletMoney(walletDisplay.value, walletDisplay.currency.code),
+        currencyCode: walletDisplay.currency.code,
+        maskName: String(activeMask?.name || state.profile?.nickname || '当前面具身份')
+      });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·礼物直接购买与代付请求]
+       说明：
+       1. 商品名称与价格均在应用内弹窗中输入；价格必须大于 0 且不超过当前钱包余额。
+       2. “给对方买”扣减钱包并发送 type=gift 礼物卡片消息，统一写入 DB.js / IndexedDB。
+       3. “请求代付”不扣用户钱包，只作为用户消息发给 AI，由 AI 按人设/上下文决定是否代付或拒绝。
+       4. 不使用 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
+       ======================================================================== */
+    case 'confirm-msg-gift-buy':
+    case 'request-msg-gift-pay': {
+      if (!state.currentChatId) break;
+
+      const walletDisplay = getWalletDisplayAmount(state.walletData || {});
+      const draft = parseGiftDraftFromModal(container, walletDisplay, state.walletData || {});
+      const giftTitle = String(draft.giftTitle || '').trim();
+      const giftPrice = Number(draft.giftPrice || 0);
+      const giftBaseCny = Number(draft.giftBaseCny || 0);
+      const currentBaseCny = Math.max(0, Number(state.walletData?.balanceBaseCny || 0) || 0);
+
+      if (!giftTitle) {
+        renderModalNotice(container, '请输入商品名称');
+        break;
+      }
+
+      if (!Number.isFinite(giftPrice) || giftPrice <= 0) {
+        renderModalNotice(container, '请输入大于 0 的礼物价格');
+        break;
+      }
+
+      if (!Number.isFinite(Number(draft.displayRate || 0)) || Number(draft.displayRate || 0) <= 0 || !Number.isFinite(giftBaseCny)) {
+        renderModalNotice(container, '当前钱包币种汇率不可用，请先切换币种后重试');
+        break;
+      }
+
+      if (giftBaseCny > currentBaseCny + 1e-8) {
+        renderModalNotice(container, '礼物价格不能超过当前钱包余额');
+        break;
+      }
+
+      const giftDisplayPrice = formatWalletMoney(giftPrice, draft.currencyCode);
+      const normalizedDraft = {
+        ...draft,
+        giftDisplayPrice
+      };
+
+      if (action === 'confirm-msg-gift-buy') {
+        const sent = await sendGiftMessage(container, state, db, normalizedDraft, { formatWalletMoney });
+        if (!sent) {
+          renderModalNotice(container, '当前聊天不存在，无法发送礼物');
+          break;
+        }
+
+        const latestGiftMessage = state.currentMessages[state.currentMessages.length - 1];
+        closeModal(container);
+        appendCurrentMessageBubble(container, state, latestGiftMessage);
+        syncMessageDockOpenState(container, state);
+        refreshPanel(container, state, 'chatList');
+        break;
+      }
+
+      closeModal(container);
+      await sendMessage(container, state, db, buildGiftPayRequestText(normalizedDraft), settingsManager, { triggerAi: true });
       break;
     }
 
