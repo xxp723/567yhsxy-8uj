@@ -26,12 +26,13 @@ import {
 } from './chat-html-card.js';
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片iframe高度与交互桥接] postMessage 监听器
+   [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
    说明：
    1. iframe 内部的高度上报脚本（chat-html-card.js 注入）通过 postMessage 报告 body 实际高度。
-   2. iframe 内部的交互桥接脚本通过 __miniphone_card_interaction__ 上报按钮/选择等互动。
-   3. 高度消息只调整对应 iframe 高度；交互消息转为冒泡 CustomEvent，交给 index.js 写入 DB.js / IndexedDB。
-   4. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
+   2. 已把收藏页 .favorite-html-card__iframe 纳入同一高度桥接，展开后按真实 HTML 内容高度自适应，不再依赖固定比例占位。
+   3. iframe 内部的交互桥接脚本通过 __miniphone_card_interaction__ 上报按钮/选择等互动。
+   4. 高度消息只调整对应 iframe 高度；交互消息转为冒泡 CustomEvent，交给 index.js 写入 DB.js / IndexedDB。
+   5. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
    ========================================================================== */
 if (!window.__miniphone_card_message_bridge_listener__) {
   window.__miniphone_card_message_bridge_listener__ = true;
@@ -39,7 +40,7 @@ if (!window.__miniphone_card_message_bridge_listener__) {
     const data = event.data;
     if (!data || !String(data.type || '').startsWith('__miniphone_card_')) return;
 
-    const iframes = document.querySelectorAll('.msg-html-card-bubble__frame');
+    const iframes = document.querySelectorAll('.msg-html-card-bubble__frame, .favorite-html-card__iframe');
     for (const iframe of iframes) {
       if (iframe.contentWindow !== event.source) continue;
 
