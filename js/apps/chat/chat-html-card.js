@@ -175,24 +175,28 @@ export function extractHtmlCardProtocolBlocks(rawText = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片格式约束加强] iframe 内部格式保护样式
+   [区域标注·已完成·HTML卡片主题色对齐全局Root] iframe 内部格式保护样式
    说明：
    1. 已为 HTML 卡片统一注入最小格式保护层，防止长文本、表格、图片、代码块横向撑破聊天卡片。
-   2. 已对无 .nordic-card 根容器的单根 HTML 自动补上暖色纸感外观，减少 AI 漏写 class 时的掉格式。
-   3. 只作用于 iframe srcdoc 内部；不修改持久化，不使用 localStorage/sessionStorage。
+   2. 已对齐 css/styles.css 的 :root 主题色：Linen #F5F1EA、Khaki #D7C9B8、Espresso #4A342A、Cocoa #7D5A44。
+   3. 已补充不突兀的莫兰迪暖色扩展变量，便于下次直接调整 HTML 卡片色系。
+   4. 卡片默认纸面改为纯色，卡片阴影按需求保留；不修改持久化，不使用 localStorage/sessionStorage。
    ========================================================================== */
 const HTML_CARD_FORMAT_ENFORCER_STYLE = `<style data-miniphone-card-format-enforcer="true">
   :root{
     color-scheme:light;
-    --card-bg:#f8f4ef;
-    --card-surface:#fffdf9;
-    --card-surface-2:#f3ece3;
-    --card-border:rgba(109,95,82,.18);
-    --card-text:#3d342d;
-    --card-sub:#7a6a5d;
-    --card-accent:#c79a66;
-    --card-accent-soft:rgba(199,154,102,.16);
-    --card-shadow:0 10px 28px rgba(61,52,45,.10);
+    --card-bg:#F5F1EA;
+    --card-surface:#fffdf8;
+    --card-surface-2:#D7C9B8;
+    --card-border:rgba(125,90,68,.18);
+    --card-text:#4A342A;
+    --card-sub:#7D5A44;
+    --card-accent:#B2967D;
+    --card-accent-soft:rgba(178,150,125,.16);
+    --card-morandi-sage:#A8A08D;
+    --card-morandi-clay:#B2967D;
+    --card-morandi-rose:#C8A99A;
+    --card-shadow:0 10px 28px rgba(74,52,42,.10);
     --card-radius:20px;
   }
   *,*::before,*::after{
@@ -226,7 +230,7 @@ const HTML_CARD_FORMAT_ENFORCER_STYLE = `<style data-miniphone-card-format-enfor
     width:100%;
     border-radius:var(--card-radius);
     border:1px solid var(--card-border);
-    background:linear-gradient(160deg,var(--card-surface),var(--card-bg));
+    background:var(--card-surface);
     box-shadow:var(--card-shadow);
     padding:14px;
     overflow:hidden;
@@ -268,10 +272,11 @@ function injectHtmlCardFormatEnforcerStyle(documentHtml = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片格式约束加强] HTML 骨架补全
+   [区域标注·已完成·HTML卡片主题色对齐全局Root] HTML 骨架补全
    说明：
    1. 允许 AI 只输出局部 HTML；这里自动补齐最小可渲染文档结构。
    2. 已统一包裹 .miniphone-html-card-root 并注入格式保护样式，防止聊天界面 HTML 卡片掉格式。
+   3. 默认 HTML 卡片主题色已对齐 css/styles.css 的 :root 色板，并提供莫兰迪暖色扩展变量。
    ========================================================================== */
 export function buildHtmlCardDocument(html = '') {
   const body = normalizeHtmlCardProtocolContent(html);
@@ -288,15 +293,18 @@ export function buildHtmlCardDocument(html = '') {
   <style>
     :root{
       color-scheme: light;
-      --card-bg:#f8f4ef;
-      --card-surface:#fffdf9;
-      --card-surface-2:#f3ece3;
-      --card-border:rgba(109,95,82,.18);
-      --card-text:#3d342d;
-      --card-sub:#7a6a5d;
-      --card-accent:#c79a66;
-      --card-accent-soft:rgba(199,154,102,.16);
-      --card-shadow:0 10px 28px rgba(61,52,45,.10);
+      --card-bg:#F5F1EA;
+      --card-surface:#fffdf8;
+      --card-surface-2:#D7C9B8;
+      --card-border:rgba(125,90,68,.18);
+      --card-text:#4A342A;
+      --card-sub:#7D5A44;
+      --card-accent:#B2967D;
+      --card-accent-soft:rgba(178,150,125,.16);
+      --card-morandi-sage:#A8A08D;
+      --card-morandi-clay:#B2967D;
+      --card-morandi-rose:#C8A99A;
+      --card-shadow:0 10px 28px rgba(74,52,42,.10);
       --card-radius:20px;
     }
     *,*::before,*::after{
@@ -329,7 +337,7 @@ export function buildHtmlCardDocument(html = '') {
       width:100%;
       border-radius:var(--card-radius);
       border:1px solid var(--card-border);
-      background:linear-gradient(160deg,var(--card-surface),var(--card-bg));
+      background:var(--card-surface);
       box-shadow:var(--card-shadow);
       padding:14px;
       overflow:hidden;
@@ -338,7 +346,7 @@ export function buildHtmlCardDocument(html = '') {
       width:100%;
       border-radius:var(--card-radius);
       border:1px solid var(--card-border);
-      background:linear-gradient(160deg,var(--card-surface),var(--card-bg));
+      background:var(--card-surface);
       box-shadow:var(--card-shadow);
       padding:14px;
       overflow:hidden;
