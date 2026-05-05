@@ -1139,10 +1139,23 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       ? findInnerVoiceForMessage(messages, messageId)
       : findLatestInnerVoice(messages);
     if (innerVoice) {
+      /* ======================================================================
+         [区域标注·已完成·心声面板日期时间传入]
+         说明：
+         1. 仅为心声面板传入当前点击消息时间，用于在心声面板上显示日期和时间。
+         2. 不新增任何持久化存储；历史心声仍只读取 DB.js / IndexedDB。
+         3. 不改其它闲谈点击逻辑，避免影响未提到的区域。
+         ====================================================================== */
+      const innerVoiceMessage = messageId
+        ? messages.find(message => String(message?.id || '') === String(messageId))
+        : [...messages].reverse().find(message => message?.role === 'assistant' && message?.innerVoice);
+      const currentSession = (state.sessions || []).find(session => String(session.id) === String(state.currentChatId)) || {};
       openInnerVoicePanel(container, innerVoice, {
         db,
         maskId: state.activeMaskId,
-        chatId: state.currentChatId
+        chatId: state.currentChatId,
+        chatName: String(currentSession.remark || currentSession.name || ''),
+        createdAt: Number(innerVoiceMessage?.timestamp || Date.now()) || Date.now()
       });
     }
     return;

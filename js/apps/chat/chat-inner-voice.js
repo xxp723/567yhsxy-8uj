@@ -17,7 +17,7 @@ import { dbGet, dbPut, escapeHtml } from './chat-utils.js';
    - chart: Now 标签图标（图表，来自 IconPark "chart-line"）
    - empty: 空状态图标（对话气泡，来自 IconPark "message"）
    - history: 历史按钮图标（来自 IconPark "history" 风格）
-   - multiSelect/check/delete: 心声历史多选删除图标（IconPark 风格）
+   - multiSelect/check/delete/download: 心声历史多选、全选、删除、下载图标（IconPark 风格）
    ========================================================================== */
 const IV_ICONS = {
   heart: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 42S6 30 6 17a9 9 0 0 1 18 0a9 9 0 0 1 18 0c0 13-18 25-18 25Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
@@ -26,7 +26,8 @@ const IV_ICONS = {
   history: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 8a16 16 0 1 1-14 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8v10h10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 16v10l7 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   multiSelect: `<svg viewBox="0 0 48 48" fill="none"><path d="M20 10h20v20H20V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 18v20h20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 20l4 4l7-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  download: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22l10 10l10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 38h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -255,14 +256,62 @@ function formatHistoryTime(ts) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·心声面板日期时间与下载] 日期格式与 TXT 下载
+   说明：
+   1. 当前心声面板显示完整日期时间，历史列表仍保留紧凑时间。
+   2. 下载按钮只读取 DB.js / IndexedDB 中的心声历史，不新增任何持久化存储。
+   3. TXT 内容按日期从早到晚排列；不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function formatPanelDateTime(ts) {
+  const d = new Date(Number(ts || Date.now()));
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildInnerVoiceDownloadText(items = []) {
+  const sorted = normalizeInnerVoiceHistory(items).slice().sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+  return sorted.map(item => {
+    const data = normalizeInnerVoiceData(item.innerVoice) || {};
+    return [
+      `日期时间：${formatPanelDateTime(item.createdAt)}`,
+      `轮次：#${Number(item.roundIndex || 1)}`,
+      `状态：${data.status || '……'}`,
+      `动作：${data.action || '……'}`,
+      `心情：${data.mood || '……'}`,
+      `心跳频率：${Number(data.heartbeat || 0)} bpm`,
+      `醋意指数：${Number(data.jealousy || 0)}%`,
+      `好感度：${Number(data.affection || 0)}%`,
+      `心声：${data.voice || '……'}`
+    ].join('\n');
+  }).join('\n\n------------------------------\n\n');
+}
+
+function downloadInnerVoiceHistoryTxt(items = [], chatName = '') {
+  const text = buildInnerVoiceDownloadText(items);
+  if (!text.trim()) return;
+  const safeName = String(chatName || '心声历史').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 32) || '心声历史';
+  const fileName = `${safeName}_${formatPanelDateTime(Date.now()).replace(/[/: ]/g, '-')}.txt`;
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 800);
+}
+
+/* ==========================================================================
    [区域标注·已修改·心声面板] 渲染心声面板 HTML
    说明：
-   1. 两个标签页显示为英文花体字："Voice" 和 "Now"（"数据"仅改面板显示为"Now"）。
+   1. 两个标签页显示为加粗英文花体字："Voice" 和 "Now"（"数据"仅改面板显示为"Now"）。
    2. 标签栏为游戏机风格分段控件，每个标签带 IconPark 图标。
-   3. 面板右上角提供"历史"图标按钮；标签下方提供"多选"按钮。
-   4. 不设关闭按钮，点击面板外遮罩区域自动关闭。
+   3. "历史/多选/下载"图标按钮统一放在标签下方同一行，仅显示图标。
+   4. 当前心声面板显示日期和时间；点击面板外遮罩区域自动关闭。
    ========================================================================== */
-export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
+export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options = {}) {
   if (!innerVoice) {
     return renderEmptyInnerVoicePanel();
   }
@@ -272,6 +321,7 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
 
   const isVoiceTab = activeTab === 'voice';
   const isDataTab = activeTab === 'data';
+  const displayTime = formatPanelDateTime(options.createdAt || Date.now());
 
   // 心跳频率进度条：60-180 bpm 映射到 0-100%
   const heartbeatPercent = Math.round(((data.heartbeat - 60) / 120) * 100);
@@ -286,12 +336,14 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
             <button class="iv-tab ${isDataTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}Now</button>
           </div>
         </div>
-        <button class="iv-history-btn" data-action="iv-show-history" type="button" aria-label="心声历史">${IV_ICONS.history}</button>
       </div>
       <div class="iv-toolbar" data-role="iv-toolbar">
-        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>多选</span></button>
+        <button class="iv-toolbar-btn" data-action="iv-show-history" type="button" aria-label="心声历史" title="心声历史">${IV_ICONS.history}</button>
+        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button" aria-label="多选" title="多选">${IV_ICONS.multiSelect}</button>
+        <button class="iv-toolbar-btn" data-action="iv-download-history" type="button" aria-label="下载心声历史" title="下载心声历史">${IV_ICONS.download}</button>
         <span class="iv-toolbar-spacer"></span>
       </div>
+      <div class="iv-panel-time" data-role="iv-panel-time">${escapeHtml(displayTime)}</div>
       <div class="iv-tab-body">
         <div class="iv-tab-page ${isVoiceTab ? 'is-active' : ''}" data-iv-page="voice">
           <div class="iv-cell iv-voice-cell">
@@ -351,8 +403,8 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
 }
 
 /* ==========================================================================
-   [区域标注·已修改·心声面板] 空状态面板
-   说明：与主面板保持一致的游戏机风格英文花体标签。
+   [区域标注·已完成·心声面板] 空状态面板
+   说明：与主面板保持一致的游戏机风格加粗英文花体标签，按钮为同一行纯图标。
    ========================================================================== */
 function renderEmptyInnerVoicePanel() {
   return `
@@ -364,12 +416,14 @@ function renderEmptyInnerVoicePanel() {
             <button class="iv-tab" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}Now</button>
           </div>
         </div>
-        <button class="iv-history-btn" data-action="iv-show-history" type="button" aria-label="心声历史">${IV_ICONS.history}</button>
       </div>
       <div class="iv-toolbar" data-role="iv-toolbar">
-        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>多选</span></button>
+        <button class="iv-toolbar-btn" data-action="iv-show-history" type="button" aria-label="心声历史" title="心声历史">${IV_ICONS.history}</button>
+        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button" aria-label="多选" title="多选">${IV_ICONS.multiSelect}</button>
+        <button class="iv-toolbar-btn" data-action="iv-download-history" type="button" aria-label="下载心声历史" title="下载心声历史">${IV_ICONS.download}</button>
         <span class="iv-toolbar-spacer"></span>
       </div>
+      <div class="iv-panel-time" data-role="iv-panel-time">${escapeHtml(formatPanelDateTime(Date.now()))}</div>
       <div class="iv-tab-body">
         <div class="iv-tab-page is-active" data-iv-page="voice">
           <div class="iv-empty">
@@ -389,8 +443,8 @@ function renderEmptyInnerVoicePanel() {
 }
 
 /* ==========================================================================
-   [区域标注·已修改·心声历史视图] 渲染历史列表
-   说明：历史视图用于观看过往心声，并支持进入多选/全选/删除。
+   [区域标注·已完成·心声历史视图] 渲染历史列表
+   说明：历史视图用于观看过往心声，并支持同一行图标按钮完成多选/全选/删除/下载。
    ========================================================================== */
 function renderInnerVoiceHistoryPanel(history = [], options = {}) {
   const multiMode = Boolean(options.multiMode);
@@ -407,15 +461,16 @@ function renderInnerVoiceHistoryPanel(history = [], options = {}) {
             <button class="iv-tab" data-action="iv-show-current" type="button">${IV_ICONS.chart}Now</button>
           </div>
         </div>
-        <button class="iv-history-btn is-active" data-action="iv-show-current" type="button" aria-label="返回当前心声">${IV_ICONS.history}</button>
       </div>
       <div class="iv-toolbar" data-role="iv-toolbar">
-        <button class="iv-toolbar-btn ${multiMode ? 'is-active' : ''}" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>${multiMode ? '取消' : '多选'}</span></button>
+        <button class="iv-toolbar-btn is-active" data-action="iv-show-current" type="button" aria-label="返回当前心声" title="返回当前心声">${IV_ICONS.history}</button>
+        <button class="iv-toolbar-btn ${multiMode ? 'is-active' : ''}" data-action="iv-toggle-multi" type="button" aria-label="${multiMode ? '取消多选' : '多选'}" title="${multiMode ? '取消多选' : '多选'}">${IV_ICONS.multiSelect}</button>
         ${multiMode ? `
-          <button class="iv-toolbar-btn" data-action="iv-select-all" type="button">${IV_ICONS.check}<span>${allSelected ? '取消全选' : '全选'}</span></button>
-          <span class="iv-toolbar-spacer"></span>
-          <button class="iv-toolbar-btn iv-toolbar-btn--danger" data-action="iv-open-delete-confirm" type="button" ${selectedIds.size ? '' : 'disabled'}>${IV_ICONS.delete}<span>删除${selectedIds.size ? ` ${selectedIds.size}` : ''}</span></button>
-        ` : `<span class="iv-toolbar-spacer"></span>`}
+          <button class="iv-toolbar-btn" data-action="iv-select-all" type="button" aria-label="${allSelected ? '取消全选' : '全选'}" title="${allSelected ? '取消全选' : '全选'}">${IV_ICONS.check}</button>
+          <button class="iv-toolbar-btn iv-toolbar-btn--danger" data-action="iv-open-delete-confirm" type="button" aria-label="删除选中心声" title="删除选中心声" ${selectedIds.size ? '' : 'disabled'}>${IV_ICONS.delete}</button>
+        ` : ''}
+        <button class="iv-toolbar-btn" data-action="iv-download-history" type="button" aria-label="下载心声历史" title="下载心声历史">${IV_ICONS.download}</button>
+        <span class="iv-toolbar-spacer"></span>
       </div>
       <div class="iv-tab-body">
         <div class="iv-tab-page is-active">
@@ -494,10 +549,12 @@ export function openInnerVoicePanel(container, innerVoice, options = {}) {
     chatId: String(options.chatId || ''),
     history: [],
     multiMode: false,
-    selectedIds: []
+    selectedIds: [],
+    currentTimestamp: Number(options.createdAt || Date.now()) || Date.now(),
+    chatName: String(options.chatName || '')
   };
 
-  overlay.innerHTML = renderInnerVoicePanel(innerVoice, 'voice');
+  overlay.innerHTML = renderInnerVoicePanel(innerVoice, 'voice', { createdAt: overlay.__ivState.currentTimestamp });
 
   overlay.addEventListener('click', async (e) => {
     if (e.target === overlay) {
@@ -531,7 +588,7 @@ export function openInnerVoicePanel(container, innerVoice, options = {}) {
     if (action === 'iv-show-current') {
       ivState.multiMode = false;
       ivState.selectedIds = [];
-      overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice');
+      overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice', { createdAt: ivState.currentTimestamp });
       return;
     }
 
@@ -566,10 +623,22 @@ export function openInnerVoicePanel(container, innerVoice, options = {}) {
       const entry = normalizeInnerVoiceHistory(ivState.history).find(item => String(item.id) === id);
       if (entry?.innerVoice) {
         ivState.innerVoice = normalizeInnerVoiceData(entry.innerVoice);
+        ivState.currentTimestamp = Number(entry.createdAt || Date.now()) || Date.now();
         ivState.multiMode = false;
         ivState.selectedIds = [];
-        overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice');
+        overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice', { createdAt: ivState.currentTimestamp });
       }
+      return;
+    }
+
+    if (action === 'iv-download-history') {
+      ivState.history = await loadInnerVoiceHistory(ivState.db, ivState.maskId, ivState.chatId);
+      const selected = new Set((ivState.selectedIds || []).map(String));
+      const sourceItems = normalizeInnerVoiceHistory(ivState.history);
+      const downloadItems = selected.size
+        ? sourceItems.filter(item => selected.has(String(item.id)))
+        : sourceItems;
+      downloadInnerVoiceHistoryTxt(downloadItems, ivState.chatName || '心声历史');
       return;
     }
 

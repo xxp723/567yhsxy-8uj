@@ -6,13 +6,13 @@
    3. 游戏机风格面板 + 漫画分镜板块布局。
    4. 两个标签切换："Voice"(第一页) 和 "Now"(第二页)，使用游戏机风格分段控件。
    5. 所有颜色统一引用 css/styles.css 中 :root 变量，不使用硬编码色值。
-   6. [已修改·标签英文花体字] 标签使用 Google Fonts "Great Vibes" 花体字。
-   7. [已修改·历史/多选按钮] 面板右上角历史按钮，标签下方多选按钮。
-   8. [已修改·心声历史列表] 历史视图、多选模式、确认删除弹窗样式。
+   6. [已完成·标签英文花体字] 标签已换为 Google Fonts "Dancing Script" 加粗花体字。
+   7. [已完成·同排纯图标工具栏] 历史/多选/全选/删除/下载按钮统一在同一行且只显示图标。
+   8. [已完成·心声面板日期时间] 当前心声面板显示日期和时间，历史下载按日期排序。
    ========================================================================== */
 
-/* ===== [已修改·花体字体导入] Google Fonts Great Vibes ===== */
-@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');
+/* ===== [已完成·花体字体导入] Google Fonts Dancing Script 加粗花体 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
 
 /* ===== [已修改·遮罩层] 心声面板遮罩层 - 使用 root 变量 ===== */
 .iv-overlay {
@@ -63,39 +63,13 @@
   transform: translate(-50%, -50%) scale(1);
 }
 
-/* ===== [已修改·面板顶部栏] 包含标签和历史按钮 ===== */
+/* ===== [已完成·面板顶部栏] 仅保留两个花体标签，工具图标统一下移到同一行 ===== */
 .iv-panel-header {
   display: flex;
   align-items: center;
   padding: 12px 12px 0 12px;
   gap: 8px;
   flex-shrink: 0;
-}
-
-/* ===== [已修改·历史按钮] 面板右上角历史图标按钮 ===== */
-.iv-history-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: var(--c-milktea-trans);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--c-text-main);
-  opacity: 0.7;
-  transition: opacity 0.2s, background 0.2s;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-.iv-history-btn:active {
-  opacity: 1;
-  background: var(--c-milktea);
-}
-.iv-history-btn svg {
-  width: 18px;
-  height: 18px;
 }
 
 /* ===== [已修改·游戏机风格标签栏] 圆角凸起按钮分段控件 ===== */
@@ -123,10 +97,10 @@
   gap: 6px;
   padding: 10px 0;
   text-align: center;
-  font-family: 'Great Vibes', cursive;
-  font-size: 18px;
-  font-weight: 400;
-  letter-spacing: 0.5px;
+  font-family: 'Dancing Script', cursive;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
   color: var(--c-text-main);
   opacity: 0.48;
   border: none;
@@ -166,35 +140,38 @@
   display: none;
 }
 
-/* ===== [已修改·多选工具栏] 标签下方多选/全选/删除按钮区域 ===== */
+/* ===== [已完成·同排纯图标工具栏] 历史/多选/全选/删除/下载按钮区域 ===== */
 .iv-toolbar {
   display: flex;
   align-items: center;
-  padding: 6px 14px 2px;
-  gap: 6px;
+  padding: 7px 14px 3px;
+  gap: 7px;
   flex-shrink: 0;
 }
 
 .iv-toolbar-btn {
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 10px;
-  font-size: 11px;
+  gap: 0;
+  padding: 0;
+  font-size: 0;
   font-weight: 600;
   color: var(--c-text-main);
   opacity: 0.65;
   background: var(--c-milktea-trans);
   border: 1px solid var(--c-gray-light);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: opacity 0.2s, background 0.2s;
+  transition: opacity 0.2s, background 0.2s, transform 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
 .iv-toolbar-btn:active {
   opacity: 1;
   background: var(--c-milktea);
+  transform: translateY(1px);
 }
 .iv-toolbar-btn.is-active {
   opacity: 1;
@@ -202,8 +179,12 @@
   border-color: var(--c-border);
 }
 .iv-toolbar-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+}
+
+.iv-toolbar-btn span {
+  display: none;
 }
 .iv-toolbar-btn--danger {
   color: #d9534f;
@@ -215,6 +196,21 @@
 
 .iv-toolbar-spacer {
   flex: 1;
+}
+
+/* ===== [已完成·心声面板日期时间] 当前心声面板日期时间显示 ===== */
+.iv-panel-time {
+  margin: 3px 16px 2px;
+  padding: 5px 10px;
+  border: 1px solid var(--c-gray-light);
+  border-radius: 999px;
+  background: var(--c-milktea-trans);
+  color: var(--c-border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 /* ===== [已修改·标签页内容] ===== */
