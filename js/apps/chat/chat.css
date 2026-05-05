@@ -3080,12 +3080,12 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片收藏页封面/页内放大样式]
+   [区域标注·已完成·本次收藏HTML卡片悬浮放大修复样式]
    说明：
    1. 收藏独立页 html 固定分组下的 HTML 卡片默认只显示标题封面。
-   2. 单击后在当前页面内展开，仅显示卡片正文预览区，不使用弹窗、不显示关闭按钮。
-   3. 再次点击非展开内容区域时，由 index.js 切回封面态。
-   4. 保持与收藏页现有圆角、阴影、字体和主题色统一。
+   2. 单击封面后，iframe 内容以悬浮层方式在收藏页面内放大，不再占据网格整行。
+   3. 悬浮卡片外层保持透明，不再显示底部白色背景框；点击非 HTML 卡片区域由 index.js 关闭。
+   4. 保持与收藏页主题色、圆角和阴影风格统一，不使用原生弹窗。
    ========================================================================== */
 .favorite-html-card {
   min-width: 0;
@@ -3124,11 +3124,18 @@
 }
 
 .favorite-html-card.is-expanded {
-  grid-column: 1 / -1;
-  min-height: min(72vh, 520px);
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(74, 52, 42, 0.12);
-  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.11);
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 116px;
+  bottom: 24px;
+  z-index: 80;
+  min-height: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .favorite-html-card__cover {
@@ -3168,8 +3175,8 @@
   display: none;
   flex: 1;
   min-height: 0;
-  border-top: 1px solid rgba(74, 52, 42, 0.08);
-  background: rgba(255, 255, 255, 0.96);
+  border-top: none;
+  background: transparent;
 }
 
 .favorite-html-card.is-expanded .favorite-html-card__cover {
@@ -3178,15 +3185,20 @@
 
 .favorite-html-card.is-expanded .favorite-html-card__zoom {
   display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
 }
 
 .favorite-html-card__iframe {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: min(72vh, 520px);
+  min-height: 0;
   border: none;
-  background: #fff;
+  border-radius: 22px;
+  background: transparent;
+  box-shadow: 0 18px 44px rgba(44, 32, 22, 0.2);
   pointer-events: auto;
 }
 

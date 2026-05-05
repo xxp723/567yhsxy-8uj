@@ -1109,6 +1109,23 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
   const target = e.target.closest('[data-action]');
 
   /* ========================================================================
+     [区域标注·已完成·本次收藏HTML卡片悬浮放大修复]
+     说明：
+     1. 收藏独立页存在已悬浮放大的 HTML 卡片时，点击任何非 HTML 卡片区域都会先关闭悬浮卡片。
+     2. 关闭动作只移除运行时 DOM class，不读写 IndexedDB，不使用 localStorage/sessionStorage。
+     3. 关闭后阻止本次底层点击动作，避免点普通收藏卡片时同时触发预览或其它页面跳转。
+     ======================================================================== */
+  if (
+    state.subPageView === 'favorite'
+    && container.querySelector('.favorite-html-card.is-expanded')
+    && !e.target.closest('.favorite-html-card')
+  ) {
+    e.preventDefault();
+    container.querySelectorAll('.favorite-html-card.is-expanded').forEach(item => item.classList.remove('is-expanded'));
+    return;
+  }
+
+  /* ========================================================================
      [区域标注·已完成·气泡/系统提示功能区关闭逻辑]
      说明：
      1. 功能区打开后，点击聊天消息页任意非功能区区域都会关闭功能区。
@@ -2790,10 +2807,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [区域标注·已完成·HTML卡片收藏页封面/页内放大]
+       [区域标注·已完成·本次收藏HTML卡片悬浮放大修复]
        说明：
-       1. 收藏页 HTML 固定分组中的 HTML 卡片，单击标题封面后只在当前收藏页面内放大 iframe 内容。
-       2. 不跳转聊天来源、不打开弹窗、不显示关闭按钮；再次点击页面内非放大内容区域关闭。
+       1. 收藏页 HTML 固定分组中的 HTML 卡片，单击封面后以悬浮层方式在当前收藏页面放大 iframe 内容。
+       2. 点击非 HTML 卡片区域（如收藏页空白、普通收藏卡片、分组栏等）由下方全局收起逻辑关闭悬浮卡片。
        3. 仅切换运行时 DOM class，不读写 IndexedDB，不使用 localStorage/sessionStorage。
        ========================================================================== */
     case 'toggle-favorite-html-card-zoom': {
@@ -2803,7 +2820,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (!card) break;
 
       e.preventDefault();
-      e.stopPropagation();
 
       const isExpanded = card.classList.contains('is-expanded');
       container.querySelectorAll('.favorite-html-card.is-expanded').forEach(item => {
