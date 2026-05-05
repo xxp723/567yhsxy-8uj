@@ -40,7 +40,9 @@ export function renderGiftFeatureButton() {
 
 /* ==========================================================================
    [区域标注·已完成·礼物消息识别与摘要]
-   说明：礼物消息 type=gift，随 currentMessages 写入 DB.js / IndexedDB。
+   说明：
+   1. 礼物消息 type=gift，随 currentMessages 写入 DB.js / IndexedDB。
+   2. 本区域已支持用户手动送礼与 AI 主动送礼两类消息摘要，后续只改礼物摘要优先定位这里。
    ========================================================================== */
 export function isGiftMessage(message = {}) {
   return String(message?.type || '') === 'gift';
@@ -50,6 +52,65 @@ export function getGiftMessageDisplayText(message = {}) {
   const title = String(message?.giftTitle || message?.content || '礼物').trim();
   const price = String(message?.giftDisplayPrice || '').trim();
   return `[礼物] ${title}${price ? ` · ${price}` : ''}`;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·AI主动送礼物协议解析]
+   说明：
+   1. 解析 AI 通用消息协议 **`[礼物] 角色名：{名称:xxx,备注:xxx}`**。
+   2. 仅把协议转成当前消息对象；真正持久化仍由 chat-message.js 写入 DB.js / IndexedDB。
+   3. 不使用 localStorage/sessionStorage，不保留双份存储兜底，不按长文本字段过滤。
+   ========================================================================== */
+function cleanAiGiftProtocolValue(value = '') {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*(?:`|\*\*)+/g, '')
+    .replace(/(?:`|\*\*)+\s*$/g, '')
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    .trim();
+}
+
+export function parseAiGiftProtocolPayload(content = {}) {
+  const normalized = cleanAiGiftProtocolValue(content);
+  if (!normalized) return null;
+
+  const bodyMatch = normalized.match(/\{\s*([\s\S]*?)\s*\}/);
+  const body = bodyMatch ? String(bodyMatch[1] || '').trim() : normalized;
+  if (!body) return null;
+
+  const titleMatch = body.match(/(?:名称|礼物名|商品名称|标题)\s*[：:]\s*([^,，;；}\n]+)/i);
+  const noteMatch = body.match(/备注\s*[：:]\s*([^}]+)/i);
+  const fallbackTitle = body
+    .replace(/备注\s*[：:]\s*[^,，;；}]*/gi, '')
+    .replace(/(?:名称|礼物名|商品名称|标题)\s*[：:]/i, '')
+    .split(/[，,；;]/)[0]
+    .trim();
+
+  const giftTitle = cleanAiGiftProtocolValue(titleMatch?.[1] || fallbackTitle || '一份小礼物');
+  const giftNote = cleanAiGiftProtocolValue(noteMatch?.[1] || '给你的一点小心意');
+
+  if (!giftTitle) return null;
+
+  return {
+    giftTitle,
+    giftNote: giftNote || '给你的一点小心意'
+  };
+}
+
+export function createAiGiftMessageFromProtocol(block = {}) {
+  const payload = parseAiGiftProtocolPayload(block?.content || '');
+  if (!payload) return null;
+
+  const roleName = String(block?.roleName || '').trim() || '对方';
+  return {
+    role: 'assistant',
+    type: 'gift',
+    content: `[礼物] ${payload.giftTitle}`,
+    giftTitle: payload.giftTitle,
+    giftNote: payload.giftNote,
+    giftPayer: `${roleName}送给你`,
+    giftSource: 'ai_protocol'
+  };
 }
 
 /* ==========================================================================

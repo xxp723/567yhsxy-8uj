@@ -32,6 +32,7 @@ import {
    3. 持久化仍由 DB.js / IndexedDB 完成，禁止 localStorage/sessionStorage。
    ========================================================================== */
 import {
+  createAiGiftMessageFromProtocol,
   getGiftMessageDisplayText,
   isGiftMessage,
   renderGiftBubble,
@@ -619,8 +620,10 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      ======================================================================== */
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   /* ========================================================================
-     [区域标注·已完成·礼物消息卡片渲染]
-     说明：type=gift 的消息来自咖啡功能区“礼物”板块，卡片 UI 由 chat-gift.js 独立维护。
+   [区域标注·已完成·礼物消息卡片渲染]
+     说明：
+     1. type=gift 的消息来自咖啡功能区“礼物”板块，或来自 AI 的 [礼物] 主动送礼协议。
+     2. 卡片 UI 由 chat-gift.js 独立维护；本区只负责聊天页渲染衔接。
      ======================================================================== */
   const isGiftBubbleMessage = isGiftMessage(msg);
   /* ========================================================================
@@ -1596,9 +1599,11 @@ export async function sendMessage(container, state, db, content, settingsManager
           ? message.stickerName || message.content || '表情包'
           : (message.type === 'transfer'
               ? message.transferDisplayAmount || message.content || '转账'
-              : (message.type === 'image'
-                  ? message.imageName || message.content || 'AI 生图'
-                  : message.content || ''))
+              : (message.type === 'gift'
+                  ? getGiftMessageDisplayText(message)
+                  : (message.type === 'image'
+                      ? message.imageName || message.content || 'AI 生图'
+                      : message.content || '')))
       ).trim();
       if (index > 0) await sleep(getAiBubbleDelayMs(visibleText, index));
       state.currentMessages.push(message);
@@ -1609,18 +1614,22 @@ export async function sendMessage(container, state, db, content, settingsManager
           ? `AI消息[${index + 1}]：表情包 ${message.stickerName || ''}`.trim()
           : (message.type === 'transfer'
               ? `AI消息[${index + 1}]：转账 ${message.transferDisplayAmount || message.content || ''}`.trim()
-              : (message.type === 'image'
-                  ? `AI消息[${index + 1}]：AI生图 ${message.imageName || ''}`.trim()
-                  : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`))
+              : (message.type === 'gift'
+                  ? `AI消息[${index + 1}]：礼物 ${message.giftTitle || message.content || ''}`.trim()
+                  : (message.type === 'image'
+                      ? `AI消息[${index + 1}]：AI生图 ${message.imageName || ''}`.trim()
+                      : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`)))
       );
       hasRenderedAiBubble = true;
       session.lastMessage = message.type === 'sticker'
         ? `[表情包] ${message.stickerName || '未命名表情包'}`
         : (message.type === 'transfer'
             ? `[转账] ${message.transferDisplayAmount || message.content || '¥0.00'}`
-            : (message.type === 'image'
-                ? `[图片] ${message.imageName || 'AI 生图'}`
-                : (message.content || '（AI 没有返回内容）')));
+            : (message.type === 'gift'
+                ? getGiftMessageDisplayText(message)
+                : (message.type === 'image'
+                    ? `[图片] ${message.imageName || 'AI 生图'}`
+                    : (message.content || '（AI 没有返回内容）'))));
       session.lastTime = Date.now();
       await persistCurrentMessages(state, db);
       await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
@@ -1631,9 +1640,11 @@ export async function sendMessage(container, state, db, content, settingsManager
       ? `[表情包] ${aiMessages[aiMessages.length - 1]?.stickerName || '未命名表情包'}`
       : (aiMessages[aiMessages.length - 1]?.type === 'transfer'
           ? `[转账] ${aiMessages[aiMessages.length - 1]?.transferDisplayAmount || aiMessages[aiMessages.length - 1]?.content || '¥0.00'}`
-          : (aiMessages[aiMessages.length - 1]?.type === 'image'
-              ? `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`
-              : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）')));
+          : (aiMessages[aiMessages.length - 1]?.type === 'gift'
+              ? getGiftMessageDisplayText(aiMessages[aiMessages.length - 1])
+              : (aiMessages[aiMessages.length - 1]?.type === 'image'
+                  ? `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`
+                  : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）'))));
     session.lastTime = Date.now();
 
     /* ========================================================================
@@ -1833,7 +1844,7 @@ export function repairAiMessageFormatIfPossible(message, state) {
    ========================================================================== */
 export function repairAiTextMessageFormatIfPossible(message) {
   if (!message || message.role !== 'assistant') return null;
-  if (['sticker', 'image', 'transfer'].includes(String(message.type || ''))) return null;
+  if (['sticker', 'image', 'transfer', 'gift'].includes(String(message.type || ''))) return null;
 
   const before = String(message.content || '');
   const protocolBlocks = extractAiProtocolBlocks(before).filter(block => block.type === '回复');
@@ -1861,7 +1872,7 @@ export function repairAiTextMessageFormatIfPossible(message) {
 
 export function repairAiQuoteMessageFormatIfPossible(message, state) {
   if (!message || message.role !== 'assistant') return null;
-  if (['sticker', 'image', 'transfer'].includes(String(message.type || ''))) return null;
+  if (['sticker', 'image', 'transfer', 'gift'].includes(String(message.type || ''))) return null;
 
   const raw = String(message.content || '').trim();
   const quoteMatch = raw.match(/(?:\[\s*引用\s*\]\s*[^：:\n`*]+?\s*[：:]\s*)?\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
@@ -1966,7 +1977,7 @@ export function extractAiProtocolBlocks(rawText) {
   /* ========================================================================
      [区域标注·已完成·角色主动转账协议解析器] AI 回复通用协议强力解析器
      说明：
-     1. 优先寻找任意位置的 [回复]/[表情]/[转账] 协议头，而不是要求整行完全规范。
+     1. 优先寻找任意位置的 [回复]/[表情]/[转账]/[礼物] 等协议头，而不是要求整行完全规范。
      2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
@@ -1982,7 +1993,7 @@ export function extractAiProtocolBlocks(rawText) {
      2. 卡片的真正提取与渲染仍由 extractHtmlCardProtocolBlocks 处理；
         本循环遇到 type === '卡片' 直接跳过，不重复处理。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2061,7 +2072,9 @@ export function buildAiReplyMessages(rawText, state) {
             ? `[表情包] ${removedMessage.stickerName || removedMessage.content || ''}`
             : (removedMessage.type === 'transfer'
                 ? `[转账] ${removedMessage.transferDisplayAmount || removedMessage.content || ''}`
-                : (removedMessage.content || ''))
+                : (removedMessage.type === 'gift'
+                    ? getGiftMessageDisplayText(removedMessage)
+                    : (removedMessage.content || '')))
         ).trim();
         if (!withdrawnText) continue;
 
@@ -2119,6 +2132,19 @@ export function buildAiReplyMessages(rawText, state) {
         });
       }
       /* [区域标注·已完成·角色主动转账协议容错] 转账协议格式不合法时直接丢弃，避免残缺协议原样露出 */
+      return;
+    }
+
+    if (block.type === '礼物') {
+      /* ======================================================================
+         [区域标注·已完成·AI主动送礼物协议解析]
+         说明：
+         1. AI 输出 [礼物] 时转为 type:gift 结构化消息，复用现有礼物卡片渲染。
+         2. 礼物标题与小字备注由 chat-gift.js 解析；消息持久化仍只走 DB.js / IndexedDB。
+         3. 协议格式不合法时直接丢弃，避免残缺 [礼物] 协议露出为普通文本。
+         ====================================================================== */
+      const giftMessage = createAiGiftMessageFromProtocol(block);
+      if (giftMessage) builtMessages.push(giftMessage);
       return;
     }
 
@@ -2922,7 +2948,7 @@ export function cleanAiVisibleBubbleText(text) {
        说明：防止 AI 掉格式时把 [回复]/[表情]/[引用]、反引号、加粗残片、格式检查前缀或“修正后内容”原样显示为普通文本。
        ====================================================================== */
     .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用)\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
+    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物)\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
     .replace(/(?:`|\*\*)+/g, '')
     .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
     .split(/\n+/)
@@ -2985,6 +3011,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
           if (String(message.type || '') === 'transfer') {
             return message;
           }
+          if (String(message.type || '') === 'gift') {
+            return message;
+          }
           if (String(message.type || '') === 'card' && String(message.cardHtml || message.content || '').trim()) {
             return message;
           }
@@ -3000,7 +3029,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     let bestLength = 0;
 
     normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || String(message.type || '') === 'card' || String(message.type || '') === 'transfer') return;
+      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
       const parts = splitSingleBubbleForCount(message.content);
       if (parts.length <= 1) return;
       const currentLength = String(message.content || '').length;
