@@ -427,6 +427,97 @@ export function buildHtmlCardDocument(html = '') {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·HTML卡片交互桥接] iframe 内部点击/选择交互 postMessage 脚本片段
+   说明：
+   1. 此脚本在 sanitize 之后追加到 </body> 前，确保不被清理掉。
+   2. iframe 内部监听 button / a / summary / 表单控件等轻互动元素，点击后给元素添加可见反馈。
+   3. 交互结果通过 postMessage 发给父页面，由 chat-message.js / index.js 转成聊天系统提示并写入 DB.js / IndexedDB。
+   4. 本区域不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不做双份存储兜底。
+   ========================================================================== */
+const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
+<script data-card-interaction-bridge="true">
+(function(){
+  var lastInteractionAt = 0;
+
+  function getText(el){
+    if(!el) return '';
+    var text = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || el.value || '').replace(/\\s+/g, ' ').trim();
+    return text.length > 80 ? text.slice(0, 80) + '…' : text;
+  }
+
+  function getInteractiveTarget(start){
+    if(!start || !start.closest) return null;
+    return start.closest('button,a,summary,label,input,textarea,select,[role="button"],[role="switch"],[role="checkbox"],[role="radio"],[tabindex],.btn,.button,[data-action]');
+  }
+
+  function markInteracted(el){
+    if(!el || !el.classList) return;
+    el.classList.add('miniphone-card-interacted');
+    if(el.matches && el.matches('button,[role="button"],[role="switch"],.btn,.button')){
+      var pressed = el.getAttribute('aria-pressed') === 'true';
+      el.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+    }
+    window.setTimeout(function(){ el.classList.remove('miniphone-card-interacted'); }, 1200);
+  }
+
+  function describeInteraction(el, eventType){
+    var tag = String(el && el.tagName || '').toLowerCase();
+    var role = String(el && el.getAttribute && el.getAttribute('role') || '').toLowerCase();
+    var text = getText(el);
+    var value = '';
+    var checked = false;
+
+    if(el && /^(input|textarea|select)$/.test(tag)){
+      value = String(el.value || '').trim();
+      checked = Boolean(el.checked);
+      if(!text){
+        var label = el.id ? document.querySelector('label[for="' + String(el.id).replace(/"/g, '\\\\"') + '"]') : null;
+        text = getText(label) || el.getAttribute('placeholder') || el.getAttribute('name') || tag;
+      }
+    }
+
+    return {
+      type: '__miniphone_card_interaction__',
+      eventType: eventType,
+      tagName: tag,
+      role: role,
+      text: text || value || tag || 'HTML卡片元素',
+      value: value.length > 80 ? value.slice(0, 80) + '…' : value,
+      checked: checked,
+      timestamp: Date.now()
+    };
+  }
+
+  function postInteraction(el, eventType){
+    if(!el) return;
+    parent.postMessage(describeInteraction(el, eventType), '*');
+  }
+
+  var style = document.createElement('style');
+  style.setAttribute('data-miniphone-card-interaction-feedback', 'true');
+  style.textContent = '.miniphone-card-interacted{filter:brightness(.96);box-shadow:0 0 0 3px rgba(199,154,102,.20),0 8px 18px rgba(61,52,45,.10)!important;transform:translateY(1px) scale(.99);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;}';
+  document.head.appendChild(style);
+
+  document.addEventListener('click', function(event){
+    var target = getInteractiveTarget(event.target);
+    if(!target) return;
+    if(target.matches && target.matches('a')){
+      event.preventDefault();
+    }
+    markInteracted(target);
+    postInteraction(target, 'click');
+  }, true);
+
+  document.addEventListener('change', function(event){
+    var target = getInteractiveTarget(event.target);
+    if(!target) return;
+    markInteracted(target);
+    postInteraction(target, 'change');
+  }, true);
+})();
+</script>`;
+
+/* ==========================================================================
    [区域标注·已完成·HTML卡片] iframe 自适应高度 postMessage 脚本片段
    说明：
    1. 此脚本在 sanitize 之后追加到 </body> 前，确保不被清理掉。
@@ -455,11 +546,11 @@ const HTML_CARD_HEIGHT_REPORTER_SCRIPT = `
 </script>`;
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片格式约束加强] iframe srcdoc 安全净化
+   [区域标注·已完成·HTML卡片格式约束加强与交互桥接] iframe srcdoc 安全净化
    说明：
    1. 先移除所有外部/用户 script、事件属性、iframe嵌套、弹窗 API、顶层跳转。
    2. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
-   3. 然后追加受信任的高度上报脚本（data-card-height-reporter），确保自适应高度正常工作。
+   3. 然后追加受信任的交互桥接脚本与高度上报脚本，确保卡片可点击、可反馈、可自适应高度。
    4. 不做双份存储，不引入原生浏览器弹窗。
    ========================================================================== */
 export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
@@ -482,11 +573,12 @@ export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
 
   sanitized = injectHtmlCardFormatEnforcerStyle(sanitized);
 
-  /* 在 </body> 前注入高度上报脚本；若无 </body> 则追加到末尾 */
+  /* 在 </body> 前注入交互桥接与高度上报脚本；若无 </body> 则追加到末尾 */
+  const trustedRuntimeScripts = HTML_CARD_INTERACTION_BRIDGE_SCRIPT + HTML_CARD_HEIGHT_REPORTER_SCRIPT;
   if (/<\/body>/i.test(sanitized)) {
-    sanitized = sanitized.replace(/<\/body>/i, HTML_CARD_HEIGHT_REPORTER_SCRIPT + '\n</body>');
+    sanitized = sanitized.replace(/<\/body>/i, trustedRuntimeScripts + '\n</body>');
   } else {
-    sanitized += HTML_CARD_HEIGHT_REPORTER_SCRIPT;
+    sanitized += trustedRuntimeScripts;
   }
 
   return sanitized;

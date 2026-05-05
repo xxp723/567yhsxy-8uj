@@ -26,21 +26,42 @@ import {
 } from './chat-html-card.js';
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片iframe自适应高度] postMessage 高度监听器
+   [区域标注·已完成·HTML卡片iframe高度与交互桥接] postMessage 监听器
    说明：
    1. iframe 内部的高度上报脚本（chat-html-card.js 注入）通过 postMessage 报告 body 实际高度。
-   2. 本监听器收到 __miniphone_card_height__ 类型消息后，找到对应 iframe 并设置其高度。
-   3. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
+   2. iframe 内部的交互桥接脚本通过 __miniphone_card_interaction__ 上报按钮/选择等互动。
+   3. 高度消息只调整对应 iframe 高度；交互消息转为冒泡 CustomEvent，交给 index.js 写入 DB.js / IndexedDB。
+   4. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
    ========================================================================== */
-if (!window.__miniphone_card_height_listener__) {
-  window.__miniphone_card_height_listener__ = true;
+if (!window.__miniphone_card_message_bridge_listener__) {
+  window.__miniphone_card_message_bridge_listener__ = true;
   window.addEventListener('message', (event) => {
     const data = event.data;
-    if (!data || data.type !== '__miniphone_card_height__' || !data.height) return;
+    if (!data || !String(data.type || '').startsWith('__miniphone_card_')) return;
+
     const iframes = document.querySelectorAll('.msg-html-card-bubble__frame');
     for (const iframe of iframes) {
-      if (iframe.contentWindow === event.source) {
+      if (iframe.contentWindow !== event.source) continue;
+
+      if (data.type === '__miniphone_card_height__' && data.height) {
         iframe.style.height = Math.ceil(data.height) + 'px';
+        break;
+      }
+
+      if (data.type === '__miniphone_card_interaction__') {
+        iframe.dispatchEvent(new CustomEvent('miniphone-html-card-interaction', {
+          bubbles: true,
+          detail: {
+            messageId: String(iframe.dataset.messageId || ''),
+            text: String(data.text || '').trim(),
+            value: String(data.value || '').trim(),
+            checked: Boolean(data.checked),
+            tagName: String(data.tagName || '').trim(),
+            role: String(data.role || '').trim(),
+            eventType: String(data.eventType || 'click').trim(),
+            timestamp: Number(data.timestamp || Date.now()) || Date.now()
+          }
+        }));
         break;
       }
     }
@@ -257,7 +278,7 @@ function getMessageDisplayTextForQuote(message = {}) {
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
   if (type === 'card') return `[HTML卡片] ${String(message?.cardTitle || message?.content || '互动卡片').trim()}`;
-  if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system') return String(message?.content || '系统提示').trim();
+  if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system' || type === 'html_card_interaction_system') return String(message?.content || '系统提示').trim();
   return String(message?.content || '').trim();
 }
 
@@ -585,7 +606,15 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 本渲染区只显示“你撤回了一条消息”，不展示撤回原文，避免界面泄露用户选择。
      ======================================================================== */
   const isUserWithdrawSystemMessage = String(msg?.type || '') === 'user_withdraw_system';
-  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage;
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片交互系统提示渲染]
+     说明：
+     1. 用户点击 AI HTML 卡片内按钮/选项后，由 index.js 插入本类型系统小字。
+     2. 系统小字随 currentMessages 写入 DB.js / IndexedDB；下一轮请求 AI 时会作为用户回应上下文发送。
+     3. 本区域只负责复用中间系统提示样式，不使用 localStorage/sessionStorage，不做双份存储兜底。
+     ======================================================================== */
+  const isHtmlCardInteractionSystemMessage = String(msg?.type || '') === 'html_card_interaction_system';
+  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage || isHtmlCardInteractionSystemMessage;
   const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
   const isTransferAccepted = transferStatus === 'accepted';
   /* ========================================================================
@@ -640,6 +669,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                          ====================================================== -->
                     <iframe
                       class="msg-html-card-bubble__frame"
+                      data-message-id="${escapeHtml(messageId)}"
                       sandbox="allow-scripts allow-forms allow-popups-to-escape-sandbox"
                       loading="lazy"
                       referrerpolicy="no-referrer"

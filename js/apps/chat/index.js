@@ -73,6 +73,7 @@ import {
   sendStickerMessage,
   sendImageMessage,
   renderCurrentChatMessage,
+  appendCurrentMessageBubble,
   refreshMessageBubbleRows,
   refreshCurrentMessageListOnly,
   updateMultiSelectActionBar,
@@ -506,6 +507,14 @@ export async function mount(container, context) {
      3. 本区域只处理这两个返回按钮的运行时导航，不新增/修改任何持久化存储逻辑；仍严格使用 DB.js / IndexedDB。
      ======================================================================== */
   const navigationClickCaptureHandler = (e) => handleChatReturnClickCapture(e, state, container);
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片交互系统提示持久化] iframe 交互事件监听
+     说明：
+     1. chat-message.js 会把 HTML 卡片 iframe 内部 postMessage 转成 miniphone-html-card-interaction 事件。
+     2. 这里只负责把用户在卡片里的点击/选择生成聊天中间系统提示，并写入 DB.js / IndexedDB。
+     3. 不使用 localStorage/sessionStorage，不保留双份兜底存储，不使用原生浏览器弹窗。
+     ======================================================================== */
+  const htmlCardInteractionHandler = (e) => handleHtmlCardInteraction(e, state, container, db);
   const clickHandler = (e) => handleClick(e, state, container, db, eventBus, windowManager, appMeta, settings);
   const inputHandler = (e) => handleInput(e, state, container, db);
   const keydownHandler = (e) => handleKeydown(e, state, container, db, settings);
@@ -527,6 +536,7 @@ export async function mount(container, context) {
   /* === [本次修改] 聊天列表长按删除联系人：应用内确认弹窗，不使用原生 confirm === */
   const chatListLongPressHandlers = createChatListLongPressHandlers(state, container);
   container.addEventListener('click', navigationClickCaptureHandler, true);
+  container.addEventListener('miniphone-html-card-interaction', htmlCardInteractionHandler);
   container.addEventListener('click', clickHandler);
   container.addEventListener('input', inputHandler);
   container.addEventListener('keydown', keydownHandler);
@@ -628,6 +638,7 @@ export async function mount(container, context) {
     destroy() {
       state.destroyed = true;
       container.removeEventListener('click', navigationClickCaptureHandler, true);
+      container.removeEventListener('miniphone-html-card-interaction', htmlCardInteractionHandler);
       container.removeEventListener('click', clickHandler);
       container.removeEventListener('input', inputHandler);
       container.removeEventListener('keydown', keydownHandler);
@@ -1013,6 +1024,79 @@ function handleChatReturnClickCapture(e, state, container) {
   if (action === 'msg-settings-back') {
     renderCurrentChatMessage(container, state);
   }
+}
+
+/* ========================================================================
+   [区域标注·已完成·HTML卡片交互系统提示持久化] 用户卡片回应入列
+   说明：
+   1. 用户点击 AI 发送的 HTML 卡片内部按钮/选项后，在聊天消息界面追加一行中间系统提示。
+   2. 系统提示 type=html_card_interaction_system、role=user，会随 currentMessages 写入 DB.js / IndexedDB。
+   3. 下一轮调用 AI 时，buildPromptPayloadForLatestUserRound 会把该系统提示作为用户最新回应上下文发送给 AI。
+   4. 本区域不使用 localStorage/sessionStorage，不做双份兜底，不使用原生浏览器弹窗。
+   ======================================================================== */
+function buildHtmlCardInteractionSystemContent(detail = {}) {
+  const label = String(detail.text || detail.value || 'HTML卡片元素').replace(/\s+/g, ' ').trim() || 'HTML卡片元素';
+  const tagName = String(detail.tagName || '').toLowerCase();
+  const role = String(detail.role || '').toLowerCase();
+  const eventType = String(detail.eventType || 'click').toLowerCase();
+  const value = String(detail.value || '').replace(/\s+/g, ' ').trim();
+  const isChoiceLike = ['checkbox', 'radio', 'switch'].includes(role);
+
+  if (tagName === 'select' && value) {
+    return `你在 HTML 卡片中选择了「${label}」：${value}`;
+  }
+
+  if ((tagName === 'textarea' || tagName === 'input') && value && eventType === 'change') {
+    return `你在 HTML 卡片中填写了「${label}」：${value}`;
+  }
+
+  if (isChoiceLike) {
+    return `你在 HTML 卡片中${detail.checked ? '选中了' : '取消了'}「${label}」`;
+  }
+
+  return `你在 HTML 卡片中点击了「${label}」`;
+}
+
+async function handleHtmlCardInteraction(e, state, container, db) {
+  if (!state.currentChatId) return;
+  const detail = e.detail || {};
+  const sourceMessageId = String(detail.messageId || '').trim();
+  const sourceMessage = (state.currentMessages || []).find(message => String(message.id) === sourceMessageId);
+  if (!sourceMessage || String(sourceMessage.type || '') !== 'card') return;
+
+  e.stopPropagation();
+
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  if (!session) return;
+
+  const now = Date.now();
+  const content = buildHtmlCardInteractionSystemContent(detail);
+  const systemMessage = {
+    id: `html_card_interaction_system_${now}_${Math.random().toString(16).slice(2)}`,
+    role: 'user',
+    type: 'html_card_interaction_system',
+    content,
+    htmlCardSourceMessageId: sourceMessageId,
+    htmlCardInteractionText: String(detail.text || '').trim(),
+    htmlCardInteractionValue: String(detail.value || '').trim(),
+    htmlCardInteractionChecked: Boolean(detail.checked),
+    htmlCardInteractionTagName: String(detail.tagName || '').trim(),
+    htmlCardInteractionRole: String(detail.role || '').trim(),
+    htmlCardInteractionEventType: String(detail.eventType || 'click').trim(),
+    timestamp: now
+  };
+
+  state.currentMessages.push(systemMessage);
+  session.lastMessage = content;
+  session.lastTime = now;
+
+  await Promise.all([
+    persistCurrentMessages(state, db),
+    dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+  ]);
+
+  appendCurrentMessageBubble(container, state, systemMessage);
+  refreshPanel(container, state, 'chatList');
 }
 
 /* ==========================================================================
