@@ -1,13 +1,12 @@
 /* ======================================================================
-   [区域标注·已完成·HTML卡片单张卡片显示修复] 闲谈应用 HTML 卡片专用样式
+   [区域标注·已完成·HTML卡片聊天页透明自适应显示] 闲谈应用 HTML 卡片专用样式
    说明：
    1. 本文件只服务"AI 在聊天消息中生成可交互 HTML 卡片"功能。
    2. 样式与 chat-message.js 中实际渲染的 class 名严格对应：
         .msg-html-card-bubble         — 透明外层挂载容器，只负责宽度/点击区域
         .msg-html-card-bubble__frame  — sandbox iframe 本体，真正显示 HTML 卡片
-   3. 已去掉外层"HTML卡片/可点击互动"标题栏以及外层容器边框/阴影，避免聊天界面出现额外大边框。
-   4. iframe 内部样式由 chat-html-card.js → buildHtmlCardDocument 注入，
-      外层 CSS 无法穿透 iframe，因此本文件只管外层容器与 iframe 盒模型。
+   3. 已去掉外层"HTML卡片/可点击互动"标题栏、聊天气泡底色、iframe 默认白底/边框和固定最小高度，避免聊天界面出现底部白色背景框。
+   4. HTML 卡片消息行已放宽宽度，iframe 高度继续由现有 postMessage 自适应上报机制接管，避免卡片内容显示不全。
    5. 不包含任何存储逻辑；仅负责渲染层样式，不使用 localStorage/sessionStorage。
    ====================================================================== */
 
@@ -20,16 +19,16 @@
 }
 
 /* ======================================================================
-   [区域标注·已完成·HTML卡片单张卡片外层容器] .msg-html-card-bubble
+   [区域标注·已完成·HTML卡片聊天页透明自适应显示] .msg-html-card-bubble
    说明：
    1. 外层容器不再绘制背景、边框、阴影，避免形成"卡片外又套一层大边框"。
-   2. 只保留宽度、点击放大入口和轻微按压反馈，让 iframe 内的 HTML 本身显示为一张卡片。
+   2. 宽度放宽到当前消息行可用宽度，减少 iframe 内真实 HTML 卡片被横向裁切的情况。
    3. line-height:0 用于消除 iframe 作为行内替换元素时可能产生的底部空隙。
    ====================================================================== */
 .msg-html-card-bubble {
   display: block;
-  width: min(100%, 312px);
-  min-height: 120px;
+  width: min(100%, 420px);
+  min-height: 0;
   border: 0 !important;
   outline: 0 !important;
   border-radius: var(--chat-html-card-radius);
@@ -61,17 +60,17 @@
 }
 
 /* ======================================================================
-   [区域标注·已完成·HTML卡片iframe无边框本体] .msg-html-card-bubble__frame
+   [区域标注·已完成·HTML卡片聊天页透明自适应显示] .msg-html-card-bubble__frame
    说明：
-   1. 宽度 100% 撑满容器；初始最小高度 200px 避免折叠不可见。
-   2. 显式去掉 iframe 默认边框/轮廓/背景，修复聊天界面出现灰色大边框的问题。
+   1. 宽度 100% 撑满容器；移除固定最小高度，避免内容较短时 iframe 底部露出白色空框。
+   2. 显式去掉 iframe 默认边框/轮廓/背景，修复聊天界面出现灰色或白色大边框的问题。
    3. 实际高度由 iframe 内部 postMessage 高度上报机制动态设置。
    4. transition 让高度变化平滑，避免突变闪屏。
    ====================================================================== */
 .msg-html-card-bubble__frame {
   display: block;
   width: 100%;
-  min-height: 200px;
+  min-height: 0;
   border: 0 !important;
   outline: 0 !important;
   border-radius: var(--chat-html-card-radius);
@@ -82,10 +81,15 @@
 }
 
 /* ======================================================================
-   [区域标注·已完成·HTML卡片在气泡内的特殊处理]
-   说明：当 msg-bubble 同时带 msg-bubble--html-card 时，
-   去掉聊天气泡自身的背景/边框/内边距，让 iframe 内卡片独立显示为单张卡片。
+   [区域标注·已完成·HTML卡片聊天页透明自适应显示]
+   说明：
+   1. 当 msg-bubble 同时带 msg-bubble--html-card 时，去掉聊天气泡自身的背景/边框/内边距。
+   2. 放宽 HTML 卡片消息行宽度，避免卡片被普通文字气泡的 85% 行宽限制裁切。
    ====================================================================== */
+.msg-bubble-row:has(.msg-bubble--html-card) {
+  max-width: calc(100% - 44px);
+}
+
 .msg-bubble--html-card {
   background: transparent !important;
   border: none !important;
@@ -100,13 +104,13 @@
    ====================================================================== */
 @media (max-width: 420px) {
   .msg-html-card-bubble {
-    width: min(100%, 280px);
-    min-height: 100px;
+    width: min(100%, calc(100vw - 72px));
+    min-height: 0;
     border-radius: 16px;
   }
 
   .msg-html-card-bubble__frame {
-    min-height: 160px;
+    min-height: 0;
     border-radius: 16px;
   }
 }

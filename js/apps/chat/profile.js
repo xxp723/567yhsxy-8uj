@@ -1058,26 +1058,31 @@ export function renderFavoriteSubPage(state) {
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
   /* ========================================================================
-     [区域标注·已完成·HTML卡片收藏页封面/页内放大]
+     [区域标注·已完成·HTML卡片收藏页封面文案/页内放大]
      说明：
-     1. HTML 固定分组中的收藏卡片默认只显示卡片标题封面，避免 iframe 缩略图挤压变形。
+     1. HTML 固定分组中的收藏卡片默认显示两行封面文案：
+        第一行为“角色名的卡片”，第二行为 HTML 卡片标题。
      2. 单击封面后在收藏页面内放大 HTML 卡片内容；不使用弹窗、不显示关闭按钮。
      3. 关闭由 index.js 监听“放大内容外的页面区域”完成，仍只改运行时 DOM，不写持久化。
      ======================================================================== */
   const isHtmlGroup = String(data.activeGroupId || 'all') === 'html';
   const cardsHtml = items.length ? items.map(item => {
-    /* [区域标注·已完成·HTML卡片收藏页封面/页内放大] HTML 卡片标题封面 + 页面内 iframe 放大内容 */
+    /* [区域标注·已完成·HTML卡片收藏页封面文案/页内放大] 第一行显示角色名卡片，第二行显示卡片标题 */
     if (isHtmlGroup && item.favoriteKind === 'html-card') {
       const safeSrcdoc = sanitizeHtmlCardDocumentForSrcdoc(item.cardHtml || '');
-      const safeTitle = escapeHtml(item.cardTitle || item.name || 'HTML 卡片');
+      const cardTitleText = String(item.cardTitle || item.name || 'HTML 卡片').trim() || 'HTML 卡片';
+      const sourceSession = (state.sessions || []).find(session => String(session.id) === String(item.sourceChatId || ''));
+      const roleNameText = String(sourceSession?.name || item.sourceName || 'AI').trim() || 'AI';
+      const safeTitle = escapeHtml(cardTitleText);
+      const safeCoverTitle = escapeHtml(`${roleNameText}的卡片`);
       return `
-        <!-- [区域标注·已完成·HTML卡片收藏页封面/页内放大] ${safeTitle} -->
+        <!-- [区域标注·已完成·HTML卡片收藏页封面文案/页内放大] ${safeCoverTitle} / ${safeTitle} -->
         <div class="favorite-html-card"
              data-action="toggle-favorite-html-card-zoom"
              data-favorite-id="${escapeHtml(item.id)}">
           <div class="favorite-html-card__cover">
-            <div class="favorite-html-card__title">${safeTitle}</div>
-            <div class="favorite-html-card__hint">单击放大查看</div>
+            <div class="favorite-html-card__title">${safeCoverTitle}</div>
+            <div class="favorite-html-card__hint">${safeTitle}</div>
           </div>
           <div class="favorite-html-card__zoom" data-role="favorite-html-card-zoom-panel">
             <iframe class="favorite-html-card__iframe"
