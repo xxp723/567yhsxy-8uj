@@ -1246,6 +1246,71 @@ function formatHistoryMessageContentForTimeAwareness(item) {
     : content;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·HTML卡片历史上下文摘要化]
+   说明：
+   1. 历史消息里遇到 type:card 的 AI HTML 卡片时，只发送剥离 HTML 后的文字摘要给 AI。
+   2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文放入历史上下文，避免浪费 token。
+   3. 本区域只做本轮 API 请求前的提示词文本转换；不读写持久化存储，不使用 localStorage/sessionStorage。
+   4. 不做 isLikelyLargeMediaField(key, value) 一类字段过滤，也不保留双份存储兜底逻辑。
+   ========================================================================== */
+function decodeHtmlEntitiesForPrompt(text = '') {
+  const value = String(text || '');
+  if (!value) return '';
+
+  if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function extractPlainTextFromHtmlCardForPrompt(html = '') {
+  const value = String(html || '').trim();
+  if (!value) return '';
+
+  const withoutNonTextBlocks = value
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<svg[\s\S]*?>[\s\S]*?<\/svg>/gi, ' ');
+
+  const text = decodeHtmlEntitiesForPrompt(
+    withoutNonTextBlocks
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|section|article|header|footer|main|li|tr|h[1-6]|button|summary|label)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  );
+
+  return text
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function formatHtmlCardHistorySummaryForPrompt(message = {}) {
+  const title = normalizePlainText(message?.cardTitle || message?.content || 'HTML卡片');
+  const htmlText = extractPlainTextFromHtmlCardForPrompt(message?.cardHtml || '');
+  const fallbackText = normalizePlainText(message?.content || '');
+  const summaryText = htmlText || fallbackText || title || '互动卡片';
+
+  return [
+    `[HTML卡片历史摘要] ${title || '互动卡片'}`,
+    summaryText
+  ].filter(Boolean).join('\n');
+}
+
 function buildConversationTimeContext({ history = [], userInput = '', now = getCurrentRealDate(), conversationTimeContext = {} } = {}) {
   const nowMs = now.getTime();
   const normalizedHistory = Array.isArray(history) ? history : [];
@@ -1324,9 +1389,19 @@ export function getChatHistory({ history = [], includeTimestamps = false } = {})
     ? history
         .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
         .map(item => {
-          const baseContent = includeTimestamps
-            ? formatHistoryMessageContentForTimeAwareness(item)
+          /* ====================================================================
+             [区域标注·已完成·HTML卡片历史上下文摘要化]
+             说明：
+             1. HTML 卡片在历史上下文里只保留剥离 HTML 后的文字摘要。
+             2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文发送给 AI，避免浪费 token。
+             3. 时间感知开启时仍保留消息发送时间标注，但摘要正文保持纯文本。
+             ==================================================================== */
+          const readableContent = String(item?.type || '') === 'card'
+            ? formatHtmlCardHistorySummaryForPrompt(item)
             : String(item.content || '');
+          const baseContent = includeTimestamps
+            ? formatHistoryMessageContentForTimeAwareness({ ...item, content: readableContent })
+            : readableContent;
           /* ====================================================================
              [区域标注·已完成·AI引用回复] 历史消息 ID 与引用预览注入
              说明：仅把现有消息对象中的 id/quote 转成 AI 可读文本，不新增存储。
