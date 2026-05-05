@@ -838,12 +838,13 @@ export function getFavoriteCardTitle(messages = []) {
 
 
 /* ========================================================================
-   [区域标注·已完成·HTML卡片收藏页封面第二行标题]
+   [区域标注·已完成·本次HTML收藏封面标题修正]
    说明：
    1. 收藏页 HTML 卡片封面第一行固定显示“角色名的卡片”。
-   2. 第二行优先从卡片 HTML 自身的 <title> / 标题标签 / data-card-title / og:title 提取真实主题标题。
-   3. 若旧收藏数据里 cardTitle 与第一行相同，则不再重复显示，改用“HTML 卡片”兜底。
-   4. 只用于收藏页运行时展示，不读写持久化存储，不使用 localStorage/sessionStorage。
+   2. 第二行已改为优先读取卡片正文里的真实标题（data-card-title / h1-h3 / .card-title / .title / role=heading）。
+   3. <title> / og:title / aria-label 只作为后备，避免旧卡片把“角色名的卡片”误当作 HTML 卡片标题。
+   4. 若旧收藏数据里 cardTitle 与第一行相同，则不再重复显示，改用“HTML 卡片”兜底。
+   5. 只用于收藏页运行时展示，不读写持久化存储，不使用 localStorage/sessionStorage。
    ======================================================================== */
 function normalizeFavoriteHtmlCardTitleText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -857,16 +858,18 @@ function extractFavoriteHtmlCardTitleFromHtml(cardHtml) {
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const metaTitle = doc.querySelector('meta[property="og:title"], meta[name="title"]')?.getAttribute('content');
-    const titledEl = doc.querySelector('[data-card-title], [aria-label]');
+    const explicitTitleEl = doc.querySelector('[data-card-title]');
     const headingEl = doc.querySelector('h1, h2, h3, [role="heading"], .card-title, .title');
+    const ariaTitleEl = doc.querySelector('[aria-label]');
 
     const candidates = [
-      doc.querySelector('title')?.textContent,
-      titledEl?.getAttribute('data-card-title'),
-      titledEl?.getAttribute('aria-label'),
-      titledEl?.textContent,
+      explicitTitleEl?.getAttribute('data-card-title'),
+      explicitTitleEl?.textContent,
       headingEl?.textContent,
-      metaTitle
+      doc.querySelector('title')?.textContent,
+      metaTitle,
+      ariaTitleEl?.getAttribute('aria-label'),
+      ariaTitleEl?.textContent
     ];
 
     for (const candidate of candidates) {
@@ -1114,16 +1117,16 @@ export function renderFavoriteSubPage(state) {
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
   /* ========================================================================
-     [区域标注·已完成·HTML卡片收藏页封面文案/页内放大]
+     [区域标注·已完成·本次HTML收藏封面标题/悬浮放大]
      说明：
      1. HTML 固定分组中的收藏卡片默认显示两行封面文案：
-        第一行为“角色名的卡片”，第二行为 HTML 卡片标题。
-     2. 单击封面后在收藏页面内放大 HTML 卡片内容；不使用弹窗、不显示关闭按钮。
+        第一行为“角色名的卡片”，第二行为 HTML 卡片正文标题。
+     2. 单击封面后在收藏页面上方以悬浮层放大 HTML 卡片内容；不使用弹窗、不显示关闭按钮。
      3. 关闭由 index.js 监听“放大内容外的页面区域”完成，仍只改运行时 DOM，不写持久化。
      ======================================================================== */
   const isHtmlGroup = String(data.activeGroupId || 'all') === 'html';
   const cardsHtml = items.length ? items.map(item => {
-    /* [区域标注·已完成·HTML卡片收藏页封面文案/页内放大] 第一行显示角色名卡片，第二行显示卡片标题 */
+    /* [区域标注·已完成·本次HTML收藏封面标题修正] 第一行显示角色名卡片，第二行优先显示 HTML 正文标题 */
     if (isHtmlGroup && item.favoriteKind === 'html-card') {
       const safeSrcdoc = sanitizeHtmlCardDocumentForSrcdoc(item.cardHtml || '');
       const sourceSession = (state.sessions || []).find(session => String(session.id) === String(item.sourceChatId || ''));
@@ -1132,7 +1135,7 @@ export function renderFavoriteSubPage(state) {
       const safeTitle = escapeHtml(cardTitleText);
       const safeCoverTitle = escapeHtml(`${roleNameText}的卡片`);
       return `
-        <!-- [区域标注·已完成·HTML卡片收藏页封面文案/页内放大] ${safeCoverTitle} / ${safeTitle} -->
+        <!-- [区域标注·已完成·本次HTML收藏封面标题/悬浮放大] ${safeCoverTitle} / ${safeTitle} -->
         <div class="favorite-html-card"
              data-action="toggle-favorite-html-card-zoom"
              data-favorite-id="${escapeHtml(item.id)}">
