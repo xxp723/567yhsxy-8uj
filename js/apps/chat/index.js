@@ -1027,12 +1027,13 @@ function handleChatReturnClickCapture(e, state, container) {
 }
 
 /* ========================================================================
-   [区域标注·已完成·HTML卡片交互系统提示持久化] 用户卡片回应入列
+   [区域标注·已完成·HTML卡片交互系统提示持久化与文案精简] 用户卡片回应入列
    说明：
    1. 用户点击 AI 发送的 HTML 卡片内部按钮/选项后，在聊天消息界面追加一行中间系统提示。
    2. 系统提示 type=html_card_interaction_system、role=user，会随 currentMessages 写入 DB.js / IndexedDB。
    3. 下一轮调用 AI 时，buildPromptPayloadForLatestUserRound 会把该系统提示作为用户最新回应上下文发送给 AI。
-   4. 本区域不使用 localStorage/sessionStorage，不做双份兜底，不使用原生浏览器弹窗。
+   4. 本区域已按本次要求移除“在 HTML 卡片中”前缀，系统小字直接显示“你点击/选择/填写/选中……”，避免文案冗余。
+   5. 本区域不使用 localStorage/sessionStorage，不做双份兜底，不使用原生浏览器弹窗。
    ======================================================================== */
 function buildHtmlCardInteractionSystemContent(detail = {}) {
   const label = String(detail.text || detail.value || 'HTML卡片元素').replace(/\s+/g, ' ').trim() || 'HTML卡片元素';
@@ -1043,18 +1044,18 @@ function buildHtmlCardInteractionSystemContent(detail = {}) {
   const isChoiceLike = ['checkbox', 'radio', 'switch'].includes(role);
 
   if (tagName === 'select' && value) {
-    return `你在 HTML 卡片中选择了「${label}」：${value}`;
+    return `你选择了「${label}」：${value}`;
   }
 
   if ((tagName === 'textarea' || tagName === 'input') && value && eventType === 'change') {
-    return `你在 HTML 卡片中填写了「${label}」：${value}`;
+    return `你填写了「${label}」：${value}`;
   }
 
   if (isChoiceLike) {
-    return `你在 HTML 卡片中${detail.checked ? '选中了' : '取消了'}「${label}」`;
+    return `你${detail.checked ? '选中了' : '取消了'}「${label}」`;
   }
 
-  return `你在 HTML 卡片中点击了「${label}」`;
+  return `你点击了「${label}」`;
 }
 
 async function handleHtmlCardInteraction(e, state, container, db) {
@@ -3849,15 +3850,6 @@ async function handleKeydown(e, state, container, db, settingsManager) {
   /* ===== 闲谈应用：回车只发送用户消息 END ===== */
 }
 
-/* ==========================================================================
-   [区域标注·本次需求2] 表情包独立页双击进入多选删除
-   说明：双击任意表情包即可唤起底部悬浮多选栏，并默认选中当前表情包。
-   ========================================================================== */
-/* ==========================================================================
-   [区域标注·已完成·收藏长按替代双击] 收藏页双击逻辑已移除
-   说明：收藏卡片进入多选模式改为长按触发（见 createFavoriteCardLongPressHandlers）。
-         此处仅保留表情包独立页的双击进入多选删除逻辑。
-   ========================================================================== */
 /* ==========================================================================
    [HTML卡片双击收藏到固定分组]
    说明：

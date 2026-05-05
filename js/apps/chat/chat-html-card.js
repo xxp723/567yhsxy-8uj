@@ -508,6 +508,17 @@ const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
     postInteraction(target, 'click');
   }, true);
 
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片iframe双击收藏桥接]
+     说明：iframe 内部双击不会冒泡到父页面，因此通过 postMessage 通知父页面触发收藏逻辑。
+     ======================================================================== */
+  document.addEventListener('dblclick', function(event){
+    parent.postMessage({
+      type: '__miniphone_card_dblclick__',
+      timestamp: Date.now()
+    }, '*');
+  }, true);
+
   document.addEventListener('change', function(event){
     var target = getInteractiveTarget(event.target);
     if(!target) return;

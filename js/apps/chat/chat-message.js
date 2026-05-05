@@ -48,6 +48,20 @@ if (!window.__miniphone_card_message_bridge_listener__) {
         break;
       }
 
+      /* ======================================================================
+         [区域标注·已完成·HTML卡片iframe双击收藏桥接]
+         说明：iframe 内部 dblclick 不能原生冒泡到聊天页，这里转成父页面可捕获的 dblclick，
+               复用 index.js 的 HTML 卡片收藏逻辑，持久化仍只走 DB.js / IndexedDB。
+         ====================================================================== */
+      if (data.type === '__miniphone_card_dblclick__') {
+        iframe.dispatchEvent(new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        }));
+        break;
+      }
+
       if (data.type === '__miniphone_card_interaction__') {
         iframe.dispatchEvent(new CustomEvent('miniphone-html-card-interaction', {
           bubbles: true,
@@ -451,7 +465,7 @@ function getVisibleStickerPanelItems(rawData, groupId = 'all') {
    3. 联想窗口只展示表情包列表，不再显示“关联表情包”标题和右侧关联词文字。
    4. 输入变化时优先局部更新已有 scroller 内容，不反复删除并重建整个窗口，避免输入时闪屏。
    5. 联想结果直接来自当前运行时 state.stickerData / IndexedDB 已加载数据，不读取 localStorage/sessionStorage，不做双份存储兜底。
-   6. 本区域只做展示与局部 DOM 同步，不过滤长文本字段，不使用 isLikelyLargeMediaField 之类逻辑。
+   6. 本区域只做展示与局部 DOM 同步，不按文本长度过滤字段。
    ======================================================================== */
 function getStickerInputSuggestionItems(rawData, keyword = '') {
   const query = String(keyword || '').trim().toLowerCase();
