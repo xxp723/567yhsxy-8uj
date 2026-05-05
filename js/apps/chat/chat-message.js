@@ -2307,6 +2307,54 @@ export function appendCurrentMessageBubble(container, state, message) {
   listArea.scrollTop = listArea.scrollHeight;
 }
 
+/* ==========================================================================
+   [HTML卡片功能栏防闪屏修复] HTML 卡片工具栏局部同步
+   说明：
+   1. HTML 卡片气泡内包含 iframe srcdoc；如果打开/关闭功能栏时 outerHTML 替换整条消息行，
+      iframe 会被销毁并重新加载，造成用户看到的卡片闪屏。
+   2. 本区域只在 HTML 卡片“功能栏开合/确认态变化”时同步工具栏 DOM 与行状态 class，
+      保留原有 .msg-html-card-bubble__frame 节点不动，避免 srcdoc 重载。
+   3. 非 HTML 卡片、系统提示、多选模式仍走原有局部替换逻辑；本修复不涉及任何持久化存储。
+   ========================================================================== */
+function syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state) {
+  if (!row || !message || state.multiSelectMode) return false;
+  if (String(message?.type || '') !== 'card' || !String(message?.cardHtml || message?.content || '').trim()) return false;
+
+  const holder = document.createElement('div');
+  holder.innerHTML = renderMessageBubble(message, session, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId
+  }).trim();
+
+  const nextRow = holder.firstElementChild;
+  const content = row.querySelector('.msg-bubble-content');
+  const bubble = content?.querySelector('.msg-bubble');
+  if (!nextRow || !content || !bubble) return false;
+
+  row.className = nextRow.className;
+  if (nextRow.dataset.action) row.dataset.action = nextRow.dataset.action;
+
+  const existingToolbar = Array.from(content.children).find(child => child.matches?.('[data-role="msg-bubble-toolbar"]'));
+  const nextToolbar = nextRow.querySelector('[data-role="msg-bubble-toolbar"]');
+
+  if (!nextToolbar) {
+    existingToolbar?.remove();
+    return true;
+  }
+
+  if (existingToolbar) {
+    existingToolbar.outerHTML = nextToolbar.outerHTML;
+    return true;
+  }
+
+  bubble.insertAdjacentHTML('beforebegin', nextToolbar.outerHTML);
+  return true;
+}
+
 /* ========================================================================== */
 export function refreshMessageBubbleRows(container, state, messageIds = []) {
   const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
@@ -2323,6 +2371,8 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
     const row = listArea.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
     const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
     if (!row || !message) return;
+
+    if (syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state)) return;
 
     row.outerHTML = renderMessageBubble(message, session, {
       userProfile: state.profile,
