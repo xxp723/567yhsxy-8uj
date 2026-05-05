@@ -11,11 +11,15 @@
 import { escapeHtml } from './chat-utils.js';
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] IconPark 图标
+   [区域标注·已修改·心声面板] IconPark 图标
    说明：心声面板用到的图标统一使用 IconPark 风格 SVG。
+   - heart: 心声标签图标（心形，来自 IconPark "like"）
+   - chart: 数据标签图标（图表，来自 IconPark "chart-line"）
+   - empty: 空状态图标（对话气泡，来自 IconPark "message"）
    ========================================================================== */
 const IV_ICONS = {
   heart: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 42S6 30 6 17a9 9 0 0 1 18 0a9 9 0 0 1 18 0c0 13-18 25-18 25Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  chart: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 6v36h36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 34l8-12 8 6 12-18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   empty: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`
 };
 
@@ -171,10 +175,10 @@ export function findLatestInnerVoice(messages) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 渲染心声面板 HTML
+   [区域标注·已修改·心声面板] 渲染心声面板 HTML
    说明：
    1. 两个标签页："心声"（心声独占大板块）和"数据"（状态、动作、心情、进度条）。
-   2. 漫画分镜板块风格，北欧简约日记配色。
+   2. ins 风格胶囊分段控件标签栏，每个标签带 IconPark 图标。
    3. 不设关闭按钮，点击面板外遮罩区域自动关闭。
    ========================================================================== */
 export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
@@ -195,8 +199,10 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
   return `
     <div class="iv-panel is-open" data-role="iv-panel">
       <div class="iv-tabs">
-        <button class="iv-tab ${isVoiceTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="voice" type="button">心声</button>
-        <button class="iv-tab ${isDataTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="data" type="button">数据</button>
+        <div class="iv-tabs__track">
+          <button class="iv-tab ${isVoiceTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}心声</button>
+          <button class="iv-tab ${isDataTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}数据</button>
+        </div>
       </div>
       <div class="iv-tab-body">
         <!-- ===== 心声标签页 ===== -->
@@ -262,14 +268,17 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 空状态面板
+   [区域标注·已修改·心声面板] 空状态面板
+   说明：与主面板保持一致的 ins 风格胶囊分段控件标签。
    ========================================================================== */
 function renderEmptyInnerVoicePanel() {
   return `
     <div class="iv-panel is-open" data-role="iv-panel">
       <div class="iv-tabs">
-        <button class="iv-tab is-active" data-action="iv-switch-tab" data-iv-tab="voice" type="button">心声</button>
-        <button class="iv-tab" data-action="iv-switch-tab" data-iv-tab="data" type="button">数据</button>
+        <div class="iv-tabs__track">
+          <button class="iv-tab is-active" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}心声</button>
+          <button class="iv-tab" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}数据</button>
+        </div>
       </div>
       <div class="iv-tab-body">
         <div class="iv-tab-page is-active" data-iv-page="voice">

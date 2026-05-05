@@ -1,21 +1,24 @@
 /* ==========================================================================
-   [模块标注·心声面板样式] chat-inner-voice.css
+   [模块标注·已修改·心声面板样式] chat-inner-voice.css
    说明：
    1. 闲谈应用"心声"面板独立 CSS 模块，方便后续针对性修改。
    2. 面板通过点击聊天消息页左侧角色头像弹出，点击面板外区域自动关闭。
-   3. 北欧简约日记风格 + 漫画分镜板块布局。
-   4. 两个标签切换："心声"(第一页) 和 "数据"(第二页)。
+   3. ins 风格面板 + 漫画分镜板块布局。
+   4. 两个标签切换："心声"(第一页) 和 "数据"(第二页)，使用胶囊分段控件。
+   5. 所有颜色统一引用 css/styles.css 中 :root 变量，不使用硬编码色值。
    ========================================================================== */
 
-/* ===== 心声面板遮罩层 ===== */
+/* ===== [已修改·遮罩层] 心声面板遮罩层 - 使用 root 变量 ===== */
 .iv-overlay {
   position: fixed;
   inset: 0;
   z-index: 8000;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(74, 52, 42, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.22s ease, visibility 0.22s ease;
+  transition: opacity 0.26s ease, visibility 0.26s ease;
   -webkit-tap-highlight-color: transparent;
 }
 .iv-overlay.is-open {
@@ -23,7 +26,7 @@
   visibility: visible;
 }
 
-/* ===== 心声面板主容器 ===== */
+/* ===== [已修改·面板主容器] ins 风格主面板 - 统一 root 变量 ===== */
 .iv-panel {
   position: fixed;
   left: 50%;
@@ -32,17 +35,20 @@
   z-index: 8001;
   width: min(82vw, 320px);
   max-height: min(78vh, 560px);
-  background: #faf8f5;
-  border-radius: 18px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: var(--c-white-rice);
+  border: 1px solid rgba(125, 90, 68, 0.10);
+  border-radius: 24px;
+  box-shadow:
+    0 20px 48px rgba(74, 52, 42, 0.18),
+    0 2px 8px rgba(74, 52, 42, 0.06);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease;
+  transition: opacity 0.26s ease, transform 0.26s ease, visibility 0.26s ease;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif;
-  color: #3a3632;
+  font-family: var(--font-retro);
+  color: var(--c-text-main);
 }
 .iv-panel.is-open {
   opacity: 1;
@@ -50,43 +56,66 @@
   transform: translate(-50%, -50%) scale(1);
 }
 
-/* ===== 标签栏 ===== */
+/* ===== [已修改·胶囊标签栏] ins 风格分段控件标签 ===== */
 .iv-tabs {
   display: flex;
-  border-bottom: 1.5px solid #e8e2da;
+  gap: 0;
   flex-shrink: 0;
-  background: #f5f1ec;
+  padding: 14px 16px 10px;
+  background: transparent;
+  border-bottom: none;
 }
+
+.iv-tabs__track {
+  display: flex;
+  width: 100%;
+  background: var(--c-milktea-trans);
+  border-radius: 12px;
+  padding: 3px;
+  position: relative;
+}
+
 .iv-tab {
   flex: 1;
-  padding: 11px 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 0;
   text-align: center;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  color: #9e9690;
+  letter-spacing: 0.4px;
+  color: var(--c-text-main);
+  opacity: 0.52;
   border: none;
   background: transparent;
+  border-radius: 10px;
   cursor: pointer;
   position: relative;
-  transition: color 0.18s ease;
+  transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   -webkit-tap-highlight-color: transparent;
-}
-.iv-tab.is-active {
-  color: #3a3632;
-}
-.iv-tab.is-active::after {
-  content: '';
-  position: absolute;
-  bottom: -1.5px;
-  left: 20%;
-  width: 60%;
-  height: 2.5px;
-  background: #3a3632;
-  border-radius: 2px;
+  z-index: 1;
 }
 
-/* ===== 标签页内容 ===== */
+.iv-tab svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.iv-tab.is-active {
+  opacity: 1;
+  background: var(--c-white-rice);
+  box-shadow: 0 2px 8px rgba(74, 52, 42, 0.10), 0 0.5px 2px rgba(74, 52, 42, 0.06);
+}
+
+/* 移除旧的下划线样式 */
+.iv-tab.is-active::after {
+  display: none;
+}
+
+/* ===== [已修改·标签页内容] ===== */
 .iv-tab-body {
   flex: 1;
   overflow-y: auto;
@@ -102,54 +131,56 @@
   display: block;
 }
 
-/* ===== 漫画分镜格子通用 ===== */
+/* ===== [已修改·漫画分镜格子] 统一 root 变量 ===== */
 .iv-cell {
-  border: 1.5px solid #e0dbd4;
-  border-radius: 10px;
-  padding: 10px 12px 10px;
+  border: 1px solid var(--c-gray-light);
+  border-radius: 14px;
+  padding: 12px 14px;
   margin-bottom: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.72);
   position: relative;
 }
 .iv-cell__label {
   position: absolute;
   top: -9px;
-  left: 10px;
-  background: #faf8f5;
-  padding: 0 6px;
+  left: 12px;
+  background: var(--c-white-rice);
+  padding: 0 7px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.2px;
-  color: #b0a99f;
+  color: var(--c-border);
   text-transform: uppercase;
+  opacity: 0.62;
 }
 .iv-cell__text {
   font-size: 13.5px;
   line-height: 1.65;
-  color: #4a4540;
+  color: var(--c-text-main);
   word-break: break-word;
   white-space: pre-wrap;
 }
 
-/* ===== 心声页：心声独占大格子 ===== */
+/* ===== [已修改·心声独占大格子] ins 风格渐变背景 ===== */
 .iv-voice-cell {
-  border-color: #d5cfc7;
-  background: linear-gradient(135deg, #fffcf8 0%, #f8f4ef 100%);
+  border-color: var(--c-milktea);
+  background: linear-gradient(135deg, rgba(255, 253, 248, 0.9) 0%, var(--c-milktea-trans) 100%);
   min-height: 90px;
 }
 .iv-voice-cell .iv-cell__label {
   font-size: 11px;
-  color: #8a8078;
+  color: var(--c-border);
   letter-spacing: 1.5px;
+  opacity: 0.72;
 }
 .iv-voice-cell .iv-cell__text {
   font-size: 14px;
   line-height: 1.72;
-  color: #3a3632;
+  color: var(--c-text-main);
   font-style: italic;
 }
 
-/* ===== 数据页：两列分镜布局 ===== */
+/* ===== [已修改·数据页两列分镜] ===== */
 .iv-grid-row {
   display: flex;
   gap: 10px;
@@ -160,30 +191,31 @@
   min-width: 0;
 }
 
-/* ===== 动作格子（宽） ===== */
+/* ===== [已修改·动作格子] ===== */
 .iv-action-cell {
   min-height: 56px;
 }
 
-/* ===== 进度条板块 ===== */
+/* ===== [已修改·进度条板块] 统一 root 变量 ===== */
 .iv-meters {
-  border: 1.5px solid #e0dbd4;
-  border-radius: 10px;
-  padding: 12px 12px 8px;
+  border: 1px solid var(--c-gray-light);
+  border-radius: 14px;
+  padding: 14px 14px 8px;
   margin-bottom: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.72);
   position: relative;
 }
 .iv-meters .iv-cell__label {
   position: absolute;
   top: -9px;
-  left: 10px;
-  background: #faf8f5;
-  padding: 0 6px;
+  left: 12px;
+  background: var(--c-white-rice);
+  padding: 0 7px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.2px;
-  color: #b0a99f;
+  color: var(--c-border);
+  opacity: 0.62;
 }
 
 .iv-meter {
@@ -201,19 +233,19 @@
 .iv-meter__name {
   font-size: 11.5px;
   font-weight: 600;
-  color: #6a6460;
+  color: var(--c-border);
 }
 .iv-meter__value {
   font-size: 11px;
   font-weight: 700;
-  color: #3a3632;
+  color: var(--c-text-main);
   letter-spacing: 0.3px;
 }
 
 .iv-meter__bar {
   width: 100%;
   height: 8px;
-  background: #ece8e2;
+  background: var(--c-milktea-trans);
   border-radius: 4px;
   overflow: hidden;
   position: relative;
@@ -238,11 +270,12 @@
   background: linear-gradient(90deg, #f0c79e 0%, #e09850 100%);
 }
 
-/* ===== 空状态 ===== */
+/* ===== [已修改·空状态] 统一 root 变量 ===== */
 .iv-empty {
   text-align: center;
   padding: 32px 16px;
-  color: #b8b0a8;
+  color: var(--c-border);
+  opacity: 0.62;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -251,105 +284,23 @@
   margin: 0 auto 10px;
   width: 32px;
   height: 32px;
-  opacity: 0.35;
+  opacity: 0.45;
 }
 .iv-empty__icon svg {
   width: 100%;
   height: 100%;
 }
 
-/* ===== 滚动条美化 ===== */
+/* ===== [已修改·滚动条美化] ===== */
 .iv-tab-body::-webkit-scrollbar {
   width: 3px;
 }
 .iv-tab-body::-webkit-scrollbar-thumb {
-  background: #d8d2ca;
+  background: var(--c-milktea);
   border-radius: 3px;
 }
 .iv-tab-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* ===== 暗色主题适配 ===== */
-@media (prefers-color-scheme: dark) {
-  .iv-panel {
-    background: #2a2725;
-    color: #dcd6ce;
-  }
-  .iv-tabs {
-    background: #322e2b;
-    border-bottom-color: #3e3a36;
-  }
-  .iv-tab {
-    color: #8a8480;
-  }
-  .iv-tab.is-active {
-    color: #e8e2da;
-  }
-  .iv-tab.is-active::after {
-    background: #e8e2da;
-  }
-  .iv-cell {
-    background: #33302d;
-    border-color: #4a4540;
-  }
-  .iv-cell__label {
-    background: #2a2725;
-    color: #8a8480;
-  }
-  .iv-cell__text {
-    color: #ccc6be;
-  }
-  .iv-voice-cell {
-    background: linear-gradient(135deg, #33302d 0%, #2e2b28 100%);
-    border-color: #4a4540;
-  }
-  .iv-voice-cell .iv-cell__label {
-    color: #a09890;
-  }
-  .iv-voice-cell .iv-cell__text {
-    color: #dcd6ce;
-  }
-  .iv-meters {
-    background: #33302d;
-    border-color: #4a4540;
-  }
-  .iv-meters .iv-cell__label {
-    background: #2a2725;
-    color: #8a8480;
-  }
-  .iv-meter__name {
-    color: #a8a09a;
-  }
-  .iv-meter__value {
-    color: #dcd6ce;
-  }
-  .iv-meter__bar {
-    background: #3e3a36;
-  }
-  .iv-empty {
-    color: #706860;
-  }
-  .iv-overlay {
-    background: rgba(0, 0, 0, 0.45);
-  }
-}
-
-/* ===== 项目主题变量适配 ===== */
-html[data-theme="dark"] .iv-panel {
-  background: var(--c-bg-secondary, #2a2725);
-  color: var(--c-text-main, #dcd6ce);
-}
-html[data-theme="dark"] .iv-tabs {
-  background: var(--c-bg-tertiary, #322e2b);
-  border-bottom-color: var(--c-border, #3e3a36);
-}
-html[data-theme="dark"] .iv-cell,
-html[data-theme="dark"] .iv-meters {
-  background: var(--c-bg-tertiary, #33302d);
-  border-color: var(--c-border, #4a4540);
-}
-html[data-theme="dark"] .iv-cell__label,
-html[data-theme="dark"] .iv-meters .iv-cell__label {
-  background: var(--c-bg-secondary, #2a2725);
-}
+/* ===== [已删除·暗色主题适配] 暗色主题段落已移除，统一使用 root 变量自动适配 ===== */
