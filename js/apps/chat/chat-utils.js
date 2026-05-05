@@ -99,14 +99,24 @@ export const ICON_BACK = `<svg viewBox="0 0 48 48" fill="none"><path d="M31 36L1
 export const ICON_CHECK = `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /* ==========================================================================
-   [区域标注] CSS 动态加载工具函数（优化：返回 Promise，等待 CSS 加载完毕再渲染）
-   说明：将闲谈应用的 CSS 直接注入 <head>，挂载时加载，卸载时移除
+   [区域标注·已完成·本次闲谈重进渲染失败修复] CSS 动态加载工具函数
+   说明：
+   1. 将闲谈应用 CSS 直接注入 <head>，挂载时等待 CSS 加载完成再渲染。
+   2. 使用引用计数保护同一个 CSS 节点，避免“退出闲谈后快速进入其它应用再回闲谈”时，
+      旧实例 destroy() 把新实例正在复用的样式节点移除，导致页面按无样式 HTML/SVG 渲染失败。
+   3. 本区域只处理闲谈 CSS 生命周期，不涉及任何持久化存储；
+      不使用 localStorage/sessionStorage，不写双份存储兜底。
    ========================================================================== */
 export function loadCSS(href, id) {
   return new Promise((resolve) => {
     const existing = document.getElementById(id);
     if (existing) {
+      const nextRefCount = Math.max(0, Number(existing.dataset.chatCssRefCount || 0) || 0) + 1;
+      existing.dataset.chatCssRefCount = String(nextRefCount);
+      existing.dataset.chatCssHref = href;
+
       if (existing.dataset.loaded === '1' || existing.sheet) {
+        existing.dataset.loaded = '1';
         resolve();
         return;
       }
@@ -123,6 +133,8 @@ export function loadCSS(href, id) {
     link.rel = 'stylesheet';
     link.href = href;
     link.id = id;
+    link.dataset.chatCssRefCount = '1';
+    link.dataset.chatCssHref = href;
     const done = () => {
       link.dataset.loaded = '1';
       resolve();
@@ -135,7 +147,18 @@ export function loadCSS(href, id) {
 
 export function removeCSS(id) {
   const el = document.getElementById(id);
-  if (el) el.remove();
+  if (!el) return;
+
+  const nextRefCount = Math.max(0, (Number(el.dataset.chatCssRefCount || 1) || 1) - 1);
+  el.dataset.chatCssRefCount = String(nextRefCount);
+  if (nextRefCount > 0) return;
+
+  window.setTimeout(() => {
+    const latest = document.getElementById(id);
+    if (!latest) return;
+    const latestRefCount = Math.max(0, Number(latest.dataset.chatCssRefCount || 0) || 0);
+    if (latestRefCount <= 0) latest.remove();
+  }, 0);
 }
 
 /* ==========================================================================
