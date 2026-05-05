@@ -63,7 +63,12 @@ const ICONS = {
   exchange: `<svg viewBox="0 0 48 48" fill="none"><path d="M7 16h28" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 8l8 8l-8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M41 32H13" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M21 24l-8 8l8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   recharge: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="3"/><path d="M24 15v18M15 24h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* [区域标注·已完成·本次钱包流水需求] IconPark — 钱包流水图标 */
-  ledger: `<svg viewBox="0 0 48 48" fill="none"><rect x="8" y="6" width="32" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M16 16h16M16 24h16M16 32h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  ledger: `<svg viewBox="0 0 48 48" fill="none"><rect x="8" y="6" width="32" height="36" rx="3" stroke="currentColor" stroke-width="3"/><path d="M16 16h16M16 24h16M16 32h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·收藏HTML卡片展开跳转上下文] IconPark — 跳转到原聊天上下文
+     说明：用于收藏页 HTML 卡片展开后的顶部“跳转”按钮。
+     ======================================================================== */
+  jumpToChat: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 38L38 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 10h16v16" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 34v4H10V10h4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -1134,6 +1139,12 @@ export function renderFavoriteSubPage(state) {
       const cardTitleText = getFavoriteHtmlCardCoverSecondLine(item, roleNameText);
       const safeTitle = escapeHtml(cardTitleText);
       const safeCoverTitle = escapeHtml(`${roleNameText}的卡片`);
+      /* ======================================================================
+         [区域标注·已完成·收藏HTML卡片展开跳转上下文]
+         说明：展开后的“跳转”按钮只读取收藏项已有来源字段，不新增持久化字段。
+         ====================================================================== */
+      const safeSourceChatId = escapeHtml(item.sourceChatId || '');
+      const safeSourceMessageId = escapeHtml(item.sourceMessageId || '');
       return `
         <!-- [区域标注·已完成·本次HTML收藏封面标题/悬浮放大] ${safeCoverTitle} / ${safeTitle} -->
         <div class="favorite-html-card"
@@ -1144,6 +1155,19 @@ export function renderFavoriteSubPage(state) {
             <div class="favorite-html-card__hint">${safeTitle}</div>
           </div>
           <div class="favorite-html-card__zoom" data-role="favorite-html-card-zoom-panel">
+            <!-- [区域标注·已完成·收藏HTML卡片展开跳转上下文] 展开态顶部跳转按钮：回到原聊天消息上下文 -->
+            <div class="favorite-html-card__jump-row">
+              <button class="favorite-html-card__jump-btn"
+                      data-action="jump-favorite-html-card-source"
+                      data-favorite-id="${escapeHtml(item.id)}"
+                      data-source-chat-id="${safeSourceChatId}"
+                      data-source-message-id="${safeSourceMessageId}"
+                      type="button"
+                      aria-label="跳转到原聊天消息上下文">
+                ${ICONS.jumpToChat}
+                <span>跳转</span>
+              </button>
+            </div>
             <iframe class="favorite-html-card__iframe"
                     sandbox="allow-scripts"
                     srcdoc="${escapeHtml(safeSrcdoc)}"

@@ -2830,6 +2830,45 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
+       [区域标注·已完成·收藏HTML卡片展开跳转上下文]
+       说明：
+       1. 点击收藏页 HTML 卡片展开面板顶部“跳转”按钮，打开原聊天并滚动到来源 HTML 卡片消息。
+       2. 仅读取收藏项已有 sourceChatId/sourceMessageId/sourceContextMessageIds 字段，不新增持久化字段。
+       3. 跳转过程只使用 DB.js / IndexedDB 加载原聊天消息，不使用 localStorage/sessionStorage。
+       4. 不使用浏览器原生弹窗；若来源消息已不存在，则保持在原聊天页面当前位置。
+       ========================================================================== */
+    case 'jump-favorite-html-card-source': {
+      if (state.subPageView !== 'favorite') break;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const favoriteId = String(target.dataset.favoriteId || '').trim();
+      const favoriteItem = normalizeFavoriteData(state.favoriteData).items.find(item => String(item.id) === favoriteId);
+      const sourceChatId = String(target.dataset.sourceChatId || favoriteItem?.sourceChatId || '').trim();
+      const sourceMessageId = String(target.dataset.sourceMessageId || favoriteItem?.sourceMessageId || '').trim();
+      if (!sourceChatId) break;
+
+      state.subPageView = null;
+      state.favoriteMultiSelectMode = false;
+      state.selectedFavoriteIds = [];
+      await openChatMessage(container, state, db, sourceChatId);
+
+      const existingMessageIds = new Set((state.currentMessages || []).map(message => String(message.id || '')));
+      const contextMessageIds = Array.isArray(favoriteItem?.sourceContextMessageIds)
+        ? favoriteItem.sourceContextMessageIds.map(id => String(id || '').trim()).filter(Boolean)
+        : [];
+      const jumpMessageId = existingMessageIds.has(sourceMessageId)
+        ? sourceMessageId
+        : contextMessageIds.find(id => existingMessageIds.has(id));
+
+      if (jumpMessageId) {
+        window.setTimeout(() => scrollToChatSearchResult(container, jumpMessageId), 120);
+      }
+      break;
+    }
+
+    /* ==========================================================================
        [区域标注·修改1] 表情包折叠栏 — 点击进入表情包子页面
        ========================================================================== */
     case 'open-sticker':

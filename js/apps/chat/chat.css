@@ -3080,13 +3080,13 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次HTML收藏悬浮展开最终去外框]
+   [区域标注·已完成·本次HTML收藏悬浮展开与跳转上下文]
    说明：
    1. 收藏独立页 html 固定分组下的 HTML 卡片默认只显示标题封面。
    2. 单击封面后，HTML 内容作为收藏页面上方悬浮层显示，不再作为网格卡片占位展开。
    3. 展开态外层卡片仅作为零视觉定位层：无背景、无边框、无阴影、无圆角底框、无内边距。
-   4. 展开后只显示 iframe 内的 HTML 卡片本体，避免底部出现透明背景底框容器。
-   5. 展开态 iframe 高度仍由 chat-html-card.js 的内容高度上报驱动自适应；不涉及任何持久化存储。
+   4. 展开后顶部显示“跳转”IconPark 图标按钮，可返回这张卡片所在聊天消息上下文。
+   5. 展开态 iframe 高度仍由 chat-html-card.js 的内容高度上报驱动自适应；本样式不涉及任何持久化存储。
    ========================================================================== */
 .favorite-html-card {
   min-width: 0;
@@ -3204,6 +3204,51 @@
   box-shadow: none;
   pointer-events: auto;
   overflow: visible;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·收藏HTML卡片展开跳转上下文] 展开态顶部跳转按钮
+   说明：
+   1. 按钮位于 iframe 上方，使用 IconPark 风格图标，主题色与闲谈 Linen/Espresso UI 一致。
+   2. 仅服务收藏页 HTML 卡片展开态，不影响普通收藏卡片或聊天消息页 HTML 卡片。
+   ========================================================================== */
+.favorite-html-card__jump-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin: 0 0 8px 0;
+  pointer-events: auto;
+}
+
+.favorite-html-card__jump-btn {
+  border: none;
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.96);
+  color: #4A342A;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(44, 32, 22, 0.14);
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.favorite-html-card__jump-btn:active {
+  background: rgba(245, 241, 234, 0.98);
+  transform: scale(0.94);
+  box-shadow: 0 4px 12px rgba(44, 32, 22, 0.12);
+}
+
+.favorite-html-card__jump-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .favorite-html-card__iframe {
