@@ -2170,11 +2170,69 @@ export function buildAiReplyMessages(rawText, state) {
    2. 消息对象使用 type:image / imageUrl / imageName / imageSource，随 currentMessages 写入 DB.js / IndexedDB。
    3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
    ========================================================================== */
+const CHAT_IMAGE_MAX_SIDE = 768;
+const CHAT_IMAGE_JPEG_QUALITY = 0.72;
+
+function isLocalImageDataUrlForChat(value = '') {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(value || '').trim());
+}
+
+function formatApproxKb(value = '') {
+  return `${Math.max(1, Math.round(String(value || '').length / 1024))}KB`;
+}
+
+async function compressLocalImageDataUrlForChat(dataUrl = {}) {
+  const source = String(dataUrl || '').trim();
+  if (!isLocalImageDataUrlForChat(source)) return source;
+
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('图片读取失败'));
+    img.src = source;
+  });
+
+  const sourceWidth = Number(image.naturalWidth || image.width || 0);
+  const sourceHeight = Number(image.naturalHeight || image.height || 0);
+  if (!sourceWidth || !sourceHeight) return source;
+
+  const scale = Math.min(1, CHAT_IMAGE_MAX_SIDE / Math.max(sourceWidth, sourceHeight));
+  const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return source;
+
+  /* [区域标注·本次修改·本地图片省token] 透明 PNG/WebP 转 JPEG 前铺浅色底，避免透明区域变黑；最长边限制为 768px。 */
+  ctx.fillStyle = '#f8f4ef';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  const compressed = canvas.toDataURL('image/jpeg', CHAT_IMAGE_JPEG_QUALITY);
+  return compressed && compressed.length < source.length ? compressed : source;
+}
+
 export async function sendImageMessage(container, state, db, imageUrl, settingsManager, options = {}) {
   if (!state.currentChatId || state.isAiSending) return;
 
-  const safeUrl = String(imageUrl || '').trim();
+  let safeUrl = String(imageUrl || '').trim();
   if (!safeUrl) return;
+
+  if (isLocalImageDataUrlForChat(safeUrl)) {
+    const originalUrl = safeUrl;
+    try {
+      safeUrl = await compressLocalImageDataUrlForChat(safeUrl);
+      if (safeUrl !== originalUrl) {
+        appendChatConsoleRuntimeLog(state, 'info', `本地图片已压缩：${formatApproxKb(originalUrl)} → ${formatApproxKb(safeUrl)}`);
+      }
+    } catch (error) {
+      appendChatConsoleRuntimeLog(state, 'warn', `本地图片压缩失败，保留原图：${error?.message || '未知错误'}`);
+      safeUrl = originalUrl;
+    }
+  }
 
   const session = state.sessions.find(s => s.id === state.currentChatId);
   if (!session) return;

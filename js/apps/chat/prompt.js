@@ -159,15 +159,31 @@ function getMessageVisualLabel(message = {}) {
   return '';
 }
 
-function createVisionMessageContent(message = {}, textContent = '') {
+function createVisionImagePart(visualUrl = '') {
+  return {
+    type: 'image_url',
+    image_url: {
+      url: String(visualUrl || '').trim(),
+      /* [区域标注·本次修改·AI识图低成本] OpenAI 兼容视觉输入使用低细节模式，减少图片 token 消耗；不支持该字段的兼容服务通常会忽略。 */
+      detail: 'low'
+    }
+  };
+}
+
+function createVisionMessageContent(message = {}, textContent = '', options = {}) {
   const text = String(textContent || '').trim();
   const visualUrl = getMessageVisualUrl(message);
   if (!visualUrl || message.role !== 'user') return text;
 
   const visualLabel = getMessageVisualLabel(message);
+  const textPart = [text, visualLabel].filter(Boolean).join('\n') || visualLabel || '用户发送了一张图片。';
+
+  /* [区域标注·本次修改·历史图片省token] 历史消息默认只发送图片/表情包文字摘要，不再重复附带真实 image_url。 */
+  if (options.includeVisual === false) return textPart;
+
   return [
-    { type: 'text', text: [text, visualLabel].filter(Boolean).join('\n') || visualLabel || '用户发送了一张图片。' },
-    { type: 'image_url', image_url: { url: visualUrl } }
+    { type: 'text', text: textPart },
+    createVisionImagePart(visualUrl)
   ];
 }
 
@@ -1389,7 +1405,7 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
    [提示词区域 9] 聊天历史
    说明：返回数组 [{ role:'user'|'assistant', content:string }]，直接追加到 messages。
    ========================================================================== */
-export function getChatHistory({ history = [], includeTimestamps = false } = {}) {
+export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false } = {}) {
   return Array.isArray(history)
     ? history
         .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
@@ -1414,8 +1430,8 @@ export function getChatHistory({ history = [], includeTimestamps = false } = {})
           const textContent = formatMessageTextWithQuoteForPrompt(item, baseContent);
           return {
             role: item.role,
-            /* [区域标注·AI识图历史媒体] 历史 user 表情包/图片保留视觉输入，供 AI 看见上下文中的图片。 */
-            content: createVisionMessageContent(item, textContent)
+            /* [区域标注·本次修改·历史图片省token] 历史 user 表情包/图片只保留文字摘要；只有当前轮用户图片会附带真实视觉输入。 */
+            content: createVisionMessageContent(item, textContent, { includeVisual: includeHistoryVision })
           };
         })
         .filter(item => hasMessageContent(item.content))
@@ -1580,7 +1596,7 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
         const visualUrl = getMessageVisualUrl(item);
         const visualLabel = getMessageVisualLabel(item);
         if (visualLabel) contentParts.push({ type: 'text', text: visualLabel });
-        contentParts.push({ type: 'image_url', image_url: { url: visualUrl } });
+        contentParts.push(createVisionImagePart(visualUrl));
       });
       messages.push({ role: 'user', content: contentParts });
     } else {
