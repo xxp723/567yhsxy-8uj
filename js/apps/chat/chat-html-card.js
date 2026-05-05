@@ -86,11 +86,12 @@ export function normalizeHtmlCardProtocolContent(raw = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片] HTML 卡片系统提示词
+   [区域标注·已完成·HTML卡片格式约束加强] HTML 卡片系统提示词
    说明：
    1. 只有聊天设置页开启 HTML 卡片开关后，prompt.js 才会注入本提示词。
-   2. 明确要求 AI 仅在“最新一轮回复确有必要”时输出 [卡片] 协议，避免滥发。
-   3. 卡片风格固定为北欧风，并要求与小手机主题暖色 UI 保持一致。
+   2. 已加强 AI 输出格式约束：卡片正文只能是 HTML，不允许混入 Markdown 围栏、解释文字或后续聊天协议。
+   3. 已要求使用单一根容器、手机窄屏布局、内联样式作用域，降低卡片在聊天界面掉格式的概率。
+   4. 卡片风格固定为北欧风，并要求与小手机主题暖色 UI 保持一致。
    ========================================================================== */
 export function getHtmlCardFeaturePrompt() {
   return [
@@ -100,10 +101,13 @@ export function getHtmlCardFeaturePrompt() {
     '如果当前情景只是普通闲聊、不需要视觉承载、或会干扰聊天节奏，就不要输出 [卡片] 协议。',
     '你输出卡片时必须严格使用完整协议块：**`[卡片] 角色名：HTML内容`**。',
     'HTML 内容必须是可直接渲染的卡片正文；可以包含内联 style、按钮、标签、进度、票券布局、便签布局、状态切换等轻互动元素。',
+    '格式硬性要求：HTML内容必须直接从第一个 HTML 标签开始，到最后一个 HTML 标签结束；禁止包裹 ```html 代码围栏；禁止在 HTML 前后添加解释文字、Markdown 列表、引号、星号强调或其它聊天协议文本。',
+    '结构硬性要求：卡片正文必须使用一个单一根容器承载全部内容，推荐 `<article class="nordic-card">...</article>`；所有布局和样式都应限制在该根容器内，避免外层聊天界面掉格式。',
+    '尺寸硬性要求：根容器宽度必须为 100%，最大宽度不得超过手机聊天气泡宽度；所有图片、表格、长文本、按钮组都必须可换行且不得横向溢出。',
     '卡片必须遵守以下硬性要求：',
     '1. 整体风格必须是北欧风，视觉上简洁、克制、留白充足、轻纸感、轻拟物、暖中性色调。',
     '2. 配色必须与当前小手机网页主题 UI 接近：暖白、米杏、浅棕、柔和金棕、低饱和灰褐，不要霓虹色、赛博色、纯黑高压风。',
-    '3. 卡片必须适配手机窄屏，禁止超宽布局；优先单列布局，圆角柔和，阴影轻，不要大面积刺眼纯色。',
+    '3. 卡片必须适配手机窄屏，禁止超宽布局；优先单列布局，圆角柔和，阴影轻，不要大面积刺眼纯色；长标题、长数字、长地址、长备注必须允许自动换行。',
     '4. 可以有 button、details、summary、checkbox、radio、progress、meter、a 等原生 HTML 可交互元素，但禁止依赖外部 CDN、外链脚本、远程字体、远程图片或网络请求。',
     '5. 禁止输出 <script>、禁止跳转顶层窗口、禁止访问父页面、禁止使用浏览器原生弹窗 API（alert/confirm/prompt）。',
     '6. 若需要图形元素，优先用纯 HTML/CSS 绘制，不要引用外部图片资源。',
@@ -148,15 +152,110 @@ export function extractHtmlCardProtocolBlocks(rawText = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片] HTML 骨架补全
-   说明：允许 AI 只输出局部 HTML；这里自动补齐最小可渲染文档结构。
+   [区域标注·已完成·HTML卡片格式约束加强] iframe 内部格式保护样式
+   说明：
+   1. 已为 HTML 卡片统一注入最小格式保护层，防止长文本、表格、图片、代码块横向撑破聊天卡片。
+   2. 已对无 .nordic-card 根容器的单根 HTML 自动补上暖色纸感外观，减少 AI 漏写 class 时的掉格式。
+   3. 只作用于 iframe srcdoc 内部；不修改持久化，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+const HTML_CARD_FORMAT_ENFORCER_STYLE = `<style data-miniphone-card-format-enforcer="true">
+  :root{
+    color-scheme:light;
+    --card-bg:#f8f4ef;
+    --card-surface:#fffdf9;
+    --card-surface-2:#f3ece3;
+    --card-border:rgba(109,95,82,.18);
+    --card-text:#3d342d;
+    --card-sub:#7a6a5d;
+    --card-accent:#c79a66;
+    --card-accent-soft:rgba(199,154,102,.16);
+    --card-shadow:0 10px 28px rgba(61,52,45,.10);
+    --card-radius:20px;
+  }
+  *,*::before,*::after{
+    box-sizing:border-box;
+    max-width:100%;
+  }
+  html,body{
+    width:100%;
+    max-width:100%;
+    margin:0;
+    padding:0;
+    overflow-x:hidden;
+    background:transparent;
+    font-family:"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--card-text);
+  }
+  body{
+    min-height:0;
+  }
+  .miniphone-html-card-root{
+    width:100%;
+    max-width:100%;
+    overflow:hidden;
+  }
+  .miniphone-html-card-root,
+  .miniphone-html-card-root *{
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  .miniphone-html-card-root > :where(article,section,main,div):first-child:last-child:not(.nordic-card){
+    width:100%;
+    border-radius:var(--card-radius);
+    border:1px solid var(--card-border);
+    background:linear-gradient(160deg,var(--card-surface),var(--card-bg));
+    box-shadow:var(--card-shadow);
+    padding:14px;
+    overflow:hidden;
+  }
+  img,svg,video,canvas{
+    max-width:100%;
+    height:auto;
+  }
+  table{
+    width:100%;
+    max-width:100%;
+    table-layout:fixed;
+    border-collapse:collapse;
+  }
+  th,td{
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  pre,code{
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  button,input,textarea,select{
+    max-width:100%;
+    font:inherit;
+  }
+</style>`;
+
+function injectHtmlCardFormatEnforcerStyle(documentHtml = '') {
+  const value = String(documentHtml || '');
+  if (!value || /data-miniphone-card-format-enforcer/i.test(value)) return value;
+
+  if (/<\/head>/i.test(value)) {
+    return value.replace(/<\/head>/i, `${HTML_CARD_FORMAT_ENFORCER_STYLE}\n</head>`);
+  }
+
+  return `${HTML_CARD_FORMAT_ENFORCER_STYLE}\n${value}`;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·HTML卡片格式约束加强] HTML 骨架补全
+   说明：
+   1. 允许 AI 只输出局部 HTML；这里自动补齐最小可渲染文档结构。
+   2. 已统一包裹 .miniphone-html-card-root 并注入格式保护样式，防止聊天界面 HTML 卡片掉格式。
    ========================================================================== */
 export function buildHtmlCardDocument(html = '') {
   const body = normalizeHtmlCardProtocolContent(html);
   if (!body) return '';
 
   const hasHtmlTag = /<html[\s>]/i.test(body);
-  if (hasHtmlTag) return body;
+  if (hasHtmlTag) return injectHtmlCardFormatEnforcerStyle(body);
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -177,7 +276,10 @@ export function buildHtmlCardDocument(html = '') {
       --card-shadow:0 10px 28px rgba(61,52,45,.10);
       --card-radius:20px;
     }
-    *{box-sizing:border-box}
+    *,*::before,*::after{
+      box-sizing:border-box;
+      max-width:100%;
+    }
     html,body{
       margin:0;
       padding:0;
@@ -188,6 +290,26 @@ export function buildHtmlCardDocument(html = '') {
     body{
       min-height:0;
       padding:0;
+      overflow-x:hidden;
+    }
+    .miniphone-html-card-root{
+      width:100%;
+      max-width:100%;
+      overflow:hidden;
+    }
+    .miniphone-html-card-root,
+    .miniphone-html-card-root *{
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+    .miniphone-html-card-root > :where(article,section,main,div):first-child:last-child:not(.nordic-card){
+      width:100%;
+      border-radius:var(--card-radius);
+      border:1px solid var(--card-border);
+      background:linear-gradient(160deg,var(--card-surface),var(--card-bg));
+      box-shadow:var(--card-shadow);
+      padding:14px;
+      overflow:hidden;
     }
     .nordic-card{
       width:100%;
@@ -275,10 +397,31 @@ export function buildHtmlCardDocument(html = '') {
       user-select:none;
       font-weight:600;
     }
+    img,svg,video,canvas{
+      max-width:100%;
+      height:auto;
+    }
+    table{
+      width:100%;
+      max-width:100%;
+      table-layout:fixed;
+      border-collapse:collapse;
+    }
+    th,td{
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+    pre,code{
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
   </style>
 </head>
 <body>
-  ${body}
+  <main class="miniphone-html-card-root">
+    ${body}
+  </main>
 </body>
 </html>`;
 }
@@ -312,11 +455,12 @@ const HTML_CARD_HEIGHT_REPORTER_SCRIPT = `
 </script>`;
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片] iframe srcdoc 安全净化
+   [区域标注·已完成·HTML卡片格式约束加强] iframe srcdoc 安全净化
    说明：
    1. 先移除所有外部/用户 script、事件属性、iframe嵌套、弹窗 API、顶层跳转。
-   2. 然后追加受信任的高度上报脚本（data-card-height-reporter），确保自适应高度正常工作。
-   3. 不做双份存储，不引入原生浏览器弹窗。
+   2. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
+   3. 然后追加受信任的高度上报脚本（data-card-height-reporter），确保自适应高度正常工作。
+   4. 不做双份存储，不引入原生浏览器弹窗。
    ========================================================================== */
 export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
   const documentHtml = buildHtmlCardDocument(html);
@@ -335,6 +479,8 @@ export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
     .replace(/\bparent\s*\./gi, 'window.')
     .replace(/<a([^>]*?)target\s*=\s*["']?_top["']?([^>]*)>/gi, '<a$1$2>')
     .replace(/<a([^>]*?)target\s*=\s*["']?_parent["']?([^>]*)>/gi, '<a$1$2>');
+
+  sanitized = injectHtmlCardFormatEnforcerStyle(sanitized);
 
   /* 在 </body> 前注入高度上报脚本；若无 </body> 则追加到末尾 */
   if (/<\/body>/i.test(sanitized)) {
