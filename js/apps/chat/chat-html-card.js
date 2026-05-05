@@ -13,7 +13,8 @@
    说明：
    1. 支持 AI 在 [卡片] 协议中直接给出 HTML 片段。
    2. 若包裹在 ```html ... ``` 代码块中会自动剥离围栏。
-   3. 不做 localStorage/sessionStorage 兜底，不做长文本字段过滤。
+   3. 已修复 HTML 最后一个标签后残留 `**、**、句号等 Markdown/标点尾巴导致卡片下方多出符号的问题。
+   4. 不做 localStorage/sessionStorage 兜底，不做长文本字段过滤。
    ========================================================================== */
 const HTML_CARD_CHAT_PROTOCOL_MARKER_REGEX = /\[(回复|表情|转账|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
 
@@ -72,6 +73,28 @@ export function stripHtmlCardTrailingChatProtocols(raw = '') {
     : value;
 }
 
+/* ========================================================================
+   [区域标注·已完成·HTML卡片尾部Markdown标点残留清理]
+   说明：
+   1. 修复 AI 将 [卡片] HTML 包在 **`...`** 里时，最后一个 HTML 标签后残留 `**、**、句号等符号并显示在卡片下方的问题。
+   2. 只在最后一个 HTML 闭合尖括号之后清理“纯 Markdown 包裹符/常见句末标点/空白”的尾巴，不触碰 HTML 标签内部内容。
+   3. 本区域只影响 HTML 卡片显示层解析；不读写 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
+   ======================================================================== */
+function stripHtmlCardTrailingMarkdownPunctuation(raw = '') {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+
+  const lastTagEndIndex = value.lastIndexOf('>');
+  if (lastTagEndIndex < 0 || lastTagEndIndex >= value.length - 1) return value;
+
+  const body = value.slice(0, lastTagEndIndex + 1).trimEnd();
+  const tail = value.slice(lastTagEndIndex + 1).trim();
+
+  return tail && /^[`*_~"'“”‘’。，、；;：:,.!！?？…·\-\s]+$/.test(tail)
+    ? body.trim()
+    : value;
+}
+
 export function normalizeHtmlCardProtocolContent(raw = '') {
   let value = String(raw || '').trim();
   if (!value) return '';
@@ -82,7 +105,7 @@ export function normalizeHtmlCardProtocolContent(raw = '') {
     .replace(/\s*```$/i, '')
     .trim();
 
-  return stripHtmlCardTrailingChatProtocols(value);
+  return stripHtmlCardTrailingMarkdownPunctuation(stripHtmlCardTrailingChatProtocols(value));
 }
 
 /* ==========================================================================
