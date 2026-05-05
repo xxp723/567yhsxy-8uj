@@ -3,10 +3,16 @@
    说明：
    1. 闲谈应用"心声"面板独立 CSS 模块，方便后续针对性修改。
    2. 面板通过点击聊天消息页左侧角色头像弹出，点击面板外区域自动关闭。
-   3. ins 风格面板 + 漫画分镜板块布局。
-   4. 两个标签切换："心声"(第一页) 和 "数据"(第二页)，使用胶囊分段控件。
+   3. 游戏机风格面板 + 漫画分镜板块布局。
+   4. 两个标签切换："Voice"(第一页) 和 "Now"(第二页)，使用游戏机风格分段控件。
    5. 所有颜色统一引用 css/styles.css 中 :root 变量，不使用硬编码色值。
+   6. [已修改·标签英文花体字] 标签使用 Google Fonts "Great Vibes" 花体字。
+   7. [已修改·历史/多选按钮] 面板右上角历史按钮，标签下方多选按钮。
+   8. [已修改·心声历史列表] 历史视图、多选模式、确认删除弹窗样式。
    ========================================================================== */
+
+/* ===== [已修改·花体字体导入] Google Fonts Great Vibes ===== */
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');
 
 /* ===== [已修改·遮罩层] 心声面板遮罩层 - 使用 root 变量 ===== */
 .iv-overlay {
@@ -26,7 +32,7 @@
   visibility: visible;
 }
 
-/* ===== [已修改·面板主容器] ins 风格主面板 - 统一 root 变量 ===== */
+/* ===== [已修改·面板主容器] 游戏机风格主面板 - 统一 root 变量 ===== */
 .iv-panel {
   position: fixed;
   left: 50%;
@@ -36,11 +42,12 @@
   width: min(82vw, 320px);
   max-height: min(78vh, 560px);
   background: var(--c-white-rice);
-  border: 1px solid rgba(125, 90, 68, 0.10);
-  border-radius: 24px;
+  border: 2px solid var(--c-border);
+  border-radius: 18px;
   box-shadow:
     0 20px 48px rgba(74, 52, 42, 0.18),
-    0 2px 8px rgba(74, 52, 42, 0.06);
+    0 2px 8px rgba(74, 52, 42, 0.06),
+    inset 0 1px 0 rgba(255,255,255,0.6);
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.26s ease, transform 0.26s ease, visibility 0.26s ease;
@@ -56,23 +63,56 @@
   transform: translate(-50%, -50%) scale(1);
 }
 
-/* ===== [已修改·胶囊标签栏] ins 风格分段控件标签 ===== */
-.iv-tabs {
+/* ===== [已修改·面板顶部栏] 包含标签和历史按钮 ===== */
+.iv-panel-header {
   display: flex;
-  gap: 0;
+  align-items: center;
+  padding: 12px 12px 0 12px;
+  gap: 8px;
   flex-shrink: 0;
-  padding: 14px 16px 10px;
-  background: transparent;
-  border-bottom: none;
+}
+
+/* ===== [已修改·历史按钮] 面板右上角历史图标按钮 ===== */
+.iv-history-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--c-milktea-trans);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--c-text-main);
+  opacity: 0.7;
+  transition: opacity 0.2s, background 0.2s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.iv-history-btn:active {
+  opacity: 1;
+  background: var(--c-milktea);
+}
+.iv-history-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ===== [已修改·游戏机风格标签栏] 圆角凸起按钮分段控件 ===== */
+.iv-tabs {
+  flex: 1;
+  min-width: 0;
 }
 
 .iv-tabs__track {
   display: flex;
   width: 100%;
   background: var(--c-milktea-trans);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 3px;
   position: relative;
+  border: 1.5px solid var(--c-gray-light);
+  box-shadow: inset 0 2px 4px rgba(74, 52, 42, 0.06);
 }
 
 .iv-tab {
@@ -81,19 +121,20 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 0;
+  padding: 10px 0;
   text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
+  font-family: 'Great Vibes', cursive;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
   color: var(--c-text-main);
-  opacity: 0.52;
+  opacity: 0.48;
   border: none;
   background: transparent;
-  border-radius: 10px;
+  border-radius: 11px;
   cursor: pointer;
   position: relative;
-  transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: opacity 0.22s ease, background 0.22s ease, box-shadow 0.22s ease, transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   z-index: 1;
 }
@@ -107,12 +148,73 @@
 .iv-tab.is-active {
   opacity: 1;
   background: var(--c-white-rice);
-  box-shadow: 0 2px 8px rgba(74, 52, 42, 0.10), 0 0.5px 2px rgba(74, 52, 42, 0.06);
+  box-shadow:
+    0 3px 10px rgba(74, 52, 42, 0.13),
+    0 1px 3px rgba(74, 52, 42, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.8);
+  transform: translateY(-1px);
+  border: 1px solid var(--c-gray-light);
+}
+
+.iv-tab:not(.is-active):active {
+  transform: translateY(1px);
+  opacity: 0.6;
 }
 
 /* 移除旧的下划线样式 */
 .iv-tab.is-active::after {
   display: none;
+}
+
+/* ===== [已修改·多选工具栏] 标签下方多选/全选/删除按钮区域 ===== */
+.iv-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px 2px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.iv-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-text-main);
+  opacity: 0.65;
+  background: var(--c-milktea-trans);
+  border: 1px solid var(--c-gray-light);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.iv-toolbar-btn:active {
+  opacity: 1;
+  background: var(--c-milktea);
+}
+.iv-toolbar-btn.is-active {
+  opacity: 1;
+  background: var(--c-milktea);
+  border-color: var(--c-border);
+}
+.iv-toolbar-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.iv-toolbar-btn--danger {
+  color: #d9534f;
+  border-color: rgba(217,83,79,0.3);
+}
+.iv-toolbar-btn--danger:active {
+  background: rgba(217,83,79,0.12);
+}
+
+.iv-toolbar-spacer {
+  flex: 1;
 }
 
 /* ===== [已修改·标签页内容] ===== */
@@ -161,7 +263,7 @@
   white-space: pre-wrap;
 }
 
-/* ===== [已修改·心声独占大格子] ins 风格渐变背景 ===== */
+/* ===== [已修改·心声独占大格子] 渐变背景 ===== */
 .iv-voice-cell {
   border-color: var(--c-milktea);
   background: linear-gradient(135deg, rgba(255, 253, 248, 0.9) 0%, var(--c-milktea-trans) 100%);
@@ -257,7 +359,7 @@
   min-width: 2px;
 }
 
-/* 心调频率 - 暖红 */
+/* 心跳频率 - 暖红 */
 .iv-meter--heartbeat .iv-meter__fill {
   background: linear-gradient(90deg, #e8a598 0%, #d9735c 100%);
 }
@@ -301,6 +403,162 @@
 }
 .iv-tab-body::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ===== [已修改·心声历史列表] 历史条目卡片样式 ===== */
+.iv-history-list {
+  padding: 6px 0;
+}
+
+.iv-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--c-gray-light);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.72);
+  transition: background 0.15s;
+  position: relative;
+}
+
+.iv-history-item.is-selected {
+  background: var(--c-milktea-trans);
+  border-color: var(--c-milktea);
+}
+
+.iv-history-checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--c-gray-light);
+  border-radius: 6px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.iv-history-checkbox.is-checked {
+  border-color: var(--c-border);
+  background: var(--c-milktea);
+}
+.iv-history-checkbox svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.iv-history-checkbox.is-checked svg {
+  opacity: 1;
+}
+
+.iv-history-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.iv-history-voice {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-text-main);
+  font-style: italic;
+  word-break: break-word;
+  margin-bottom: 4px;
+}
+
+.iv-history-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  color: var(--c-border);
+  opacity: 0.7;
+}
+
+.iv-history-meta span {
+  white-space: nowrap;
+}
+
+/* ===== [已修改·确认删除弹窗] 应用内自定义弹窗 ===== */
+.iv-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(74, 52, 42, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+.iv-confirm-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.iv-confirm-dialog {
+  width: min(78vw, 280px);
+  background: var(--c-white-rice);
+  border: 1.5px solid var(--c-gray-light);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(74,52,42,0.2);
+  padding: 22px 20px 16px;
+  text-align: center;
+  transform: scale(0.92);
+  transition: transform 0.2s;
+}
+.iv-confirm-overlay.is-open .iv-confirm-dialog {
+  transform: scale(1);
+}
+
+.iv-confirm-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--c-text-main);
+  margin-bottom: 8px;
+}
+
+.iv-confirm-msg {
+  font-size: 13px;
+  color: var(--c-border);
+  line-height: 1.55;
+  margin-bottom: 18px;
+}
+
+.iv-confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.iv-confirm-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: 1.5px solid var(--c-gray-light);
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--c-white-rice);
+  color: var(--c-text-main);
+}
+.iv-confirm-btn:active {
+  opacity: 0.7;
+}
+.iv-confirm-btn--danger {
+  background: #d9534f;
+  color: #fff;
+  border-color: #d9534f;
+}
+.iv-confirm-btn--danger:active {
+  background: #c9302c;
 }
 
 /* ===== [已删除·暗色主题适配] 暗色主题段落已移除，统一使用 root 变量自动适配 ===== */

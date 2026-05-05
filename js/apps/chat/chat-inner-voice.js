@@ -5,22 +5,28 @@
  *       解析 AI 回复中的心声数据、渲染心声面板、处理头像点击事件。
  * 架构层: 应用层（闲谈子模块）
  *
- * [模块标注·心声面板JS] 整个文件为心声功能独立模块，方便后续针对性修改。
+ * [模块标注·已修改·心声面板JS] 整个文件为心声功能独立模块，方便后续针对性修改。
  */
 
-import { escapeHtml } from './chat-utils.js';
+import { dbGet, dbPut, escapeHtml } from './chat-utils.js';
 
 /* ==========================================================================
    [区域标注·已修改·心声面板] IconPark 图标
    说明：心声面板用到的图标统一使用 IconPark 风格 SVG。
    - heart: 心声标签图标（心形，来自 IconPark "like"）
-   - chart: 数据标签图标（图表，来自 IconPark "chart-line"）
+   - chart: Now 标签图标（图表，来自 IconPark "chart-line"）
    - empty: 空状态图标（对话气泡，来自 IconPark "message"）
+   - history: 历史按钮图标（来自 IconPark "history" 风格）
+   - multiSelect/check/delete: 心声历史多选删除图标（IconPark 风格）
    ========================================================================== */
 const IV_ICONS = {
   heart: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 42S6 30 6 17a9 9 0 0 1 18 0a9 9 0 0 1 18 0c0 13-18 25-18 25Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   chart: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 6v36h36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 34l8-12 8 6 12-18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  empty: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`
+  empty: `<svg viewBox="0 0 48 48" fill="none"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="21" r="2" fill="currentColor"/><circle cx="24" cy="21" r="2" fill="currentColor"/><circle cx="32" cy="21" r="2" fill="currentColor"/></svg>`,
+  history: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 8a16 16 0 1 1-14 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8v10h10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 16v10l7 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  multiSelect: `<svg viewBox="0 0 48 48" fill="none"><path d="M20 10h20v20H20V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M8 18v20h20" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 20l4 4l7-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  check: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 25l10 10l18-20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  delete: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 19v14M27 19v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -28,10 +34,80 @@ const IV_ICONS = {
    说明：
    1. AI 回复中使用 [心声]{json}[/心声] 包裹心声数据。
    2. 该标签在 buildAiReplyMessages 之前被提取并剥离，不显示在聊天气泡中。
-   3. 心声数据随消息对象的 innerVoice 字段写入 DB.js / IndexedDB。
+   3. 心声数据随消息对象的 innerVoice 字段写入 DB.js / IndexedDB，同时另存为独立心声历史。
    ========================================================================== */
 const INNER_VOICE_OPEN_TAG = '[心声]';
 const INNER_VOICE_CLOSE_TAG = '[/心声]';
+
+/* ==========================================================================
+   [区域标注·已修改·心声历史独立存储] IndexedDB 存储键与标准化
+   说明：
+   1. 心声历史独立保存在 DB.js / IndexedDB，不依赖 currentMessages。
+   2. 删除当前聊天消息/清空当前聊天记录不会删除心声历史。
+   3. 不使用 localStorage/sessionStorage，不写双份兜底存储。
+   ========================================================================== */
+const DATA_KEY_INNER_VOICE_HISTORY = (maskId, chatId) => `chat_inner_voice_history::${maskId || 'default'}::${chatId || 'none'}`;
+
+function normalizeInnerVoiceHistory(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list
+    .map(item => {
+      const data = normalizeInnerVoiceData(item?.innerVoice || item);
+      if (!data) return null;
+      return {
+        id: String(item?.id || `iv_${Number(item?.createdAt || Date.now())}_${Math.random().toString(16).slice(2)}`),
+        maskId: String(item?.maskId || ''),
+        chatId: String(item?.chatId || ''),
+        chatName: String(item?.chatName || ''),
+        messageId: String(item?.messageId || ''),
+        roundIndex: Math.max(1, Math.floor(Number(item?.roundIndex || 1)) || 1),
+        createdAt: Number(item?.createdAt || Date.now()) || Date.now(),
+        innerVoice: data
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+export async function loadInnerVoiceHistory(db, maskId, chatId) {
+  if (!db || !chatId) return [];
+  return normalizeInnerVoiceHistory(await dbGet(db, DATA_KEY_INNER_VOICE_HISTORY(maskId, chatId)));
+}
+
+async function persistInnerVoiceHistoryList(db, maskId, chatId, list) {
+  if (!db || !chatId) return;
+  await dbPut(db, DATA_KEY_INNER_VOICE_HISTORY(maskId, chatId), normalizeInnerVoiceHistory(list));
+}
+
+/* ==========================================================================
+   [区域标注·已修改·心声历史独立存储] 保存每轮生成的心声
+   说明：
+   1. 每次 AI 回复提取到心声后都追加到独立历史记录。
+   2. 该历史与聊天消息分离，删除聊天消息不会同步删除这里的数据。
+   3. 持久化只通过 DB.js / IndexedDB；不使用 localStorage/sessionStorage。
+   ========================================================================== */
+export async function persistInnerVoiceHistoryEntry(db, state, innerVoice, messageId = '') {
+  const data = normalizeInnerVoiceData(innerVoice);
+  if (!db || !state?.currentChatId || !data) return null;
+
+  const maskId = String(state.activeMaskId || '');
+  const chatId = String(state.currentChatId || '');
+  const session = (state.sessions || []).find(item => String(item.id) === chatId) || {};
+  const history = await loadInnerVoiceHistory(db, maskId, chatId);
+  const now = Date.now();
+  const entry = {
+    id: `iv_${now}_${Math.random().toString(16).slice(2)}`,
+    maskId,
+    chatId,
+    chatName: String(session.remark || session.name || ''),
+    messageId: String(messageId || ''),
+    roundIndex: history.length + 1,
+    createdAt: now,
+    innerVoice: data
+  };
+  await persistInnerVoiceHistoryList(db, maskId, chatId, [entry, ...history]);
+  return entry;
+}
 
 /* ==========================================================================
    [区域标注·已完成·心声面板] 解析 AI 原始回复中的心声 JSON
@@ -90,7 +166,7 @@ function parseInnerVoiceLoose(raw) {
     status: extract('状态') || extract('status'),
     action: extract('动作') || extract('action'),
     mood: extract('心情') || extract('mood'),
-    heartbeat: extractNum('心调频率') || extractNum('heartbeat') || extractNum('心跳'),
+    heartbeat: extractNum('心跳频率') || extractNum('心调频率') || extractNum('heartbeat') || extractNum('心跳'),
     jealousy: extractNum('醋意指数') || extractNum('jealousy') || extractNum('醋意'),
     affection: extractNum('好感度') || extractNum('affection') || extractNum('好感'),
     voice: extract('心声') || extract('voice') || extract('真实想法')
@@ -117,7 +193,7 @@ export function normalizeInnerVoiceData(raw) {
     status: clampStr(raw.status || raw.状态, 20),
     action: clampStr(raw.action || raw.动作, 50),
     mood: clampStr(raw.mood || raw.心情, 20),
-    heartbeat: clampNum(raw.heartbeat || raw.心调频率 || raw.心跳, 60, 180),
+    heartbeat: clampNum(raw.heartbeat || raw.心跳频率 || raw.心调频率 || raw.心跳, 60, 180),
     jealousy: clampNum(raw.jealousy || raw.醋意指数 || raw.醋意, 0, 100),
     affection: clampNum(raw.affection || raw.好感度 || raw.好感, 0, 100),
     voice: clampStr(raw.voice || raw.心声 || raw.真实想法, 100)
@@ -138,18 +214,16 @@ export function findInnerVoiceForMessage(messages, messageId) {
   const targetIndex = messages.findIndex(m => String(m?.id || '') === targetId);
   if (targetIndex < 0) return null;
 
-  // 向前找到这一轮 AI 回复的开始位置
   let roundStart = targetIndex;
   while (roundStart > 0 && messages[roundStart - 1]?.role === 'assistant') {
     roundStart--;
   }
-  // 向后找到这一轮 AI 回复的结束位置
+
   let roundEnd = targetIndex;
   while (roundEnd < messages.length - 1 && messages[roundEnd + 1]?.role === 'assistant') {
     roundEnd++;
   }
 
-  // 在这一轮中查找携带 innerVoice 的消息
   for (let i = roundEnd; i >= roundStart; i--) {
     const msg = messages[i];
     if (msg?.innerVoice && typeof msg.innerVoice === 'object') {
@@ -174,12 +248,19 @@ export function findLatestInnerVoice(messages) {
   return null;
 }
 
+function formatHistoryTime(ts) {
+  const d = new Date(Number(ts || Date.now()));
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /* ==========================================================================
    [区域标注·已修改·心声面板] 渲染心声面板 HTML
    说明：
-   1. 两个标签页："心声"（心声独占大板块）和"数据"（状态、动作、心情、进度条）。
-   2. ins 风格胶囊分段控件标签栏，每个标签带 IconPark 图标。
-   3. 不设关闭按钮，点击面板外遮罩区域自动关闭。
+   1. 两个标签页显示为英文花体字："Voice" 和 "Now"（"数据"仅改面板显示为"Now"）。
+   2. 标签栏为游戏机风格分段控件，每个标签带 IconPark 图标。
+   3. 面板右上角提供"历史"图标按钮；标签下方提供"多选"按钮。
+   4. 不设关闭按钮，点击面板外遮罩区域自动关闭。
    ========================================================================== */
 export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
   if (!innerVoice) {
@@ -192,29 +273,33 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
   const isVoiceTab = activeTab === 'voice';
   const isDataTab = activeTab === 'data';
 
-  // 心调频率进度条：60-180 bpm 映射到 0-100%
+  // 心跳频率进度条：60-180 bpm 映射到 0-100%
   const heartbeatPercent = Math.round(((data.heartbeat - 60) / 120) * 100);
   const heartbeatWidth = Math.max(2, Math.min(100, heartbeatPercent));
 
   return `
-    <div class="iv-panel is-open" data-role="iv-panel">
-      <div class="iv-tabs">
-        <div class="iv-tabs__track">
-          <button class="iv-tab ${isVoiceTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}心声</button>
-          <button class="iv-tab ${isDataTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}数据</button>
+    <div class="iv-panel is-open" data-role="iv-panel" data-iv-view="current">
+      <div class="iv-panel-header">
+        <div class="iv-tabs">
+          <div class="iv-tabs__track">
+            <button class="iv-tab ${isVoiceTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}Voice</button>
+            <button class="iv-tab ${isDataTab ? 'is-active' : ''}" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}Now</button>
+          </div>
         </div>
+        <button class="iv-history-btn" data-action="iv-show-history" type="button" aria-label="心声历史">${IV_ICONS.history}</button>
+      </div>
+      <div class="iv-toolbar" data-role="iv-toolbar">
+        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>多选</span></button>
+        <span class="iv-toolbar-spacer"></span>
       </div>
       <div class="iv-tab-body">
-        <!-- ===== 心声标签页 ===== -->
         <div class="iv-tab-page ${isVoiceTab ? 'is-active' : ''}" data-iv-page="voice">
           <div class="iv-cell iv-voice-cell">
             <span class="iv-cell__label">INNER VOICE</span>
             <div class="iv-cell__text">${escapeHtml(data.voice || '……')}</div>
           </div>
         </div>
-        <!-- ===== 数据标签页 ===== -->
         <div class="iv-tab-page ${isDataTab ? 'is-active' : ''}" data-iv-page="data">
-          <!-- 状态 + 心情：两列分镜 -->
           <div class="iv-grid-row">
             <div class="iv-cell">
               <span class="iv-cell__label">STATUS</span>
@@ -225,17 +310,15 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
               <div class="iv-cell__text">${escapeHtml(data.mood || '……')}</div>
             </div>
           </div>
-          <!-- 动作：宽格子 -->
           <div class="iv-cell iv-action-cell">
             <span class="iv-cell__label">ACTION</span>
             <div class="iv-cell__text">${escapeHtml(data.action || '……')}</div>
           </div>
-          <!-- 三个进度条 -->
           <div class="iv-meters">
             <span class="iv-cell__label">METERS</span>
             <div class="iv-meter iv-meter--heartbeat">
               <div class="iv-meter__header">
-                <span class="iv-meter__name">心调频率</span>
+                <span class="iv-meter__name">心跳频率</span>
                 <span class="iv-meter__value">${data.heartbeat} bpm</span>
               </div>
               <div class="iv-meter__bar">
@@ -269,16 +352,23 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice') {
 
 /* ==========================================================================
    [区域标注·已修改·心声面板] 空状态面板
-   说明：与主面板保持一致的 ins 风格胶囊分段控件标签。
+   说明：与主面板保持一致的游戏机风格英文花体标签。
    ========================================================================== */
 function renderEmptyInnerVoicePanel() {
   return `
-    <div class="iv-panel is-open" data-role="iv-panel">
-      <div class="iv-tabs">
-        <div class="iv-tabs__track">
-          <button class="iv-tab is-active" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}心声</button>
-          <button class="iv-tab" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}数据</button>
+    <div class="iv-panel is-open" data-role="iv-panel" data-iv-view="current">
+      <div class="iv-panel-header">
+        <div class="iv-tabs">
+          <div class="iv-tabs__track">
+            <button class="iv-tab is-active" data-action="iv-switch-tab" data-iv-tab="voice" type="button">${IV_ICONS.heart}Voice</button>
+            <button class="iv-tab" data-action="iv-switch-tab" data-iv-tab="data" type="button">${IV_ICONS.chart}Now</button>
+          </div>
         </div>
+        <button class="iv-history-btn" data-action="iv-show-history" type="button" aria-label="心声历史">${IV_ICONS.history}</button>
+      </div>
+      <div class="iv-toolbar" data-role="iv-toolbar">
+        <button class="iv-toolbar-btn" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>多选</span></button>
+        <span class="iv-toolbar-spacer"></span>
       </div>
       <div class="iv-tab-body">
         <div class="iv-tab-page is-active" data-iv-page="voice">
@@ -299,36 +389,211 @@ function renderEmptyInnerVoicePanel() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 打开心声面板
+   [区域标注·已修改·心声历史视图] 渲染历史列表
+   说明：历史视图用于观看过往心声，并支持进入多选/全选/删除。
+   ========================================================================== */
+function renderInnerVoiceHistoryPanel(history = [], options = {}) {
+  const multiMode = Boolean(options.multiMode);
+  const selectedIds = new Set(Array.isArray(options.selectedIds) ? options.selectedIds.map(String) : []);
+  const items = normalizeInnerVoiceHistory(history);
+  const allSelected = items.length > 0 && items.every(item => selectedIds.has(String(item.id)));
+
+  return `
+    <div class="iv-panel is-open" data-role="iv-panel" data-iv-view="history" data-iv-multi="${multiMode ? '1' : '0'}">
+      <div class="iv-panel-header">
+        <div class="iv-tabs">
+          <div class="iv-tabs__track">
+            <button class="iv-tab is-active" data-action="iv-show-current" type="button">${IV_ICONS.heart}Voice</button>
+            <button class="iv-tab" data-action="iv-show-current" type="button">${IV_ICONS.chart}Now</button>
+          </div>
+        </div>
+        <button class="iv-history-btn is-active" data-action="iv-show-current" type="button" aria-label="返回当前心声">${IV_ICONS.history}</button>
+      </div>
+      <div class="iv-toolbar" data-role="iv-toolbar">
+        <button class="iv-toolbar-btn ${multiMode ? 'is-active' : ''}" data-action="iv-toggle-multi" type="button">${IV_ICONS.multiSelect}<span>${multiMode ? '取消' : '多选'}</span></button>
+        ${multiMode ? `
+          <button class="iv-toolbar-btn" data-action="iv-select-all" type="button">${IV_ICONS.check}<span>${allSelected ? '取消全选' : '全选'}</span></button>
+          <span class="iv-toolbar-spacer"></span>
+          <button class="iv-toolbar-btn iv-toolbar-btn--danger" data-action="iv-open-delete-confirm" type="button" ${selectedIds.size ? '' : 'disabled'}>${IV_ICONS.delete}<span>删除${selectedIds.size ? ` ${selectedIds.size}` : ''}</span></button>
+        ` : `<span class="iv-toolbar-spacer"></span>`}
+      </div>
+      <div class="iv-tab-body">
+        <div class="iv-tab-page is-active">
+          ${items.length ? `
+            <div class="iv-history-list" data-role="iv-history-list">
+              ${items.map(item => {
+                const data = normalizeInnerVoiceData(item.innerVoice);
+                const selected = selectedIds.has(String(item.id));
+                return `
+                  <button class="iv-history-item ${selected ? 'is-selected' : ''}"
+                          data-action="${multiMode ? 'iv-toggle-history-item' : 'iv-view-history-item'}"
+                          data-iv-history-id="${escapeHtml(item.id)}"
+                          type="button">
+                    ${multiMode ? `
+                      <span class="iv-history-checkbox ${selected ? 'is-checked' : ''}">
+                        ${IV_ICONS.check}
+                      </span>
+                    ` : ''}
+                    <span class="iv-history-content">
+                      <span class="iv-history-voice">${escapeHtml(data?.voice || '……')}</span>
+                      <span class="iv-history-meta">
+                        <span>#${Number(item.roundIndex || 1)}</span>
+                        <span>${escapeHtml(formatHistoryTime(item.createdAt))}</span>
+                        <span>心跳 ${Number(data?.heartbeat || 0)} bpm</span>
+                      </span>
+                    </span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          ` : `
+            <div class="iv-empty">
+              <span class="iv-empty__icon">${IV_ICONS.empty}</span>
+              暂无心声历史<br>每轮 AI 回复生成后会自动保存在这里
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderInnerVoiceDeleteConfirm(count = 0) {
+  return `
+    <div class="iv-confirm-overlay is-open" data-role="iv-confirm-overlay">
+      <div class="iv-confirm-dialog">
+        <div class="iv-confirm-title">确认删除心声历史</div>
+        <div class="iv-confirm-msg">将删除已选中的 ${Number(count || 0)} 条心声历史。删除后不可恢复。</div>
+        <div class="iv-confirm-actions">
+          <button class="iv-confirm-btn" data-action="iv-close-delete-confirm" type="button">取消</button>
+          <button class="iv-confirm-btn iv-confirm-btn--danger" data-action="iv-confirm-delete-history" type="button">确认删除</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注·已修改·心声面板] 打开心声面板
    说明：
    1. 在聊天消息页容器中插入遮罩层 + 面板 DOM。
    2. 点击遮罩层自动关闭面板（不设关闭按钮）。
-   3. 标签页切换由 handleInnerVoicePanelClick 处理。
+   3. 标签切换、历史、多选、全选、删除确认均在本模块内部处理。
+   4. 心声历史只读写 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
    ========================================================================== */
-export function openInnerVoicePanel(container, innerVoice) {
-  // 先关闭已有面板
+export function openInnerVoicePanel(container, innerVoice, options = {}) {
   closeInnerVoicePanel(container);
 
   const overlay = document.createElement('div');
   overlay.className = 'iv-overlay is-open';
   overlay.dataset.role = 'iv-overlay';
+  overlay.__ivState = {
+    innerVoice: normalizeInnerVoiceData(innerVoice),
+    db: options.db || null,
+    maskId: String(options.maskId || ''),
+    chatId: String(options.chatId || ''),
+    history: [],
+    multiMode: false,
+    selectedIds: []
+  };
 
   overlay.innerHTML = renderInnerVoicePanel(innerVoice, 'voice');
 
-  // 点击遮罩层（非面板区域）关闭
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener('click', async (e) => {
     if (e.target === overlay) {
       closeInnerVoicePanel(container);
+      return;
     }
-  });
 
-  // 标签页切换
-  overlay.addEventListener('click', (e) => {
-    const tabBtn = e.target.closest('[data-action="iv-switch-tab"]');
-    if (!tabBtn) return;
+    const target = e.target.closest('[data-action]');
+    if (!target || !overlay.contains(target)) return;
+
+    const action = String(target.dataset.action || '');
+    if (!action.startsWith('iv-')) return;
+
+    e.preventDefault();
     e.stopPropagation();
-    const tabId = String(tabBtn.dataset.ivTab || 'voice');
-    switchInnerVoiceTab(overlay, tabId);
+
+    const ivState = overlay.__ivState || {};
+    if (action === 'iv-switch-tab') {
+      switchInnerVoiceTab(overlay, String(target.dataset.ivTab || 'voice'));
+      return;
+    }
+
+    if (action === 'iv-show-history') {
+      ivState.history = await loadInnerVoiceHistory(ivState.db, ivState.maskId, ivState.chatId);
+      ivState.multiMode = false;
+      ivState.selectedIds = [];
+      overlay.innerHTML = renderInnerVoiceHistoryPanel(ivState.history, ivState);
+      return;
+    }
+
+    if (action === 'iv-show-current') {
+      ivState.multiMode = false;
+      ivState.selectedIds = [];
+      overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice');
+      return;
+    }
+
+    if (action === 'iv-toggle-multi') {
+      ivState.history = await loadInnerVoiceHistory(ivState.db, ivState.maskId, ivState.chatId);
+      ivState.multiMode = !ivState.multiMode;
+      ivState.selectedIds = [];
+      overlay.innerHTML = renderInnerVoiceHistoryPanel(ivState.history, ivState);
+      return;
+    }
+
+    if (action === 'iv-select-all') {
+      const ids = normalizeInnerVoiceHistory(ivState.history).map(item => String(item.id));
+      const selected = new Set((ivState.selectedIds || []).map(String));
+      const allSelected = ids.length > 0 && ids.every(id => selected.has(id));
+      ivState.selectedIds = allSelected ? [] : ids;
+      overlay.innerHTML = renderInnerVoiceHistoryPanel(ivState.history, ivState);
+      return;
+    }
+
+    if (action === 'iv-toggle-history-item') {
+      const id = String(target.dataset.ivHistoryId || '');
+      const selected = new Set((ivState.selectedIds || []).map(String));
+      selected.has(id) ? selected.delete(id) : selected.add(id);
+      ivState.selectedIds = Array.from(selected);
+      overlay.innerHTML = renderInnerVoiceHistoryPanel(ivState.history, ivState);
+      return;
+    }
+
+    if (action === 'iv-view-history-item') {
+      const id = String(target.dataset.ivHistoryId || '');
+      const entry = normalizeInnerVoiceHistory(ivState.history).find(item => String(item.id) === id);
+      if (entry?.innerVoice) {
+        ivState.innerVoice = normalizeInnerVoiceData(entry.innerVoice);
+        ivState.multiMode = false;
+        ivState.selectedIds = [];
+        overlay.innerHTML = renderInnerVoicePanel(ivState.innerVoice, 'voice');
+      }
+      return;
+    }
+
+    if (action === 'iv-open-delete-confirm') {
+      const count = (ivState.selectedIds || []).length;
+      if (!count) return;
+      overlay.insertAdjacentHTML('beforeend', renderInnerVoiceDeleteConfirm(count));
+      return;
+    }
+
+    if (action === 'iv-close-delete-confirm') {
+      overlay.querySelector('[data-role="iv-confirm-overlay"]')?.remove();
+      return;
+    }
+
+    if (action === 'iv-confirm-delete-history') {
+      const selected = new Set((ivState.selectedIds || []).map(String));
+      const nextHistory = normalizeInnerVoiceHistory(ivState.history).filter(item => !selected.has(String(item.id)));
+      await persistInnerVoiceHistoryList(ivState.db, ivState.maskId, ivState.chatId, nextHistory);
+      ivState.history = nextHistory;
+      ivState.selectedIds = [];
+      ivState.multiMode = false;
+      overlay.innerHTML = renderInnerVoiceHistoryPanel(ivState.history, ivState);
+    }
   });
 
   container.appendChild(overlay);
@@ -343,7 +608,6 @@ export function closeInnerVoicePanel(container) {
   overlay.classList.remove('is-open');
   const panel = overlay.querySelector('[data-role="iv-panel"]');
   if (panel) panel.classList.remove('is-open');
-  // 动画结束后移除 DOM
   setTimeout(() => overlay.remove(), 250);
 }
 
@@ -399,9 +663,7 @@ export function isAssistantAvatarClick(target) {
   if (!target) return false;
   const avatar = target.closest('.msg-bubble__avatar');
   if (!avatar) return false;
-  // 用户头像带有 --user 修饰符
   if (avatar.classList.contains('msg-bubble__avatar--user')) return false;
-  // 确认所在行是左侧（非用户）
   const row = avatar.closest('.msg-bubble-row');
   if (!row) return false;
   return row.classList.contains('msg-bubble-row--left');

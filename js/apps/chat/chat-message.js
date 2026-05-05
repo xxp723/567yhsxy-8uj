@@ -31,7 +31,10 @@ import {
    2. 提取到的心声数据挂到本轮最后一条 AI 消息的 innerVoice 字段，随 currentMessages 写入 DB.js / IndexedDB。
    3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
-import { extractInnerVoiceFromRawText } from './chat-inner-voice.js';
+import {
+  extractInnerVoiceFromRawText,
+  persistInnerVoiceHistoryEntry
+} from './chat-inner-voice.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -1615,20 +1618,26 @@ export async function sendMessage(container, state, db, content, settingsManager
     session.lastTime = Date.now();
 
     /* ========================================================================
-       [区域标注·已完成·心声面板集成] 将心声数据挂到本轮最后一条 AI 消息
+       [区域标注·已修改·心声每轮生成与独立历史] 保存本轮心声
        说明：
-       1. 心声数据挂在本轮最后一条 assistant 消息的 innerVoice 字段上。
-       2. 随 currentMessages 写入 DB.js / IndexedDB，下次打开同一聊天可继续查看。
-       3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       1. 心声仍挂到本轮最后一条 assistant 消息的 innerVoice 字段，供点击当前气泡头像直接查看。
+       2. 同时追加写入独立心声历史键 chat_inner_voice_history::*（DB.js / IndexedDB），因此删除/清空当前聊天消息不会删除心声历史。
+       3. 下一轮发给 AI 的 history/currentUserRoundMessages 不包含 innerVoice 字段；心声仅供用户点开面板观看。
+       4. 不使用 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
        ======================================================================== */
     if (extractedInnerVoice) {
+      let innerVoiceMessageId = '';
       for (let i = state.currentMessages.length - 1; i >= 0; i--) {
         if (state.currentMessages[i]?.role === 'assistant') {
           state.currentMessages[i].innerVoice = extractedInnerVoice;
+          innerVoiceMessageId = String(state.currentMessages[i]?.id || '');
           break;
         }
       }
-      await persistCurrentMessages(state, db);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        persistInnerVoiceHistoryEntry(db, state, extractedInnerVoice, innerVoiceMessageId)
+      ]);
     }
   } catch (error) {
     appendChatConsoleRuntimeLog(state, 'error', `API 调用失败：${error?.message || '未知错误'}`);

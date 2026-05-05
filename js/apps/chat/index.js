@@ -1139,7 +1139,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       ? findInnerVoiceForMessage(messages, messageId)
       : findLatestInnerVoice(messages);
     if (innerVoice) {
-      openInnerVoicePanel(container, innerVoice);
+      openInnerVoicePanel(container, innerVoice, {
+        db,
+        maskId: state.activeMaskId,
+        chatId: state.currentChatId
+      });
     }
     return;
   }
