@@ -14,6 +14,11 @@ import {
   getChatImageApiSettings
 } from './chat-image-generation.js';
 import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
+/* ==========================================================================
+   [区域标注·已完成·心声面板] 导入心声系统提示词构建函数
+   说明：心声模块独立于 chat-inner-voice.js，这里只导入提示词构建函数。
+   ========================================================================== */
+import { buildInnerVoiceSystemPrompt } from './chat-inner-voice.js';
 
 /* ==========================================================================
    [区域标注] API 服务商基础信息
@@ -1525,6 +1530,9 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 END ===== */
+    /* ===== 闲谈应用：心声协议提示词注入 START ===== */
+    buildInnerVoiceSystemPrompt(),
+    /* ===== 闲谈应用：心声协议提示词注入 END ===== */
     getThinkingInstruction({ settings: normalizedSettings })
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
 }

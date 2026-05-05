@@ -24,6 +24,14 @@ import {
   extractHtmlCardProtocolBlocks,
   sanitizeHtmlCardDocumentForSrcdoc
 } from './chat-html-card.js';
+/* ==========================================================================
+   [区域标注·已完成·心声面板集成] 导入心声模块提取函数
+   说明：
+   1. extractInnerVoiceFromRawText 从 AI 原始回复中提取 [心声]{json}[/心声] 并返回清理后文本。
+   2. 提取到的心声数据挂到本轮最后一条 AI 消息的 innerVoice 字段，随 currentMessages 写入 DB.js / IndexedDB。
+   3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+import { extractInnerVoiceFromRawText } from './chat-inner-voice.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -1500,7 +1508,21 @@ export async function sendMessage(container, state, db, content, settingsManager
       stickerData: state.stickerData
     });
 
-    const rawAiText = result?.rawText || result?.text || '';
+    const rawAiTextOriginal = result?.rawText || result?.text || '';
+
+    /* ========================================================================
+       [区域标注·已完成·心声面板集成] 从 AI 原始回复中提取心声数据
+       说明：
+       1. extractInnerVoiceFromRawText 提取 [心声]{json}[/心声] 并返回去掉心声标签后的纯文本。
+       2. 提取到的 innerVoice 对象会挂到本轮最后一条 AI 消息的 innerVoice 字段，随 currentMessages 写入 DB.js / IndexedDB。
+       3. cleanedText 作为后续 buildAiReplyMessages 的输入，确保心声 JSON 不会以纯文本气泡显示在聊天界面。
+       4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       ======================================================================== */
+    const { innerVoice: extractedInnerVoice, cleanedText: rawAiText } = extractInnerVoiceFromRawText(rawAiTextOriginal);
+    if (extractedInnerVoice) {
+      appendChatConsoleRuntimeLog(state, 'info', `心声数据已提取：好感=${extractedInnerVoice.affection}%，醋意=${extractedInnerVoice.jealousy}%，心跳=${extractedInnerVoice.heartbeat}bpm`);
+    }
+
     if (!String(rawAiText || '').trim()) {
       appendChatConsoleRuntimeLog(state, 'warn', 'AI 返回为空文本');
     } else {
@@ -1591,6 +1613,23 @@ export async function sendMessage(container, state, db, content, settingsManager
               ? `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`
               : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）')));
     session.lastTime = Date.now();
+
+    /* ========================================================================
+       [区域标注·已完成·心声面板集成] 将心声数据挂到本轮最后一条 AI 消息
+       说明：
+       1. 心声数据挂在本轮最后一条 assistant 消息的 innerVoice 字段上。
+       2. 随 currentMessages 写入 DB.js / IndexedDB，下次打开同一聊天可继续查看。
+       3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       ======================================================================== */
+    if (extractedInnerVoice) {
+      for (let i = state.currentMessages.length - 1; i >= 0; i--) {
+        if (state.currentMessages[i]?.role === 'assistant') {
+          state.currentMessages[i].innerVoice = extractedInnerVoice;
+          break;
+        }
+      }
+      await persistCurrentMessages(state, db);
+    }
   } catch (error) {
     appendChatConsoleRuntimeLog(state, 'error', `API 调用失败：${error?.message || '未知错误'}`);
     state.currentMessages.push({

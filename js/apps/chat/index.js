@@ -135,6 +135,17 @@ import {
   formatWalletMoney
 } from './profile.js';
 import { renderMoments } from './moments.js';
+/* ==========================================================================
+   [区域标注·已完成·心声面板] 导入心声面板模块
+   说明：心声面板独立模块，提供面板打开/关闭、心声数据查找等功能。
+   ========================================================================== */
+import {
+  openInnerVoicePanel,
+  findInnerVoiceForMessage,
+  findLatestInnerVoice,
+  isAssistantAvatarClick,
+  getMessageIdFromAvatarClick
+} from './chat-inner-voice.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
@@ -357,7 +368,12 @@ export async function mount(container, context) {
        2. 挂载阶段与聊天主样式并行预加载，减少首次出现卡片时的未样式化闪屏。
        3. 仅服务本次 HTML 卡片功能，不改其它聊天功能样式加载逻辑。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-html-card.css', 'chat-html-card-css')
+    loadCSS('./js/apps/chat/chat-html-card.css', 'chat-html-card-css'),
+    /* ======================================================================
+       [区域标注·已完成·心声面板] 加载心声面板 CSS
+       说明：与聊天主样式并行预加载，避免首次打开心声面板时的未样式化闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-inner-voice.css', 'chat-inner-voice-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -1106,6 +1122,28 @@ async function handleHtmlCardInteraction(e, state, container, db) {
    说明：统一处理应用内所有按钮/列表项的点击事件
    ========================================================================== */
 async function handleClick(e, state, container, db, eventBus, windowManager, appMeta, settingsManager) {
+  /* ========================================================================
+     [区域标注·已完成·心声面板] 角色头像点击事件委托 —— 打开心声面板
+     说明：
+     1. 使用事件委托而非逐个绑定 addEventListener，避免头像更新时重复绑定。
+     2. 单击左侧（AI 角色）头像，弹出心声面板。
+     3. 优先查找该消息所在轮次的心声数据，若无则查找最新心声。
+     4. 心声面板不设关闭按钮，点击面板外区域自动关闭。
+     ======================================================================== */
+  if (state.currentChatId && isAssistantAvatarClick(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    const messageId = getMessageIdFromAvatarClick(e.target);
+    const messages = state.currentMessages || [];
+    const innerVoice = messageId
+      ? findInnerVoiceForMessage(messages, messageId)
+      : findLatestInnerVoice(messages);
+    if (innerVoice) {
+      openInnerVoicePanel(container, innerVoice);
+    }
+    return;
+  }
+
   const target = e.target.closest('[data-action]');
 
   /* ========================================================================
