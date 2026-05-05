@@ -2789,46 +2789,26 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ==========================================================================
-       [HTML卡片收藏跳转校验]
+       [区域标注·已完成·HTML卡片收藏页封面/页内放大]
        说明：
-       1. 收藏页 HTML 卡片点击后，先从 DB.js / IndexedDB 读取原会话消息并校验来源。
-       2. 原会话、原 HTML 卡片消息，或收藏时记录的卡片附近消息任一缺失时，只显示应用内提示，不跳转。
-       3. 校验通过后再关闭收藏子页面、打开原聊天页并定位原 HTML 卡片；已收藏卡片本身不会被删除。
+       1. 收藏页 HTML 固定分组中的 HTML 卡片，单击标题封面后只在当前收藏页面内放大 iframe 内容。
+       2. 不跳转聊天来源、不打开弹窗、不显示关闭按钮；再次点击页面内非放大内容区域关闭。
+       3. 仅切换运行时 DOM class，不读写 IndexedDB，不使用 localStorage/sessionStorage。
        ========================================================================== */
-    case 'jump-to-html-card-source': {
-      const sourceChatId = String(target.dataset.sourceChatId || '').trim();
-      const sourceMessageId = String(target.dataset.sourceMessageId || '').trim();
-      if (!sourceChatId || !sourceMessageId) {
-        renderModalNotice(container, '该收藏缺少来源信息，无法跳转');
-        break;
-      }
+    case 'toggle-favorite-html-card-zoom': {
+      if (state.subPageView !== 'favorite') break;
 
-      const sourceSession = state.sessions.find(s => String(s.id) === sourceChatId);
-      if (!sourceSession) {
-        renderModalNotice(container, '原聊天会话已不存在，无法跳转');
-        break;
-      }
+      const card = target.closest('.favorite-html-card');
+      if (!card) break;
 
-      const data = normalizeFavoriteData(state.favoriteData);
-      const favoriteId = String(target.dataset.favoriteId || '').trim();
-      const favoriteItem = data.items.find(item => String(item.id) === favoriteId);
-      const requiredMessageIds = Array.from(new Set([
-        sourceMessageId,
-        ...(Array.isArray(favoriteItem?.sourceContextMessageIds) ? favoriteItem.sourceContextMessageIds.map(String) : [])
-      ].map(id => String(id || '').trim()).filter(Boolean)));
+      e.preventDefault();
+      e.stopPropagation();
 
-      const sourceMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + sourceChatId)) || [];
-      const sourceMessageIds = new Set(sourceMessages.map(message => String(message.id || '')));
-      const canJump = requiredMessageIds.every(id => sourceMessageIds.has(id));
-
-      if (!canJump) {
-        renderModalNotice(container, '原 HTML 卡片或附近消息已被删除，无法跳转');
-        break;
-      }
-
-      closeSubPage(container, state);
-      await openChatMessage(container, state, db, sourceChatId);
-      setTimeout(() => scrollToChatSearchResult(container, sourceMessageId), 120);
+      const isExpanded = card.classList.contains('is-expanded');
+      container.querySelectorAll('.favorite-html-card.is-expanded').forEach(item => {
+        if (item !== card) item.classList.remove('is-expanded');
+      });
+      card.classList.toggle('is-expanded', !isExpanded);
       break;
     }
 

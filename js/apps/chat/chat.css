@@ -3055,16 +3055,16 @@
 }
 
 /* ==========================================================================
-   [已完成·HTML卡片收藏] 收藏页 HTML 卡片展示样式
+   [区域标注·已完成·HTML卡片收藏页封面/页内放大样式]
    说明：
-   1. 用于收藏独立页 html 固定分组下 favoriteKind='html-card' 的卡片渲染。
-   2. 卡片内嵌 iframe srcdoc 原样展示 HTML 内容，高度受限并隐藏溢出。
-   3. iframe 上层覆盖透明点击层，用于捕获跳转点击而不被 iframe 吞掉。
-   4. 色彩、圆角、阴影与现有收藏卡片保持一致。
+   1. 收藏独立页 html 固定分组下的 HTML 卡片默认只显示标题封面。
+   2. 单击后在当前页面内展开，仅显示卡片正文预览区，不使用弹窗、不显示关闭按钮。
+   3. 再次点击非展开内容区域时，由 index.js 切回封面态。
+   4. 保持与收藏页现有圆角、阴影、字体和主题色统一。
    ========================================================================== */
 .favorite-html-card {
   min-width: 0;
-  min-height: 148px;
+  min-height: 112px;
   border: 1px solid rgba(74, 52, 42, 0.08);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.68);
@@ -3078,11 +3078,17 @@
   position: relative;
   box-shadow: 0 6px 16px rgba(74, 52, 42, 0.055);
   overflow: hidden;
-  transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transform-origin: center center;
+  transition:
+    transform 0.14s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    min-height 0.18s ease;
 }
 
 .favorite-html-card:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
   background: rgba(255, 250, 244, 0.94);
 }
 
@@ -3092,60 +3098,72 @@
   box-shadow: 0 0 0 2px rgba(74, 52, 42, 0.08);
 }
 
-.favorite-html-card__header {
-  flex-shrink: 0;
-  padding: 10px 12px 6px 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.favorite-html-card.is-expanded {
+  grid-column: 1 / -1;
+  min-height: min(72vh, 520px);
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(74, 52, 42, 0.12);
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.11);
 }
 
-.favorite-html-card__badge {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 8px;
-  background: rgba(74, 52, 42, 0.09);
-  color: rgba(74, 52, 42, 0.68);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  flex-shrink: 0;
+.favorite-html-card__cover {
+  flex: 1;
+  min-height: 112px;
+  padding: 14px 12px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 250, 244, 0.08) 100%),
+    rgba(255, 255, 255, 0.18);
 }
 
 .favorite-html-card__title {
-  flex: 1;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
   color: #4A342A;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-.favorite-html-card__frame-wrap {
+.favorite-html-card__hint {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(74, 52, 42, 0.48);
+  letter-spacing: 0.2px;
+}
+
+.favorite-html-card__zoom {
+  display: none;
   flex: 1;
   min-height: 0;
-  position: relative;
-  overflow: hidden;
-  border-radius: 0 0 18px 18px;
+  border-top: 1px solid rgba(74, 52, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
 }
 
-.favorite-html-card__frame {
+.favorite-html-card.is-expanded .favorite-html-card__cover {
+  display: none;
+}
+
+.favorite-html-card.is-expanded .favorite-html-card__zoom {
+  display: block;
+}
+
+.favorite-html-card__iframe {
   display: block;
   width: 100%;
-  height: 120px;
+  height: 100%;
+  min-height: min(72vh, 520px);
   border: none;
-  pointer-events: none;
   background: #fff;
-}
-
-.favorite-html-card__click-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  cursor: pointer;
-  background: transparent;
+  pointer-events: auto;
 }
 
 .favorite-html-card__check {

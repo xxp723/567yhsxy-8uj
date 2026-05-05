@@ -1057,17 +1057,34 @@ export function renderFavoriteSubPage(state) {
             ${group.id !== 'all' && group.id !== 'html' ? 'data-long-press-action="delete-favorite-group"' : ''}
             type="button">${escapeHtml(group.name)}</button>
   `).join('');
-  /* [已完成·HTML卡片收藏] 区分普通收藏卡片 vs HTML 卡片收藏渲染 */
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片收藏页封面/页内放大]
+     说明：
+     1. HTML 固定分组中的收藏卡片默认只显示卡片标题封面，避免 iframe 缩略图挤压变形。
+     2. 单击封面后在收藏页面内放大 HTML 卡片内容；不使用弹窗、不显示关闭按钮。
+     3. 关闭由 index.js 监听“放大内容外的页面区域”完成，仍只改运行时 DOM，不写持久化。
+     ======================================================================== */
   const isHtmlGroup = String(data.activeGroupId || 'all') === 'html';
   const cardsHtml = items.length ? items.map(item => {
-    /* [已完成·HTML卡片收藏] HTML 卡片用 iframe 渲染，普通卡片沿用原逻辑 */
+    /* [区域标注·已完成·HTML卡片收藏页封面/页内放大] HTML 卡片标题封面 + 页面内 iframe 放大内容 */
     if (isHtmlGroup && item.favoriteKind === 'html-card') {
       const safeSrcdoc = sanitizeHtmlCardDocumentForSrcdoc(item.cardHtml || '');
+      const safeTitle = escapeHtml(item.cardTitle || item.name || 'HTML 卡片');
       return `
-        <div class="favorite-html-card" data-action="jump-to-html-card-source" data-favorite-id="${escapeHtml(item.id)}" data-source-chat-id="${escapeHtml(item.sourceChatId || '')}" data-source-message-id="${escapeHtml(item.sourceMessageId || '')}">
-          <div class="favorite-html-card__title">${escapeHtml(item.cardTitle || item.name || 'HTML 卡片')}</div>
-          <iframe class="favorite-html-card__iframe" sandbox="allow-scripts" srcdoc="${escapeHtml(safeSrcdoc)}"></iframe>
-          <div class="favorite-html-card__time">${new Date(item.createdAt || Date.now()).toLocaleString()}</div>
+        <!-- [区域标注·已完成·HTML卡片收藏页封面/页内放大] ${safeTitle} -->
+        <div class="favorite-html-card"
+             data-action="toggle-favorite-html-card-zoom"
+             data-favorite-id="${escapeHtml(item.id)}">
+          <div class="favorite-html-card__cover">
+            <div class="favorite-html-card__title">${safeTitle}</div>
+            <div class="favorite-html-card__hint">单击放大查看</div>
+          </div>
+          <div class="favorite-html-card__zoom" data-role="favorite-html-card-zoom-panel">
+            <iframe class="favorite-html-card__iframe"
+                    sandbox="allow-scripts"
+                    srcdoc="${escapeHtml(safeSrcdoc)}"
+                    title="${safeTitle}"></iframe>
+          </div>
         </div>
       `;
     }
