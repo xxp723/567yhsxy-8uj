@@ -3080,13 +3080,13 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次HTML收藏悬浮展开去底框与iframe自适应]
+   [区域标注·已完成·本次HTML收藏悬浮展开最终去外框]
    说明：
    1. 收藏独立页 html 固定分组下的 HTML 卡片默认只显示标题封面。
-   2. 单击封面后，HTML 内容以收藏页面上方悬浮层放大，不再作为网格卡片占位展开。
-   3. 展开态外层卡片已移除背景、边框、阴影、固定大高度和内边距，避免底部出现透明背景底框容器。
-   4. 展开态 iframe 已移除固定 aspect-ratio 占位，高度由 chat-html-card.js 的内容高度上报驱动自适应。
-   5. 保持与收藏页主题 UI 风格统一，不使用原生弹窗。
+   2. 单击封面后，HTML 内容作为收藏页面上方悬浮层显示，不再作为网格卡片占位展开。
+   3. 展开态外层卡片仅作为零视觉定位层：无背景、无边框、无阴影、无圆角底框、无内边距。
+   4. 展开后只显示 iframe 内的 HTML 卡片本体，避免底部出现透明背景底框容器。
+   5. 展开态 iframe 高度仍由 chat-html-card.js 的内容高度上报驱动自适应；不涉及任何持久化存储。
    ========================================================================== */
 .favorite-html-card {
   min-width: 0;
@@ -3126,15 +3126,13 @@
 
 .favorite-html-card.is-expanded {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  top: 116px;
-  bottom: auto;
+  inset: 0;
   z-index: 80;
   width: auto;
+  min-width: 0;
   min-height: 0;
   height: auto;
-  max-height: calc(100% - 132px);
+  max-height: none;
   margin: 0;
   padding: 0;
   background: transparent;
@@ -3143,6 +3141,7 @@
   box-shadow: none;
   overflow: visible;
   pointer-events: none;
+  transform: none;
 }
 
 .favorite-html-card__cover {
@@ -3190,10 +3189,19 @@
 }
 
 .favorite-html-card.is-expanded .favorite-html-card__zoom {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 116px;
   display: block;
-  width: 100%;
+  width: auto;
   height: auto;
-  max-height: calc(100vh - 180px);
+  max-height: calc(100% - 132px);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   pointer-events: auto;
   overflow: visible;
 }
