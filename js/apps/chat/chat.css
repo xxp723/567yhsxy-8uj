@@ -3084,7 +3084,7 @@
    说明：
    1. 收藏独立页 html 固定分组下的 HTML 卡片默认只显示标题封面。
    2. 单击封面后，iframe 内容以悬浮层方式在收藏页面内放大，不再占据网格整行。
-   3. 悬浮卡片外层保持透明，不再显示底部白色背景框；点击非 HTML 卡片区域由 index.js 关闭。
+   3. 悬浮卡片外层保持透明，且不再向页面底部拉伸出多余背景底框；点击非 HTML 卡片区域由 index.js 关闭。
    4. 保持与收藏页主题色、圆角和阴影风格统一，不使用原生弹窗。
    ========================================================================== */
 .favorite-html-card {
@@ -3128,11 +3128,14 @@
   left: 16px;
   right: 16px;
   top: 116px;
-  bottom: 24px;
+  bottom: auto;
   z-index: 80;
   min-height: 0;
+  height: min(68vh, 520px);
+  margin: 0;
+  padding: 0;
   background: transparent;
-  border-color: transparent;
+  border: 0;
   box-shadow: none;
   overflow: visible;
   pointer-events: none;

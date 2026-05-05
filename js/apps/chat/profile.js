@@ -837,6 +837,62 @@ export function getFavoriteCardTitle(messages = []) {
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·HTML卡片收藏页封面第二行标题]
+   说明：
+   1. 收藏页 HTML 卡片封面第一行固定显示“角色名的卡片”。
+   2. 第二行优先从卡片 HTML 自身的 <title> / 标题标签 / data-card-title / og:title 提取真实主题标题。
+   3. 若旧收藏数据里 cardTitle 与第一行相同，则不再重复显示，改用“HTML 卡片”兜底。
+   4. 只用于收藏页运行时展示，不读写持久化存储，不使用 localStorage/sessionStorage。
+   ======================================================================== */
+function normalizeFavoriteHtmlCardTitleText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+
+function extractFavoriteHtmlCardTitleFromHtml(cardHtml) {
+  const html = String(cardHtml || '').trim();
+  if (!html || typeof DOMParser !== 'function') return '';
+
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const metaTitle = doc.querySelector('meta[property="og:title"], meta[name="title"]')?.getAttribute('content');
+    const titledEl = doc.querySelector('[data-card-title], [aria-label]');
+    const headingEl = doc.querySelector('h1, h2, h3, [role="heading"], .card-title, .title');
+
+    const candidates = [
+      doc.querySelector('title')?.textContent,
+      titledEl?.getAttribute('data-card-title'),
+      titledEl?.getAttribute('aria-label'),
+      titledEl?.textContent,
+      headingEl?.textContent,
+      metaTitle
+    ];
+
+    for (const candidate of candidates) {
+      const title = normalizeFavoriteHtmlCardTitleText(candidate);
+      if (title) return title;
+    }
+  } catch (_) {
+    return '';
+  }
+
+  return '';
+}
+
+
+function getFavoriteHtmlCardCoverSecondLine(item, roleNameText) {
+  const firstLineText = normalizeFavoriteHtmlCardTitleText(`${roleNameText || 'AI'}的卡片`);
+  const htmlTitle = extractFavoriteHtmlCardTitleFromHtml(item?.cardHtml);
+  if (htmlTitle && htmlTitle !== firstLineText) return htmlTitle;
+
+  const storedTitle = normalizeFavoriteHtmlCardTitleText(item?.cardTitle || item?.name);
+  if (storedTitle && storedTitle !== firstLineText) return storedTitle;
+
+  return 'HTML 卡片';
+}
+
+
 export async function addMessagesToFavorites(container, state, db, messages) {
   const selected = Array.isArray(messages) ? messages.filter(Boolean) : [];
   if (!selected.length) return;
@@ -1070,9 +1126,9 @@ export function renderFavoriteSubPage(state) {
     /* [区域标注·已完成·HTML卡片收藏页封面文案/页内放大] 第一行显示角色名卡片，第二行显示卡片标题 */
     if (isHtmlGroup && item.favoriteKind === 'html-card') {
       const safeSrcdoc = sanitizeHtmlCardDocumentForSrcdoc(item.cardHtml || '');
-      const cardTitleText = String(item.cardTitle || item.name || 'HTML 卡片').trim() || 'HTML 卡片';
       const sourceSession = (state.sessions || []).find(session => String(session.id) === String(item.sourceChatId || ''));
       const roleNameText = String(sourceSession?.name || item.sourceName || 'AI').trim() || 'AI';
+      const cardTitleText = getFavoriteHtmlCardCoverSecondLine(item, roleNameText);
       const safeTitle = escapeHtml(cardTitleText);
       const safeCoverTitle = escapeHtml(`${roleNameText}的卡片`);
       return `
