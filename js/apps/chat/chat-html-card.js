@@ -449,17 +449,20 @@ export function buildHtmlCardDocument(html = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片交互桥接] iframe 内部点击/选择交互 postMessage 脚本片段
+   [区域标注·已完成·HTML卡片按钮交互修复] iframe 内部点击/选择交互 postMessage 脚本片段
    说明：
    1. 此脚本在 sanitize 之后追加到 </body> 前，确保不被清理掉。
    2. iframe 内部监听 button / a / summary / 表单控件等轻互动元素，点击后给元素添加可见反馈。
-   3. 交互结果通过 postMessage 发给父页面，由 chat-message.js / index.js 转成聊天系统提示并写入 DB.js / IndexedDB。
-   4. 本区域不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不做双份存储兜底。
+   3. 本次已补强移动端点击桥接：覆盖 pointerup / click / change / 键盘触发，并做短时间去重，修复“点卡片内按钮没反应”。
+   4. 同时为未声明 type 的 button 自动补上 type="button"，避免按钮处于 form 内时触发提交刷新，导致交互看起来失效。
+   5. 交互结果通过 postMessage 发给父页面，由 chat-message.js / index.js 转成聊天系统提示并写入 DB.js / IndexedDB。
+   6. 本区域不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不做双份存储兜底。
    ========================================================================== */
 const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
 <script data-card-interaction-bridge="true">
 (function(){
   var lastInteractionAt = 0;
+  var lastInteractionKey = '';
 
   function getText(el){
     if(!el) return '';
@@ -470,6 +473,12 @@ const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
   function getInteractiveTarget(start){
     if(!start || !start.closest) return null;
     return start.closest('button,a,summary,label,input,textarea,select,[role="button"],[role="switch"],[role="checkbox"],[role="radio"],[tabindex],.btn,.button,[data-action]');
+  }
+
+  function normalizeButtonTypes(){
+    document.querySelectorAll('button:not([type])').forEach(function(button){
+      button.setAttribute('type', 'button');
+    });
   }
 
   function markInteracted(el){
@@ -510,8 +519,24 @@ const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
     };
   }
 
+  function shouldSkipDuplicate(el, eventType){
+    var now = Date.now();
+    var key = [
+      eventType,
+      String(el && el.tagName || '').toLowerCase(),
+      getText(el),
+      String(el && el.getAttribute && el.getAttribute('role') || '').toLowerCase()
+    ].join('::');
+    if((now - lastInteractionAt) < 320 && key === lastInteractionKey){
+      return true;
+    }
+    lastInteractionAt = now;
+    lastInteractionKey = key;
+    return false;
+  }
+
   function postInteraction(el, eventType){
-    if(!el) return;
+    if(!el || shouldSkipDuplicate(el, eventType)) return;
     parent.postMessage(describeInteraction(el, eventType), '*');
   }
 
@@ -519,6 +544,18 @@ const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
   style.setAttribute('data-miniphone-card-interaction-feedback', 'true');
   style.textContent = '.miniphone-card-interacted{filter:brightness(.96);box-shadow:0 0 0 3px rgba(199,154,102,.20),0 8px 18px rgba(61,52,45,.10)!important;transform:translateY(1px) scale(.99);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;}';
   document.head.appendChild(style);
+
+  normalizeButtonTypes();
+
+  document.addEventListener('pointerup', function(event){
+    var target = getInteractiveTarget(event.target);
+    if(!target) return;
+    if(target.matches && target.matches('a')){
+      event.preventDefault();
+    }
+    markInteracted(target);
+    postInteraction(target, 'pointerup');
+  }, true);
 
   document.addEventListener('click', function(event){
     var target = getInteractiveTarget(event.target);
@@ -528,6 +565,14 @@ const HTML_CARD_INTERACTION_BRIDGE_SCRIPT = `
     }
     markInteracted(target);
     postInteraction(target, 'click');
+  }, true);
+
+  document.addEventListener('keydown', function(event){
+    if(event.key !== 'Enter' && event.key !== ' ') return;
+    var target = getInteractiveTarget(event.target);
+    if(!target) return;
+    markInteracted(target);
+    postInteraction(target, 'keydown');
   }, true);
 
   /* ========================================================================
@@ -579,30 +624,30 @@ const HTML_CARD_HEIGHT_REPORTER_SCRIPT = `
 </script>`;
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片格式约束加强与交互桥接] iframe srcdoc 安全净化
+   [区域标注·已完成·HTML卡片按钮交互修复] iframe srcdoc 安全净化
    说明：
-   1. 先移除所有外部/用户 script、事件属性、iframe嵌套、弹窗 API、顶层跳转。
-   2. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
-   3. 然后追加受信任的交互桥接脚本与高度上报脚本，确保卡片可点击、可反馈、可自适应高度。
-   4. 不做双份存储，不引入原生浏览器弹窗。
+   1. 本次不再无条件删除 AI 卡片里的内联 script 与 on* 事件属性，避免把按钮/切换逻辑一起清空，导致“点了没反应”。
+   2. 仍然继续拦截外部脚本、iframe 嵌套、原生弹窗 API、顶层窗口访问与危险 target 跳转，保证卡片运行边界。
+   3. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
+   4. 然后追加受信任的交互桥接脚本与高度上报脚本，确保卡片可点击、可反馈、可自适应高度。
+   5. 不做双份存储，不引入原生浏览器弹窗。
    ========================================================================== */
 export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
   const documentHtml = buildHtmlCardDocument(html);
   if (!documentHtml) return '';
 
   let sanitized = documentHtml
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/<script\b[^>]*\bsrc\s*=\s*(".*?"|'.*?'|[^\s>]+)[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
     .replace(/\balert\s*\(/gi, 'void(')
     .replace(/\bconfirm\s*\(/gi, 'void(')
     .replace(/\bprompt\s*\(/gi, 'void(')
+    .replace(/\bwindow\.open\s*\(/gi, 'void(')
     .replace(/\btop\s*\./gi, 'window.')
     .replace(/\bparent\s*\./gi, 'window.')
     .replace(/<a([^>]*?)target\s*=\s*["']?_top["']?([^>]*)>/gi, '<a$1$2>')
-    .replace(/<a([^>]*?)target\s*=\s*["']?_parent["']?([^>]*)>/gi, '<a$1$2>');
+    .replace(/<a([^>]*?)target\s*=\s*["']?_parent["']?([^>]*)>/gi, '<a$1$2>')
+    .replace(/<a([^>]*?)href\s*=\s*["']\s*javascript:[^"']*["']([^>]*)>/gi, '<a$1$2>');
 
   sanitized = injectHtmlCardFormatEnforcerStyle(sanitized);
 
