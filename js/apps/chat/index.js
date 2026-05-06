@@ -1620,11 +1620,12 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ========================================================================
-       [区域标注·已完成·文字图保存发送]
+       [区域标注·已修改·文字图保存发送改为仅入列不自动请求AI]
        说明：
-       1. 文字图保存后立即作为 type:image 用户消息入列，并通过 DB.js / IndexedDB 持久化。
-       2. 消息 content 使用精简格式“用户发送了一张文字图图片，图片内容：...”，让 AI 按图片内容回应。
-       3. 不写 imageUrl，不生成真实图片，不使用 localStorage/sessionStorage，也不做双份存储兜底。
+       1. 文字图保存后仍立即作为 type:image 用户消息入列，并通过 DB.js / IndexedDB 持久化。
+       2. 消息 content 仍使用精简格式“用户发送了一张文字图图片，图片内容：...”，供用户后续点击纸飞机时再带给 AI。
+       3. 本区域已移除“发送文字图后立即调用 API”的旧逻辑；必须等待用户手动点击纸飞机按钮才触发 AI 回复。
+       4. 不写 imageUrl，不生成真实图片，不使用 localStorage/sessionStorage，也不做双份存储兜底。
        ======================================================================== */
     case 'confirm-msg-text-image': {
       if (!state.currentChatId || state.isAiSending) break;
@@ -1650,7 +1651,6 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       appendCurrentMessageBubble(container, state, textImageMessage);
       syncMessageDockOpenState(container, state);
       refreshPanel(container, state, 'chatList');
-      await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
       break;
     }
 

@@ -92,12 +92,12 @@ export function renderTextImageFeatureButton() {
 export function renderTextImageBubble(message = {}) {
   const text = normalizeTextImageText(message?.textImageText || '');
   const messageId = String(message?.id || '').trim();
-  const title = text ? `文字图：${text}` : '文字图';
+  const title = text ? `Picture: ${text}` : 'Picture';
 
   return `
     <!-- ======================================================================
-         [区域标注·已完成·文字图消息渲染]
-         说明：未点开时只显示宝丽来边框与纯色画面；文字只在点击后的悬浮图中展示。
+         [区域标注·已修改·文字图消息渲染]
+         说明：发送到聊天消息界面后，文字图下方标题已改为英文“Picture”；未点开时只显示拍立得图片本体。
          ====================================================================== -->
     <button class="msg-text-image-bubble"
             data-action="open-msg-text-image-preview"
@@ -105,7 +105,7 @@ export function renderTextImageBubble(message = {}) {
             type="button"
             title="${escapeHtml(title)}">
       <span class="msg-text-image-bubble__photo" aria-hidden="true"></span>
-      <span class="msg-text-image-bubble__caption">文字图</span>
+      <span class="msg-text-image-bubble__caption">Picture</span>
     </button>
   `;
 }
@@ -168,8 +168,8 @@ export function openTextImagePreview(container, message = {}) {
   overlay.dataset.role = 'msg-text-image-preview';
   overlay.innerHTML = `
     <!-- ======================================================================
-         [区域标注·已完成·文字图悬浮预览]
-         说明：无关闭按钮；点击悬浮图外侧遮罩关闭，风格参考心声面板的暖色悬浮卡片。
+         [区域标注·已修改·文字图悬浮预览]
+         说明：无关闭按钮；点击悬浮图外侧遮罩关闭。预览中部画面已改为纯色，不再使用渐变纹理或白色光晕。
          ====================================================================== -->
     <div class="msg-text-image-preview__panel" role="dialog" aria-label="文字图预览">
       <div class="msg-text-image-preview__paper">
