@@ -20,6 +20,13 @@ import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
    说明：心声模块独立于 chat-inner-voice.js，这里只导入提示词构建函数。
    ========================================================================== */
 import { buildInnerVoiceSystemPrompt } from './chat-inner-voice.js';
+/* ==========================================================================
+   [区域标注·已完成·全局API报错弹窗] 导入结构化 API 错误工具
+   说明：
+   1. prompt.js 只负责在 API 失败时抛出带 apiErrorInfo 的结构化错误。
+   2. 具体应用内弹窗由聊天消息页调用 showApiErrorModal 展示；这里不使用原生浏览器弹窗。
+   ========================================================================== */
+import { createApiError } from '../../core/ui/components/ApiErrorModal.js';
 
 /* ==========================================================================
    [区域标注] API 服务商基础信息
@@ -1827,7 +1834,8 @@ function toClaudeContent(content) {
 }
 
 async function requestOpenAiLike(profile, messages) {
-  const response = await fetch(`${trimSlash(profile.baseUrl)}/chat/completions`, {
+  const endpoint = `${trimSlash(profile.baseUrl)}/chat/completions`;
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1844,7 +1852,14 @@ async function requestOpenAiLike(profile, messages) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+    const message = extractApiErrorMessage(payload, `HTTP ${response.status}`);
+    throw createApiError(message, {
+      status: response.status,
+      provider: profile.provider,
+      model: profile.model,
+      endpoint,
+      message
+    });
   }
 
   return payload?.choices?.[0]?.message?.content || '';
@@ -1855,7 +1870,8 @@ async function requestOpenAiLike(profile, messages) {
    说明：将 system 与历史消息压平成文本，兼容 Gemini generateContent。
    ========================================================================== */
 async function requestGemini(profile, messages) {
-  const url = `${trimSlash(profile.baseUrl)}/models/${encodeURIComponent(profile.model)}:generateContent?key=${encodeURIComponent(profile.apiKey)}`;
+  const endpoint = `${trimSlash(profile.baseUrl)}/models/${encodeURIComponent(profile.model)}:generateContent`;
+  const url = `${endpoint}?key=${encodeURIComponent(profile.apiKey)}`;
   const normalizedMessages = normalizeMessages(messages);
   const mergedText = normalizedMessages
     .map(item => `${item.role.toUpperCase()}:\n${toGeminiText(item)}`)
@@ -1879,7 +1895,14 @@ async function requestGemini(profile, messages) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+    const message = extractApiErrorMessage(payload, `HTTP ${response.status}`);
+    throw createApiError(message, {
+      status: response.status,
+      provider: profile.provider,
+      model: profile.model,
+      endpoint,
+      message
+    });
   }
 
   return payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1895,7 +1918,8 @@ async function requestClaude(profile, messages) {
     .filter(item => item.role === 'user' || item.role === 'assistant')
     .map(item => ({ role: item.role, content: toClaudeContent(item.content) }));
 
-  const response = await fetch(`${trimSlash(profile.baseUrl)}/messages`, {
+  const endpoint = `${trimSlash(profile.baseUrl)}/messages`;
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1913,7 +1937,14 @@ async function requestClaude(profile, messages) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(extractApiErrorMessage(payload, `HTTP ${response.status}`));
+    const message = extractApiErrorMessage(payload, `HTTP ${response.status}`);
+    throw createApiError(message, {
+      status: response.status,
+      provider: profile.provider,
+      model: profile.model,
+      endpoint,
+      message
+    });
   }
 
   return payload?.content?.find?.(item => item?.type === 'text')?.text || payload?.content?.[0]?.text || '';
@@ -1972,11 +2003,21 @@ export async function chat({
   const profile = await getPrimaryApiConfig(settingsManager);
 
   if (!profile.apiKey) {
-    throw new Error('主 API Key 不能为空，请先在设置应用的 API 设置中保存并确认连接。');
+    throw createApiError('主 API Key 不能为空，请先在设置应用的 API 设置中保存并确认连接。', {
+      code: 'config_error',
+      provider: profile.provider,
+      model: profile.model,
+      solution: '请到设置应用补全主 API Key、Base URL 和模型后再发送。'
+    });
   }
 
   if (!profile.model) {
-    throw new Error('主 API 模型不能为空，请先在设置应用的 API 设置中拉取并选择模型。');
+    throw createApiError('主 API 模型不能为空，请先在设置应用的 API 设置中拉取并选择模型。', {
+      code: 'config_error',
+      provider: profile.provider,
+      model: profile.model,
+      solution: '请到设置应用补全主 API Key、Base URL 和模型后再发送。'
+    });
   }
 
   let rawText = '';
@@ -1992,7 +2033,20 @@ export async function chat({
       rawText = await requestClaude(profile, messages);
       break;
     default:
-      throw new Error(`不支持的主 API 服务商：${profile.provider}`);
+      throw createApiError(`不支持的主 API 服务商：${profile.provider}`, {
+        code: 'config_error',
+        provider: profile.provider,
+        model: profile.model,
+        solution: '请到设置应用切换为受支持的主 API 服务商后再发送。'
+      });
+  }
+
+  if (!String(rawText || '').trim()) {
+    throw createApiError('API 请求已完成，但本轮 AI 没有返回可展示的聊天内容。', {
+      code: 'empty_response',
+      provider: profile.provider,
+      model: profile.model
+    });
   }
 
   /* ========================================================================

@@ -20,6 +20,14 @@ import {
 } from './chat-utils.js';
 import { chat } from './prompt.js';
 import { getVisibleChatSessions } from './chat-list.js';
+/* ==========================================================================
+   [区域标注·已完成·全局API报错弹窗接入] 导入应用内 API 报错弹窗
+   说明：
+   1. API 失败、429/503 等状态码、网络错误或空回复时，统一显示应用内弹窗。
+   2. 不使用 alert/confirm/prompt 等原生浏览器弹窗。
+   3. 弹窗只操作运行时 DOM，不写入聊天记录，不涉及持久化存储。
+   ========================================================================== */
+import { showApiErrorModal } from '../../core/ui/components/ApiErrorModal.js';
 import {
   extractHtmlCardProtocolBlocks,
   sanitizeHtmlCardDocumentForSrcdoc
@@ -1568,7 +1576,20 @@ export async function sendMessage(container, state, db, content, settingsManager
     }
 
     if (!String(rawAiText || '').trim()) {
-      appendChatConsoleRuntimeLog(state, 'warn', 'AI 返回为空文本');
+      /* ======================================================================
+         [区域标注·已完成·全局API报错弹窗接入] AI 空回复不入聊天记录
+         说明：
+         1. 主 API 请求完成但没有返回可展示内容时，只显示应用内报错弹窗。
+         2. 不再把“AI 没有返回内容”或任何空回复占位文本发送到聊天界面。
+         3. 本区域不写入 localStorage/sessionStorage，不新增双份存储兜底。
+         ====================================================================== */
+      appendChatConsoleRuntimeLog(state, 'warn', 'AI 返回为空文本，已改为显示 API 报错弹窗');
+      showApiErrorModal(container, {
+        code: 'empty_response',
+        title: 'AI 本轮没有成功回复',
+        message: 'API 请求已完成，但本轮 AI 没有返回可展示的聊天内容。'
+      });
+      return;
     } else {
       appendChatConsoleRuntimeLog(state, 'info', `AI 原始返回长度：${String(rawAiText).length}`);
     }
@@ -1694,13 +1715,15 @@ export async function sendMessage(container, state, db, content, settingsManager
       ]);
     }
   } catch (error) {
-    appendChatConsoleRuntimeLog(state, 'error', `API 调用失败：${error?.message || '未知错误'}`);
-    state.currentMessages.push({
-      id: `ai_error_${Date.now()}`,
-      role: 'assistant',
-      content: `API 调用失败：${error?.message || '未知错误'}`,
-      timestamp: Date.now()
-    });
+    /* ========================================================================
+       [区域标注·已完成·全局API报错弹窗接入] API 调用失败不写入聊天气泡
+       说明：
+       1. 429、503、网络错误、配置错误等失败原因统一交给 showApiErrorModal 展示。
+       2. 不再把“API 调用失败：...”或“AI 没有返回内容”写入消息界面。
+       3. 聊天记录持久化仍只走 DB.js / IndexedDB；本错误弹窗不做任何持久化存储。
+       ======================================================================== */
+    appendChatConsoleRuntimeLog(state, 'error', `API 调用失败，已显示报错弹窗：${error?.message || '未知错误'}`);
+    showApiErrorModal(container, error);
   } finally {
     state.isAiSending = false;
     await Promise.all([
