@@ -295,11 +295,12 @@ export async function sendGiftMessage(container, state, db, draft = {}, helpers 
 }
 
 /* ==========================================================================
-   [区域标注·已完成·礼物代付请求卡片化]
+   [区域标注·已更新·本次需求1·礼物代付卡片展示文案隐藏关系判断]
    说明：
-   1. “请求代付”不再以普通裸文本用户消息入列，而是生成 type=gift 的礼物卡片消息。
-   2. 卡片消息仍保留完整 AI 可见请求文案，供“用户最新一轮消息”发送给 AI。
-   3. 历史上下文摘要化由 chat-message.js 统一处理；本区域只负责礼物代付请求消息对象构造。
+   1. “请求代付”仍生成 type=gift 的礼物卡片消息，不改动消息类型与持久化流程。
+   2. AI 可见的完整代付判断文案继续保留在 content / giftAiPromptText 中，供“用户最新一轮消息”发送给 AI。
+   3. 消息界面卡片下方不再显示“请根据我们的关系决定是否愿意帮我代付”，改为英文祝福文案。
+   4. 历史上下文摘要化仍由 chat-message.js 统一处理；本区域只负责礼物代付请求消息对象构造。
    ========================================================================== */
 export function buildGiftPayRequestText(draft = {}) {
   const title = String(draft.giftTitle || '').trim();
@@ -327,7 +328,7 @@ export function createGiftPayRequestMessage(draft = {}) {
     giftCurrency: String(draft.currencyCode || 'CNY').toUpperCase(),
     giftPrice: Number(draft.giftPrice || 0),
     giftBaseCny: Number(draft.giftBaseCny || 0),
-    giftNote: '请根据我们的关系决定是否愿意帮我代付',
+    giftNote: 'May this little gift carry warm wishes to you',
     giftPayer: '请求你代付',
     giftRequestType: 'pay_request',
     giftAiPromptText: aiPromptText,
