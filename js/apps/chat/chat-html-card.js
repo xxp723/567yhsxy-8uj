@@ -125,7 +125,7 @@ export function getHtmlCardFeaturePrompt() {
     '结构要求：使用单一根容器承载全部内容，推荐 `<article class="nordic-card">...</article>`；布局和样式限制在根容器内。',
     '显示要求：适配手机窄屏，宽度 100%，不得横向溢出；长标题、长数字、长地址、长备注、表格、图片、按钮组都必须可换行。',
     '视觉要求：北欧ins暖色风，简洁、克制、留白充足；配色贴近当前小手机主题 UI，使用暖白、米杏、浅棕、柔和金棕、低饱和灰褐，避免霓虹色、赛博色、纯黑高压风。',
-    '安全要求：禁止 <script>、禁止访问父页面或顶层窗口、禁止 alert/confirm/prompt、禁止依赖外部 CDN、远程脚本、远程字体、远程图片或其它网络请求。',
+    '安全要求：HTML必须闭合完整，禁止 <script>、禁止访问父页面或顶层窗口、禁止 alert/confirm/prompt、禁止依赖外部 CDN、远程脚本、远程字体、远程图片或其它网络请求。',
     '图形元素优先用纯 HTML/CSS 绘制；卡片内容必须与角色人设、会话对象、世界书、聊天历史和当前用户消息一致，禁止脱离剧情凭空生成。',
     '一轮通常最多一条 [卡片]；[卡片] 是附加消息类型，不替代必要的 [回复] 文字气泡。'
   ].join('\n');
@@ -623,14 +623,45 @@ const HTML_CARD_HEIGHT_REPORTER_SCRIPT = `
 })();
 </script>`;
 
+function appendTrustedHtmlCardRuntimeScripts(documentHtml = '') {
+  const value = String(documentHtml || '');
+  const trustedRuntimeScripts = HTML_CARD_INTERACTION_BRIDGE_SCRIPT + HTML_CARD_HEIGHT_REPORTER_SCRIPT;
+
+  if (!value) return trustedRuntimeScripts;
+
+  const scriptSafeHtml = value
+    .replace(/<\/script/gi, '<\\/script')
+    .replace(/<!--/g, '<\\!--');
+
+  const normalizedDocumentHtml = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    document.open();
+    document.write(${JSON.stringify(scriptSafeHtml)});
+    document.close();
+  <\/script>
+</head>
+<body></body>
+</html>`;
+
+  if (/<\/body>/i.test(normalizedDocumentHtml)) {
+    return normalizedDocumentHtml.replace(/<\/body>/i, trustedRuntimeScripts + '\n</body>');
+  }
+
+  return normalizedDocumentHtml + trustedRuntimeScripts;
+}
+
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片按钮交互修复] iframe srcdoc 安全净化
+   [区域标注·已完成·本次需求1·HTML卡片运行时脚本不再外露] iframe srcdoc 安全净化
    说明：
-   1. 本次不再无条件删除 AI 卡片里的内联 script 与 on* 事件属性，避免把按钮/切换逻辑一起清空，导致“点了没反应”。
-   2. 仍然继续拦截外部脚本、iframe 嵌套、原生弹窗 API、顶层窗口访问与危险 target 跳转，保证卡片运行边界。
-   3. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
-   4. 然后追加受信任的交互桥接脚本与高度上报脚本，确保卡片可点击、可反馈、可自适应高度。
-   5. 不做双份存储，不引入原生浏览器弹窗。
+   1. 已修复 iframe 运行时脚本被当作普通文本显示，导致卡片里露出 `(function(){...` 大段 JS 的掉格式问题。
+   2. 先把 AI HTML 作为字符串写入 iframe 文档，再追加受信任的交互桥接与高度上报脚本，避免直接拼接到异常 HTML 结构里。
+   3. 仍然继续拦截外部脚本、iframe 嵌套、原生弹窗 API、顶层窗口访问与危险 target 跳转，保证卡片运行边界。
+   4. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
+   5. 不做双份存储，不引入原生浏览器弹窗，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
   const documentHtml = buildHtmlCardDocument(html);
@@ -651,13 +682,5 @@ export function sanitizeHtmlCardDocumentForSrcdoc(html = '') {
 
   sanitized = injectHtmlCardFormatEnforcerStyle(sanitized);
 
-  /* 在 </body> 前注入交互桥接与高度上报脚本；若无 </body> 则追加到末尾 */
-  const trustedRuntimeScripts = HTML_CARD_INTERACTION_BRIDGE_SCRIPT + HTML_CARD_HEIGHT_REPORTER_SCRIPT;
-  if (/<\/body>/i.test(sanitized)) {
-    sanitized = sanitized.replace(/<\/body>/i, trustedRuntimeScripts + '\n</body>');
-  } else {
-    sanitized += trustedRuntimeScripts;
-  }
-
-  return sanitized;
+  return appendTrustedHtmlCardRuntimeScripts(sanitized);
 }
