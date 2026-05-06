@@ -114,7 +114,8 @@
           <div class="p1-apps-row">
             <div class="app-icon" draggable="true" data-app-id="chat" title="闲谈">
               <button class="app-icon-btn" type="button" data-open-app="chat" aria-label="打开闲谈">
-                <span class="app-icon-glyph"><svg width="28" height="28" viewBox="0 0 48 48" fill="none"><path d="M44 6H4v28h14l68l6-8h14V6Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="14" y1="18" x2="34" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="14" y1="26" x2="28" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span>
+                <!-- [区域标注·已完成·闲谈入口图标路径修复] 修正闲谈桌面入口 SVG path，避免非法路径导致应用点不开 -->
+                <span class="app-icon-glyph"><svg width="28" height="28" viewBox="0 0 48 48" fill="none"><path d="M44 6H4v28h14l6 8l6-8h14V6Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="14" y1="18" x2="34" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="14" y1="26" x2="28" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span>
                 <img class="app-custom-img" data-app-img="chat" src="" style="display:none;" alt="闲谈" />
               </button>
               <span class="app-icon-label">闲谈</span>
