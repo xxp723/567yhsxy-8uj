@@ -1991,6 +1991,34 @@ export function resolveAiQuotePayloadById(state, quoteId = '') {
 }
 
 
+/* ==========================================================================
+   [区域标注·已完成·本次消息掉格式修复] 通用协议段落解析辅助
+   说明：
+   1. 兼容 AI 漏写“角色名：”或漏写“：”时仍可识别协议块，避免 [表情]/[引用]/[回复] 整段掉成普通文本。
+   2. 只做运行时解析，不改持久化结构；消息落库仍统一走 DB.js / IndexedDB。
+   ========================================================================== */
+function parseProtocolRoleAndContent(raw = '', type = '') {
+  const text = cleanAiProtocolBlockContent(raw);
+  if (!text) return { roleName: '', content: '' };
+
+  const typeName = String(type || '').trim();
+
+  /* [引用] 常见掉格式：{引用ID:xxx}正文（漏角色名） */
+  if (typeName === '引用' && /^\s*\{\s*引用\s*ID\s*[：:]/i.test(text)) {
+    return { roleName: '', content: text };
+  }
+
+  /* 标准：角色名：内容（角色名 1-40 字） */
+  const roleAndContentMatch = text.match(/^([^：:\n`*]{1,40})\s*[：:]\s*([\s\S]*)$/);
+  if (roleAndContentMatch) {
+    const roleName = String(roleAndContentMatch[1] || '').trim();
+    const content = cleanAiProtocolBlockContent(roleAndContentMatch[2] || '');
+    if (content) return { roleName, content };
+  }
+
+  return { roleName: '', content: text };
+}
+
 export function extractAiProtocolBlocks(rawText) {
   const visibleText = String(rawText || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -1999,27 +2027,13 @@ export function extractAiProtocolBlocks(rawText) {
   if (!visibleText) return [];
 
   /* ========================================================================
-     [区域标注·已完成·角色主动转账协议解析器] AI 回复通用协议强力解析器
+     [区域标注·已更新·本次消息掉格式修复] 宽松协议头识别
      说明：
-     1. 优先寻找任意位置的 [回复]/[表情]/[转账]/[礼物] 等协议头，而不是要求整行完全规范。
-     2. 兼容漏加 **、漏加反引号、多个协议连写、协议前后夹杂 Markdown 的情况。
-     3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
+     1. 协议头仅要求出现 [类型]，不再强依赖“角色名：”紧跟在后。
+     2. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
+     3. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
      ======================================================================== */
-  /* ========================================================================
-     [区域标注·已完成·AI文字图/生图互斥协议解析] 通用协议解析器识别 [文字图]/[图片]
-     说明：
-     1. [文字图] 仅在生图 API 未开启时由 buildAiReplyMessages 转成文字图气泡。
-     2. [图片] 协议只作为生图触发信号，不作为原始文本气泡展示；图片消息由 generatedImages 转成 type:image 后落库。
-     ======================================================================== */
-  /* ========================================================================
-     [区域标注·已完成·HTML卡片协议边界修复] 通用协议正则包含 [卡片]
-     说明：
-     1. 将 [卡片] 加入通用协议正则，使 [回复] 块的内容在遇到 [卡片] 时正确截断，
-        避免 HTML 卡片原文泄漏到 [回复] 文本气泡中显示为转义 HTML。
-     2. 卡片的真正提取与渲染仍由 extractHtmlCardProtocolBlocks 处理；
-        本循环遇到 type === '卡片' 直接跳过，不重复处理。
-     ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|文字图|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|文字图|图片|卡片)\]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2028,10 +2042,12 @@ export function extractAiProtocolBlocks(rawText) {
       const nextMatch = matches[index + 1];
       const contentStart = Number(match.index || 0) + String(match[0] || '').length;
       const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+      const type = String(match[1] || '').trim();
+      const parsed = parseProtocolRoleAndContent(visibleText.slice(contentStart, contentEnd), type);
       return {
-        type: String(match[1] || '').trim(),
-        roleName: String(match[2] || '').trim(),
-        content: cleanAiProtocolBlockContent(visibleText.slice(contentStart, contentEnd))
+        type,
+        roleName: parsed.roleName,
+        content: parsed.content
       };
     })
     .filter(item => item.type && item.content);
@@ -3026,11 +3042,15 @@ export function cleanAiVisibleBubbleText(text) {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     /* ======================================================================
-       [区域标注·已完成·本次消息掉格式修复] 清理裸露通用协议残片
-       说明：防止 AI 掉格式时把 [回复]/[表情]/[引用]、反引号、加粗残片、格式检查前缀或“修正后内容”原样显示为普通文本。
+       [区域标注·已更新·本次消息掉格式修复] 清理裸露通用协议残片（覆盖漏角色名场景）
+       说明：
+       1. 兼容清理 `[回复] 内容` / `[表情] 内容` / `[引用]{引用ID:...}内容` 等漏写角色名的协议残片。
+       2. 兼容清理 `[回复] 角色名 内容`（漏冒号）等前缀噪音，避免协议头残留进聊天气泡。
+       3. 新增清理“{user_xxx...}正文”这类掉格式前缀，避免角色占位串直接显示在消息气泡。
        ====================================================================== */
     .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物)\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
+    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物|转账|撤回|文字图|图片)\s*\]\s*(?:[^：:\n`*]{1,40}\s*[：:]\s*)?/i, '')
+    .replace(/^\s*\{(?:user|assistant|role|character|mask)_[^}\n]{3,120}\}\s*/i, '')
     .replace(/(?:`|\*\*)+/g, '')
     .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
     .split(/\n+/)

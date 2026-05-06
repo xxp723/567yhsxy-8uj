@@ -111,24 +111,37 @@ export async function persistInnerVoiceHistoryEntry(db, state, innerVoice, messa
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次修正：解析 AI 原始回复中的心声九段短格式]
+   [区域标注·已完成·本次修正：解析并剥离 AI 原始回复中的心声九段短格式]
    说明：
    1. 从 rawText 中提取 [心声]...[/心声] 之间的九段短格式心声。
-   2. 新协议不再要求完整 JSON，但必须保留状态/动作/心情/心跳/醋意/好感/性欲/心声/性幻想九个面板字段。
-   3. 为兼容旧回复，若内容是 JSON、旧七段短格式或“状态/动作/心情”等键值文本，仍按旧字段宽松解析。
-   4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   2. 本次已补强漏闭合标签容错：只要出现 [心声] 起始标签，就从该处剥离到 [/心声] 或文本末尾，避免心声竖线块泄漏进聊天气泡。
+   3. 新协议不要求 JSON，但必须保留状态/动作/心情/心跳/醋意/好感/性欲/心声/性幻想九个面板字段。
+   4. 为兼容旧回复，若内容是 JSON、旧七段短格式或“状态/动作/心情”等键值文本，仍按旧字段宽松解析。
+   5. 不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 export function extractInnerVoiceFromRawText(rawText) {
   const text = String(rawText || '');
-  const openIndex = text.indexOf(INNER_VOICE_OPEN_TAG);
-  const closeIndex = text.indexOf(INNER_VOICE_CLOSE_TAG);
+  const openPattern = /\[\s*心声\s*\]/i;
+  const openMatch = text.match(openPattern);
 
-  if (openIndex < 0 || closeIndex < 0 || closeIndex <= openIndex) {
+  if (!openMatch || typeof openMatch.index !== 'number') {
     return { innerVoice: null, cleanedText: text };
   }
 
-  const innerVoiceText = text.slice(openIndex + INNER_VOICE_OPEN_TAG.length, closeIndex).trim();
-  const cleanedText = (text.slice(0, openIndex) + text.slice(closeIndex + INNER_VOICE_CLOSE_TAG.length)).trim();
+  const openIndex = openMatch.index;
+  const openEnd = openIndex + String(openMatch[0] || INNER_VOICE_OPEN_TAG).length;
+  const closePattern = /\[\s*\/\s*心声\s*\]/i;
+  const afterOpenText = text.slice(openEnd);
+  const closeMatch = afterOpenText.match(closePattern);
+  const closeIndex = closeMatch && typeof closeMatch.index === 'number'
+    ? openEnd + closeMatch.index
+    : text.length;
+  const closeEnd = closeMatch
+    ? closeIndex + String(closeMatch[0] || INNER_VOICE_CLOSE_TAG).length
+    : text.length;
+
+  const innerVoiceText = text.slice(openEnd, closeIndex).trim();
+  const cleanedText = (text.slice(0, openIndex) + text.slice(closeEnd)).trim();
 
   const innerVoice = parseInnerVoicePayload(innerVoiceText);
   return { innerVoice, cleanedText };
