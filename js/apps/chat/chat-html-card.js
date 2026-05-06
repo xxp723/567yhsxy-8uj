@@ -629,36 +629,22 @@ function appendTrustedHtmlCardRuntimeScripts(documentHtml = '') {
 
   if (!value) return trustedRuntimeScripts;
 
-  const scriptSafeHtml = value
-    .replace(/<\/script/gi, '<\\/script')
-    .replace(/<!--/g, '<\\!--');
-
-  const normalizedDocumentHtml = `<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script>
-    document.open();
-    document.write(${JSON.stringify(scriptSafeHtml)});
-    document.close();
-  <\/script>
-</head>
-<body></body>
-</html>`;
-
-  if (/<\/body>/i.test(normalizedDocumentHtml)) {
-    return normalizedDocumentHtml.replace(/<\/body>/i, trustedRuntimeScripts + '\n</body>');
+  if (/<\/body>/i.test(value)) {
+    return value.replace(/<\/body>/i, `${trustedRuntimeScripts}\n</body>`);
   }
 
-  return normalizedDocumentHtml + trustedRuntimeScripts;
+  if (/<\/html>/i.test(value)) {
+    return value.replace(/<\/html>/i, `${trustedRuntimeScripts}\n</html>`);
+  }
+
+  return `${value}\n${trustedRuntimeScripts}`;
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次需求1·HTML卡片运行时脚本不再外露] iframe srcdoc 安全净化
+   [区域标注·已完成·本次需求1·HTML卡片渲染外露脚本文本修复] iframe srcdoc 安全净化
    说明：
-   1. 已修复 iframe 运行时脚本被当作普通文本显示，导致卡片里露出 `(function(){...` 大段 JS 的掉格式问题。
-   2. 先把 AI HTML 作为字符串写入 iframe 文档，再追加受信任的交互桥接与高度上报脚本，避免直接拼接到异常 HTML 结构里。
+   1. 已修复聊天消息界面里的 HTML 卡片偶发把 `document.write / document.close` 包装脚本尾巴当成普通文本显示，导致卡片渲染失败的问题。
+   2. 改为先构建并净化正常 HTML 文档，再把受信任的交互桥接与高度上报脚本直接追加到文档尾部，不再使用 document.write 二次包裹整份 HTML。
    3. 仍然继续拦截外部脚本、iframe 嵌套、原生弹窗 API、顶层窗口访问与危险 target 跳转，保证卡片运行边界。
    4. 已在净化后再次确保格式保护样式存在，兼容 AI 输出完整 HTML 文档的情况。
    5. 不做双份存储，不引入原生浏览器弹窗，不使用 localStorage/sessionStorage。
