@@ -252,12 +252,18 @@ export function normalizeInnerVoiceData(raw) {
   };
 }
 
+function isInnerVoiceAssistantSideMessage(message) {
+  const role = String(message?.role || '').trim().toLowerCase();
+  return role === 'assistant' || role === 'other';
+}
+
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 查找指定 AI 消息关联的心声数据
+   [区域标注·已完成·本次修复：左侧角色头像按轮次打开心声面板]
    说明：
-   1. 心声数据存储在同一轮 AI 回复中最后一条 assistant 消息的 innerVoice 字段。
-   2. 点击头像时，查找该消息所在轮次中携带 innerVoice 的消息。
-   3. 仅读取运行时 state.currentMessages，不使用 localStorage/sessionStorage。
+   1. 心声数据仍挂在同一轮最后一条 assistant 消息的 innerVoice 字段。
+   2. 但聊天渲染层会把 role 为 assistant / other 的消息都显示为左侧角色消息。
+   3. 因此这里按“左侧角色消息连续块”定位当前轮次，避免同一轮中部分左侧头像因 role=other 被截断而点不开。
+   4. 仅读取运行时 state.currentMessages，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function findInnerVoiceForMessage(messages, messageId) {
   if (!Array.isArray(messages) || !messageId) return null;
@@ -265,14 +271,15 @@ export function findInnerVoiceForMessage(messages, messageId) {
   const targetId = String(messageId);
   const targetIndex = messages.findIndex(m => String(m?.id || '') === targetId);
   if (targetIndex < 0) return null;
+  if (!isInnerVoiceAssistantSideMessage(messages[targetIndex])) return null;
 
   let roundStart = targetIndex;
-  while (roundStart > 0 && messages[roundStart - 1]?.role === 'assistant') {
+  while (roundStart > 0 && isInnerVoiceAssistantSideMessage(messages[roundStart - 1])) {
     roundStart--;
   }
 
   let roundEnd = targetIndex;
-  while (roundEnd < messages.length - 1 && messages[roundEnd + 1]?.role === 'assistant') {
+  while (roundEnd < messages.length - 1 && isInnerVoiceAssistantSideMessage(messages[roundEnd + 1])) {
     roundEnd++;
   }
 
