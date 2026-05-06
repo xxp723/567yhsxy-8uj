@@ -10,6 +10,7 @@
    7. [已完成·同排纯图标工具栏] 历史/多选/全选/删除/下载按钮统一在同一行且只显示图标。
    8. [已完成·心声面板日期时间] 当前心声面板显示日期和时间，历史下载按日期排序。
    9. [已完成·本次修正：性幻想与性欲值] Voice 页新增“性幻想”，Now 页新增“性欲值”进度条。
+   10. [已完成·本次修正：心声面板标题与板块间距] FANTASY/ACTION/METERS 标题与板块间距已统一为更舒展的面板节奏。
    ========================================================================== */
 
 /* ===== [已完成·花体字体导入] Google Fonts Dancing Script 加粗花体 ===== */
@@ -260,7 +261,7 @@
   white-space: pre-wrap;
 }
 
-/* ===== [已完成·本次修正：Voice页心声与性幻想格子] 渐变背景 ===== */
+/* ===== [已完成·本次修正：Voice页心声与性幻想格子] 渐变背景；FANTASY 标题与间距已对齐 INNER VOICE 的英文标题节奏 ===== */
 .iv-voice-cell {
   border-color: var(--c-milktea);
   background: linear-gradient(135deg, rgba(255, 253, 248, 0.9) 0%, var(--c-milktea-trans) 100%);
@@ -283,9 +284,14 @@
   border-color: var(--c-milktea);
   background: linear-gradient(135deg, var(--c-milktea-trans) 0%, rgba(255, 255, 255, 0.76) 100%);
   min-height: 74px;
+  margin-top: 14px;
 }
 .iv-fantasy-cell .iv-cell__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   color: var(--c-border);
+  text-transform: uppercase;
   opacity: 0.72;
 }
 .iv-fantasy-cell .iv-cell__text {
@@ -305,16 +311,18 @@
   min-width: 0;
 }
 
-/* ===== [已修改·动作格子] ===== */
+/* ===== [已完成·本次修正：Now页动作格子间距] ACTION 标题与板块距离已对齐 MOOD 的舒展节奏 ===== */
 .iv-action-cell {
   min-height: 56px;
+  margin-top: 14px;
 }
 
-/* ===== [已修改·进度条板块] 统一 root 变量 ===== */
+/* ===== [已完成·本次修正：Now页进度条板块间距] METERS 标题与板块距离已对齐 MOOD 的舒展节奏，统一 root 变量 ===== */
 .iv-meters {
   border: 1px solid var(--c-gray-light);
   border-radius: 14px;
   padding: 14px 14px 8px;
+  margin-top: 14px;
   margin-bottom: 10px;
   background: rgba(255, 255, 255, 0.72);
   position: relative;

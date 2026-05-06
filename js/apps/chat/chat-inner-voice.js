@@ -379,8 +379,9 @@ function downloadInnerVoiceHistoryTxt(items = [], chatName = '') {
    说明：
    1. 两个标签页显示为加粗英文花体字："Voice" 和 "Now"（"数据"仅改面板显示为"Now"）。
    2. Voice 页已新增“性幻想”板块；Now 页已新增“性欲值”进度条和数值显示。
-   3. "历史/多选/下载"图标按钮统一放在标签下方同一行，仅显示图标。
-   4. 当前心声面板显示日期和时间；点击面板外遮罩区域自动关闭。
+   3. [已完成·本次修正：心声面板标题与板块间距] Voice 页性幻想标题显示为英文 FANTASY，具体字体和间距由 chat-inner-voice.css 统一控制。
+   4. "历史/多选/下载"图标按钮统一放在标签下方同一行，仅显示图标。
+   5. 当前心声面板显示日期和时间；点击面板外遮罩区域自动关闭。
    ========================================================================== */
 export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options = {}) {
   if (!innerVoice) {
@@ -425,7 +426,7 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options =
             <div class="iv-cell__text">${escapeHtml(data.voice || '……')}</div>
           </div>
           <div class="iv-cell iv-fantasy-cell">
-            <span class="iv-cell__label">性幻想</span>
+            <span class="iv-cell__label">FANTASY</span>
             <div class="iv-cell__text">${escapeHtml(data.fantasy || '……')}</div>
           </div>
         </div>
