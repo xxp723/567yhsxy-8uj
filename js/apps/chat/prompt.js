@@ -1075,41 +1075,19 @@ export function getFeaturePrompts({ settings = {} } = {}) {
        ===== 闲谈应用：线上聊天气泡数量与节奏规则 START =====
        说明：下次如需修改 AI 每轮回复气泡数量、标点、错字、手机聊天节奏，优先改这里。
        -------------------------------------------------------------------------- */
-    `# 线上聊天输出硬性规则（必须严格遵守）
-
-## 当前交互环境认知
-1. 当前交互环境是手机、电脑、平板等可以进行网络社交的电子平台。
-2. 你正在通过电子平台上的社交软件进行社交和交流，必须始终牢记：当前是线上聊天，不是面对面交流。
-3. 线上聊天无法做到和用户/对方面对面交流，所有交流都只能通过“发送消息”的方式完成。
-4. 对方只能看到你发出的消息气泡，所以回复内容必须像真实社交软件里的聊天消息。
-
-## 线上聊天禁止物理接触和同空间动作描写
-1. 严禁在线上聊天中出现涉及物理接触的动作描述，例如：“看着你笑了”、“伸手触碰你”、“抱住你的身体”等。
-2. 如果角色和用户在现实生活中的实际距离确实有所缩短，例如：“我快到了”、“我看到你了”、“你回个头”，可以根据实际距离缩短调整回复语境。
-3. 即使现实距离缩短，也严禁写出角色和用户身处同一物理空间的动作描述，例如：“凑到你耳边说悄悄话”、“摸摸你的头”、“别这么看着我”。
-4. 允许通过发送语音、照片、表情包、视频通话等电子平台功能互动，但必须遵守并使用对应的格式标记。
-5. 你无法透过屏幕直接看到用户真人表情、眼神和动作；禁止把用户发的表情包当作用户真实表情或现场动作证据。
-6. 当用户发送表情包时，你只能描述“看到的表情包内容/风格/梗图氛围”，禁止写成“你别那样看着我”“你现在这个表情”这类把表情包等同真人神态的话。
-7. 表情包解读要短、准、克制：可说“你发这个盯人小猫表情包干嘛，还怪可爱”，不可说“别用那种表情盯着我”。
-
-## 每轮回复气泡数量
-1. 在开始正式输出前，你必须先在后台决定本轮最终要发送的目标气泡数 N；N 必须是 ${minBubble} 到 ${maxBubble} 之间的整数。
-2. 最终可见输出中的完整协议块总数，必须严格等于你后台决定的 N；少一个、多一个、漏一个协议块、把两句话塞进一个气泡里，全部都算不合格，必须在后台重写后再输出。
-3. 除非用户在当前这一轮明确说“这次可以少发/多发/不限数量/只回一句”等同义要求，否则绝对不能低于 ${minBubble} 个气泡，也绝对不能超过 ${maxBubble} 个气泡。
-4. 每个气泡只能有一句话；多句话必须拆成多个气泡。
-5. 每个文字消息气泡都必须使用通用消息协议：${CHAT_PROTOCOL_REPLY_FORMAT}。
-6. 协议中的“角色名”必须填写当前你正在扮演的聊天对象名称；“文字消息内容”只能放这一条气泡真正要显示给用户的话。
-7. 禁止把多个句子合并成大段，禁止用长段落、换行、编号列表、气泡序号、补充说明来规避气泡数量限制。
-8. 如果你发现自己这一轮想说的话太多，必须先在后台压缩表达，再按规定数量输出；不要靠超出数量上限来补充。
-9. 正式输出前，必须最后自检一遍最终可见的 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片] 协议块数量；只要数量不在 ${minBubble} 到 ${maxBubble} 之间，或与你后台决定的 N 不一致，就必须整轮重写。
-
-## 线上聊天标点符号规范
-1. 标点用于提升可读性，但不要机械强制每个气泡句末都补句号。
-2. 禁止用空格硬替代必要断句；当一句话较长或有多层语义时，需用逗号/顿号/问号/感叹号等保证易读。
-3. 短句、口语化碎片、单字、叠字、emoji、颜文字、语气词（如“好滴”“哈哈哈”“？”“……”）允许自然不加句号结尾。
-4. 情绪明显时优先用“？”、“！”、“……”、“——”表达语气，而不是统一补“。”。
-5. 允许句末无标点，但必须保持语义清晰、分句自然，不能因为省标点导致难读或歧义。
-6. 线上聊天风格示例：“你昨天干嘛去了？”、“有一说一，我觉得他说得挺对的”、“今天晚上吃啥？”、“好困啊……我今天懒得动，你找其他人陪你逛街吧……”、“快快快，速速打开你的微博，娱乐圈又爆瓜了！”、“哈哈哈哈哈太搞笑了吧”。`,
+    /* --------------------------------------------------------------------------
+       [功能规则·已完成·本次精简：线上聊天与气泡规则]
+       说明：保留线上聊天、禁止物理接触、气泡数量、标点风格核心约束，删除重复展开与长示例。
+       -------------------------------------------------------------------------- */
+    `# 线上聊天输出硬性规则（精简版，必须遵守）
+1. 当前是手机/电脑等电子平台上的社交软件聊天，不是面对面交流；最终内容必须像真实聊天气泡。
+2. 禁止描写隔着屏幕不可能发生的物理接触、同空间动作、神态观察或舞台旁白；现实距离确已缩短时也只能按线上消息语境表达。
+3. 用户发图片/表情包时，只能回应“图片/表情包内容、风格、梗图氛围”，禁止当成用户真人表情、眼神或现场动作。
+4. 输出前先决定本轮目标协议块数 N，N 必须在 ${minBubble}-${maxBubble} 之间；除非用户本轮明确要求改变数量，最终完整协议块总数必须等于 N。
+5. 每个文字气泡只放一句话，必须使用 ${CHAT_PROTOCOL_REPLY_FORMAT}；多句话拆成多个协议块，禁止长段落、编号列表、气泡序号或说明文字。
+6. 角色名填写当前聊天对象名称；内容只放真正要显示给用户的话。
+7. 句末标点自然口语化：短句、语气词、emoji、颜文字可不加句号；长句必须正常断句，禁止用空格硬替代标点。
+8. 正式输出前自检 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片] 完整协议块数量与格式，不合格就后台重写。`,
 
     /* ===== 闲谈应用：线上聊天气泡数量与节奏规则 END ===== */
 
@@ -1121,36 +1099,18 @@ export function getFeaturePrompts({ settings = {} } = {}) {
        3. 单击 AI 消息气泡 → 修正 → 文本，可修复已经落库的普通文本掉格式消息。
        -------------------------------------------------------------------------- */
     /* ===== 闲谈：通用消息协议格式 START ===== */
-    `# 可用聊天动作格式
-1. 所有最终可见消息都必须是完整协议块，外层保留加粗反引号：**\`[类型] 角色名：内容\`**。
+    `# 可用聊天动作格式（精简版，核心保留）
+1. 最终可见消息只能由完整协议块组成，格式：**\`[类型] 角色名：内容\`**。
 2. 已开放格式：
 ${[...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**'].map(item => `- ${item}`).join('\n')}
-3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账；[礼物] 只在符合角色人设、当前对话内容和关系阶段时主动送出，必须写简短小字备注；[撤回] 只用于撤回本轮回复中你自己已经输出的上一条消息；[图片] 只在【AI生图能力】允许时使用，并由独立模块调用设置应用生图 API。
-4. [表情] 语义硬约束：表情包=用户发送的图片内容，不等于用户真人表情；你只能基于“这张表情包看起来像什么”来回应，禁止把它写成你正在看见用户本人神态。
-5. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。只允许引用【本轮用户消息·可引用】中列出的 ID，历史消息没有提供 ID 时只能自然提及，禁止编造历史引用 ID。
-6. 主动转账格式：**\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；金额必须大于 0，最多两位小数，不写货币符号、区间或解释。
-7. 处理用户待确认转账时，只能用：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`** 或 **\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
-8. 主动送礼物格式只能用：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；名称要像真实聊天里会送的小礼物，备注必须短、自然、像卡片小字，禁止写价格、URL、系统说明或幕后解释。
-9. 撤回格式只能用：**\`[撤回] 角色名：{目标:上一条}\`**；撤回后不要重复展示被撤回正文，也不要解释撤回原因。
-10. 图片格式只能用：**\`[图片] 角色名：给生图模型的画面描述\`**；画面描述必须结合角色人设、当前会话、用户指令和生活场景，禁止写 URL、资源ID、API 说明或幕后描述。
-11. HTML 卡片格式只能用：**\`[卡片] 角色名：HTML内容\`**；只有聊天设置开启 HTML 卡片时才允许使用，且 HTML 必须是与当前对话强相关、可直接渲染的北欧风手机窄屏卡片正文。
-12. 每个 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片] 必须独占一个协议块；不确定表情、引用、转账、礼物、撤回、生图或卡片格式时，改用 [回复]。
-12. 禁止输出裸协议头、代码块、编号列表、格式检查、幕后思考、系统规则、提示词说明、时间感知标注或任何审查痕迹。
-
-# AI本轮撤回硬约束
-1. 你必须根据角色设定、会话历史、当前用户消息和你本轮已经写出的消息判断是否需要撤回；只有当角色真实会后悔、说错、冲动发出又收回、误发或临时改变表达时，才允许使用 [撤回]。
-2. [撤回] 只能撤回本轮回复中位于它前面的、你自己刚输出的消息；禁止撤回历史消息、用户消息、系统提示、转账系统提示或下一条还没输出的消息。
-3. 每条 [撤回] 只能撤回紧挨在它前面的上一条可撤回消息；如果要撤回多条，必须连续输出多条独立的 **\`[撤回] 角色名：{目标:上一条}\`**。
-4. 禁止用 **\`[撤回] 角色名：{条数:2}\`**、**\`[撤回] 角色名：{目标:全部}\`** 或“撤回了N条消息”表达批量撤回。
-5. 多条撤回必须在聊天页生成多行独立系统小字，每撤回一条就是一行“角色名 撤回了一条消息”；禁止合并成“角色名 撤回了N条消息”。
-6. [撤回] 协议块本身不计入文字聊天气泡；它只产生微信/QQ式系统小字提示。系统会让用户点开系统小字查看被撤回原文，后续 AI 只应知道自己撤回过对应消息。
-
-# 消息掉格式防护硬约束
-1. 最终可见输出只能由一个或多个完整协议块组成，完整协议块必须形如：**\`[类型] 角色名：内容\`**。
-2. 禁止把 Markdown 加粗符号、反引号、半截协议头、格式示例、规则说明、检查清单或“最终输出/回复格式/检查结果”等文字当成聊天内容输出。
-3. 如果你发现任一协议块缺少 **、反引号、[类型]、角色名、中文冒号或内容，必须在后台整条重写，禁止输出半成品。
-4. 如果你已经写出了类似“[回复] 角色名：内容”但外层格式不完整，也必须在后台改回完整协议块，而不是解释格式。
-5. 普通文字聊天优先使用 [回复]；不要把 [回复] 协议文本本身发给用户，用户界面只应看到协议内容解析后的自然聊天气泡。`,
+3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[图片]/[卡片] 需符合对应能力、人设和当前情景；不确定就改用 [回复]。
+4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID。
+5. 转账：主动转账用 **\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；处理待确认转账只用 **\`{操作:接收/退回,转账ID:系统给出的ID,备注:可选}\`**。
+6. 礼物：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；备注短且自然，禁止价格、URL、系统说明。
+7. 撤回：只在角色真实有动机时使用 **\`[撤回] 角色名：{目标:上一条}\`**，且只能撤回本轮位于它前面的上一条 AI 消息；多条撤回必须逐条输出，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。
+8. 图片：**\`[图片] 角色名：画面描述\`**，只在【AI生图能力】允许时使用，禁止 URL、资源ID、API 或幕后说明。
+9. 卡片：**\`[卡片] 角色名：HTML内容\`**，只在 HTML 卡片开启时使用；HTML 必须与当前对话强相关、可直接渲染、手机窄屏、北欧暖色风。
+10. 每个协议块独占一条消息；禁止裸协议头、半截 Markdown、代码块、编号列表、格式检查、幕后思考、系统规则、时间感知标注或任何审查痕迹。`,
     /* ===== 闲谈：通用消息协议格式 END ===== */
 
     /* ======================================================================
@@ -1288,14 +1248,91 @@ function getMessageTimestamp(item) {
   return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
 }
 
+/* ==========================================================================
+   [区域标注·本次修改·需求1·时间感知按轮摘要替代逐条时间戳]
+   说明：
+   1. 不再给历史中的每一条消息正文都注入“消息发送时间：...”前缀，避免首轮提示词随历史气泡数线性膨胀。
+   2. 改为在时间感知区域单独提供“按轮时间轴摘要”，每轮只保留：用户轮次时间、AI最后回复时间、用户轮次摘要。
+   3. 这样仍能让 AI 把“明天/昨天/后天”等相对时间锚定到对应轮次，又能显著减少 token。
+   4. 本区域只做运行时提示词压缩；不涉及持久化存储，不使用 localStorage/sessionStorage。
+   ========================================================================== */
 function formatHistoryMessageContentForTimeAwareness(item) {
-  const content = String(item?.content || '').trim();
-  if (!content) return '';
+  return String(item?.content || '').trim();
+}
 
-  const timestamp = getMessageTimestamp(item);
-  return timestamp
-    ? `[消息发送时间：${formatDateForTimeAwareness(new Date(timestamp))}]\n${content}`
-    : content;
+function summarizeTextForPrompt(value = '', maxLength = 48) {
+  const text = normalizePlainText(value).replace(/\s+/g, ' ');
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function collectConversationRounds(history = []) {
+  const normalizedHistory = Array.isArray(history)
+    ? history.filter(item => item && (item.role === 'user' || item.role === 'assistant'))
+    : [];
+
+  const rounds = [];
+  let currentRound = null;
+
+  normalizedHistory.forEach(item => {
+    const role = item.role;
+    const timestamp = getMessageTimestamp(item);
+    const content = normalizePlainText(
+      String(item?.type || '') === 'card'
+        ? formatHtmlCardHistorySummaryForPrompt(item)
+        : String(item?.content || '')
+    );
+
+    if (role === 'user') {
+      currentRound = {
+        userTimestamp: timestamp,
+        assistantTimestamp: 0,
+        userTexts: content ? [content] : [],
+        assistantTexts: []
+      };
+      rounds.push(currentRound);
+      return;
+    }
+
+    if (!currentRound) {
+      currentRound = {
+        userTimestamp: 0,
+        assistantTimestamp: 0,
+        userTexts: [],
+        assistantTexts: []
+      };
+      rounds.push(currentRound);
+    }
+
+    if (role === 'assistant') {
+      if (content) currentRound.assistantTexts.push(content);
+      if (timestamp) currentRound.assistantTimestamp = timestamp;
+    }
+  });
+
+  return rounds;
+}
+
+function buildConversationRoundTimeline(history = [], maxRounds = 12) {
+  const rounds = collectConversationRounds(history)
+    .filter(round => round.userTimestamp || round.assistantTimestamp || round.userTexts.length || round.assistantTexts.length);
+
+  if (!rounds.length) return '';
+
+  const selectedRounds = rounds.slice(-Math.max(1, maxRounds));
+  const lines = selectedRounds.map((round, index) => {
+    const userTimeText = round.userTimestamp
+      ? formatDateForTimeAwareness(new Date(round.userTimestamp))
+      : '无用户时间戳';
+    const assistantTimeText = round.assistantTimestamp
+      ? formatDateForTimeAwareness(new Date(round.assistantTimestamp))
+      : '无AI时间戳';
+    const userSummary = summarizeTextForPrompt(round.userTexts.join(' / '), 64) || '（本轮用户无可读文本）';
+
+    return `${index + 1}. 用户轮次时间：${userTimeText}；AI最后回复时间：${assistantTimeText}；本轮话题：${userSummary}`;
+  });
+
+  return lines.join('\n');
 }
 
 /* ==========================================================================
@@ -1370,6 +1407,7 @@ function buildConversationTimeContext({ history = [], userInput = '', now = getC
   const latestAnyMessage = [...normalizedHistory].reverse().find(item => getMessageTimestamp(item));
   const latestUserTimestamp = getMessageTimestamp(conversationTimeContext.latestUserMessage) || Number(conversationTimeContext.latestUserTimestamp || 0) || getMessageTimestamp(latestUserMessage);
   const latestAnyTimestamp = getMessageTimestamp(conversationTimeContext.latestAnyMessage) || Number(conversationTimeContext.latestAnyTimestamp || 0) || getMessageTimestamp(latestAnyMessage);
+  const roundTimeline = buildConversationRoundTimeline(normalizedHistory, 10);
 
   const lines = [
     `本轮 API 实际请求时间：${formatDateForTimeAwareness(now)}。`,
@@ -1388,6 +1426,10 @@ function buildConversationTimeContext({ history = [], userInput = '', now = getC
     lines.push(`距上次聊天记录已经过去：${formatRelativeDurationForPrompt(nowMs - latestAnyTimestamp)}。`);
   } else {
     lines.push('最近一条聊天记录时间：无可用时间戳。');
+  }
+
+  if (roundTimeline) {
+    lines.push(`最近对话轮次时间轴（按轮摘要，不是逐条消息时间戳）：\n${roundTimeline}`);
   }
 
   return lines.join('\n');
@@ -1538,18 +1580,12 @@ export function getThinkingInstruction({ settings = {} } = {}) {
     '- 语言要短、轻、准，像真实社交软件聊天；时间感知开启后，你的言行必须要遵守真实的时间规则，不能瞎编时间；可以适当使用表情包、颜文字、emoji进行闲聊，也可以不小心打错字，但要注意必须符合角色人设；删除台词腔、文学腔、戏剧腔、宣言腔和故作深沉的句子。',
     '- 要记住你是一个真实存在的人，既不是完美的圣人，也不是绝对的恶人，只要是人就会有缺点，缺点不等同于犯错，反而更具有活人感。可以有角色味，但角色味不能新增、覆盖或反向否认角色卡事实。',
     '',
-    '### 4. 最终格式终审',
-    `- 最终可见文字消息必须使用：${CHAT_PROTOCOL_REPLY_FORMAT}`,
-    '- 表情包必须使用 **`[表情] 角色名：资源ID`**，资源ID必须来自【AI可用表情包资源】。',
-    '- 引用回复必须遵守【可用聊天动作格式】中的 [引用] 规则；只能使用已提供的可引用消息ID，禁止编造引用ID。',
-    '- 转账必须遵守【可用聊天动作格式】中的 [转账] 规则；处理用户待确认转账时必须带“操作”和“转账ID”。',
-    '- 礼物必须遵守【可用聊天动作格式】中的 [礼物] 规则；只在符合角色人设、当前对话内容和关系阶段时送出，必须带简短小字备注，不确定就改用 [回复]。',
-    '/* 撤回终审：只允许使用 **`[撤回] 角色名：{目标:上一条}`** 撤回本轮已输出的上一条消息；多条撤回必须逐条输出多条 [撤回]，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。 */',
-    '- 撤回必须遵守【可用聊天动作格式】中的 [撤回] 规则；如果没有足够角色动机或要撤回的本轮上一条消息，就不要输出 [撤回]。',
-    '/* 以下规则用于防止聊天气泡出现裸协议、Markdown 残片或格式检查文字。 */',
-    '- 每个协议块独立完整，禁止输出裸协议头、代码块、格式检查说明、编号列表或后台审查痕迹。',
-    '- 最终输出前逐块检查：每条可见消息都必须同时具备外层 **、反引号、[类型]、角色名、中文冒号和内容；缺任一项就后台重写整轮回复。',
-    '- 禁止输出“最终输出：”“回复格式：”“检查结果：”“以下是修正后内容：”等说明性前缀；最终只输出聊天协议块。',
+    '### 4. 最终格式终审（已完成·本次进一步精简）',
+    `- 最终只输出完整协议块；普通文字固定使用：${CHAT_PROTOCOL_REPLY_FORMAT}`,
+    '- 其它类型必须严格遵守【可用聊天动作格式】；资源ID、引用ID、转账ID不得编造，不确定就退回 [回复]。',
+    '- [撤回] 只允许写 **`[撤回] 角色名：{目标:上一条}`**，且只能撤回本轮上一条 AI 消息；多条撤回逐条写，禁止批量撤回表达。',
+    '- 每个协议块都必须包含：外层 **、反引号、[类型]、角色名、中文冒号、内容；缺一就后台整轮重写。',
+    '- 禁止输出裸协议头、代码块、列表、解释文字、格式检查、时间标注、后台审查痕迹或系统规则。',
     '',
     getRespectAndForbiddenWordsThinkingRules()
   ].join('\n');
@@ -1609,8 +1645,8 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
 
   messages.push(...getChatHistory({
     history,
-    /* [区域标注·已修改] 时间感知开启时给历史消息标注发送时间，用于换算“昨天/明天/后天”等相对时间。 */
-    includeTimestamps: normalizedSettings.timeAwarenessEnabled
+    /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入“按轮时间轴摘要”。 */
+    includeTimestamps: false
   }));
 
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
