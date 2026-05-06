@@ -159,6 +159,20 @@ import {
   sendGiftMessage,
   showMessageGiftModal
 } from './chat-gift.js';
+/* ==========================================================================
+   [区域标注·已完成·文字图板块入口接入]
+   说明：
+   1. 咖啡功能区“文字图”的弹窗、消息构造与悬浮预览由独立 chat-text-image.js 提供。
+   2. 本入口文件只负责事件接线与 DB.js / IndexedDB 持久化流程调度。
+   3. 禁止 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+import {
+  createTextImageMessage,
+  openTextImagePreview,
+  parseTextImageDraftFromModal,
+  showTextImageModal,
+  validateTextImageDraft
+} from './chat-text-image.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
@@ -391,7 +405,12 @@ export async function mount(container, context) {
        [区域标注·已完成·礼物板块独立样式预加载]
        说明：礼物弹窗与礼物卡片样式拆分到 chat-gift.css，挂载时预加载以避免首次打开闪屏。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-gift.css', 'chat-gift-css')
+    loadCSS('./js/apps/chat/chat-gift.css', 'chat-gift-css'),
+    /* ======================================================================
+       [区域标注·已完成·文字图独立样式预加载]
+       说明：文字图弹窗、拍立得气泡与无关闭按钮悬浮预览样式拆分到 chat-text-image.css，挂载时预加载以避免首次打开闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-text-image.css', 'chat-text-image-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -709,6 +728,7 @@ export async function mount(container, context) {
       removeCSS('chat-msg-css');
       removeCSS('chat-html-card-css');
       removeCSS('chat-gift-css');
+      removeCSS('chat-text-image-css');
     }
   };
 }
@@ -1225,7 +1245,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        2. 这里只把这两个返回按钮列为关闭功能区拦截白名单，并阻止事件继续冒泡到外层手势/桌面层。
        3. 本修复仅调整运行时点击处理顺序，不涉及持久化存储；仍只使用 DB.js / IndexedDB。
        ====================================================================== */
-    const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back', 'msg-media-open-zoom', 'msg-media-close-zoom'].includes(clickedAction);
+    const shouldBypassCloseIntercept = ['msg-back', 'msg-settings-back', 'msg-media-open-zoom', 'msg-media-close-zoom', 'open-msg-text-image-preview'].includes(clickedAction);
     if (shouldBypassCloseIntercept) {
       e.preventDefault();
       e.stopPropagation();
@@ -1588,6 +1608,64 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         balanceLabel: formatWalletMoney(walletDisplay.value, walletDisplay.currency.code),
         currencyCode: walletDisplay.currency.code
       });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·文字图弹窗打开]
+       说明：咖啡功能区“文字图”入口打开应用内弹窗，不使用浏览器原生弹窗/选择器。
+       ======================================================================== */
+    case 'open-msg-text-image-modal':
+      showTextImageModal(container);
+      break;
+
+    /* ========================================================================
+       [区域标注·已完成·文字图保存发送]
+       说明：
+       1. 文字图保存后立即作为 type:image 用户消息入列，并通过 DB.js / IndexedDB 持久化。
+       2. 消息 content 使用精简格式“用户发送了一张文字图图片，图片内容：...”，让 AI 按图片内容回应。
+       3. 不写 imageUrl，不生成真实图片，不使用 localStorage/sessionStorage，也不做双份存储兜底。
+       ======================================================================== */
+    case 'confirm-msg-text-image': {
+      if (!state.currentChatId || state.isAiSending) break;
+      const text = parseTextImageDraftFromModal(container);
+      if (!validateTextImageDraft(container, text)) break;
+
+      const session = state.sessions.find(s => String(s.id) === String(state.currentChatId));
+      const textImageMessage = createTextImageMessage(text);
+      if (!session || !textImageMessage) break;
+
+      state.currentMessages.push(textImageMessage);
+      state.coffeeDockOpen = false;
+      state.stickerPanelOpen = false;
+      session.lastMessage = '[文字图]';
+      session.lastTime = textImageMessage.timestamp;
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      closeModal(container);
+      appendCurrentMessageBubble(container, state, textImageMessage);
+      syncMessageDockOpenState(container, state);
+      refreshPanel(container, state, 'chatList');
+      await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·文字图悬浮预览]
+       说明：点击文字图消息后显示无关闭按钮悬浮图片；点击外侧遮罩关闭。
+       ======================================================================== */
+    case 'open-msg-text-image-preview': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+      if (message) {
+        e.preventDefault();
+        e.stopPropagation();
+        openTextImagePreview(container, message);
+      }
       break;
     }
 
