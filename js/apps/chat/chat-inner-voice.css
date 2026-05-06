@@ -9,6 +9,7 @@
    6. [已完成·标签英文花体字] 标签已换为 Google Fonts "Dancing Script" 加粗花体字。
    7. [已完成·同排纯图标工具栏] 历史/多选/全选/删除/下载按钮统一在同一行且只显示图标。
    8. [已完成·心声面板日期时间] 当前心声面板显示日期和时间，历史下载按日期排序。
+   9. [已完成·本次修正：性幻想与性欲值] Voice 页新增“性幻想”，Now 页新增“性欲值”进度条。
    ========================================================================== */
 
 /* ===== [已完成·花体字体导入] Google Fonts Dancing Script 加粗花体 ===== */
@@ -259,7 +260,7 @@
   white-space: pre-wrap;
 }
 
-/* ===== [已修改·心声独占大格子] 渐变背景 ===== */
+/* ===== [已完成·本次修正：Voice页心声与性幻想格子] 渐变背景 ===== */
 .iv-voice-cell {
   border-color: var(--c-milktea);
   background: linear-gradient(135deg, rgba(255, 253, 248, 0.9) 0%, var(--c-milktea-trans) 100%);
@@ -275,6 +276,21 @@
   font-size: 14px;
   line-height: 1.72;
   color: var(--c-text-main);
+  font-style: italic;
+}
+
+.iv-fantasy-cell {
+  border-color: var(--c-milktea);
+  background: linear-gradient(135deg, var(--c-milktea-trans) 0%, rgba(255, 255, 255, 0.76) 100%);
+  min-height: 74px;
+}
+.iv-fantasy-cell .iv-cell__label {
+  color: var(--c-border);
+  opacity: 0.72;
+}
+.iv-fantasy-cell .iv-cell__text {
+  font-size: 13.5px;
+  line-height: 1.68;
   font-style: italic;
 }
 
@@ -366,6 +382,10 @@
 /* 好感度 - 暖橙 */
 .iv-meter--affection .iv-meter__fill {
   background: linear-gradient(90deg, #f0c79e 0%, #e09850 100%);
+}
+/* [已完成·本次修正：性欲值进度条] 性欲值 - 玫瑰粉 */
+.iv-meter--desire .iv-meter__fill {
+  background: linear-gradient(90deg, #efb4c4 0%, #d66b8a 100%);
 }
 
 /* ===== [已修改·空状态] 统一 root 变量 ===== */

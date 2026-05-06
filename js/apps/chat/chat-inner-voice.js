@@ -31,11 +31,11 @@ const IV_ICONS = {
 };
 
 /* ==========================================================================
-   [区域标注·已完成·本次修正：心声七段短格式协议标签定义]
+   [区域标注·已完成·本次修正：心声九段短格式协议标签定义]
    说明：
-   1. AI 回复中使用 [心声]状态|动作|心情|心跳|醋意|好感|真实心声[/心声]，保留原面板所有字段。
+   1. AI 回复中使用 [心声]状态|动作|心情|心跳|醋意|好感|性欲|真实心声|性幻想[/心声]。
    2. 该标签在 buildAiReplyMessages 之前被提取并剥离，不显示在聊天气泡中。
-   3. 解析器仍兼容旧 JSON 心声，心声数据随消息对象写入 DB.js / IndexedDB，同时另存为独立心声历史。
+   3. 解析器仍兼容旧七段/旧 JSON 心声，心声数据随消息对象写入 DB.js / IndexedDB，同时另存为独立心声历史。
    ========================================================================== */
 const INNER_VOICE_OPEN_TAG = '[心声]';
 const INNER_VOICE_CLOSE_TAG = '[/心声]';
@@ -111,11 +111,11 @@ export async function persistInnerVoiceHistoryEntry(db, state, innerVoice, messa
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次修正：解析 AI 原始回复中的心声七段短格式]
+   [区域标注·已完成·本次修正：解析 AI 原始回复中的心声九段短格式]
    说明：
-   1. 从 rawText 中提取 [心声]...[/心声] 之间的七段短格式心声。
-   2. 新协议不再要求完整 JSON，但必须保留状态/动作/心情/心跳/醋意/好感/心声七个面板字段。
-   3. 为兼容旧回复，若内容是 JSON 或“状态/动作/心情”等键值文本，仍按旧字段宽松解析。
+   1. 从 rawText 中提取 [心声]...[/心声] 之间的九段短格式心声。
+   2. 新协议不再要求完整 JSON，但必须保留状态/动作/心情/心跳/醋意/好感/性欲/心声/性幻想九个面板字段。
+   3. 为兼容旧回复，若内容是 JSON、旧七段短格式或“状态/动作/心情”等键值文本，仍按旧字段宽松解析。
    4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 export function extractInnerVoiceFromRawText(rawText) {
@@ -150,13 +150,27 @@ function parseInnerVoicePayload(raw) {
   }
 
   /* ========================================================================
-     [区域标注·已完成·本次修正：七段短格式转原面板数据]
+     [区域标注·已完成·本次修正：九段短格式转心声面板数据]
      说明：
-     1. 新格式为：状态|动作|心情|心跳|醋意|好感|真实心声。
-     2. 前 6 段固定映射面板字段；第 7 段允许包含分隔符，会自动合并回心声正文。
-     3. 这样比完整 JSON 省字段名 token，同时不会丢失原面板的状态、心情、好感度等数据。
+     1. 新格式为：状态|动作|心情|心跳|醋意|好感|性欲|真实心声|性幻想。
+     2. 前 8 段固定映射面板字段；第 9 段允许包含分隔符，会自动合并回性幻想正文。
+     3. 仍兼容旧七段格式，确保旧心声历史可继续读取。
      ======================================================================== */
   const pipeParts = s.split('|').map(part => part.trim());
+  if (pipeParts.length >= 9) {
+    return normalizeInnerVoiceData({
+      status: pipeParts[0],
+      action: pipeParts[1],
+      mood: pipeParts[2],
+      heartbeat: pipeParts[3],
+      jealousy: pipeParts[4],
+      affection: pipeParts[5],
+      desire: pipeParts[6],
+      voice: pipeParts[7],
+      fantasy: pipeParts.slice(8).join('|').trim()
+    });
+  }
+
   if (pipeParts.length >= 7) {
     return normalizeInnerVoiceData({
       status: pipeParts[0],
@@ -176,7 +190,8 @@ function parseInnerVoicePayload(raw) {
    [区域标注·已完成·本次修正：宽松解析心声数据]
    说明：
    1. 当 AI 输出旧 JSON 不够严格时（如缺引号），尝试正则提取各字段。
-   2. 当 AI 按七段短格式输出时，优先由 parseInnerVoicePayload 映射回原面板全部字段。
+   2. 当 AI 按九段/旧七段短格式输出时，优先由 parseInnerVoicePayload 映射回面板全部字段。
+   3. 本次已补充“性幻想”和“性欲值”字段解析。
    ========================================================================== */
 function parseInnerVoiceLoose(raw) {
   const s = String(raw || '').trim();
@@ -200,7 +215,9 @@ function parseInnerVoiceLoose(raw) {
     heartbeat: extractNum('心跳频率') || extractNum('心调频率') || extractNum('heartbeat') || extractNum('心跳'),
     jealousy: extractNum('醋意指数') || extractNum('jealousy') || extractNum('醋意'),
     affection: extractNum('好感度') || extractNum('affection') || extractNum('好感'),
-    voice: extract('心声') || extract('voice') || extract('真实想法')
+    desire: extractNum('性欲值') || extractNum('desire') || extractNum('性欲'),
+    voice: extract('心声') || extract('voice') || extract('真实想法'),
+    fantasy: extract('性幻想') || extract('fantasy')
   };
 
   if (!data.voice && !data.status && !data.mood) return null;
@@ -208,8 +225,10 @@ function parseInnerVoiceLoose(raw) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 标准化心声数据对象
-   说明：确保所有字段存在且类型正确，限定字数范围。
+   [区域标注·已完成·本次修正：心声面板标准化数据对象]
+   说明：
+   1. 确保所有字段存在且类型正确，限定字数范围。
+   2. 本次已新增“性幻想”(≤100字) 和 “性欲值”(0-100)。
    ========================================================================== */
 export function normalizeInnerVoiceData(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -221,13 +240,15 @@ export function normalizeInnerVoiceData(raw) {
   };
 
   return {
-    status: clampStr(raw.status || raw.状态, 20),
+    status: clampStr(raw.status || raw.状态, 30),
     action: clampStr(raw.action || raw.动作, 50),
-    mood: clampStr(raw.mood || raw.心情, 20),
+    mood: clampStr(raw.mood || raw.心情, 30),
     heartbeat: clampNum(raw.heartbeat || raw.心跳频率 || raw.心调频率 || raw.心跳, 60, 180),
     jealousy: clampNum(raw.jealousy || raw.醋意指数 || raw.醋意, 0, 100),
     affection: clampNum(raw.affection || raw.好感度 || raw.好感, 0, 100),
-    voice: clampStr(raw.voice || raw.心声 || raw.真实想法, 100)
+    desire: clampNum(raw.desire || raw.性欲值 || raw.性欲, 0, 100),
+    voice: clampStr(raw.voice || raw.心声 || raw.真实想法, 150),
+    fantasy: clampStr(raw.fantasy || raw.性幻想, 100)
   };
 }
 
@@ -334,10 +355,10 @@ function downloadInnerVoiceHistoryTxt(items = [], chatName = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已修改·心声面板] 渲染心声面板 HTML
+   [区域标注·已完成·本次修正：心声面板渲染 HTML]
    说明：
    1. 两个标签页显示为加粗英文花体字："Voice" 和 "Now"（"数据"仅改面板显示为"Now"）。
-   2. 标签栏为游戏机风格分段控件，每个标签带 IconPark 图标。
+   2. Voice 页已新增“性幻想”板块；Now 页已新增“性欲值”进度条和数值显示。
    3. "历史/多选/下载"图标按钮统一放在标签下方同一行，仅显示图标。
    4. 当前心声面板显示日期和时间；点击面板外遮罩区域自动关闭。
    ========================================================================== */
@@ -356,6 +377,9 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options =
   // 心跳频率进度条：60-180 bpm 映射到 0-100%
   const heartbeatPercent = Math.round(((data.heartbeat - 60) / 120) * 100);
   const heartbeatWidth = Math.max(2, Math.min(100, heartbeatPercent));
+
+  // [已完成·本次修正：性欲值进度条] 0-100 直接映射 Now 页进度条宽度。
+  const desireWidth = Math.max(2, data.desire);
 
   return `
     <div class="iv-panel is-open" data-role="iv-panel" data-iv-view="current">
@@ -379,6 +403,10 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options =
           <div class="iv-cell iv-voice-cell">
             <span class="iv-cell__label">INNER VOICE</span>
             <div class="iv-cell__text">${escapeHtml(data.voice || '……')}</div>
+          </div>
+          <div class="iv-cell iv-fantasy-cell">
+            <span class="iv-cell__label">性幻想</span>
+            <div class="iv-cell__text">${escapeHtml(data.fantasy || '……')}</div>
           </div>
         </div>
         <div class="iv-tab-page ${isDataTab ? 'is-active' : ''}" data-iv-page="data">
@@ -423,6 +451,15 @@ export function renderInnerVoicePanel(innerVoice, activeTab = 'voice', options =
               </div>
               <div class="iv-meter__bar">
                 <div class="iv-meter__fill" style="width:${Math.max(2, data.affection)}%"></div>
+              </div>
+            </div>
+            <div class="iv-meter iv-meter--desire">
+              <div class="iv-meter__header">
+                <span class="iv-meter__name">性欲值</span>
+                <span class="iv-meter__value">${data.desire}%</span>
+              </div>
+              <div class="iv-meter__bar">
+                <div class="iv-meter__fill" style="width:${desireWidth}%"></div>
               </div>
             </div>
           </div>
@@ -725,35 +762,39 @@ function switchInnerVoiceTab(overlayOrPanel, tabId) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次修正：心声面板七段短格式提示词]
+   [心声面板九段短格式提示词]
    说明：
    1. 本函数返回追加到 AI 系统提示词中的心声格式要求。
-   2. 已改为七段短格式，不要求完整 JSON 字段模板，但保留原面板全部字段。
-   3. 解析器会把七段短格式映射为状态/动作/心情/心跳/醋意/好感/心声；旧 JSON 回复仍兼容解析。
-   4. 状态、动作、心情、心声仍要求第一人称，提到用户时统一使用第三人称。
+   2. 已改为九段短格式，不要求完整 JSON 字段模板，并新增“性幻想”和“性欲值”。
+   3. 强调心声必须针对最新一轮用户消息，结合角色人设和会话历史，禁止臆造本轮未出现内容。
+   4. 状态、动作、心情、心声、性幻想仍要求第一人称，提到用户时统一使用第三人称。
    ========================================================================== */
 export function buildInnerVoiceSystemPrompt() {
   return `
 【心声协议·强制】
-每一轮回复都必须在所有可见消息协议之后，末尾追加一段心声数据块。使用七段短格式，不要写 JSON：
+每一轮回复都必须在所有可见消息协议之后，末尾追加一段心声数据块。使用九段短格式，不要写 JSON：
 
-[心声]状态|动作|心情|心跳|醋意|好感|真实心声[/心声]
+[心声]状态|动作|心情|心跳|醋意|好感|性欲|真实心声|性幻想[/心声]
 
-七段含义：
+九段含义：
 1. 状态：角色当前状态，第一人称，≤30字。
 2. 动作：角色正在做的动作，第一人称，≤50字。
 3. 心情：没说出口的真实心情，第一人称，≤30字，可自然加入1个emoji。
 4. 心跳：整数 bpm，60-180。
 5. 醋意：整数，0-100。
 6. 好感：整数，0-100。
-7. 真实心声：第一人称，≤100字，要体现与表面消息的反差；提到用户时统一用“他/她/会话对象”，不要用“你/你们”。
+7. 性欲：整数，0-100。
+8. 真实心声：第一人称，≤150字，要体现与表面消息的反差；提到用户时统一用“他/她/会话对象”，不要用“你/你们”。
+9. 性幻想：第一人称，≤100字，必须符合角色人设与当前关系阶段。
 
 示例：
-[心声]抑制不住地想她ing|一边吃东西，一边盯着屏幕等回复|有点急躁，但更多的是心疼她没睡好|92|12|76|表面装得无所谓，其实等到她的回复之后才松了一口气[/心声]
+[心声]抑制不住地想她ing|一边吃东西，一边盯着屏幕等回复|有点急躁，但更多的是心疼她没睡好|92|12|76|18|表面装得无所谓，其实等到她的回复之后才松了一口气|只是短暂闪过想抱紧她的念头，马上又被我压了回去[/心声]
 
 规则：
-- 只输出七段内容，不要输出 JSON、字段名、Markdown、代码块或解释。
-- 七段之间必须使用英文竖线 | 分隔，不能省略任意一段。
+- 心声必须针对最新一轮用户消息/最新输入内容生成，同时结合角色人设和会话历史。
+- 禁止臆造用户本轮没有发送或表达的内容：如果用户本轮只有文字，就不能写“她刚才发的那个表情包真可爱”；如果本轮没有图片/表情/语音/转账/礼物，也不能在心声里当作刚刚发生。
+- 只输出九段内容，不要输出 JSON、字段名、Markdown、代码块或解释。
+- 九段之间必须使用英文竖线 | 分隔，不能省略任意一段。
 - [心声]...[/心声] 放在本轮所有 [回复]/[表情]/[转账]/[礼物]/[图片]/[卡片] 等协议的最后面。
 - 心声数据块强制必须生成，不可省略。
 `.trim();
