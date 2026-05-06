@@ -154,7 +154,7 @@ import {
    3. 禁止 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 import {
-  buildGiftPayRequestText,
+  createGiftPayRequestMessage,
   parseGiftDraftFromModal,
   sendGiftMessage,
   showMessageGiftModal
@@ -1688,11 +1688,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ========================================================================
-       [区域标注·已完成·礼物直接购买与代付请求]
+       [区域标注·已完成·礼物直接购买与代付请求卡片化]
        说明：
        1. 商品名称与价格均在应用内弹窗中输入；价格必须大于 0 且不超过当前钱包余额。
        2. “给对方买”扣减钱包并发送 type=gift 礼物卡片消息，统一写入 DB.js / IndexedDB。
-       3. “请求代付”不扣用户钱包，只作为用户消息发给 AI，由 AI 按人设/上下文决定是否代付或拒绝。
+       3. “请求代付”不扣用户钱包，改为先入列 type=gift 礼物卡片消息，再触发 AI 回复，避免聊天界面出现裸文本。
        4. 不使用 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
        ======================================================================== */
     case 'confirm-msg-gift-buy':
@@ -1747,8 +1747,29 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         break;
       }
 
+      const session = state.sessions.find(s => String(s.id) === String(state.currentChatId));
+      if (!session) {
+        renderModalNotice(container, '当前聊天不存在，无法发送礼物代付请求');
+        break;
+      }
+
+      const giftPayRequestMessage = createGiftPayRequestMessage(normalizedDraft);
+      state.currentMessages.push(giftPayRequestMessage);
+      state.coffeeDockOpen = false;
+      state.stickerPanelOpen = false;
+      session.lastMessage = `[礼物代付请求] ${giftTitle}${giftDisplayPrice ? ` · ${giftDisplayPrice}` : ''}`;
+      session.lastTime = giftPayRequestMessage.timestamp;
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
       closeModal(container);
-      await sendMessage(container, state, db, buildGiftPayRequestText(normalizedDraft), settingsManager, { triggerAi: true });
+      appendCurrentMessageBubble(container, state, giftPayRequestMessage);
+      syncMessageDockOpenState(container, state);
+      refreshPanel(container, state, 'chatList');
+      await sendMessage(container, state, db, '', settingsManager, { skipAppendUser: true, triggerAi: true });
       break;
     }
 

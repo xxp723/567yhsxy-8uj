@@ -2782,7 +2782,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   };
 
-  const getAiVisibleContentForMessage = (item = {}) => {
+  const getAiVisibleContentForMessage = (item = {}, options = {}) => {
     if (String(item?.type || '') === 'user_withdraw_system') {
       const systemTipTime = formatWithdrawSystemTipTimeForAi(item.withdrawnAt || item.timestamp);
       const timeAwareInstruction = `【系统提示小字发送时间：${systemTipTime}】当前对话对象在上述时间撤回了一条消息。请务必把这个时间当作撤回系统提示小字发生的时间，并结合“本轮 API 实际请求时间”判断间隔；如果已经过去较久，不要说“刚才/刚刚撤回”，应改用“之前撤回的消息”等符合时间差的表达。`;
@@ -2791,11 +2791,29 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
       const withdrawnText = String(item.withdrawnContent || '').trim();
       return withdrawnText ? `${timeAwareInstruction}\n你看得见撤回原文。若间隔较久，可用一句自然互动回应，例如“您之前撤回的消息我看到了”。\n撤回的消息内容：${withdrawnText}` : base;
     }
+    if (String(item?.type || '') === 'gift') {
+      /* ======================================================================
+         [区域标注·已完成·礼物消息AI上下文摘要化]
+         说明：
+         1. 礼物代付请求在“当前轮用户消息”中保留完整请求文案，确保 AI 能理解是否代付。
+         2. 礼物消息进入历史上下文后仅发送短摘要，避免重复携带长文造成 token 浪费。
+         3. 仅处理 type=gift，不影响其它消息类型。
+         ====================================================================== */
+      const isHistorySummary = Boolean(options.historySummary);
+      const giftRequestType = String(item?.giftRequestType || '').trim();
+      if (isHistorySummary) {
+        const title = String(item?.giftTitle || '礼物').trim();
+        const priceLabel = String(item?.giftDisplayPrice || '').trim();
+        const prefix = giftRequestType === 'pay_request' ? '[礼物代付请求]' : '[礼物]';
+        return `${prefix} ${title}${priceLabel ? ` · ${priceLabel}` : ''}`;
+      }
+      return String(item?.giftAiPromptText || item?.content || '').trim();
+    }
     return String(item.content || '').trim();
   };
 
   const userInput = currentRoundMessages.map((item, index) => {
-    const content = getAiVisibleContentForMessage(item);
+    const content = getAiVisibleContentForMessage(item, { historySummary: false });
     return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
   }).join('\n');
 
@@ -2815,7 +2833,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
        ====================================================================== */
     id: item.id || '',
     role: item.role,
-    content: getAiVisibleContentForMessage(item),
+      content: getAiVisibleContentForMessage(item, { historySummary: false }),
     quote: item.quote || null,
     type: item.type || '',
     stickerUrl: item.stickerUrl || '',
@@ -2848,7 +2866,7 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
          ====================================================================== */
       id: item.id || '',
       role: item.role,
-      content: getAiVisibleContentForMessage(item),
+      content: getAiVisibleContentForMessage(item, { historySummary: true }),
       quote: item.quote || null,
       type: item.type || '',
       stickerUrl: item.stickerUrl || '',

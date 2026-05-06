@@ -124,8 +124,11 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·北欧 ins 风礼物消息卡片]
-   说明：礼物气泡内部卡片样式；外层左右气泡仍复用聊天消息页结构。
+   [区域标注·已完成·礼物消息卡片香槟色纯色样式]
+   说明：
+   1. 礼物气泡内部卡片统一改为香槟色纯色，不再使用渐变背景。
+   2. 已移除右下角圆形装饰，避免视觉突兀。
+   3. 外层左右气泡仍复用聊天消息页结构；本区域仅调整礼物卡片外观。
    ========================================================================== */
 .msg-bubble--gift {
   padding: 0 !important;
@@ -137,29 +140,15 @@
   width: min(230px, 68vw);
   box-sizing: border-box;
   padding: 16px 16px 15px;
-  border: 1px solid rgba(174, 143, 117, 0.2);
+  border: 1px solid rgba(178, 150, 112, 0.28);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.92), transparent 36%),
-    linear-gradient(145deg, #fbf5ee 0%, #eaded0 100%);
+  background: #e9dcc3;
   box-shadow:
-    0 18px 38px rgba(92, 70, 52, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    0 18px 38px rgba(92, 70, 52, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.54);
   color: #3f2d25;
   overflow: hidden;
   position: relative;
-}
-
-.msg-gift-card::after {
-  content: "";
-  position: absolute;
-  right: -24px;
-  bottom: -30px;
-  width: 92px;
-  height: 92px;
-  border-radius: 999px;
-  background: rgba(196, 156, 123, 0.16);
-  pointer-events: none;
 }
 
 .msg-gift-card__topline {
@@ -246,14 +235,7 @@
   line-height: 1.55;
 }
 
-.msg-bubble-row--right .msg-gift-card {
-  background:
-    radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.88), transparent 36%),
-    linear-gradient(145deg, #fff7ed 0%, #efd7c5 100%);
-}
-
+.msg-bubble-row--right .msg-gift-card,
 .msg-bubble-row--left .msg-gift-card {
-  background:
-    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.92), transparent 36%),
-    linear-gradient(145deg, #f7f2ea 0%, #e5dacb 100%);
+  background: #e9dcc3;
 }

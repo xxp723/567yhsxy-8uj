@@ -2,7 +2,7 @@
 /**
  * 文件名: js/apps/chat/chat-gift.js
  * 用途: 闲谈应用 — 咖啡功能区“礼物”独立模块
- *       负责礼物入口、礼物弹窗、礼物消息卡片渲染、直接购买入列与代付请求文本构建。
+ *       负责礼物入口、礼物弹窗、礼物消息卡片渲染、直接购买入列与代付请求卡片消息构建。
  * 存储规则：所有持久化只通过 DB.js / IndexedDB 封装完成，禁止 localStorage/sessionStorage。
  */
 
@@ -295,11 +295,42 @@ export async function sendGiftMessage(container, state, db, draft = {}, helpers 
 }
 
 /* ==========================================================================
-   [区域标注·已完成·礼物代付请求文本]
-   说明：“请求代付”只把请求作为用户消息发送给 AI，不扣用户钱包；AI 可按人设和上下文拒绝。
+   [区域标注·已完成·礼物代付请求卡片化]
+   说明：
+   1. “请求代付”不再以普通裸文本用户消息入列，而是生成 type=gift 的礼物卡片消息。
+   2. 卡片消息仍保留完整 AI 可见请求文案，供“用户最新一轮消息”发送给 AI。
+   3. 历史上下文摘要化由 chat-message.js 统一处理；本区域只负责礼物代付请求消息对象构造。
    ========================================================================== */
 export function buildGiftPayRequestText(draft = {}) {
   const title = String(draft.giftTitle || '').trim();
   const priceLabel = String(draft.giftDisplayPrice || '').trim();
   return `【礼物代付请求】我想买「${title}」，价格是 ${priceLabel}。请你根据你的人设、我们之前的对话历史和当前关系，自行决定是否愿意帮我代付；你可以答应，也可以自然地拒绝。`;
+}
+
+export function createGiftPayRequestMessage(draft = {}) {
+  const now = Date.now();
+  const giftTitle = String(draft.giftTitle || '').trim() || '礼物';
+  const giftDisplayPrice = String(draft.giftDisplayPrice || '').trim();
+  const aiPromptText = buildGiftPayRequestText({
+    ...draft,
+    giftTitle,
+    giftDisplayPrice
+  });
+
+  return {
+    id: `user_gift_pay_${now}_${Math.random().toString(16).slice(2)}`,
+    role: 'user',
+    type: 'gift',
+    content: aiPromptText,
+    giftTitle,
+    giftDisplayPrice,
+    giftCurrency: String(draft.currencyCode || 'CNY').toUpperCase(),
+    giftPrice: Number(draft.giftPrice || 0),
+    giftBaseCny: Number(draft.giftBaseCny || 0),
+    giftNote: '请根据我们的关系决定是否愿意帮我代付',
+    giftPayer: '请求你代付',
+    giftRequestType: 'pay_request',
+    giftAiPromptText: aiPromptText,
+    timestamp: now
+  };
 }
