@@ -271,11 +271,11 @@ function isInnerVoiceAssistantSideMessage(message) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次修复：左侧角色头像按轮次打开心声面板]
+   [区域标注·已完成·本次修复：左侧角色头像按用户轮次打开心声面板]
    说明：
    1. 心声数据仍挂在同一轮最后一条 assistant 消息的 innerVoice 字段。
-   2. 但聊天渲染层会把 role 为 assistant / other 的消息都显示为左侧角色消息。
-   3. 因此这里按“左侧角色消息连续块”定位当前轮次，避免同一轮中部分左侧头像因 role=other 被截断而点不开。
+   2. 聊天渲染层会把 role 为 assistant / other 的消息都显示为左侧角色消息，但同一轮 AI 回复中间可能夹有系统提示、卡片状态、撤回提示等非 assistant / other 记录。
+   3. 因此这里不再按“左侧角色消息连续块”查找，而是按“上一条用户消息 ~ 下一条用户消息”之间的整轮区间查找，避免同一轮里前半段头像被中间消息截断而点不开。
    4. 仅读取运行时 state.currentMessages，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function findInnerVoiceForMessage(messages, messageId) {
@@ -287,12 +287,16 @@ export function findInnerVoiceForMessage(messages, messageId) {
   if (!isInnerVoiceAssistantSideMessage(messages[targetIndex])) return null;
 
   let roundStart = targetIndex;
-  while (roundStart > 0 && isInnerVoiceAssistantSideMessage(messages[roundStart - 1])) {
+  while (roundStart > 0) {
+    const prevMessage = messages[roundStart - 1];
+    if (String(prevMessage?.role || '').trim().toLowerCase() === 'user') break;
     roundStart--;
   }
 
   let roundEnd = targetIndex;
-  while (roundEnd < messages.length - 1 && isInnerVoiceAssistantSideMessage(messages[roundEnd + 1])) {
+  while (roundEnd < messages.length - 1) {
+    const nextMessage = messages[roundEnd + 1];
+    if (String(nextMessage?.role || '').trim().toLowerCase() === 'user') break;
     roundEnd++;
   }
 
