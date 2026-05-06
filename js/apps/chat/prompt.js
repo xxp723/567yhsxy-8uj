@@ -334,29 +334,53 @@ function createPromptSection(title, content) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI引用回复提示词格式化]
+   [区域标注·已完成·本次降token：引用回复提示词轻量化]
    说明：
-   1. 只把消息对象里已有的 id / quote / content 整理进本轮 API 请求，不新增任何持久化存储。
-   2. quote 字段随聊天消息对象保存在 DB.js / IndexedDB；这里仅做 AI 可读格式转换。
-   3. AI 如需引用回复，必须使用 [引用] 协议，并填写本区暴露的“可引用消息ID”。
+   1. 历史消息默认只发送“谁说了什么”的纯文本摘要，不再附带每条消息 id / type / quote 结构。
+   2. 仅“最新一轮用户消息”保留最小可引用 ID，确保 AI 本轮仍能输出 [引用] 气泡。
+   3. quote 字段仍来自 DB.js / IndexedDB 中已有聊天消息对象；本区只做本轮 API 请求前的文本转换。
    ========================================================================== */
-function formatPromptQuoteLine(quote = {}) {
+function formatPromptQuoteLine(quote = {}, { includeReferenceId = false } = {}) {
   const quoteText = normalizePlainText(quote?.text);
   if (!quoteText) return '';
 
   const senderName = normalizePlainText(quote?.senderName || (quote?.role === 'user' ? '我' : '对方')) || '对方';
-  const quoteId = normalizePlainText(quote?.id);
-  return `> 当前消息引用了${quoteId ? `消息ID:${quoteId}，` : ''}${senderName}的原消息：“${quoteText}”`;
+  const quoteId = includeReferenceId ? normalizePlainText(quote?.id) : '';
+  return `> 引用了${quoteId ? `ID:${quoteId}，` : ''}${senderName}：“${quoteText}”`;
 }
 
-function formatMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '') {
-  const content = normalizePlainText(fallbackContent || message?.content);
-  const quoteLine = formatPromptQuoteLine(message?.quote);
-  const messageId = normalizePlainText(message?.id);
-  const type = normalizePlainText(message?.type) || 'text';
-  const idLine = messageId ? `[可引用消息ID:${messageId}；消息类型:${type}]` : '';
+function getPromptSenderLabel(message = {}) {
+  return message?.role === 'user' ? '我' : '对方';
+}
 
-  return [idLine, quoteLine, content].filter(Boolean).join('\n');
+function formatCompactMessageContentForPrompt(message = {}, fallbackContent = '') {
+  const type = normalizePlainText(message?.type) || 'text';
+  const content = normalizePlainText(fallbackContent || message?.content);
+
+  if (type === 'sticker') return `[表情包] ${normalizePlainText(message?.stickerName || content || '表情包')}`;
+  if (type === 'image') return `[图片] ${normalizePlainText(message?.imageName || content || '图片')}`;
+  if (type === 'card') return content || '[HTML卡片] 互动卡片';
+  if (type === 'transfer') return `[转账] ${content}`;
+  if (type === 'gift') return `[礼物] ${content}`;
+  if (type === 'voice') return `[语音] ${content}`;
+  if (type === 'withdraw') return '[撤回了一条消息]';
+
+  return content;
+}
+
+function formatMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '', options = {}) {
+  const includeReferenceMeta = Boolean(options.includeReferenceMeta);
+  const content = formatCompactMessageContentForPrompt(message, fallbackContent);
+  const quoteLine = formatPromptQuoteLine(message?.quote, { includeReferenceId: includeReferenceMeta });
+  const senderLine = `${getPromptSenderLabel(message)}：${content || '（空消息）'}`;
+
+  if (!includeReferenceMeta) {
+    return [quoteLine, senderLine].filter(Boolean).join('\n');
+  }
+
+  const messageId = normalizePlainText(message?.id);
+  const idLine = messageId ? `可引用ID:${messageId}` : '';
+  return [idLine, quoteLine, senderLine].filter(Boolean).join('\n');
 }
 
 function extractSystemTempBlocks(text = '') {
@@ -366,7 +390,7 @@ function extractSystemTempBlocks(text = '') {
 function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessages = []) {
   const formattedRoundMessages = Array.isArray(currentUserRoundMessages)
     ? currentUserRoundMessages
-        .map(item => formatMessageTextWithQuoteForPrompt(item))
+        .map(item => formatMessageTextWithQuoteForPrompt(item, '', { includeReferenceMeta: true }))
         .filter(Boolean)
         .join('\n\n')
     : '';
@@ -374,7 +398,12 @@ function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessag
   if (!formattedRoundMessages) return normalizePlainText(rawUserInput);
 
   const systemTempBlocks = extractSystemTempBlocks(rawUserInput);
-  return [formattedRoundMessages, ...systemTempBlocks].filter(Boolean).join('\n\n');
+  return [
+    '【本轮用户消息·可引用】',
+    '仅以下本轮用户消息可被 [引用] 协议引用；历史消息不提供引用ID。',
+    formattedRoundMessages,
+    ...systemTempBlocks
+  ].filter(Boolean).join('\n');
 }
 
 /* ==========================================================================
@@ -1098,7 +1127,7 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 ${[...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**'].map(item => `- ${item}`).join('\n')}
 3. [回复] 是文字气泡；[表情] 只能使用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能使用已提供的可引用消息ID；[转账] 只在角色确有动机时使用，禁止机械频繁转账；[礼物] 只在符合角色人设、当前对话内容和关系阶段时主动送出，必须写简短小字备注；[撤回] 只用于撤回本轮回复中你自己已经输出的上一条消息；[图片] 只在【AI生图能力】允许时使用，并由独立模块调用设置应用生图 API。
 4. [表情] 语义硬约束：表情包=用户发送的图片内容，不等于用户真人表情；你只能基于“这张表情包看起来像什么”来回应，禁止把它写成你正在看见用户本人神态。
-5. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。
+5. 引用用户消息时，必须理解“被引用原消息 + 用户新输入”；AI 主动引用格式：**\`[引用] 角色名：{引用ID:消息ID}一句自然聊天文字\`**。只允许引用【本轮用户消息·可引用】中列出的 ID，历史消息没有提供 ID 时只能自然提及，禁止编造历史引用 ID。
 6. 主动转账格式：**\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；金额必须大于 0，最多两位小数，不写货币符号、区间或解释。
 7. 处理用户待确认转账时，只能用：**\`[转账] 角色名：{操作:接收,转账ID:系统给出的ID}\`** 或 **\`[转账] 角色名：{操作:退回,转账ID:系统给出的ID,备注:可选理由}\`**。
 8. 主动送礼物格式只能用：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；名称要像真实聊天里会送的小礼物，备注必须短、自然、像卡片小字，禁止写价格、URL、系统说明或幕后解释。
@@ -1404,8 +1433,11 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 9] 聊天历史
-   说明：返回数组 [{ role:'user'|'assistant', content:string }]，直接追加到 messages。
+   [提示词区域 9·已完成·本次降token：聊天历史轻量文本摘要]
+   说明：
+   1. 返回数组 [{ role:'user'|'assistant', content:string }]，直接追加到 messages。
+   2. 历史消息只保留轻量纯文本摘要，不再给每条历史注入可引用消息ID、消息类型结构或完整 quote 包装。
+   3. 只有最新一轮用户消息会在“本轮用户消息·可引用”中保留极简 ID，避免影响 AI 本轮引用回复气泡。
    ========================================================================== */
 export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false } = {}) {
   return Array.isArray(history)
@@ -1426,10 +1458,13 @@ export function getChatHistory({ history = [], includeTimestamps = false, includ
             ? formatHistoryMessageContentForTimeAwareness({ ...item, content: readableContent })
             : readableContent;
           /* ====================================================================
-             [区域标注·已完成·AI引用回复] 历史消息 ID 与引用预览注入
-             说明：仅把现有消息对象中的 id/quote 转成 AI 可读文本，不新增存储。
+             [区域标注·已完成·本次降token：历史消息轻量摘要]
+             说明：
+             1. 历史消息不再发送可引用消息ID、消息类型结构或完整 quote 包装。
+             2. 历史图片/表情/卡片等仅保留纯文本摘要，避免每轮随历史累积大量无效 token。
+             3. 最新一轮用户消息仍在 buildCurrentUserPromptContent 中保留最小可引用ID。
              ==================================================================== */
-          const textContent = formatMessageTextWithQuoteForPrompt(item, baseContent);
+          const textContent = formatMessageTextWithQuoteForPrompt(item, baseContent, { includeReferenceMeta: false });
           return {
             role: item.role,
             /* [区域标注·本次修改·历史图片省token] 历史 user 表情包/图片只保留文字摘要；只有当前轮用户图片会附带真实视觉输入。 */

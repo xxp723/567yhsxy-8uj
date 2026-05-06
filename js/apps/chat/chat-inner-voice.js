@@ -31,11 +31,11 @@ const IV_ICONS = {
 };
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 心声协议标签定义
+   [区域标注·已完成·本次修正：心声七段短格式协议标签定义]
    说明：
-   1. AI 回复中使用 [心声]{json}[/心声] 包裹心声数据。
+   1. AI 回复中使用 [心声]状态|动作|心情|心跳|醋意|好感|真实心声[/心声]，保留原面板所有字段。
    2. 该标签在 buildAiReplyMessages 之前被提取并剥离，不显示在聊天气泡中。
-   3. 心声数据随消息对象的 innerVoice 字段写入 DB.js / IndexedDB，同时另存为独立心声历史。
+   3. 解析器仍兼容旧 JSON 心声，心声数据随消息对象写入 DB.js / IndexedDB，同时另存为独立心声历史。
    ========================================================================== */
 const INNER_VOICE_OPEN_TAG = '[心声]';
 const INNER_VOICE_CLOSE_TAG = '[/心声]';
@@ -111,11 +111,11 @@ export async function persistInnerVoiceHistoryEntry(db, state, innerVoice, messa
 }
 
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 解析 AI 原始回复中的心声 JSON
+   [区域标注·已完成·本次修正：解析 AI 原始回复中的心声七段短格式]
    说明：
-   1. 从 rawText 中提取 [心声]{...}[/心声] 之间的 JSON 字符串。
-   2. 返回 { innerVoice: {...}, cleanedText: '去掉心声标签后的文本' }。
-   3. 如果没有找到心声标签或 JSON 解析失败，innerVoice 为 null。
+   1. 从 rawText 中提取 [心声]...[/心声] 之间的七段短格式心声。
+   2. 新协议不再要求完整 JSON，但必须保留状态/动作/心情/心跳/醋意/好感/心声七个面板字段。
+   3. 为兼容旧回复，若内容是 JSON 或“状态/动作/心情”等键值文本，仍按旧字段宽松解析。
    4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 export function extractInnerVoiceFromRawText(rawText) {
@@ -127,26 +127,56 @@ export function extractInnerVoiceFromRawText(rawText) {
     return { innerVoice: null, cleanedText: text };
   }
 
-  const jsonStr = text.slice(openIndex + INNER_VOICE_OPEN_TAG.length, closeIndex).trim();
+  const innerVoiceText = text.slice(openIndex + INNER_VOICE_OPEN_TAG.length, closeIndex).trim();
   const cleanedText = (text.slice(0, openIndex) + text.slice(closeIndex + INNER_VOICE_CLOSE_TAG.length)).trim();
 
-  let innerVoice = null;
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed && typeof parsed === 'object') {
-      innerVoice = normalizeInnerVoiceData(parsed);
-    }
-  } catch (_e) {
-    // JSON 解析失败，尝试宽松匹配
-    innerVoice = parseInnerVoiceLoose(jsonStr);
-  }
-
+  const innerVoice = parseInnerVoicePayload(innerVoiceText);
   return { innerVoice, cleanedText };
 }
 
+function parseInnerVoicePayload(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+
+  if (s.startsWith('{') && s.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === 'object') {
+        return normalizeInnerVoiceData(parsed);
+      }
+    } catch (_e) {
+      // JSON 解析失败时继续走宽松解析
+    }
+  }
+
+  /* ========================================================================
+     [区域标注·已完成·本次修正：七段短格式转原面板数据]
+     说明：
+     1. 新格式为：状态|动作|心情|心跳|醋意|好感|真实心声。
+     2. 前 6 段固定映射面板字段；第 7 段允许包含分隔符，会自动合并回心声正文。
+     3. 这样比完整 JSON 省字段名 token，同时不会丢失原面板的状态、心情、好感度等数据。
+     ======================================================================== */
+  const pipeParts = s.split('|').map(part => part.trim());
+  if (pipeParts.length >= 7) {
+    return normalizeInnerVoiceData({
+      status: pipeParts[0],
+      action: pipeParts[1],
+      mood: pipeParts[2],
+      heartbeat: pipeParts[3],
+      jealousy: pipeParts[4],
+      affection: pipeParts[5],
+      voice: pipeParts.slice(6).join('|').trim()
+    });
+  }
+
+  return parseInnerVoiceLoose(s) || normalizeInnerVoiceData({ voice: s });
+}
+
 /* ==========================================================================
-   [区域标注·已完成·心声面板] 宽松解析心声数据
-   说明：当 AI 输出的 JSON 不够严格时（如缺引号），尝试正则提取各字段。
+   [区域标注·已完成·本次修正：宽松解析心声数据]
+   说明：
+   1. 当 AI 输出旧 JSON 不够严格时（如缺引号），尝试正则提取各字段。
+   2. 当 AI 按七段短格式输出时，优先由 parseInnerVoicePayload 映射回原面板全部字段。
    ========================================================================== */
 function parseInnerVoiceLoose(raw) {
   const s = String(raw || '').trim();
@@ -695,32 +725,37 @@ function switchInnerVoiceTab(overlayOrPanel, tabId) {
 }
 
 /* ==========================================================================
-   [区域标注·已修改·心声面板提示词·第一人称规则已更新] 构建心声系统提示词
+   [区域标注·已完成·本次修正：心声面板七段短格式提示词]
    说明：
    1. 本函数返回追加到 AI 系统提示词中的心声格式要求。
-   2. 已要求“状态/动作/心情/心声”均以角色第一人称书写。
-   3. 已要求提到用户时统一使用第三人称，避免第二人称与第三人称混用。
-   4. 已允许“心情”自然加入 1 个 emoji，并继续强制每轮输出心声数据块。
+   2. 已改为七段短格式，不要求完整 JSON 字段模板，但保留原面板全部字段。
+   3. 解析器会把七段短格式映射为状态/动作/心情/心跳/醋意/好感/心声；旧 JSON 回复仍兼容解析。
+   4. 状态、动作、心情、心声仍要求第一人称，提到用户时统一使用第三人称。
    ========================================================================== */
 export function buildInnerVoiceSystemPrompt() {
   return `
 【心声协议·强制】
-你每一轮回复都**必须**在所有可见消息协议之后、末尾追加一段心声数据块。格式如下：
+每一轮回复都必须在所有可见消息协议之后，末尾追加一段心声数据块。使用七段短格式，不要写 JSON：
 
-[心声]{"状态":"角色当前状态（≤20字）","动作":"角色正在做的动作（≤50字）","心情":"没说出口的真实心情（≤20字）","心跳":数值,"醋意":数值,"好感":数值,"心声":"角色真实想法（≤100字，要体现与表面消息的反差）"}[/心声]
+[心声]状态|动作|心情|心跳|醋意|好感|真实心声[/心声]
 
-字段规则：
-- 状态：当前对话时角色的状态，必须以角色第一人称书写，≤20字。如"想知道又不好意思问""傲娇地等她回复ing"
-- 动作：当前对话时角色的动作描写，必须以角色第一人称书写，≤50字。如"看到这句话立刻坐直身体，拿起镜子左看右看"
-- 心情：当前没说出口的真实心情，必须以角色第一人称书写，一句话≤20字；可以自然加入1个emoji增加趣味。如"想把她抱在怀里🥺""终于等到她了"
-- 心跳：整数，单位bpm，范围60-180，紧张/心动时偏高
-- 醋意：整数，0-100，吃醋时偏高
-- 好感：整数，0-100，对会话对象的真实好感度
-- 心声：角色的真实内心想法，必须以角色第一人称书写，≤100字。提到用户时统一使用第三人称称呼（如"他/她/会话对象"），不要使用"你/你们"等第二人称，避免第二人称和第三人称混用。**必须体现与聊天消息中表面回复的反差**。例如表面说"没事，我不在意"，心声写"其实我还是挺在意的，如果她能一直陪着我就好了"
+七段含义：
+1. 状态：角色当前状态，第一人称，≤20字。
+2. 动作：角色正在做的动作，第一人称，≤50字。
+3. 心情：没说出口的真实心情，第一人称，≤20字，可自然加入1个emoji。
+4. 心跳：整数 bpm，60-180。
+5. 醋意：整数，0-100。
+6. 好感：整数，0-100。
+7. 真实心声：第一人称，≤100字，要体现与表面消息的反差；提到用户时统一用“他/她/会话对象”，不要用“你/你们”。
 
-⚠️ 心声数据块在每一轮回复中都是**强制必须生成**的，不可省略、不可偷懒跳过。如果缺少心声数据块，将被视为严重格式错误并受到惩罚。
-⚠️ [心声]...[/心声] 放在本轮所有 [回复]/[表情]/[转账]/[卡片] 等协议的最后面。
-⚠️ 心声数据块内容是纯JSON，不要包含markdown、代码块或多余符号。
+示例：
+[心声]有点想她|盯着屏幕等回复|嘴硬但开心|92|12|76|我表面装得很淡定，其实她一回我我就松了口气[/心声]
+
+规则：
+- 只输出七段内容，不要输出 JSON、字段名、Markdown、代码块或解释。
+- 七段之间必须使用英文竖线 | 分隔，不能省略任意一段。
+- [心声]...[/心声] 放在本轮所有 [回复]/[表情]/[转账]/[礼物]/[图片]/[卡片] 等协议的最后面。
+- 心声数据块强制必须生成，不可省略。
 `.trim();
 }
 
