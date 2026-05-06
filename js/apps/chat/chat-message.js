@@ -47,6 +47,7 @@ import {
    4. 持久化仍统一通过 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
    ========================================================================== */
 import {
+  createAiTextImageMessageFromProtocol,
   isTextImageMessage,
   renderTextImageBubble,
   renderTextImageFeatureButton
@@ -1598,7 +1599,10 @@ export async function sendMessage(container, state, db, content, settingsManager
       .filter(item => item.imageUrl);
 
     const aiMessages = [
-      ...buildAiReplyMessages(rawAiText, state),
+      ...buildAiReplyMessages(rawAiText, state, {
+        /* [区域标注·已完成·AI文字图/生图互斥前端接收] 生图 API 开启时前端丢弃 [文字图]；未开启时才把 [文字图] 渲染为文字图气泡。 */
+        textImageProtocolEnabled: Boolean(result?.textImageProtocolEnabled)
+      }),
       ...generatedImageMessages
     ];
     if (!aiMessages.length) {
@@ -1635,7 +1639,9 @@ export async function sendMessage(container, state, db, content, settingsManager
               : (message.type === 'gift'
                   ? `AI消息[${index + 1}]：礼物 ${message.giftTitle || message.content || ''}`.trim()
                   : (message.type === 'image'
-                      ? `AI消息[${index + 1}]：AI生图 ${message.imageName || ''}`.trim()
+                      ? (isTextImageMessage(message)
+                          ? `AI消息[${index + 1}]：文字图 ${message.textImageText || ''}`.trim()
+                          : `AI消息[${index + 1}]：AI生图 ${message.imageName || ''}`.trim())
                       : `AI消息[${index + 1}]：${String(message.content || '').slice(0, 120)}`)))
       );
       hasRenderedAiBubble = true;
@@ -1646,7 +1652,7 @@ export async function sendMessage(container, state, db, content, settingsManager
             : (message.type === 'gift'
                 ? getGiftMessageDisplayText(message)
                 : (message.type === 'image'
-                    ? `[图片] ${message.imageName || 'AI 生图'}`
+                    ? (isTextImageMessage(message) ? `[文字图] ${message.textImageText || '文字图'}` : `[图片] ${message.imageName || 'AI 生图'}`)
                     : (message.content || '（AI 没有返回内容）'))));
       session.lastTime = Date.now();
       await persistCurrentMessages(state, db);
@@ -1661,7 +1667,7 @@ export async function sendMessage(container, state, db, content, settingsManager
           : (aiMessages[aiMessages.length - 1]?.type === 'gift'
               ? getGiftMessageDisplayText(aiMessages[aiMessages.length - 1])
               : (aiMessages[aiMessages.length - 1]?.type === 'image'
-                  ? `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`
+                  ? (isTextImageMessage(aiMessages[aiMessages.length - 1]) ? `[文字图] ${aiMessages[aiMessages.length - 1]?.textImageText || '文字图'}` : `[图片] ${aiMessages[aiMessages.length - 1]?.imageName || 'AI 生图'}`)
                   : (aiMessages[aiMessages.length - 1]?.content || '（AI 没有返回内容）'))));
     session.lastTime = Date.now();
 
@@ -2000,8 +2006,10 @@ export function extractAiProtocolBlocks(rawText) {
      3. 提取后统一转成内部消息对象，聊天界面绝不直接显示原始协议文本。
      ======================================================================== */
   /* ========================================================================
-     [区域标注·已完成·AI生图] 通用协议解析器识别 [图片]
-     说明：[图片] 协议只作为生图触发信号，不作为原始文本气泡展示；图片消息由 generatedImages 转成 type:image 后落库。
+     [区域标注·已完成·AI文字图/生图互斥协议解析] 通用协议解析器识别 [文字图]/[图片]
+     说明：
+     1. [文字图] 仅在生图 API 未开启时由 buildAiReplyMessages 转成文字图气泡。
+     2. [图片] 协议只作为生图触发信号，不作为原始文本气泡展示；图片消息由 generatedImages 转成 type:image 后落库。
      ======================================================================== */
   /* ========================================================================
      [区域标注·已完成·HTML卡片协议边界修复] 通用协议正则包含 [卡片]
@@ -2011,7 +2019,7 @@ export function extractAiProtocolBlocks(rawText) {
      2. 卡片的真正提取与渲染仍由 extractHtmlCardProtocolBlocks 处理；
         本循环遇到 type === '卡片' 直接跳过，不重复处理。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|文字图|图片|卡片)\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2030,7 +2038,16 @@ export function extractAiProtocolBlocks(rawText) {
 }
 
 
-export function buildAiReplyMessages(rawText, state) {
+export function buildAiReplyMessages(rawText, state, options = {}) {
+  /* ========================================================================
+     [区域标注·已完成·AI文字图/生图互斥前端渲染入口]
+     说明：
+     1. textImageProtocolEnabled=true 时才接收 [文字图] 并转成文字图气泡。
+     2. 生图 API 开启后 textImageProtocolEnabled=false，前端直接丢弃 [文字图]，只接收 generatedImages 产生的 [图片] 消息。
+     3. 文字图消息仍随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const textImageProtocolEnabled = Boolean(options.textImageProtocolEnabled);
+
   /* ========================================================================
      [区域标注·已完成·HTML卡片开关关闭时阻断卡片协议落库]
      说明：
@@ -2130,6 +2147,21 @@ export function buildAiReplyMessages(rawText, state) {
         });
       }
       /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
+      return;
+    }
+
+    if (block.type === '文字图') {
+      /* ======================================================================
+         [区域标注·已完成·AI文字图协议渲染]
+         说明：
+         1. 仅在生图 API 未开启/配置不完整时接收 [文字图]。
+         2. 生图 API 已开启时禁发文字图；若模型误输出，本区直接丢弃，避免双份视觉通道。
+         3. 文字图复用 chat-text-image.js 的消息结构，不写 imageUrl，不触发视觉识别 token。
+         ====================================================================== */
+      if (textImageProtocolEnabled) {
+        const textImageMessage = createAiTextImageMessageFromProtocol(block.content);
+        if (textImageMessage) builtMessages.push(textImageMessage);
+      }
       return;
     }
 
@@ -3040,6 +3072,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
           if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
             return message;
           }
+          if (isTextImageMessage(message)) {
+            return message;
+          }
           if (String(message.type || '') === 'transfer') {
             return message;
           }
@@ -3061,7 +3096,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     let bestLength = 0;
 
     normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
+      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || isTextImageMessage(message) || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
       const parts = splitSingleBubbleForCount(message.content);
       if (parts.length <= 1) return;
       const currentLength = String(message.content || '').length;

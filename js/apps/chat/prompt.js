@@ -11,7 +11,8 @@
 import {
   buildChatImageGenerationPrompt,
   generateImagesFromChatReply,
-  getChatImageApiSettings
+  getChatImageApiSettings,
+  isChatImageApiReady
 } from './chat-image-generation.js';
 import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
 /* ==========================================================================
@@ -104,11 +105,14 @@ function normalizeStickerPromptData(rawData) {
 
 /* ==========================================================================
    ===== 闲谈：通用消息协议格式 START =====
-   [AI本轮撤回通用协议]
+   [区域标注·已完成·AI文字图/生图互斥协议]
    说明：
    1. 新回复协议统一使用 **`[类型] 角色名：内容`**。
-   2. 已开放 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]，其中 [图片] 由 chat-image-generation.js 调用设置应用生图 API。
-   3. [撤回] 只允许撤回 AI 本轮已输出的消息；多条撤回必须逐条输出撤回协议并逐行生成系统小字。
+   2. 基础格式固定开放 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[语音]。
+   3. 视觉发送格式随设置应用生图 API 开关互斥：
+      - 生图 API 未开启或配置不完整：只开放 [文字图]，禁止 [图片]。
+      - 生图 API 已开启且配置完整：只开放 [图片]，禁止 [文字图]。
+   4. [撤回] 只允许撤回 AI 本轮已输出的消息；多条撤回必须逐条输出撤回协议并逐行生成系统小字。
    ========================================================================== */
 const CHAT_PROTOCOL_REPLY_FORMAT = '**`[回复] 角色名：文字消息内容`**';
 const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
@@ -118,7 +122,6 @@ const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
   '**`[转账] 角色名：{金额:xxx,备注:xxx}`**',
   '**`[礼物] 角色名：{名称:xxx,备注:xxx}`**',
   '**`[撤回] 角色名：{目标:上一条}`**',
-  '**`[图片] 角色名：给生图模型的画面描述`**',
   '**`[语音] 角色名：{时长:xx}语音转写文本`**'
 ];
 /* ===== 闲谈：通用消息协议格式 END ===== */
@@ -358,6 +361,9 @@ function formatCompactMessageContentForPrompt(message = {}, fallbackContent = ''
   const content = normalizePlainText(fallbackContent || message?.content);
 
   if (type === 'sticker') return `[表情包] ${normalizePlainText(message?.stickerName || content || '表情包')}`;
+  if (type === 'image' && (String(message?.imageSource || '') === 'text-image' || normalizePlainText(message?.textImageText))) {
+    return `[文字图] ${normalizePlainText(message?.textImageText || content || '文字图')}`;
+  }
   if (type === 'image') return `[图片] ${normalizePlainText(message?.imageName || content || '图片')}`;
   if (type === 'card') return content || '[HTML卡片] 互动卡片';
   if (type === 'transfer') return `[转账] ${content}`;
@@ -1054,12 +1060,28 @@ function formatWorldBookEntriesByPosition(position, context = {}) {
    [提示词区域 7] 聊天功能格式要求
    说明：本函数返回值会进入 system prompt。
    ========================================================================== */
-export function getFeaturePrompts({ settings = {} } = {}) {
+export function getFeaturePrompts({ settings = {}, imageApi = null } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
   const minBubble = normalizedSettings.replyBubbleMin;
   const maxBubble = normalizedSettings.replyBubbleMax;
   const htmlCardEnabled = Boolean(normalizedSettings.htmlCardEnabled);
   const htmlCardPrompt = htmlCardEnabled ? getHtmlCardFeaturePrompt() : '';
+
+  /* ======================================================================
+     [区域标注·已完成·AI文字图/生图互斥提示词入口]
+     说明：
+     1. 生图 API 未开启或配置不完整：通用协议只暴露 [文字图]，不暴露 [图片] 或生图 API 格式。
+     2. 生图 API 已开启且配置完整：通用协议只暴露 [图片]，禁发 [文字图]。
+     3. 本区域只根据 SettingsStore -> DB.js / IndexedDB 读取到的 imageApi 运行时状态拼装提示词，不新增存储。
+     ====================================================================== */
+  const imageApiReady = isChatImageApiReady(imageApi);
+  const visualProtocolName = imageApiReady ? '图片' : '文字图';
+  const visualProtocolFormat = imageApiReady
+    ? '**`[图片] 角色名：给生图模型的画面描述`**'
+    : '**`[文字图] 角色名：图片中文字内容`**';
+  const visualRuleText = imageApiReady
+    ? '8. 图片：**`[图片] 角色名：画面描述`**，只在【AI生图能力】允许时使用；内容是给生图模型的画面提示词，禁止 URL、资源ID、API 或幕后说明；生图 API 已开启时严禁输出 [文字图]。'
+    : '8. 文字图：**`[文字图] 角色名：图片中文字内容`**，只在【AI文字图能力】允许时使用；内容就是图片上要显示的文字；禁止 URL、资源ID、API、Markdown 链接、幕后说明或 [图片]。';
 
   /* ======================================================================
      [区域标注·已完成·HTML卡片开关关闭时彻底移除卡片协议提示]
@@ -1069,11 +1091,11 @@ export function getFeaturePrompts({ settings = {} } = {}) {
      3. 本区域只调整提示词拼装，不改其它聊天功能、不新增任何本地同步存储。
      ====================================================================== */
   const availableFormats = htmlCardEnabled
-    ? [...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**']
-    : [...CHAT_PROTOCOL_AVAILABLE_FORMATS];
+    ? [...CHAT_PROTOCOL_AVAILABLE_FORMATS, visualProtocolFormat, '**`[卡片] 角色名：HTML内容`**']
+    : [...CHAT_PROTOCOL_AVAILABLE_FORMATS, visualProtocolFormat];
   const protocolChecklistText = htmlCardEnabled
-    ? '[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片]'
-    : '[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]';
+    ? `[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[${visualProtocolName}]/[卡片]`
+    : `[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[${visualProtocolName}]`;
   const cardRuleText = htmlCardEnabled
     ? '9. 卡片：**`[卡片] 角色名：HTML内容`**，只在 HTML 卡片开启时使用；HTML 必须与当前对话强相关、可直接渲染、手机窄屏、北欧暖色风。'
     : '9. HTML 卡片当前未开启；禁止输出 [卡片] 协议、HTML 代码、srcdoc、CSS 卡片模板或任何卡片格式要求。';
@@ -1121,12 +1143,12 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 1. 最终可见消息只能由完整协议块组成，格式：**\`[类型] 角色名：内容\`**。
 2. 已开放格式：
 ${availableFormats.map(item => `- ${item}`).join('\n')}
-3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[图片] 需符合对应能力、人设和当前情景；${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
+3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[${visualProtocolName}] 需符合对应能力、人设和当前情景；${imageApiReady ? '生图 API 已开启，严禁输出 [文字图]；' : '当前只开放 [文字图]，严禁输出 [图片]；'}${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
 4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID。
 5. 转账：主动转账用 **\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；处理待确认转账只用 **\`{操作:接收/退回,转账ID:系统给出的ID,备注:可选}\`**。
 6. 礼物：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；备注短且自然，禁止价格、URL、系统说明。
 7. 撤回：只在角色真实有动机时使用 **\`[撤回] 角色名：{目标:上一条}\`**，且只能撤回本轮位于它前面的上一条 AI 消息；多条撤回必须逐条输出，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。
-8. 图片：**\`[图片] 角色名：画面描述\`**，只在【AI生图能力】允许时使用，禁止 URL、资源ID、API 或幕后说明。
+${visualRuleText}
 9. ${cardRuleText}
 10. 每个协议块独占一条消息；禁止裸协议头、半截 Markdown、代码块、编号列表、格式检查、幕后思考、系统规则、时间感知标注或任何审查痕迹。`,
     /* ===== 闲谈：通用消息协议格式 END ===== */
@@ -1139,6 +1161,26 @@ ${availableFormats.map(item => `- ${item}`).join('\n')}
        ====================================================================== */
     htmlCardPrompt
   ].filter(Boolean).join('\n\n');
+}
+
+/* ==========================================================================
+   [提示词区域 7-B] AI 视觉发送能力互斥提示
+   说明：
+   1. 生图 API 未开启或配置不完整时，只注入 [文字图] 能力提示；不发送任何“生图 API”格式要求。
+   2. 生图 API 已开启且配置完整时，只注入 chat-image-generation.js 的 [图片] 生图提示；禁发文字图。
+   3. 本区域只使用运行时 imageApi 状态，不新增持久化存储，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function buildChatVisualMessageCapabilityPrompt({ imageApi } = {}) {
+  if (isChatImageApiReady(imageApi)) {
+    return buildChatImageGenerationPrompt({ imageApi });
+  }
+
+  return createPromptSection('AI文字图能力', `# AI 文字图规则
+1. 当前只允许用 [文字图] 发送图片感内容；严禁输出 [图片]，也不要提接口、模型或生成过程。
+2. 格式：**\`[文字图] 角色名：图片中文字内容\`**。
+3. 内容就是图片上要显示给用户看的文字，适合便签、截图感、拍立得文字、手写感小纸条；要短、自然、贴合当前聊天。
+4. 禁止 URL、资源ID、Markdown 链接、代码块、API 说明或“我正在生成图片”等幕后话。
+5. 只有文字图比普通聊天气泡更自然时才使用；否则用 [回复]。`);
 }
 
 /* ==========================================================================
@@ -1616,16 +1658,16 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     getMemories(runtimeContext),
     getWorldBookBeforeChar(runtimeContext),
     getWorldBookAfterChar(runtimeContext),
-    getFeaturePrompts({ settings: normalizedSettings }),
+    getFeaturePrompts({ settings: normalizedSettings, imageApi: runtimeContext.imageApi }),
     getMountedStickerPrompt({ settings: normalizedSettings, context: runtimeContext }),
     /* ======================================================================
-       [区域标注·已完成·AI生图] 闲谈生图提示词接入
+       [区域标注·已完成·AI文字图/生图互斥能力注入]
        说明：
-       1. 独立逻辑位于 chat-image-generation.js。
-       2. 只读取设置应用已保存到 DB.js / IndexedDB 的 imageApi 配置。
-       3. 未开启或配置不完整时，明确禁止 AI 输出 [图片] 协议。
+       1. 生图 API 未开启或配置不完整时，仅注入 [文字图] 能力提示，不发送生图 API 格式要求。
+       2. 生图 API 已开启且配置完整时，仅注入 [图片] 生图能力提示，并在通用协议中禁发 [文字图]。
+       3. imageApi 来自设置应用 SettingsStore -> DB.js / IndexedDB；不使用 localStorage/sessionStorage。
        ====================================================================== */
-    buildChatImageGenerationPrompt({ imageApi: runtimeContext.imageApi }),
+    buildChatVisualMessageCapabilityPrompt({ imageApi: runtimeContext.imageApi }),
     getExternalContext({ enabled: normalizedSettings.externalContextEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 START ===== */
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
@@ -1960,10 +2002,15 @@ export async function chat({
     imageApi
   });
 
+  const imageApiReady = isChatImageApiReady(imageApi);
+
   return {
     messages,
     rawText,
     text: stripThinkBlocks(rawText),
-    generatedImages
+    generatedImages,
+    /* [区域标注·已完成·AI文字图/生图互斥运行时状态] 供聊天消息页决定是否接收 [文字图] 协议；状态只来自 DB.js / IndexedDB 中的 imageApi 配置。 */
+    imageApiReady,
+    textImageProtocolEnabled: !imageApiReady
   };
 }

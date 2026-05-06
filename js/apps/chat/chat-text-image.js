@@ -53,6 +53,30 @@ export function createTextImageMessage(text = '', options = {}) {
   };
 }
 
+/* ==========================================================================
+   [区域标注·已完成·AI文字图协议接入]
+   说明：
+   1. AI 在生图 API 未开启时可用 [文字图] 协议发送“文字图图片”气泡。
+   2. 该消息复用现有文字图渲染结构，不写 imageUrl，不触发视觉识别 token。
+   3. 持久化仍由调用方把消息对象写入 DB.js / IndexedDB；本模块不使用 localStorage/sessionStorage。
+   ========================================================================== */
+export function createAiTextImageMessageFromProtocol(text = '', options = {}) {
+  const safeText = normalizeTextImageText(text);
+  if (!safeText) return null;
+
+  const now = Number(options.timestamp || Date.now()) || Date.now();
+  return {
+    id: `ai_text_image_${now}_${Math.random().toString(16).slice(2)}`,
+    role: 'assistant',
+    type: 'image',
+    imageSource: 'text-image',
+    imageName: '文字图',
+    textImageText: safeText,
+    content: `[文字图] ${safeText}`,
+    timestamp: now
+  };
+}
+
 export function renderTextImageFeatureButton() {
   return `
     <!-- ======================================================================
