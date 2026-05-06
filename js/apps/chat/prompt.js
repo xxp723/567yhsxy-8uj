@@ -118,7 +118,7 @@ const CHAT_PROTOCOL_REPLY_FORMAT = '**`[回复] 角色名：文字消息内容`*
 const CHAT_PROTOCOL_AVAILABLE_FORMATS = [
   '**`[回复] 角色名：文字消息内容`**',
   '**`[表情] 角色名：表情名或资源ID`**',
-  '**`[引用] 角色名：{引用ID:xxx}文字消息内容`**',
+  '**`[引用] 角色名：{引用ID:xxx}角色自己的新回复内容`**',
   '**`[转账] 角色名：{金额:xxx,备注:xxx}`**',
   '**`[礼物] 角色名：{名称:xxx,备注:xxx}`**',
   '**`[撤回] 角色名：{目标:上一条}`**',
@@ -337,11 +337,12 @@ function createPromptSection(title, content) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次降token：引用回复提示词轻量化]
+   [区域标注·已完成·本次需求：AI引用回复防复读与视角修正]
    说明：
    1. 历史消息默认只发送“谁说了什么”的纯文本摘要，不再附带每条消息 id / type / quote 结构。
    2. 仅“最新一轮用户消息”保留最小可引用 ID，确保 AI 本轮仍能输出 [引用] 气泡。
-   3. quote 字段仍来自 DB.js / IndexedDB 中已有聊天消息对象；本区只做本轮 API 请求前的文本转换。
+   3. 本区已把用户发言标记为“用户：”，AI 历史发言标记为“你：”，避免模型把“我：...”误读成自己要复述的话。
+   4. quote 字段仍来自 DB.js / IndexedDB 中已有聊天消息对象；本区只做本轮 API 请求前的文本转换。
    ========================================================================== */
 function formatPromptQuoteLine(quote = {}, { includeReferenceId = false } = {}) {
   const quoteText = normalizePlainText(quote?.text);
@@ -353,7 +354,7 @@ function formatPromptQuoteLine(quote = {}, { includeReferenceId = false } = {}) 
 }
 
 function getPromptSenderLabel(message = {}) {
-  return message?.role === 'user' ? '我' : '对方';
+  return message?.role === 'user' ? '用户' : '你';
 }
 
 function formatCompactMessageContentForPrompt(message = {}, fallbackContent = '') {
@@ -407,6 +408,7 @@ function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessag
   return [
     '【本轮用户消息·可引用】',
     '仅以下本轮用户消息可被 [引用] 协议引用；历史消息不提供引用ID。',
+    '“用户：”后面的内容是用户发来的原话，不是你要复述的台词；如果使用 [引用]，{引用ID:xxx} 后必须写你作为角色的新回应。',
     formattedRoundMessages,
     ...systemTempBlocks
   ].filter(Boolean).join('\n');
@@ -1143,8 +1145,8 @@ export function getFeaturePrompts({ settings = {}, imageApi = null } = {}) {
 1. 最终回复先输出可见聊天消息；可见聊天消息只能由完整协议块组成，格式：**\`[类型] 角色名：内容\`**。若另有【心声协议】，心声只能在所有可见协议块之后单独一行，绝不能写进任何聊天气泡内容。
 2. 已开放格式：
 ${availableFormats.map(item => `- ${item}`).join('\n')}
-3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[${visualProtocolName}] 需符合对应能力、人设和当前情景；${imageApiReady ? '生图 API 已开启，严禁输出 [文字图]；' : '当前只开放 [文字图]，严禁输出 [图片]；'}${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
-4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID。
+3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID，且 {引用ID:xxx} 后只能写角色自己的新回应；[转账]/[礼物]/[${visualProtocolName}] 需符合对应能力、人设和当前情景；${imageApiReady ? '生图 API 已开启，严禁输出 [文字图]；' : '当前只开放 [文字图]，严禁输出 [图片]；'}${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
+4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID，禁止把被引用原文或用户最新原话搬到正文里，禁止在正文开头写“我：”“用户：”“对方：”等说话人前缀。
 5. 转账：主动转账用 **\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；处理待确认转账只用 **\`{操作:接收/退回,转账ID:系统给出的ID,备注:可选}\`**。
 6. 礼物：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；备注短且自然，禁止价格、URL、系统说明。
 7. 撤回：只在角色真实有动机时使用 **\`[撤回] 角色名：{目标:上一条}\`**，且只能撤回本轮位于它前面的上一条 AI 消息；多条撤回必须逐条输出，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。
@@ -1634,7 +1636,7 @@ export function getThinkingInstruction({ settings = {} } = {}) {
     '',
     '### 4. 最终格式终审',
     `- 最终可见聊天消息只输出完整协议块；普通文字固定使用：${CHAT_PROTOCOL_REPLY_FORMAT}`,
-    '- 其它类型必须严格遵守【可用聊天动作格式】；资源ID、引用ID、转账ID不得编造，不确定就退回 [回复]。',
+    '- 其它类型必须严格遵守【可用聊天动作格式】；资源ID、引用ID、转账ID不得编造；[引用] 的 {引用ID:xxx} 后必须是角色自己的新回应，不能复读被引用原文或用户最新原话，不确定就退回 [回复]。',
     '- [撤回] 只允许写 **`[撤回] 角色名：{目标:上一条}`**，且只能撤回本轮上一条 AI 消息；多条撤回逐条写，禁止批量撤回表达。',
     '- 每个可见协议块都必须包含：外层 **、反引号、[类型]、角色名、中文冒号、内容；缺一就后台整轮重写。',
     '- 若系统包含【心声协议】，心声只能在所有可见协议块后作为最后一行独立输出，禁止混入 [回复] 内容或拆进聊天气泡。',
@@ -1705,8 +1707,10 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
   const rawUserInput = String(userInput || '').trim();
   /* ==========================================================================
-     [区域标注·已完成·AI引用回复] 当前用户轮次引用上下文注入
-     说明：currentUserRoundMessages 由 chat-message.js 从当前消息对象生成，quote/id 均来自现有 IndexedDB 消息记录。
+     [区域标注·已完成·本次需求：AI引用回复防复读与视角修正] 当前用户轮次引用上下文注入
+     说明：
+     1. currentUserRoundMessages 由 chat-message.js 从当前消息对象生成，quote/id 均来自现有 IndexedDB 消息记录。
+     2. buildCurrentUserPromptContent 会把用户发言标记为“用户：”，并明确 [引用] 正文必须是角色自己的新回应，避免 AI 输出“我：...”或复读用户原话。
      ========================================================================== */
   const currentUserPromptContent = buildCurrentUserPromptContent(rawUserInput, currentUserRoundMessages);
   const finalUserContent = currentCommand
