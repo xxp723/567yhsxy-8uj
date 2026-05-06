@@ -39,6 +39,19 @@ import {
   renderGiftFeatureButton
 } from './chat-gift.js';
 /* ==========================================================================
+   [区域标注·已完成·文字图板块集成] 导入独立文字图模块
+   说明：
+   1. 咖啡功能区“文字图”入口、拍立得消息气泡与悬浮预览由 chat-text-image.js / chat-text-image.css 独立维护。
+   2. 本文件只负责把文字图消息接入聊天消息页渲染与 AI 上下文组装。
+   3. 文字图不写 imageUrl，不触发视觉识别 token；AI 只读取精简图片描述文本。
+   4. 持久化仍统一通过 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+import {
+  isTextImageMessage,
+  renderTextImageBubble,
+  renderTextImageFeatureButton
+} from './chat-text-image.js';
+/* ==========================================================================
    [区域标注·已完成·心声面板集成] 导入心声模块提取函数
    说明：
    1. extractInnerVoiceFromRawText 从 AI 原始回复中提取 [心声]{json}[/心声] 并返回清理后文本。
@@ -315,6 +328,7 @@ function formatMsgTime(ts) {
 function getMessageDisplayTextForQuote(message = {}) {
   const type = String(message?.type || '');
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
+  if (isTextImageMessage(message)) return `[文字图] ${String(message?.textImageText || message?.content || '文字图').trim()}`;
   if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
   if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
   if (type === 'gift') return getGiftMessageDisplayText(message);
@@ -609,6 +623,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 所有图片消息（AI 生成/发送图片）统一支持单击居中放大，交由 index.js 的消息页媒体预览层处理。
      4. 不使用 localStorage/sessionStorage，也不保留双份存储兜底；不使用原生弹窗或原生选择器。
      ======================================================================== */
+  const isTextImageBubbleMessage = isTextImageMessage(msg);
   const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
   const isZoomableImage = isImageMessage;
   /* ========================================================================
@@ -676,7 +691,9 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
           <img class="msg-sticker-bubble__image" src="${escapeHtml(msg?.stickerUrl || '')}" alt="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
         </div>
       `
-    : (isImageMessage
+    : (isTextImageBubbleMessage
+        ? renderTextImageBubble(msg)
+        : (isImageMessage
         ? `
           <!-- ==================================================================
                [区域标注·已完成·图片单击居中放大入口]
@@ -730,7 +747,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                       title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
                   </div>
                 `
-                : escapeHtml(msg?.content || '')))));
+                : escapeHtml(msg?.content || ''))))));
 
   if (isTransferSystemMessage) {
     return `
@@ -836,7 +853,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
           ${quoteHtml}
           ${bubbleInnerHtml}
         </div>
@@ -960,6 +977,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
         ${MSG_ICONS.image}<span>图片</span>
       </button>
+      ${renderTextImageFeatureButton()}
       <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
         ${MSG_ICONS.wallet}<span>转账</span>
       </button>
@@ -2616,13 +2634,15 @@ export function refreshCurrentSessionLastMessage(state) {
   const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
   session.lastMessage = latest?.type === 'sticker'
         ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
+        : (isTextImageMessage(latest)
+        ? `[文字图] ${latest?.textImageText || '文字图'}`
         : (latest?.type === 'image'
         ? `[图片] ${latest?.imageName || '图片'}`
         : (latest?.type === 'transfer'
             ? `[转账] ${latest?.transferDisplayAmount || latest?.content || '¥0.00'}`
             : (latest?.type === 'gift'
                 ? getGiftMessageDisplayText(latest)
-                : (latest?.content || ''))));
+                : (latest?.content || '')))));
   session.lastTime = latest?.timestamp || Date.now();
 }
 
