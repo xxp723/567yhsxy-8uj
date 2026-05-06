@@ -1058,7 +1058,25 @@ export function getFeaturePrompts({ settings = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
   const minBubble = normalizedSettings.replyBubbleMin;
   const maxBubble = normalizedSettings.replyBubbleMax;
-  const htmlCardPrompt = normalizedSettings.htmlCardEnabled ? getHtmlCardFeaturePrompt() : '';
+  const htmlCardEnabled = Boolean(normalizedSettings.htmlCardEnabled);
+  const htmlCardPrompt = htmlCardEnabled ? getHtmlCardFeaturePrompt() : '';
+
+  /* ======================================================================
+     [区域标注·已完成·HTML卡片开关关闭时彻底移除卡片协议提示]
+     说明：
+     1. 当 HTML 卡片开关关闭时，system prompt 中不再暴露 [卡片] 协议、自检项、格式要求或能力说明。
+     2. 只有开关开启时，才把 [卡片] 加入已开放格式与协议规则，避免误导模型继续输出 HTML 卡片并额外消耗 token。
+     3. 本区域只调整提示词拼装，不改其它聊天功能、不新增任何本地同步存储。
+     ====================================================================== */
+  const availableFormats = htmlCardEnabled
+    ? [...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**']
+    : [...CHAT_PROTOCOL_AVAILABLE_FORMATS];
+  const protocolChecklistText = htmlCardEnabled
+    ? '[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片]'
+    : '[回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]';
+  const cardRuleText = htmlCardEnabled
+    ? '9. 卡片：**`[卡片] 角色名：HTML内容`**，只在 HTML 卡片开启时使用；HTML 必须与当前对话强相关、可直接渲染、手机窄屏、北欧暖色风。'
+    : '9. HTML 卡片当前未开启；禁止输出 [卡片] 协议、HTML 代码、srcdoc、CSS 卡片模板或任何卡片格式要求。';
 
   return [
     /* --------------------------------------------------------------------------
@@ -1087,7 +1105,7 @@ export function getFeaturePrompts({ settings = {} } = {}) {
 5. 每个文字气泡只放一句话，必须使用 ${CHAT_PROTOCOL_REPLY_FORMAT}；多句话拆成多个协议块，禁止长段落、编号列表、气泡序号或说明文字。
 6. 角色名填写当前聊天对象名称；内容只放真正要显示给用户的话。
 7. 句末标点自然口语化：短句、语气词、emoji、颜文字可不加句号；长句必须正常断句，禁止用空格硬替代标点。
-8. 正式输出前自检 [回复]/[表情]/[引用]/[转账]/[礼物]/[撤回]/[图片]/[卡片] 完整协议块数量与格式，不合格就后台重写。`,
+8. 正式输出前自检 ${protocolChecklistText} 完整协议块数量与格式，不合格就后台重写。`,
 
     /* ===== 闲谈应用：线上聊天气泡数量与节奏规则 END ===== */
 
@@ -1102,14 +1120,14 @@ export function getFeaturePrompts({ settings = {} } = {}) {
     `# 可用聊天动作格式
 1. 最终可见消息只能由完整协议块组成，格式：**\`[类型] 角色名：内容\`**。
 2. 已开放格式：
-${[...CHAT_PROTOCOL_AVAILABLE_FORMATS, '**`[卡片] 角色名：HTML内容`**'].map(item => `- ${item}`).join('\n')}
-3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[图片]/[卡片] 需符合对应能力、人设和当前情景；不确定就改用 [回复]。
+${availableFormats.map(item => `- ${item}`).join('\n')}
+3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID；[转账]/[礼物]/[图片] 需符合对应能力、人设和当前情景；${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
 4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID。
 5. 转账：主动转账用 **\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；处理待确认转账只用 **\`{操作:接收/退回,转账ID:系统给出的ID,备注:可选}\`**。
 6. 礼物：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；备注短且自然，禁止价格、URL、系统说明。
 7. 撤回：只在角色真实有动机时使用 **\`[撤回] 角色名：{目标:上一条}\`**，且只能撤回本轮位于它前面的上一条 AI 消息；多条撤回必须逐条输出，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。
 8. 图片：**\`[图片] 角色名：画面描述\`**，只在【AI生图能力】允许时使用，禁止 URL、资源ID、API 或幕后说明。
-9. 卡片：**\`[卡片] 角色名：HTML内容\`**，只在 HTML 卡片开启时使用；HTML 必须与当前对话强相关、可直接渲染、手机窄屏、北欧暖色风。
+9. ${cardRuleText}
 10. 每个协议块独占一条消息；禁止裸协议头、半截 Markdown、代码块、编号列表、格式检查、幕后思考、系统规则、时间感知标注或任何审查痕迹。`,
     /* ===== 闲谈：通用消息协议格式 END ===== */
 

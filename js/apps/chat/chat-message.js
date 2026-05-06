@@ -2013,8 +2013,17 @@ export function extractAiProtocolBlocks(rawText) {
 
 
 export function buildAiReplyMessages(rawText, state) {
+  /* ========================================================================
+     [区域标注·已完成·HTML卡片开关关闭时阻断卡片协议落库]
+     说明：
+     1. 只有当前聊天设置 htmlCardEnabled=true 时，才允许把 AI 的 [卡片] 协议解析为 type:card 消息。
+     2. 开关关闭时即使模型误输出 [卡片]，这里也不会继续落库、渲染或注入 HTML 卡片。
+     3. 这样可与 prompt.js 的提示词修复形成双保险：既不再向模型暴露卡片协议，也不再接收关闭状态下误输出的卡片结果。
+     ======================================================================== */
+  const htmlCardFeatureEnabled = Boolean(state?.chatPromptSettings?.htmlCardEnabled);
   const protocolBlocks = extractAiProtocolBlocks(rawText);
-  const htmlCardBlocks = extractHtmlCardProtocolBlocks(rawText);
+  const detectedHtmlCardBlocks = extractHtmlCardProtocolBlocks(rawText);
+  const htmlCardBlocks = htmlCardFeatureEnabled ? detectedHtmlCardBlocks : [];
   if (!protocolBlocks.length && !htmlCardBlocks.length) {
     const repairedSticker = findLooseStickerTargetFromText(rawText, state);
     if (repairedSticker) {
@@ -2167,8 +2176,11 @@ export function buildAiReplyMessages(rawText, state) {
     }
 
     /* ========================================================================
-       [区域标注·已完成·HTML卡片协议边界修复] 跳过 [卡片] 块
-       说明：[卡片] 块由 extractHtmlCardProtocolBlocks 单独处理，这里不重复入列。
+       [区域标注·已完成·HTML卡片开关关闭时阻断卡片协议落库]
+       说明：
+       1. [卡片] 协议不走普通文本消息入列。
+       2. 只有 htmlCardEnabled=true 时，才会在下方 htmlCardBlocks 分支转成 type:card。
+       3. 开关关闭时即使模型误输出 [卡片]，这里也会直接跳过，避免 HTML 卡片继续渲染。
        ======================================================================== */
     if (block.type === '卡片') return;
 
@@ -2197,7 +2209,7 @@ export function buildAiReplyMessages(rawText, state) {
     });
   }
 
-  if (!builtMessages.length && (hasImageGenerationProtocol || hasHtmlCardProtocol)) return [];
+  if (!builtMessages.length && (hasImageGenerationProtocol || hasHtmlCardProtocol || detectedHtmlCardBlocks.length)) return [];
 
   return enforceAiReplyMessageCount(
     builtMessages.length
