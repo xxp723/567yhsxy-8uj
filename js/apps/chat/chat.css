@@ -6,6 +6,21 @@
  */
 
 /* ==========================================================================
+   [区域标注·已完成·本次英文字体统一] 闲谈应用英文字体嵌入
+   说明：
+   1. 已将闲谈应用默认英文字体统一为 ZSFT-dt。
+   2. 中文仍保留 PingFang SC / Microsoft YaHei 作为 fallback，避免中文缺字。
+   3. 本区域仅定义字体资源，不涉及任何持久化存储逻辑。
+   ========================================================================== */
+@font-face {
+  font-family: "ZSFT-dt";
+  src: url("https://fontsapi.zeoseven.com/dt/main.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次主题色需求] 全局覆盖 — 隐藏系统默认标题栏与窗口装饰
    说明：
    1. 闲谈应用自行管理顶部栏，因此需要隐藏 WindowManager 自带的 header。
@@ -38,7 +53,8 @@
   background: #F5F1EA;
   position: relative;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* [区域标注·已完成·本次英文字体统一] 闲谈主界面默认英文字体：已替换为 ZSFT-dt。 */
+  font-family: "ZSFT-dt", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 /* ==========================================================================

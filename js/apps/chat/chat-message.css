@@ -30,7 +30,8 @@
   position: relative;
   overflow: hidden;
   background: #f8f4ef;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* [区域标注·已完成·本次英文字体统一] 聊天消息页默认英文字体：已替换为 ZSFT-dt。 */
+  font-family: "ZSFT-dt", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 /* ==========================================================================
