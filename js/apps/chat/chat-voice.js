@@ -21,11 +21,11 @@ const VOICE_ICONS = {
 };
 
 /* ==========================================================================
-   [区域标注·已完成·语音消息数据工具]
+   [区域标注·已完成·AI语音消息通用协议与数据工具]
    说明：
-   1. type=voice_message 为本次新增模拟语音消息类型。
-   2. voiceText 是用户在弹窗输入的“语音转文字”内容，会随当前聊天消息统一写入 DB.js / IndexedDB。
-   3. 不读取或写入 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
+   1. type=voice_message 同时支持用户模拟语音与 AI 主动发送语音消息。
+   2. 用户语音由弹窗创建；AI 语音来自通用协议 `[语音] 角色名：{时长:xx}语音转写文本`。
+   3. voiceText/voiceDuration 随当前聊天消息统一写入 DB.js / IndexedDB；本区域不读取或写入 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
    ========================================================================== */
 export function isVoiceMessage(message = {}) {
   return String(message?.type || '') === 'voice_message';
@@ -63,6 +63,47 @@ export function createVoiceMessage(text = '', options = {}) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·AI语音消息协议解析]
+   说明：
+   1. 解析 AI 输出的 `[语音] 角色名：{时长:xx}语音转写文本`，生成与用户语音共用的 voice_message 结构。
+   2. content 保留为 `[语音] 转写文本`，用于历史上下文摘要；voiceText 专供气泡展开显示转写。
+   3. 本区域只做运行时解析与消息对象创建；真正持久化仍由聊天消息页写入 DB.js / IndexedDB。
+   ========================================================================== */
+export function parseAiVoiceProtocolPayload(content = '') {
+  const normalized = normalizeVoiceText(content)
+    .replace(/^(?:`|\*\*)+/g, '')
+    .replace(/(?:`|\*\*)+$/g, '')
+    .trim();
+  if (!normalized) return null;
+
+  const durationMatch = normalized.match(/^\{\s*时长\s*[：:]\s*(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i);
+  const voiceText = normalizeVoiceText(durationMatch ? durationMatch[2] : normalized);
+  if (!voiceText) return null;
+
+  const durationFromProtocol = durationMatch ? Number(durationMatch[1]) : 0;
+  const duration = Math.max(1, Math.min(60, Math.floor(durationFromProtocol || Math.ceil(voiceText.length / 3) || 1)));
+
+  return {
+    voiceText,
+    voiceDuration: duration,
+    content: `[语音] ${voiceText}`
+  };
+}
+
+export function createAiVoiceMessageFromProtocol(block = {}) {
+  const payload = parseAiVoiceProtocolPayload(block?.content || '');
+  if (!payload) return null;
+
+  return {
+    role: 'assistant',
+    type: 'voice_message',
+    voiceRoleName: String(block?.roleName || '').trim(),
+    voiceExpanded: false,
+    ...payload
+  };
+}
+
+/* ==========================================================================
    [区域标注·已完成·咖啡功能区语音入口]
    说明：
    1. 本按钮插入聊天消息页底栏“咖啡”功能区。
@@ -78,10 +119,10 @@ export function renderVoiceFeatureButton() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·语音气泡渲染]
+   [区域标注·已完成·AI/用户语音气泡渲染]
    说明：
-   1. 默认显示类似微信/QQ 的语音消息气泡：语音波纹 + 秒数，不直接露出文字。
-   2. 双击气泡后切换 voiceExpanded，并在横线下方显示模拟“语音转文字”内容。
+   1. 用户模拟语音与 AI 主动语音共用本气泡：语音波纹 + 秒数，默认不直接露出文字。
+   2. 双击气泡后切换 voiceExpanded，并在横线下方显示“语音转文字”内容。
    3. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成。
    ========================================================================== */
 export function renderVoiceBubble(message = {}) {

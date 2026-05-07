@@ -68,6 +68,7 @@ import {
    3. 语音消息随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
    ========================================================================== */
 import {
+  createAiVoiceMessageFromProtocol,
   getVoiceMessageDisplayText,
   isVoiceMessage,
   renderVoiceBubble,
@@ -2081,7 +2082,7 @@ export function extractAiProtocolBlocks(rawText) {
      2. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
      3. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|文字图|图片|卡片)\]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\]\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2211,6 +2212,19 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
         });
       }
       /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
+      return;
+    }
+
+    if (block.type === '语音') {
+      /* ======================================================================
+         [区域标注·已完成·AI语音消息协议渲染]
+         说明：
+         1. AI 输出 [语音] 时转为 type=voice_message 结构化消息，复用 chat-voice.js 的语音气泡。
+         2. 协议格式为 `[语音] 角色名：{时长:xx}语音转写文本`；解析失败直接丢弃，避免原始协议露出。
+         3. 语音消息随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+         ====================================================================== */
+      const voiceMessage = createAiVoiceMessageFromProtocol(block);
+      if (voiceMessage) builtMessages.push(voiceMessage);
       return;
     }
 
@@ -3163,6 +3177,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
           if (isTextImageMessage(message)) {
             return message;
           }
+          if (isVoiceMessage(message)) {
+            return message;
+          }
           if (String(message.type || '') === 'transfer') {
             return message;
           }
@@ -3184,7 +3201,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
     let bestLength = 0;
 
     normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || isTextImageMessage(message) || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
+      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || isTextImageMessage(message) || isVoiceMessage(message) || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
       const parts = splitSingleBubbleForCount(message.content);
       if (parts.length <= 1) return;
       const currentLength = String(message.content || '').length;
