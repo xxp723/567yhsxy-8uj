@@ -1,0 +1,106 @@
+/* ==========================================================================
+   文件名: js/apps/chat/chat-voice.css
+   用途: 闲谈应用 — 独立语音消息板块样式
+   说明：只服务咖啡功能区“语音”弹窗与语音消息气泡。
+   ========================================================================== */
+
+/* ==========================================================================
+   [区域标注·已完成·语音板块弹窗样式]
+   说明：
+   1. 沿用闲谈应用暖色应用内弹窗风格，不使用浏览器原生弹窗/选择器。
+   2. 只影响 data-role="msg-voice-text-input" 相关语音弹窗区域。
+   ========================================================================== */
+.msg-voice-modal-body {
+  gap: 12px;
+}
+
+.msg-voice-modal-input {
+  min-height: 128px;
+  resize: none;
+  line-height: 1.55;
+  border-radius: 18px;
+  padding: 12px 14px;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·语音消息气泡样式]
+   说明：
+   1. 默认只显示语音波纹与秒数，模拟微信/QQ 社交软件语音气泡。
+   2. 双击后通过 .is-expanded 展开横线下方“语音转文字”内容。
+   3. 只做视觉展示，不涉及任何持久化存储逻辑。
+   ========================================================================== */
+.msg-bubble--voice {
+  min-width: 116px;
+  max-width: min(280px, 74vw);
+  padding: 0;
+  overflow: hidden;
+}
+
+.msg-voice-bubble {
+  min-width: 116px;
+  max-width: min(280px, 74vw);
+  cursor: pointer;
+  user-select: none;
+}
+
+.msg-voice-bubble__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.msg-voice-bubble__wave {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  color: currentColor;
+}
+
+.msg-voice-bubble__wave svg {
+  width: 100%;
+  height: 100%;
+}
+
+.msg-voice-bubble__duration {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.msg-voice-bubble__divider {
+  height: 1px;
+  margin: 0 12px;
+  background: currentColor;
+  opacity: .22;
+}
+
+.msg-voice-bubble__transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 12px 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-voice-bubble__label {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: .62;
+}
+
+.msg-voice-bubble__text {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.msg-bubble-row--right .msg-voice-bubble__main {
+  flex-direction: row-reverse;
+}
+
+.msg-bubble-row--right .msg-voice-bubble__transcript {
+  text-align: right;
+}

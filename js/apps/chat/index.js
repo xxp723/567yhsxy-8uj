@@ -173,6 +173,18 @@ import {
   showTextImageModal,
   validateTextImageDraft
 } from './chat-text-image.js';
+/* ==========================================================================
+   [区域标注·已完成·语音板块入口接入]
+   说明：
+   1. 咖啡功能区“语音”的弹窗、消息构造与语音转文字气泡展开由独立 chat-voice.js 提供。
+   2. 本入口文件只负责事件接线与 DB.js / IndexedDB 持久化流程调度。
+   3. 禁止 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
+   ========================================================================== */
+import {
+  createVoiceMessage,
+  parseVoiceDraftFromModal,
+  showVoiceMessageModal
+} from './chat-voice.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
@@ -410,7 +422,12 @@ export async function mount(container, context) {
        [区域标注·已完成·文字图独立样式预加载]
        说明：文字图弹窗、拍立得气泡与无关闭按钮悬浮预览样式拆分到 chat-text-image.css，挂载时预加载以避免首次打开闪屏。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-text-image.css', 'chat-text-image-css')
+    loadCSS('./js/apps/chat/chat-text-image.css', 'chat-text-image-css'),
+    /* ======================================================================
+       [区域标注·已完成·语音板块独立样式预加载]
+       说明：语音弹窗与语音气泡样式拆分到 chat-voice.css，挂载时预加载以避免首次打开闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-voice.css', 'chat-voice-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -729,6 +746,7 @@ export async function mount(container, context) {
       removeCSS('chat-html-card-css');
       removeCSS('chat-gift-css');
       removeCSS('chat-text-image-css');
+      removeCSS('chat-voice-css');
     }
   };
 }
@@ -1618,6 +1636,52 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'open-msg-text-image-modal':
       showTextImageModal(container);
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·语音弹窗打开]
+       说明：咖啡功能区“语音”入口打开应用内弹窗，不使用浏览器原生弹窗/选择器。
+       ======================================================================== */
+    case 'open-msg-voice-modal':
+      showVoiceMessageModal(container);
+      break;
+
+    /* ========================================================================
+       [区域标注·已完成·语音保存发送并标记 AI 上下文]
+       说明：
+       1. 语音弹窗保存后立即作为 type=voice_message 用户消息入列，并通过 DB.js / IndexedDB 持久化。
+       2. 消息 content 使用“用户发送了一条语音消息，语音转文字内容：...”格式，明确告诉 AI 这是用户语音消息。
+       3. 保存后不自动请求 AI；用户点击纸飞机时再把该语音消息作为当前轮用户上下文发送给 AI。
+       4. 不使用 localStorage/sessionStorage，不写双份存储兜底，不按长文本字段过滤。
+       ======================================================================== */
+    case 'confirm-msg-voice': {
+      if (!state.currentChatId || state.isAiSending) break;
+      const voiceText = parseVoiceDraftFromModal(container);
+      if (!voiceText) {
+        renderModalNotice(container, '请输入语音文字内容');
+        break;
+      }
+
+      const session = state.sessions.find(s => String(s.id) === String(state.currentChatId));
+      const voiceMessage = createVoiceMessage(voiceText);
+      if (!session || !voiceMessage) break;
+
+      state.currentMessages.push(voiceMessage);
+      state.coffeeDockOpen = false;
+      state.stickerPanelOpen = false;
+      session.lastMessage = '[语音]';
+      session.lastTime = voiceMessage.timestamp;
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      closeModal(container);
+      appendCurrentMessageBubble(container, state, voiceMessage);
+      syncMessageDockOpenState(container, state);
+      refreshPanel(container, state, 'chatList');
+      break;
+    }
 
     /* ========================================================================
        [区域标注·已修改·文字图保存发送改为仅入列不自动请求AI]
@@ -4151,6 +4215,30 @@ async function handleKeydown(e, state, container, db, settingsManager) {
    4. 持久化只走传入的 DB.js / IndexedDB 实例，不使用 localStorage/sessionStorage，不写双份兜底存储。
    ========================================================================== */
 function handleDoubleClick(e, state, container, db) {
+  /* ========================================================================
+     [区域标注·已完成·语音气泡双击展开/收起]
+     说明：
+     1. 双击 type=voice_message 语音气泡时，在气泡下方展开/收起模拟语音转文字内容。
+     2. 展开状态 voiceExpanded 随当前聊天记录写入 DB.js / IndexedDB，刷新后保持一致。
+     3. 只局部刷新当前气泡行，避免页面闪屏；不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const voiceBubble = e.target.closest('[data-action="toggle-msg-voice-transcript"]');
+  if (state.currentChatId && voiceBubble) {
+    const messageId = String(voiceBubble.dataset.messageId || voiceBubble.closest('[data-message-id]')?.dataset?.messageId || '').trim();
+    const messageIndex = (state.currentMessages || []).findIndex(item => String(item.id) === messageId);
+    if (messageIndex >= 0 && String(state.currentMessages[messageIndex]?.type || '') === 'voice_message') {
+      e.preventDefault();
+      e.stopPropagation();
+      state.currentMessages[messageIndex] = {
+        ...state.currentMessages[messageIndex],
+        voiceExpanded: !Boolean(state.currentMessages[messageIndex].voiceExpanded)
+      };
+      persistCurrentMessages(state, db);
+      refreshMessageBubbleRows(container, state, [messageId]);
+      return;
+    }
+  }
+
   /* --- 聊天消息页 HTML 卡片双击收藏 --- */
   if (state.currentChatId && !state.subPageView) {
     const htmlCardBubble = e.target.closest('.msg-html-card-bubble');
