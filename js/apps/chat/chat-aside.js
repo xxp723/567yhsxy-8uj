@@ -57,6 +57,17 @@ export function normalizeAsideSettings(raw) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·闲谈打不开修复] 旁白模式运行时状态检测导出
+   说明：
+   1. chat-message.js 与 index.js 会静态导入 isAsideModeActive；缺少该导出会导致闲谈入口模块加载失败。
+   2. 本函数只读取传入 state/options 的 asideModeActive 运行时布尔值，不读写任何持久化存储。
+   3. 持久化仍严格只通过 DB.js / IndexedDB；不使用 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+export function isAsideModeActive(stateOrOptions = {}) {
+  return Boolean(stateOrOptions?.asideModeActive);
+}
+
+/* ==========================================================================
    [区域标注·已完成·旁白模式] 旁白模式确认弹窗渲染
    说明：
    1. 点击咖啡功能区"旁白"按钮后打开此弹窗。
@@ -181,6 +192,37 @@ export function renderAsideExitButtonHtml() {
       ${ASIDE_ICONS.heart}
     </button>
   `;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·闲谈打不开修复] 退出旁白模式确认弹窗导出
+   说明：
+   1. index.js 会静态导入 showAsideExitConfirmModal；缺少该导出会导致闲谈入口模块加载失败。
+   2. 使用闲谈应用内 chat-modal 样式，不使用浏览器原生 alert/confirm/prompt。
+   3. 本弹窗只负责运行时确认交互，不读写任何持久化存储；确认后的状态变更仍由 index.js 处理。
+   ========================================================================== */
+export function showAsideExitConfirmModal(container) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>退出旁白模式</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${ASIDE_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body aside-modal-body">
+      <div class="chat-modal-hint">
+        退出后，后续 AI 回复将不再生成旁白。旁白模式期间的摘要会保留在当前运行时上下文中，用于维持剧情连续性。
+      </div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-exit-aside-mode" type="button">确认退出</button>
+    </div>
+  `;
+
+  mask.classList.remove('is-hidden');
 }
 
 /* ==========================================================================
