@@ -271,6 +271,11 @@ const MSG_ICONS = {
   sticker: `<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="currentColor" stroke-width="3"/><path d="M16 29c2 4 14 4 16 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="17" cy="20" r="2.5" fill="currentColor"/><circle cx="31" cy="20" r="2.5" fill="currentColor"/></svg>`,
   wallet: `<svg viewBox="0 0 48 48" fill="none"><path d="M6 14h36v28H6V14Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M10 14V8h26v6" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 28h10v8H32a4 4 0 0 1 0-8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   bolt: `<svg viewBox="0 0 48 48" fill="none"><path d="M28 4L10 28h14l-4 16l18-24H24l4-16Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* ========================================================================
+     [区域标注·已完成·旁白板块入口] IconPark — 旁白按钮图标
+     说明：用于聊天消息页咖啡功能区第二行"旁白"板块，图标来源保持 IconPark 风格。
+     ======================================================================== */
+  aside: `<svg viewBox="0 0 48 48" fill="none"><path d="M10 8h28a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H26l-8 8v-8h-8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 17h12M18 23h8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
 
   /* ==========================================================================
      [区域标注·本次修改3] 消息气泡功能栏 IconPark 图标
@@ -1000,23 +1005,37 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
 
   /* ==========================================================================
-     [区域标注·已完成·咖啡功能区礼物入口]
+     [区域标注·已完成·咖啡功能区两行布局与旁白入口]
      说明：
-     1. 已按本次需求移除原“动作”板块，新增“礼物”板块。
-     2. “礼物”入口 HTML 来自独立 chat-gift.js，后续只改礼物板块可优先定位该文件。
-     3. 图片、转账、礼物消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
+     1. 咖啡功能区分成两行：第一行（图片/文字图/语音/转账），第二行（礼物/旁白）。
+     2. "礼物"入口 HTML 来自独立 chat-gift.js，后续只改礼物板块可优先定位该文件。
+     3. "旁白"入口暂时只添加 UI 按钮，功能逻辑待后续实现。
+     4. 图片、转账、礼物消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
   /* ========================================================================== */
   const featureDockHtml = `
     <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
-      <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
-        ${MSG_ICONS.image}<span>图片</span>
-      </button>
-      ${renderTextImageFeatureButton()}
-      ${renderVoiceFeatureButton()}
-      <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
-        ${MSG_ICONS.wallet}<span>转账</span>
-      </button>
-      ${renderGiftFeatureButton()}
+      <!-- ====================================================================
+           [区域标注·已完成·咖啡功能区第一行] 图片 / 文字图 / 语音 / 转账
+           ==================================================================== -->
+      <div class="msg-feature-dock__row">
+        <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
+          ${MSG_ICONS.image}<span>图片</span>
+        </button>
+        ${renderTextImageFeatureButton()}
+        ${renderVoiceFeatureButton()}
+        <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
+          ${MSG_ICONS.wallet}<span>转账</span>
+        </button>
+      </div>
+      <!-- ====================================================================
+           [区域标注·已完成·咖啡功能区第二行] 礼物 / 旁白
+           ==================================================================== -->
+      <div class="msg-feature-dock__row">
+        ${renderGiftFeatureButton()}
+        <button class="msg-feature-dock__item msg-feature-dock__item--aside" type="button" data-action="open-msg-aside-modal" data-feature="aside">
+          ${MSG_ICONS.aside}<span>旁白</span>
+        </button>
+      </div>
     </div>
   `;
 
