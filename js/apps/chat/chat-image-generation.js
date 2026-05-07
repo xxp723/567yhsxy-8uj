@@ -164,11 +164,13 @@ export function buildChatImageGenerationPrompt({ imageApi } = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI生图] AI 回复中的 [图片] 协议解析
+   [区域标注·已完成·本次需求1·AI生图按协议原文顺序显示] AI 回复中的 [图片] 协议解析
    说明：
    1. 只解析 AI 本轮回复文本，不读写任何存储。
    2. 兼容完整 Markdown 协议块与轻微缺失加粗/反引号的情况。
-   3. 解析结果交给生图请求函数调用设置应用中已开启的生图模型。
+   3. 图片提示词只截取到下一条任意聊天协议开始处，避免把后续 [回复]/[卡片] 等内容误并入生图提示词。
+   4. 已保留 startIndex/endIndex/protocolOrder 运行时顺序信息，供聊天界面把图片插回 AI 原文所在位置，不再强制落到本轮最下方。
+   5. 解析结果交给生图请求函数调用设置应用中已开启的生图模型；不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 export function extractChatImageGenerationRequests(text) {
   const visibleText = String(text || '')
@@ -177,20 +179,32 @@ export function extractChatImageGenerationRequests(text) {
     .trim();
   if (!visibleText) return [];
 
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[图片\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
-  const matches = [...visibleText.matchAll(markerRegex)];
-  if (!matches.length) return [];
+  const markerRegex = /(?:\*\*)?\s*`?\s*\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]\s*([^：:\n`*]+?)\s*[：:]\s*/g;
+  const protocolMarkers = [...visibleText.matchAll(markerRegex)]
+    .map(match => ({
+      type: String(match[1] || '').trim(),
+      roleName: String(match[2] || '').trim(),
+      index: Number(match.index || 0),
+      markerText: String(match[0] || '')
+    }))
+    .filter(marker => marker.type);
 
-  return matches
-    .map((match, index) => {
-      const nextMatch = matches[index + 1];
-      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
-      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
+  const imageMarkers = protocolMarkers.filter(marker => marker.type === '图片');
+  if (!imageMarkers.length) return [];
+
+  return imageMarkers
+    .map((marker) => {
+      const contentStart = marker.index + marker.markerText.length;
+      const nextProtocolMarker = protocolMarkers.find(item => item.index > marker.index);
+      const contentEnd = nextProtocolMarker ? nextProtocolMarker.index : visibleText.length;
       const prompt = cleanProtocolContent(visibleText.slice(contentStart, contentEnd));
       return {
-        roleName: String(match[1] || '').trim(),
+        roleName: marker.roleName,
         prompt,
-        rawProtocol: cleanProtocolContent(visibleText.slice(Number(match.index || 0), contentEnd))
+        rawProtocol: cleanProtocolContent(visibleText.slice(marker.index, contentEnd)),
+        startIndex: marker.index,
+        endIndex: contentEnd,
+        protocolOrder: marker.index
       };
     })
     .filter(item => item.prompt);
@@ -240,11 +254,12 @@ export async function requestChatImageGeneration(imageApi, prompt) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI生图] 从 AI 回复生成图片结果
+   [区域标注·已完成·本次需求1·AI生图按协议原文顺序显示] 从 AI 回复生成图片结果
    说明：
    1. prompt.js 在主聊天 API 返回后调用本函数。
    2. 若生图 API 未启用或配置不完整，则不会调用接口。
    3. 返回 generatedImages 给聊天消息页转成 type:image 消息并写入当前聊天记录。
+   4. 每张图继续携带 protocolOrder/startIndex/endIndex，仅用于本轮运行时排序显示，不新增任何持久化副本。
    ========================================================================== */
 export async function generateImagesFromChatReply({ text = '', imageApi } = {}) {
   const api = normalizeChatImageApiSettings(imageApi);
@@ -262,7 +277,10 @@ export async function generateImagesFromChatReply({ text = '', imageApi } = {}) 
       prompt: request.prompt,
       imageUrl,
       imageName: request.prompt.slice(0, 42) || 'AI 生图',
-      rawProtocol: request.rawProtocol
+      rawProtocol: request.rawProtocol,
+      startIndex: Number(request.startIndex || 0) || 0,
+      endIndex: Number(request.endIndex || request.startIndex || 0) || 0,
+      protocolOrder: Number(request.protocolOrder || request.startIndex || 0) || 0
     });
   }
 

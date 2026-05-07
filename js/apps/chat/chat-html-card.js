@@ -132,12 +132,13 @@ export function getHtmlCardFeaturePrompt() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·HTML卡片掉格式修复] 协议块提取
+   [区域标注·已完成·HTML卡片按协议原文顺序显示] 协议块提取
    说明：
    1. 从 AI 原始文本中提取 [卡片] 角色名：HTML正文。
    2. 本区域已修复“卡片后续 [回复]/[表情]/[转账]/[引用]/[撤回]/[图片] 协议被塞进 iframe”的掉格式问题。
    3. 卡片正文只截取到下一条任意聊天协议开始处；兼容协议头前面带 **、反引号、空格等 Markdown 残片的情况。
-   4. 不涉及任何持久化存储；不使用 localStorage/sessionStorage，不做双份兜底。
+   4. 已保留 startIndex/protocolOrder 运行时顺序信息，供聊天界面把 HTML 卡片插回 AI 原文所在位置，不再强制落到本轮最下方。
+   5. 不涉及任何持久化存储；不使用 localStorage/sessionStorage，不做双份兜底。
    ========================================================================== */
 export function extractHtmlCardProtocolBlocks(rawText = '') {
   const visibleText = String(rawText || '')
@@ -159,7 +160,10 @@ export function extractHtmlCardProtocolBlocks(rawText = '') {
       return {
         type: 'card',
         roleName: marker.roleName,
-        html
+        html,
+        startIndex: marker.index,
+        endIndex: contentEnd,
+        protocolOrder: marker.index
       };
     })
     .filter(item => item.html);
