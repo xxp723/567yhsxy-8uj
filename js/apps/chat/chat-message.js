@@ -71,6 +71,7 @@ import {
   createAiVoiceMessageFromProtocol,
   getVoiceMessageDisplayText,
   isVoiceMessage,
+  parseAiVoiceProtocolPayload,
   renderVoiceBubble,
   renderVoiceFeatureButton
 } from './chat-voice.js';
@@ -329,10 +330,14 @@ const MSG_ICONS = {
      ======================================================================== */
   systemTip: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 8h32v26H18L8 42V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M16 18h16M16 26h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* ========================================================================
-     [区域标注·已完成·本次修正分类弹窗] IconPark — 文本修正按钮图标
-     说明：用于“修正”分类弹窗的文本格式修复；不涉及任何持久化存储读写。
+     [区域标注·已完成·本次语音掉格式修正入口] IconPark — 文本 / 语音修正按钮图标
+     说明：
+     1. 用于“修正”分类弹窗的文本格式与语音格式修复。
+     2. “语音”修正会把含 [语音] / 【语音】残片的 AI 文字气泡转为语音气泡。
+     3. 本区域不涉及任何持久化存储读写；保存仍由 index.js 写入 DB.js / IndexedDB。
      ======================================================================== */
   textRepair: `<svg viewBox="0 0 48 48" fill="none"><path d="M8 10h32M14 10v28M34 10v28M10 38h12M26 38h12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  voiceRepair: `<svg viewBox="0 0 48 48" fill="none"><rect x="17" y="5" width="14" height="24" rx="7" stroke="currentColor" stroke-width="3"/><path d="M10 22c0 8 6 14 14 14s14-6 14-14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M24 36v7M17 43h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
   /* ========================================================================
      [区域标注·已完成·当前会话头像设置] IconPark — 头像上传 / 链接 / 裁剪图标
      说明：仅用于聊天设置页“当前会话联系人头像”区域；不涉及其它资料头像。
@@ -2039,12 +2044,13 @@ export function repairAiMessageFormatIfPossible(message, state) {
 
 
 /* ==========================================================================
-   [区域标注·已完成·本次消息掉格式修复] 文本/引用掉格式修复工具
+   [区域标注·已完成·本次语音掉格式修复] 文本/引用/语音掉格式修复工具
    说明：
-   1. “修正 → 文本”就是用于修复图片中这类普通文字气泡掉格式：裸露 [回复] 协议头、Markdown 加粗/反引号、格式检查前缀或“修正后内容”等说明文字。
-   2. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
-   3. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
-   4. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
+   1. “修正 → 文本”用于修复普通文字气泡掉格式：裸露 [回复] 协议头、Markdown 加粗/反引号、格式检查前缀或“修正后内容”等说明文字。
+   2. “修正 → 语音”用于把含 [语音] / 【语音】残片的 AI 文字气泡修正为 type=voice_message 语音气泡。
+   3. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
+   4. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
+   5. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
    ========================================================================== */
 export function repairAiTextMessageFormatIfPossible(message) {
   if (!message || message.role !== 'assistant') return null;
@@ -2091,6 +2097,31 @@ export function repairAiQuoteMessageFormatIfPossible(message, state) {
     type: '',
     content: replyText,
     quote: quotePayload
+  };
+}
+
+export function repairAiVoiceMessageFormatIfPossible(message) {
+  if (!message || message.role !== 'assistant') return null;
+  if (isVoiceMessage(message)) return null;
+  if (['sticker', 'image', 'transfer', 'gift', 'card'].includes(String(message.type || ''))) return null;
+
+  const raw = String(message.content || message.voiceText || '').trim();
+  if (!/(?:\[\s*语音\s*\]|【\s*语音\s*】)/i.test(raw)) return null;
+
+  const voiceBlocks = extractAiProtocolBlocks(raw).filter(block => block.type === '语音');
+  const payload = voiceBlocks
+    .map(block => parseAiVoiceProtocolPayload(block.content))
+    .find(Boolean)
+    || parseAiVoiceProtocolPayload(raw);
+
+  if (!payload) return null;
+
+  return {
+    ...message,
+    role: 'assistant',
+    type: 'voice_message',
+    voiceExpanded: false,
+    ...payload
   };
 }
 
@@ -2207,13 +2238,14 @@ export function extractAiProtocolBlocks(rawText) {
   if (!visibleText) return [];
 
   /* ========================================================================
-     [区域标注·已更新·本次消息掉格式修复] 宽松协议头识别
+     [区域标注·已完成·本次语音掉格式强容错解析] 宽松协议头识别
      说明：
      1. 协议头仅要求出现 [类型]，不再强依赖“角色名：”紧跟在后。
-     2. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
-     3. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
+     2. [语音] 支持 `[ 语音 ]` 与 `【语音】`，AI 掉 Markdown/空格/全角括号时仍会进入语音解析。
+     3. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
+     4. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*\[(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\]\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音)\s*】)\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2222,7 +2254,7 @@ export function extractAiProtocolBlocks(rawText) {
       const nextMatch = matches[index + 1];
       const contentStart = Number(match.index || 0) + String(match[0] || '').length;
       const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
-      const type = String(match[1] || '').trim();
+      const type = String(match[1] || match[2] || '').trim();
       const parsed = parseProtocolRoleAndContent(visibleText.slice(contentStart, contentEnd), type);
       return {
         type,
@@ -2256,6 +2288,25 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
   const detectedHtmlCardBlocks = extractHtmlCardProtocolBlocks(rawText);
   const htmlCardBlocks = htmlCardFeatureEnabled ? detectedHtmlCardBlocks : [];
   if (!protocolBlocks.length && !htmlCardBlocks.length) {
+    /* ======================================================================
+       [区域标注·已完成·本次语音掉格式强容错解析] 无标准协议块时的语音兜底解析
+       说明：
+       1. 只要 AI 原文中出现 [语音] / 【语音】，前端优先尝试转为语音消息气泡。
+       2. 解析成功后不再把原始 [语音] 文本渲染为普通气泡，严防截图中这类掉格式问题。
+       3. 仅转换当前运行时消息对象；落库仍随 currentMessages 写入 DB.js / IndexedDB。
+       ====================================================================== */
+    if (/(?:\[\s*语音\s*\]|【\s*语音\s*】)/i.test(String(rawText || ''))) {
+      const voicePayload = parseAiVoiceProtocolPayload(rawText);
+      if (voicePayload) {
+        return enforceAiReplyMessageCount([{
+          role: 'assistant',
+          type: 'voice_message',
+          voiceExpanded: false,
+          ...voicePayload
+        }], state.chatPromptSettings);
+      }
+    }
+
     const repairedSticker = findLooseStickerTargetFromText(rawText, state);
     if (repairedSticker) {
       return enforceAiReplyMessageCount([{
@@ -3249,7 +3300,7 @@ export function cleanAiVisibleBubbleText(text) {
        3. 新增清理“{user_xxx...}正文”这类掉格式前缀，避免角色占位串直接显示在消息气泡。
        ====================================================================== */
     .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物|转账|撤回|文字图|图片)\s*\]\s*(?:[^：:\n`*]{1,40}\s*[：:]\s*)?/i, '')
+    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物|转账|撤回|语音|文字图|图片)\s*\]\s*(?:[^：:\n`*]{1,40}\s*[：:]\s*)?/i, '')
     .replace(/^\s*\{(?:user|assistant|role|character|mask)_[^}\n]{3,120}\}\s*/i, '')
     .replace(/(?:`|\*\*)+/g, '')
     .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
@@ -3955,18 +4006,19 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
 
   panel.innerHTML = `
     <!-- ======================================================================
-         [区域标注·已完成·AI本轮撤回系统提示修正入口] AI 消息格式修正类别选择
+         [区域标注·已完成·本次语音掉格式修正入口] AI 消息格式修正类别选择
          说明：
-         1. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
-         2. 仍由 index.js 调用 repairAiSystemTipFormatIfPossible 后写入 DB.js / IndexedDB。
-         3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+         1. “语音”按钮专门把含 [语音] / 【语音】残片的 AI 文字气泡修正为语音气泡。
+         2. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
+         3. 仍由 index.js 调用对应 repairAi*FormatIfPossible 后写入 DB.js / IndexedDB。
+         4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
          ====================================================================== -->
     <div class="chat-modal-header">
       <span>选择修正类别</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">图片中这类普通文字气泡掉格式，请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
+      <div class="chat-modal-hint">如果普通文字气泡里露出了 [语音]，请选择“语音”；普通回复协议掉格式请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
       <div class="msg-format-repair-grid">
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="sticker" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.sticker}</span>
@@ -3977,6 +4029,11 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
           <span class="msg-format-repair-option__icon">${MSG_ICONS.textRepair}</span>
           <strong>文本</strong>
           <em>修复裸露协议/修正后内容</em>
+        </button>
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="voice" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.voiceRepair}</span>
+          <strong>语音</strong>
+          <em>修复 [语音] 为语音气泡</em>
         </button>
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="quote" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.quote}</span>

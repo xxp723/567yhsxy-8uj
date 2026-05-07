@@ -82,6 +82,7 @@ import {
   repairAiTextMessageFormatIfPossible,
   repairAiQuoteMessageFormatIfPossible,
   repairAiSystemTipFormatIfPossible,
+  repairAiVoiceMessageFormatIfPossible,
   sendStickerMessage,
   sendImageMessage,
   renderCurrentChatMessage,
@@ -2536,8 +2537,11 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ==========================================================================
-       [区域标注·已完成·本次修正分类弹窗] 应用 AI 消息格式分类修复
-       说明：根据弹窗中选择的类别，仅修复当前 AI 消息对象；不使用 localStorage/sessionStorage。
+       [区域标注·已完成·语音掉格式修正接线] 应用 AI 消息格式分类修复
+       说明：
+       1. 根据弹窗中选择的类别，仅修复当前 AI 消息对象。
+       2. 已接入“语音”类别：含 [语音] / 【语音】残片的 AI 文字气泡可修正为语音气泡。
+       3. 真正保存仍只调用 persistCurrentMessages/dbPut → DB.js / IndexedDB；不使用 localStorage/sessionStorage。
        ========================================================================== */
     case 'apply-ai-format-repair': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
@@ -2552,13 +2556,17 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
             ? repairAiQuoteMessageFormatIfPossible(sourceMessage, state)
             : (repairType === 'system'
                 ? repairAiSystemTipFormatIfPossible(sourceMessage, state)
-                : repairAiMessageFormatIfPossible(sourceMessage, state)));
+                : (repairType === 'voice'
+                    ? repairAiVoiceMessageFormatIfPossible(sourceMessage, state)
+                    : repairAiMessageFormatIfPossible(sourceMessage, state))));
 
       const repairLabel = repairType === 'text'
         ? '文本'
         : (repairType === 'quote'
             ? '引用'
-            : (repairType === 'system' ? '系统提示' : '表情包'));
+            : (repairType === 'system'
+                ? '系统提示'
+                : (repairType === 'voice' ? '语音' : '表情包')));
 
       if (!repairedMessage) {
         showAiFormatRepairResultModal(container, {

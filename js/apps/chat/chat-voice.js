@@ -21,11 +21,12 @@ const VOICE_ICONS = {
 };
 
 /* ==========================================================================
-   [区域标注·已完成·AI语音消息通用协议与数据工具]
+   [区域标注·已完成·本次语音掉格式强容错解析]
    说明：
    1. type=voice_message 同时支持用户模拟语音与 AI 主动发送语音消息。
-   2. 用户语音由弹窗创建；AI 语音来自通用协议 `[语音] 角色名：{时长:xx}语音转写文本`。
-   3. voiceText/voiceDuration 随当前聊天消息统一写入 DB.js / IndexedDB；本区域不读取或写入 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
+   2. 前端只要在 AI 文本中识别到 `[语音]` / `【语音】` 标记，就优先按语音消息解析并渲染语音气泡。
+   3. 已兼容漏角色冒号、Markdown 反引号/加粗、`{时长:5}` / `{5}` / `时长:5` 等掉格式写法。
+   4. voiceText/voiceDuration 随当前聊天消息统一写入 DB.js / IndexedDB；本区域不读取或写入 localStorage/sessionStorage，不做双份存储兜底，不按长文本字段过滤。
    ========================================================================== */
 export function isVoiceMessage(message = {}) {
   return String(message?.type || '') === 'voice_message';
@@ -45,8 +46,13 @@ export function normalizeVoiceText(value = '') {
    ========================================================================== */
 export function sanitizeVoiceTranscriptText(value = '') {
   return normalizeVoiceText(value)
-    .replace(/^(?:\[语音\]\s*)+/g, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/^[\s`*_#"'“”]+|[\s`*_#"'“”]+$/g, '')
+    .replace(/^(?:(?:\[\s*语音\s*\]|【\s*语音\s*】)\s*)+/gi, '')
+    .replace(/^[^：:\n{}]{1,40}\s*[：:]\s*(?=(?:\{\s*(?:(?:时长|duration)\s*[：:]\s*)?\d{1,2})|(?:(?:时长|duration)\s*[：:]\s*\d{1,2}))/i, '')
     .replace(/^(?:\{\s*(?:(?:时长|duration)\s*[：:]\s*)?\d{1,2}\s*(?:秒|s)?\s*\}\s*)+/gi, '')
+    .replace(/^(?:(?:时长|duration)\s*[：:]\s*\d{1,2}\s*(?:秒|s)?\s*[，,;；。\s]*)+/gi, '')
     .replace(/（[^（）]*）|\([^()]*\)/g, '')
     .replace(/\s+([，。！？；：、])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
@@ -81,21 +87,37 @@ export function createVoiceMessage(text = '', options = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音协议解析修正]
+   [区域标注·已完成·本次语音掉格式强容错解析]
    说明：
-   1. 已支持 AI 输出的 `[语音] 角色名：{时长:xx}语音转写文本` 与 `{4}语音转写文本` 两种时长格式。
-   2. `{4}` 会被解析为 voiceDuration=4，不再掉进 voiceText 导致展开时显示在正文前。
-   3. voiceText/content 均写入清洗后的转文字文本；持久化仍由聊天消息页写入 DB.js / IndexedDB。
+   1. 已支持 AI 输出的 `[语音] 角色名：{时长:xx}语音转写文本`、`[语音]{4}文本` 与 `【语音】时长:4 文本`。
+   2. 只要文本里出现 `[语音]` / `【语音】` 标记，就从标记后方提取语音内容，避免 Markdown 反引号、加粗符号或前置杂字符导致掉格式。
+   3. `{4}` / `{时长:4}` / `时长:4` 会被解析为 voiceDuration=4，不再掉进 voiceText 导致展开时显示在正文前。
+   4. voiceText/content 均写入清洗后的转文字文本；持久化仍由聊天消息页写入 DB.js / IndexedDB。
    ========================================================================== */
 export function parseAiVoiceProtocolPayload(content = '') {
   const normalized = normalizeVoiceText(content)
-    .replace(/^(?:`|\*\*)+/g, '')
-    .replace(/(?:`|\*\*)+$/g, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/^[\s`*_#"'“”]+|[\s`*_#"'“”]+$/g, '')
     .trim();
   if (!normalized) return null;
 
-  const durationMatch = normalized.match(/^\{\s*(?:(?:时长|duration)\s*[：:]\s*)?(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i);
-  const voiceText = sanitizeVoiceTranscriptText(durationMatch ? durationMatch[2] : normalized);
+  const markerMatch = normalized.match(/(?:\[\s*语音\s*\]|【\s*语音\s*】)/i);
+  let candidate = (markerMatch
+    ? normalized.slice(markerMatch.index + markerMatch[0].length)
+    : normalized)
+    .replace(/^[\s`*_#"'“”]+|[\s`*_#"'“”]+$/g, '')
+    .trim();
+
+  const durationMatch = candidate.match(/^(?:[^：:\n{}]{1,40}\s*[：:]\s*)?\{\s*(?:(?:时长|duration)\s*[：:]\s*)?(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i)
+    || candidate.match(/^(?:[^：:\n{}]{1,40}\s*[：:]\s*)?(?:时长|duration)\s*[：:]\s*(\d{1,2})\s*(?:秒|s)?\s*[，,;；。\s]*([\s\S]*)$/i)
+    || candidate.match(/^[^{}\n]{1,40}\s+\{\s*(?:(?:时长|duration)\s*[：:]\s*)?(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i);
+
+  if (!durationMatch && markerMatch) {
+    candidate = candidate.replace(/^[^：:\n{}]{1,40}\s*[：:]\s*/, '').trim();
+  }
+
+  const voiceText = sanitizeVoiceTranscriptText(durationMatch ? durationMatch[2] : candidate);
   if (!voiceText) return null;
 
   const durationFromProtocol = durationMatch ? Number(durationMatch[1]) : 0;
