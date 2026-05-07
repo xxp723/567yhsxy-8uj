@@ -1846,18 +1846,21 @@ export async function sendMessage(container, state, db, content, settingsManager
     }
 
     /* ========================================================================
-       [区域标注·已完成·旁白模式] 旁白气泡插入消息列表 + 旁白历史持久化
+       [区域标注·已完成·旁白开启期间即时显示修复] 旁白气泡插入消息列表 + 旁白历史持久化
        说明：
        1. 提取到旁白文本后，将旁白挂到最后一条 assistant 消息的 asideText 字段。
-       2. 同时追加到 state.asideHistory 数组，退出旁白模式时生成摘要注入上下文。
-       3. displayMode='top' 时旁白气泡显示在第一条 AI 消息上方；
-          displayMode='interleave' 时旁白穿插在 AI 消息中显示。
-       4. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       2. 本区已修复：旁白模式开启期间，AI 回复落到界面后会立即把旁白气泡局部插入到对应 AI 消息前方；
+          不再等退出旁白模式触发整页重绘后才显示旁白。
+       3. 同时追加到 state.asideHistory 数组，退出旁白模式时生成摘要注入上下文。
+       4. displayMode='top' 与 displayMode='interleave' 的历史整页渲染规则保持原样；本次只修正当前轮旁白即时出现时机。
+       5. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
        ======================================================================== */
     if (extractedAsideText) {
+      let asideMessageId = '';
       for (let i = state.currentMessages.length - 1; i >= 0; i--) {
         if (state.currentMessages[i]?.role === 'assistant') {
           state.currentMessages[i].asideText = extractedAsideText;
+          asideMessageId = String(state.currentMessages[i]?.id || '');
           break;
         }
       }
@@ -1875,6 +1878,7 @@ export async function sendMessage(container, state, db, content, settingsManager
       /* 持久化旁白历史到 IndexedDB */
       const asideHistoryKey = `chat_aside_history::${state.activeMaskId}::${state.currentChatId}`;
       await dbPut(db, asideHistoryKey, state.asideHistory);
+      syncCurrentAsideBubble(container, extractedAsideText, asideMessageId);
     }
   } catch (error) {
     /* ========================================================================
@@ -2758,6 +2762,36 @@ export function renderCurrentChatMessage(container, state, options = {}) {
 }
 
 /* ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·旁白开启期间即时显示修复] 当前轮旁白气泡局部插入
+   说明：
+   1. AI 回复气泡已增量追加到 DOM 后，旁白文本才会挂到最后一条 assistant 消息。
+   2. 本函数只把当前轮旁白局部插入到对应 AI 消息前方，避免整页重绘造成闪屏。
+   3. 不做任何持久化读写；消息与旁白历史保存仍由上方 DB.js / IndexedDB 流程完成。
+   ========================================================================== */
+function syncCurrentAsideBubble(container, asideText = '', messageId = '') {
+  const text = String(asideText || '').trim();
+  const safeMessageId = String(messageId || '').trim();
+  if (!text || !safeMessageId) return false;
+
+  const listArea = container.querySelector('[data-role="msg-list"]');
+  const targetRow = listArea?.querySelector(`[data-message-id="${CSS.escape(safeMessageId)}"]`);
+  if (!listArea || !targetRow) return false;
+
+  const asideSelector = `.msg-aside-bubble[data-aside-id="${CSS.escape(safeMessageId)}"]`;
+  const existingAside = listArea.querySelector(asideSelector);
+  const asideHtml = renderAsideBubbleHtml(text, safeMessageId);
+
+  if (existingAside) {
+    existingAside.outerHTML = asideHtml;
+  } else {
+    targetRow.insertAdjacentHTML('beforebegin', asideHtml);
+  }
+
+  listArea.scrollTop = listArea.scrollHeight;
+  return true;
+}
+
 export function appendCurrentMessageBubble(container, state, message) {
   if (!message || !state.currentChatId) return;
 
