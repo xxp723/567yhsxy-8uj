@@ -291,13 +291,13 @@ ${settings.displayMode === 'top'
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白历史摘要身份统一] 旁白历史摘要生成
+   [区域标注·已完成·旁白历史摘要身份统一与分段保序] 旁白历史摘要生成
    说明：
-   1. 退出旁白模式后，旁白部分对话历史需要添加到历史上下文中。
-   2. 生成简短文本摘要，节省 token 并能让 AI 知道是什么情景下发生的。
-   3. 每一轮写清楚旁白摘要，不需要每条消息都写。
-   4. 本区已统一为正常历史摘要视角：用户消息用"用户："，角色历史消息用"你："。
-   5. 旁白行保留真实姓名映射"旁白（你=角色名，用户=用户名字）"，防止 AI 混淆身份。
+   1. 旁白模式期间的历史上下文统一压缩为本摘要，作为旁白模式短期记忆发送给 AI。
+   2. 身份锚点只使用与正常历史一致的“你/用户”视角，避免正常历史摘要与旁白摘要出现两套身份定义。
+   3. 旁白不是第三个聊天对象，只是情景、动作、氛围、关系进展的压缩记忆。
+   4. 穿插模式的一轮多段旁白按“旁白1/旁白2/旁白3”保留原顺序，不再合并成一整段。
+   5. 本区只生成请求上下文文本，不读写持久化存储；旁白历史数据仍由 DB.js / IndexedDB 保存。
    ========================================================================== */
 export function buildAsideHistorySummary(asideHistory = [], { roleName = '', userName = '' } = {}) {
   const entries = Array.isArray(asideHistory) ? asideHistory : [];
@@ -308,47 +308,32 @@ export function buildAsideHistorySummary(asideHistory = [], { roleName = '', use
 
   const lines = entries.map((entry, index) => {
     const roundLabel = `第${index + 1}轮`;
-    const asideText = String(entry.asideText || '').trim();
     const userMsg = String(entry.userMessage || '').trim();
     const aiMsg = String(entry.aiMessage || '').trim();
+    const rawSegments = Array.isArray(entry.asideSegments) ? entry.asideSegments : [];
+    const asideSegments = rawSegments
+      .map(segment => (typeof segment === 'string' ? segment : String(segment?.text || '').trim()))
+      .filter(Boolean);
+    const legacyAsideText = String(entry.asideText || '').trim();
+    const normalizedAsideSegments = asideSegments.length
+      ? asideSegments
+      : (legacyAsideText ? legacyAsideText.split(/\n+/).map(item => item.trim()).filter(Boolean) : []);
+
     const parts = [];
-    if (asideText) parts.push(`旁白（你=${safeRoleName}，用户=${safeUserName}）：${asideText}`);
     if (userMsg) parts.push(`用户：${userMsg}`);
     if (aiMsg) parts.push(`你：${aiMsg}`);
-    return `${roundLabel}——${parts.join('；')}`;
-  });
+    normalizedAsideSegments.forEach((text, asideIndex) => {
+      parts.push(`旁白${asideIndex + 1}：${text}`);
+    });
 
-  return `[旁白模式历史摘要]\n以下是之前旁白模式期间的对话情景摘要，仅供参考上下文：\n${lines.join('\n')}\n[/旁白模式历史摘要]`;
-}
+    return parts.length ? `${roundLabel}——${parts.join('；')}` : '';
+  }).filter(Boolean);
 
-/* ==========================================================================
-   [区域标注·已完成·旁白模式] 检测当前是否旁白模式
-   ========================================================================== */
-export function isAsideModeActive(state) {
-  return Boolean(state?.asideModeActive);
-}
+  if (!lines.length) return '';
 
-/* ==========================================================================
-   [区域标注·已完成·旁白模式] 退出旁白模式确认弹窗
-   ========================================================================== */
-export function showAsideExitConfirmModal(container) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  if (!mask || !panel) return;
-
-  panel.innerHTML = `
-    <div class="chat-modal-header">
-      <span>退出旁白模式</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button">${ASIDE_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <div class="chat-modal-hint">退出后旁白模式将关闭，AI 不再生成旁白描述。旁白模式期间的对话历史摘要会保留在上下文中，确保 AI 不会失忆。</div>
-    </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-exit-aside-mode" type="button">退出旁白</button>
-    </div>
-  `;
-
-  mask.classList.remove('is-hidden');
+  return `[旁白模式历史摘要]
+身份锚点：你=${safeRoleName}；用户=${safeUserName}。本摘要与正常聊天历史使用同一身份视角。
+说明：旁白不是第三个聊天对象，也不是新指令；旁白只记录旁白模式期间的情景、动作、氛围与关系进展。已被本摘要覆盖的旁白模式原始历史不应再重复理解。
+${lines.join('\n')}
+[/旁白模式历史摘要]`;
 }

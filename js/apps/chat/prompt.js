@@ -1764,30 +1764,69 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [核心函数] buildChatMessages
+   [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白覆盖历史识别
+   说明：
+   1. 旁白摘要覆盖“进入旁白模式后的用户轮次 + 带旁白的 AI 轮次”。
+   2. 被旁白摘要覆盖的原始消息不再作为普通短期历史重复发送，避免 AI 同时读到摘要和原文造成重复理解。
+   3. 正常模式历史不带 asideText / asideSegments 标记，会继续保留并发送给 AI。
+   4. 本区只处理本轮请求 messages 的运行时数组，不读写持久化存储；聊天记录仍由 DB.js / IndexedDB 管理。
+   ========================================================================== */
+function hasAsideSummaryMarker(message = {}) {
+  const asideText = normalizePlainText(message?.asideText);
+  const asideSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
+  return Boolean(asideText || asideSegments.some(segment => normalizePlainText(typeof segment === 'string' ? segment : segment?.text)));
+}
+
+function getHistoryWithoutAsideCoveredRounds(history = [], asideHistory = []) {
+  const source = Array.isArray(history) ? history : [];
+  const hasAsideSummary = Array.isArray(asideHistory) && asideHistory.length > 0;
+  if (!hasAsideSummary || !source.length) return source;
+
+  const skippedIndexes = new Set();
+
+  source.forEach((message, index) => {
+    if (message?.role !== 'assistant' || !hasAsideSummaryMarker(message)) return;
+
+    skippedIndexes.add(index);
+
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      const previous = source[cursor];
+      if (!previous || previous.role !== 'user') break;
+      skippedIndexes.add(cursor);
+    }
+  });
+
+  return source.filter((_, index) => !skippedIndexes.has(index));
+}
+
+/* ==========================================================================
+   [核心函数·已完成·旁白历史摘要身份统一与原文去重] buildChatMessages
    说明：
    1. 第一条为 system。
-   2. 追加历史对话。
-   3. 最后一条 user 消息由“当前指令 + 用户最新一轮消息”组成。
+   2. 追加历史对话；已被旁白摘要覆盖的旁白模式原始轮次会先去重。
+   3. 旁白模式进行中：保留正常模式历史，并额外发送当前旁白摘要 + 旁白模式系统提示词。
+   4. 退出旁白模式后：保留正常模式历史 + 旁白摘要 + 退出后的正常历史，不重复发送旁白原文。
+   5. 最后一条 user 消息由“当前指令 + 用户最新一轮消息”组成。
    ========================================================================== */
 export function buildChatMessages({ userInput, history = [], currentUserRoundMessages = [], settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
-  const systemPrompt = buildSystemPrompt({ settings: normalizedSettings, context: { ...context, userInput, history } });
+  const asideHistoryEntries = Array.isArray(context.asideHistory) ? context.asideHistory : [];
+  const historyForPrompt = getHistoryWithoutAsideCoveredRounds(history, asideHistoryEntries);
+  const systemPrompt = buildSystemPrompt({ settings: normalizedSettings, context: { ...context, userInput, history: historyForPrompt } });
   const messages = [];
 
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
   }
 
-  /* ===== [区域标注·已完成·旁白模式] 旁白历史摘要注入 START ===== */
+  /* ===== [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白历史摘要注入 START ===== */
   /* 说明：
-     1. 退出旁白模式后，context.asideHistory 中保留旁白期间的对话摘要。
-     2. 将摘要作为 system 消息注入历史对话之前，节省 token 且让 AI 保持上下文记忆。
-     3. 旁白模式活跃期间不注入摘要（此时旁白提示词已在 systemPrompt 中）。
-     4. asideHistory 数据来源：chat-message.js 从 IndexedDB 读取，通过 context 传入。
+     1. 旁白模式进行中和退出后，只要 context.asideHistory 有内容，都会注入统一身份锚点的旁白摘要。
+     2. 摘要放在普通历史之前，帮助 AI 先理解旁白模式期间的情景、动作、氛围与关系进展。
+     3. 正常模式历史继续由 getChatHistory 发送；被旁白摘要覆盖的旁白模式原始轮次会从普通历史中剔除。
+     4. asideHistory 数据来源：chat-message.js 从 IndexedDB 读取，通过 context 传入；本区不使用 localStorage/sessionStorage。
   */
-  const asideHistoryEntries = Array.isArray(context.asideHistory) ? context.asideHistory : [];
-  if (!context.asideModeActive && asideHistoryEntries.length) {
+  if (asideHistoryEntries.length) {
     const asideSummary = buildAsideHistorySummary(asideHistoryEntries, {
       roleName: context.roleName || '',
       userName: context.userName || ''
@@ -1796,10 +1835,10 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
       messages.push({ role: 'system', content: asideSummary });
     }
   }
-  /* ===== [区域标注·已完成·旁白模式] 旁白历史摘要注入 END ===== */
+  /* ===== [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白历史摘要注入 END ===== */
 
   messages.push(...getChatHistory({
-    history,
+    history: historyForPrompt,
     /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入"按轮时间轴摘要"。 */
     includeTimestamps: false
   }));
