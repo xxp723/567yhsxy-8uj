@@ -277,12 +277,13 @@ ${settings.displayMode === 'top'
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白模式] 旁白历史摘要生成
+   [区域标注·已完成·旁白历史摘要身份统一] 旁白历史摘要生成
    说明：
    1. 退出旁白模式后，旁白部分对话历史需要添加到历史上下文中。
    2. 生成简短文本摘要，节省 token 并能让 AI 知道是什么情景下发生的。
    3. 每一轮写清楚旁白摘要，不需要每条消息都写。
-   4. 每轮摘要头部标注"旁白（角色=xx，用户=xx）"，防止 AI 混淆身份。
+   4. 本区已统一为正常历史摘要视角：用户消息用"用户："，角色历史消息用"你："。
+   5. 旁白行保留真实姓名映射"旁白（你=角色名，用户=用户名字）"，防止 AI 混淆身份。
    ========================================================================== */
 export function buildAsideHistorySummary(asideHistory = [], { roleName = '', userName = '' } = {}) {
   const entries = Array.isArray(asideHistory) ? asideHistory : [];
@@ -297,9 +298,9 @@ export function buildAsideHistorySummary(asideHistory = [], { roleName = '', use
     const userMsg = String(entry.userMessage || '').trim();
     const aiMsg = String(entry.aiMessage || '').trim();
     const parts = [];
-    if (asideText) parts.push(`旁白（角色=${safeRoleName}，用户=${safeUserName}）：${asideText}`);
-    if (userMsg) parts.push(`${safeUserName}：${userMsg}`);
-    if (aiMsg) parts.push(`${safeRoleName}：${aiMsg}`);
+    if (asideText) parts.push(`旁白（你=${safeRoleName}，用户=${safeUserName}）：${asideText}`);
+    if (userMsg) parts.push(`用户：${userMsg}`);
+    if (aiMsg) parts.push(`你：${aiMsg}`);
     return `${roundLabel}——${parts.join('；')}`;
   });
 
