@@ -100,6 +100,14 @@ import {
   renderAsideExitButtonHtml,
   isAsideModeActive
 } from './chat-aside.js';
+/* ==========================================================================
+   [区域标注·已完成·语言翻译] 导入语言翻译模块
+   ========================================================================== */
+import {
+  renderTranslationSettingsHtml,
+  renderTranslationBubbleHtml,
+  normalizeTranslationSettings
+} from './chat-translation.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -963,6 +971,9 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isVoiceBubbleMessage ? 'msg-bubble--voice' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
           ${quoteHtml}
           ${bubbleInnerHtml}
+          <!-- ===== [区域标注·已完成·语言翻译] 翻译气泡插入点 START ===== -->
+          ${renderTranslationBubbleHtml(msg, options.translationSettings, isUser)}
+          <!-- ===== [区域标注·已完成·语言翻译] 翻译气泡插入点 END ===== -->
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
       </div>
@@ -1425,6 +1436,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           </label>
         </section>
         <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
+
+        <!-- ==========================================================================
+             [区域标注·已完成·语言翻译] 语言翻译折叠栏板块
+             说明：
+             1. 由 chat-translation.js 的 renderTranslationSettingsHtml() 生成 HTML。
+             2. 翻译设置独立存储于 IndexedDB，键名 chat_translation_settings::*。
+             3. 折叠栏包含总开关、角色/用户语言选择、翻译显示模式选择。
+             ========================================================================== -->
+        ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
 
         <!-- ==========================================================================
              [区域标注·本次需求4] 清空全部聊天记录入口
@@ -2824,6 +2844,9 @@ export function renderCurrentChatMessage(container, state, options = {}) {
   msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
     chatSettings: state.chatPromptSettings,
     isSending: state.isAiSending,
+    /* ===== 闲谈应用：语言翻译设置传递到 renderChatMessage START ===== */
+    translationSettings: state.translationSettings,
+    /* ===== 闲谈应用：语言翻译设置传递到 renderChatMessage END ===== */
     /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
     userProfile: state.profile,
     /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
@@ -2936,6 +2959,8 @@ export function appendCurrentMessageBubble(container, state, message) {
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     asideDisplayMode: state.asideSettings?.displayMode || 'top',
+    /* ===== [区域标注·已完成·语言翻译] 增量追加气泡也传递翻译设置 ===== */
+    translationSettings: state.translationSettings,
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: state.deleteConfirmMessageId,
     rewindConfirmMessageId: state.rewindConfirmMessageId,

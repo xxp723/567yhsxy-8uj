@@ -149,6 +149,18 @@ import {
 } from './profile.js';
 import { renderMoments } from './moments.js';
 /* ==========================================================================
+   [区域标注·已完成·语言翻译] 导入语言翻译独立模块
+   说明：
+   1. 折叠栏 HTML 生成由 chat-message.js 调用 renderTranslationSettingsHtml。
+   2. 本入口文件负责事件委托（设置页点击 + 消息气泡双击展开）。
+   3. 持久化只使用 DB.js / IndexedDB，禁止 localStorage/sessionStorage。
+   ========================================================================== */
+import {
+  handleTranslationSettingsClick,
+  handleTranslationBubbleDblClick,
+  normalizeTranslationSettings
+} from './chat-translation.js';
+/* ==========================================================================
    [区域标注·已完成·心声面板] 导入心声面板模块
    说明：心声面板独立模块，提供面板打开/关闭、心声数据查找等功能。
    ========================================================================== */
@@ -208,6 +220,8 @@ import {
    ======================================================================== */
 const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
 const DATA_KEY_CHAT_CONSOLE_ENABLED = (maskId, chatId) => `chat_console_enabled::${maskId || 'default'}::${chatId || 'none'}`;
+/* ===== [区域标注·已完成·语言翻译] IndexedDB 数据键 ===== */
+const DATA_KEY_CHAT_TRANSLATION_SETTINGS = (maskId, chatId) => `chat_translation_settings::${maskId || 'default'}::${chatId || 'none'}`;
 
 function normalizeChatConsoleLogs(logs) {
   return Array.isArray(logs)
@@ -445,7 +459,11 @@ export async function mount(container, context) {
        [区域标注·已完成·旁白模式独立样式预加载]
        说明：旁白弹窗、旁白气泡、顶栏退出按钮样式拆分到 chat-aside.css，挂载时预加载以避免首次打开闪屏。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-aside.css', 'chat-aside-css')
+    loadCSS('./js/apps/chat/chat-aside.css', 'chat-aside-css'),
+    /* ======================================================================
+       [区域标注·已完成·语言翻译CSS] 预加载语言翻译折叠栏 & 翻译气泡样式
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-translation.css', 'chat-translation-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -585,7 +603,9 @@ export async function mount(container, context) {
     chatConsoleEnabled: false,
     chatConsoleExpanded: false,
     chatConsoleWarnErrorOnly: false,
-    chatConsoleLogs: []
+    chatConsoleLogs: [],
+    /* ===== [区域标注·已完成·语言翻译] 翻译设置状态 ===== */
+    translationSettings: null
   };
 
   await syncArchiveBoundContactCleanup(container, state, db, archiveData);
@@ -775,6 +795,9 @@ export async function mount(container, context) {
       removeCSS('chat-gift-css');
       removeCSS('chat-text-image-css');
       removeCSS('chat-voice-css');
+      removeCSS('chat-inner-voice-css');
+      removeCSS('chat-aside-css');
+      removeCSS('chat-translation-css');
     }
   };
 }
@@ -998,6 +1021,8 @@ async function openChatMessage(container, state, db, chatId) {
   state.chatConsoleLogs = normalizeChatConsoleLogs(await dbGet(db, DATA_KEY_CHAT_CONSOLE(state.activeMaskId, chatId)));
   state.chatConsoleEnabled = Boolean(await dbGet(db, DATA_KEY_CHAT_CONSOLE_ENABLED(state.activeMaskId, chatId)));
   state.chatConsoleExpanded = false;
+  /* ===== [区域标注·已完成·语言翻译] 从 IndexedDB 加载翻译设置 ===== */
+  state.translationSettings = normalizeTranslationSettings(await dbGet(db, DATA_KEY_CHAT_TRANSLATION_SETTINGS(state.activeMaskId, chatId)));
 
   if (msgWrap) {
     msgWrap.style.display = 'flex';
@@ -3794,6 +3819,16 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     default:
+      /* ========================================================================
+         [区域标注·已完成·语言翻译] 翻译设置折叠栏事件委托
+         说明：
+         1. 翻译折叠栏中的所有开关、下拉选择、显示模式按钮点击事件统一委托到此处。
+         2. handleTranslationSettingsClick 内部会判断 data-action 前缀 "trans-" 并处理。
+         3. 持久化只使用 DB.js / IndexedDB，禁止 localStorage/sessionStorage。
+         ======================================================================== */
+      if (state.currentChatId && action && action.startsWith('trans-')) {
+        await handleTranslationSettingsClick(e, target, action, state, container, db);
+      }
       break;
   }
 }
@@ -4408,6 +4443,11 @@ function handleDoubleClick(e, state, container, db) {
         }
       }
     }
+  }
+
+  /* ===== [区域标注·已完成·语言翻译] 双击消息气泡展开/收起翻译 ===== */
+  if (state.currentChatId && !state.subPageView) {
+    handleTranslationBubbleDblClick(e, container, state.translationSettings);
   }
 
   /* --- 表情包独立页双击进入多选删除 --- */
