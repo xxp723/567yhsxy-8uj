@@ -631,6 +631,55 @@ export function syncStickerInputSuggestions(container, state, keyword = '') {
    1. 导出给 index.js 增量追加消息，避免 AI 每输出一个气泡都整页重绘造成闪屏。
    2. 同时为每条消息补充 data-message-id，供单击功能栏、删除、多选使用。
 /* ========================================================================== */
+/* ========================================================================
+   [区域标注·已完成·旁白固定/穿插位置修复] 旁白字段规范化与气泡拼接
+   说明：
+   1. 兼容旧字段 asideText，也支持本次新增的 asideSegments 多段旁白。
+   2. 固定模式由“绑定到本轮第一条 AI 消息”保证显示在用户消息下方、AI 全部回复上方。
+   3. 穿插模式按多段旁白分别绑定到不同 AI 消息，可在回复开头、中间、结尾出现多段旁白。
+   4. 本区域只处理运行时渲染，不读写持久化存储；保存仍统一走 DB.js / IndexedDB。
+   ======================================================================== */
+function getAsideSegmentsFromMessage(message = {}) {
+  const rawSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
+  const normalizedSegments = rawSegments
+    .map((segment, index) => {
+      const text = typeof segment === 'string' ? segment : String(segment?.text || '').trim();
+      if (!text) return null;
+      return {
+        id: String(segment?.id || `${message?.id || 'aside'}_${index + 1}`),
+        text,
+        placement: String(segment?.placement || 'before') === 'after' ? 'after' : 'before'
+      };
+    })
+    .filter(Boolean);
+
+  if (normalizedSegments.length) return normalizedSegments;
+
+  const legacyText = String(message?.asideText || '').trim();
+  return legacyText
+    ? [{
+        id: String(message?.id || 'aside'),
+        text: legacyText,
+        placement: 'before'
+      }]
+    : [];
+}
+
+function renderMessageAsideHtml(message = {}, placement = 'before') {
+  const targetPlacement = placement === 'after' ? 'after' : 'before';
+  return getAsideSegmentsFromMessage(message)
+    .filter(segment => segment.placement === targetPlacement)
+    .map((segment, index) => renderAsideBubbleHtml(segment.text, `${String(segment.id || message?.id || 'aside')}_${targetPlacement}_${index + 1}`))
+    .join('');
+}
+
+function renderMessageWithAsideHtml(message, chatSession, options = {}) {
+  const beforeAsideHtml = renderMessageAsideHtml(message, 'before');
+  const bubbleHtml = renderMessageBubble(message, chatSession, options);
+  const afterAsideHtml = renderMessageAsideHtml(message, 'after');
+  return `${beforeAsideHtml}${bubbleHtml}${afterAsideHtml}`;
+}
+
 export function renderMessageBubble(msg, chatSession, options = {}) {
   const session = chatSession || {};
   const name = session.name || '聊天';
@@ -1021,43 +1070,48 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
 
   /* ==========================================================================
-     [区域标注·已完成·旁白模式] 消息列表区域（含旁白气泡渲染）
+     [区域标注·已完成·旁白固定/穿插位置修复] 消息列表区域（含旁白气泡渲染）
      说明：
      1. AI 回复中的 <think>...</think> 已在 prompt.js 里剥离，界面只展示最终回复。
-     2. 旁白模式下，消息带有 asideText 字段的 assistant 消息会渲染旁白气泡。
-     3. displayMode='top' 时旁白气泡固定在第一条 AI 消息上方。
-     4. displayMode='interleave' 时旁白气泡紧跟在对应 AI 消息前。
+     2. 本区不再把整段旁白统一收集到“全会话第一条 AI 消息”或“最后一条 AI 消息”附近。
+     3. displayMode='top' 的旁白按每轮 AI 连续回复分组，固定显示在该轮用户消息下方、第一条 AI/角色消息上方。
+     4. displayMode='interleave' 的旁白读取 asideSegments，可按段穿插在对应 AI 文本/表情包/语音/图片等消息前后。
+     5. 历史消息回看也复用相同规则；本区域只渲染，不读写 localStorage/sessionStorage。
   /* ========================================================================== */
   let messagesHtml = '';
   if (msgs.length === 0) {
     messagesHtml = `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
   } else {
-    const asideModeOn = isAsideModeActive(options);
     const asideDisplayMode = String(options.asideDisplayMode || 'top');
-    /* 收集所有带旁白的消息（用于 top 模式：只在第一条 AI 消息上方渲染所有旁白） */
-    const topAsideTexts = [];
-    if (asideModeOn && asideDisplayMode === 'top') {
-      msgs.forEach(msg => {
-        if (msg?.role === 'assistant' && msg?.asideText) topAsideTexts.push(msg.asideText);
-      });
-    }
-    let topAsideRendered = false;
-    messagesHtml = msgs.map(msg => {
-      let prefix = '';
-      if (asideModeOn && msg?.role === 'assistant') {
-        if (asideDisplayMode === 'top' && !topAsideRendered && topAsideTexts.length) {
-          prefix = topAsideTexts.map(t => renderAsideBubbleHtml(t)).join('');
-          topAsideRendered = true;
-        } else if (asideDisplayMode === 'interleave' && msg?.asideText) {
-          prefix = renderAsideBubbleHtml(msg.asideText, String(msg.id || ''));
+    const parts = [];
+
+    for (let index = 0; index < msgs.length; index += 1) {
+      const msg = msgs[index];
+
+      if (asideDisplayMode === 'top' && msg?.role === 'assistant') {
+        const run = [];
+        let cursor = index;
+        while (cursor < msgs.length && msgs[cursor]?.role === 'assistant') {
+          run.push(msgs[cursor]);
+          cursor += 1;
         }
+
+        const runAsideHtml = run
+          .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => segment.text))
+          .filter(Boolean)
+          .map((text, asideIndex) => renderAsideBubbleHtml(text, `${String(run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`))
+          .join('');
+
+        if (runAsideHtml) parts.push(runAsideHtml);
+        run.forEach(item => parts.push(renderMessageBubble(item, session, options)));
+        index = cursor - 1;
+        continue;
       }
-      /* 非旁白模式下，已有旁白字段的消息也渲染旁白气泡（历史消息回看） */
-      if (!asideModeOn && msg?.role === 'assistant' && msg?.asideText) {
-        prefix = renderAsideBubbleHtml(msg.asideText, String(msg.id || ''));
-      }
-      return prefix + renderMessageBubble(msg, session, options);
-    }).join('');
+
+      parts.push(renderMessageWithAsideHtml(msg, session, options));
+    }
+
+    messagesHtml = parts.join('');
   }
 
   /* ==========================================================================
@@ -1546,6 +1600,73 @@ async function applyAiPendingTransferDecisions(state, db, rawText) {
   return true;
 }
 
+/* ========================================================================
+   [区域标注·已完成·旁白固定/穿插位置修复] 当前轮旁白段落绑定到 AI 消息
+   说明：
+   1. 这是本次旁白位置修正的核心：在 AI 消息入列前就把旁白段落绑定到正确消息对象。
+   2. 固定模式 top：所有旁白段落绑定到本轮第一条 assistant 消息的 before 位置，
+      因此显示为“用户消息下方、本轮 AI/角色所有回复最上方”。
+   3. 穿插模式 interleave：根据 AI 原始文本中多段 [旁白] 与 [回复]/[表情]/[语音] 等协议头的先后顺序，
+      把旁白绑定到下一条可见 AI 消息前；若旁白位于本轮末尾，则绑定到最后一条 AI 消息后。
+   4. 只修改当前运行时消息对象字段 asideText/asideSegments，消息落库仍随 currentMessages 统一写入 DB.js / IndexedDB。
+   ======================================================================== */
+function bindAsideSegmentsToAiMessages(aiMessages = [], asideSegments = [], displayMode = 'top', rawTextWithAside = '') {
+  const messages = Array.isArray(aiMessages) ? aiMessages.map(message => ({ ...message })) : [];
+  const segments = (Array.isArray(asideSegments) ? asideSegments : [])
+    .map((segment, index) => ({
+      id: String(segment?.id || `aside_segment_${index + 1}`),
+      text: String(segment?.text || '').trim(),
+      startIndex: Number(segment?.startIndex || 0) || 0,
+      endIndex: Number(segment?.endIndex || segment?.startIndex || 0) || 0
+    }))
+    .filter(segment => segment.text);
+
+  if (!messages.length || !segments.length) return messages;
+
+  const attachSegment = (messageIndex, segment, placement = 'before') => {
+    const index = Math.max(0, Math.min(messages.length - 1, Number(messageIndex || 0) || 0));
+    const target = messages[index];
+    const normalizedPlacement = placement === 'after' ? 'after' : 'before';
+    const nextSegment = {
+      id: `${segment.id}_${normalizedPlacement}`,
+      text: segment.text,
+      placement: normalizedPlacement
+    };
+    target.asideSegments = [...(Array.isArray(target.asideSegments) ? target.asideSegments : []), nextSegment];
+    target.asideText = getAsideSegmentsFromMessage(target).map(item => item.text).join('\n');
+  };
+
+  const firstAssistantIndex = messages.findIndex(message => message?.role === 'assistant');
+  const safeFirstIndex = firstAssistantIndex >= 0 ? firstAssistantIndex : 0;
+
+  if (String(displayMode || 'top') !== 'interleave') {
+    segments.forEach(segment => attachSegment(safeFirstIndex, segment, 'before'));
+    return messages;
+  }
+
+  const source = String(rawTextWithAside || '');
+  const protocolMarkerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音)\s*】)\s*/g;
+  const protocolMarkers = [...source.matchAll(protocolMarkerRegex)]
+    .map(match => Number(match.index || 0))
+    .sort((a, b) => a - b);
+
+  if (!protocolMarkers.length) {
+    segments.forEach((segment, index) => attachSegment(Math.min(index, messages.length - 1), segment, 'before'));
+    return messages;
+  }
+
+  segments.forEach(segment => {
+    const markersBefore = protocolMarkers.filter(position => position < segment.startIndex).length;
+    if (markersBefore >= messages.length) {
+      attachSegment(messages.length - 1, segment, 'after');
+      return;
+    }
+    attachSegment(markersBefore, segment, 'before');
+  });
+
+  return messages;
+}
+
 /* ========================================================================== */
 export async function sendMessage(container, state, db, content, settingsManager, options = {}) {
   const userText = String(content || '').trim();
@@ -1696,12 +1817,14 @@ export async function sendMessage(container, state, db, content, settingsManager
        ======================================================================== */
     let rawAiText = rawAiTextAfterInnerVoice;
     let extractedAsideText = '';
+    let extractedAsideSegments = [];
     if (isAsideModeActive(state)) {
-      const { asideText, cleanedText } = extractAsideFromRawText(rawAiTextAfterInnerVoice);
+      const { asideText, asideSegments, cleanedText } = extractAsideFromRawText(rawAiTextAfterInnerVoice);
       extractedAsideText = asideText;
+      extractedAsideSegments = Array.isArray(asideSegments) ? asideSegments : [];
       rawAiText = cleanedText;
       if (extractedAsideText) {
-        appendChatConsoleRuntimeLog(state, 'info', `旁白文本已提取：${extractedAsideText.slice(0, 80)}${extractedAsideText.length > 80 ? '…' : ''}`);
+        appendChatConsoleRuntimeLog(state, 'info', `旁白文本已提取：${extractedAsideSegments.length || 1} 段：${extractedAsideText.slice(0, 80)}${extractedAsideText.length > 80 ? '…' : ''}`);
       }
     }
 
@@ -1749,13 +1872,18 @@ export async function sendMessage(container, state, db, content, settingsManager
       }))
       .filter(item => item.imageUrl);
 
-    const aiMessages = [
-      ...buildAiReplyMessages(rawAiText, state, {
-        /* [区域标注·已完成·AI文字图/生图互斥前端接收] 生图 API 开启时前端丢弃 [文字图]；未开启时才把 [文字图] 渲染为文字图气泡。 */
-        textImageProtocolEnabled: Boolean(result?.textImageProtocolEnabled)
-      }),
-      ...generatedImageMessages
-    ];
+    const aiMessages = bindAsideSegmentsToAiMessages(
+      [
+        ...buildAiReplyMessages(rawAiText, state, {
+          /* [区域标注·已完成·AI文字图/生图互斥前端接收] 生图 API 开启时前端丢弃 [文字图]；未开启时才把 [文字图] 渲染为文字图气泡。 */
+          textImageProtocolEnabled: Boolean(result?.textImageProtocolEnabled)
+        }),
+        ...generatedImageMessages
+      ],
+      extractedAsideSegments,
+      state.asideSettings?.displayMode || 'top',
+      rawAiTextAfterInnerVoice
+    );
     if (!aiMessages.length) {
       appendChatConsoleRuntimeLog(state, 'warn', '解析后无可显示消息');
     } else {
@@ -1846,39 +1974,29 @@ export async function sendMessage(container, state, db, content, settingsManager
     }
 
     /* ========================================================================
-       [区域标注·已完成·旁白开启期间即时显示修复] 旁白气泡插入消息列表 + 旁白历史持久化
+       [区域标注·已完成·旁白固定/穿插位置修复] 旁白历史持久化
        说明：
-       1. 提取到旁白文本后，将旁白挂到最后一条 assistant 消息的 asideText 字段。
-       2. 本区已修复：旁白模式开启期间，AI 回复落到界面后会立即把旁白气泡局部插入到对应 AI 消息前方；
-          不再等退出旁白模式触发整页重绘后才显示旁白。
-       3. 同时追加到 state.asideHistory 数组，退出旁白模式时生成摘要注入上下文。
-       4. displayMode='top' 与 displayMode='interleave' 的历史整页渲染规则保持原样；本次只修正当前轮旁白即时出现时机。
-       5. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       1. 旁白不再在 AI 全部消息生成结束后挂到“最后一条 assistant 消息”。
+       2. 当前轮旁白已在 aiMessages 入列前由 bindAsideSegmentsToAiMessages 绑定到正确位置：
+          - 固定模式：绑定到本轮第一条 AI/角色消息之前；
+          - 穿插模式：按 AI 原文中多段 [旁白] 的相对位置绑定到对应消息前/后。
+       3. 这里仅追加旁白历史，退出旁白模式时生成摘要注入上下文。
+       4. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
        ======================================================================== */
     if (extractedAsideText) {
-      let asideMessageId = '';
-      for (let i = state.currentMessages.length - 1; i >= 0; i--) {
-        if (state.currentMessages[i]?.role === 'assistant') {
-          state.currentMessages[i].asideText = extractedAsideText;
-          asideMessageId = String(state.currentMessages[i]?.id || '');
-          break;
-        }
-      }
-      /* 追加旁白历史条目（运行时数组），退出旁白模式时用于生成摘要 */
       if (!Array.isArray(state.asideHistory)) state.asideHistory = [];
       const lastUserMsg = [...state.currentMessages].reverse().find(m => m.role === 'user');
       const lastAiMsg = [...state.currentMessages].reverse().find(m => m.role === 'assistant');
       state.asideHistory.push({
         asideText: extractedAsideText,
+        asideSegments: extractedAsideSegments.map(segment => ({ text: String(segment?.text || '').trim() })).filter(segment => segment.text),
         userMessage: lastUserMsg ? String(lastUserMsg.content || '').slice(0, 200) : '',
         aiMessage: lastAiMsg ? String(lastAiMsg.content || '').slice(0, 200) : '',
         timestamp: Date.now()
       });
       await persistCurrentMessages(state, db);
-      /* 持久化旁白历史到 IndexedDB */
       const asideHistoryKey = `chat_aside_history::${state.activeMaskId}::${state.currentChatId}`;
       await dbPut(db, asideHistoryKey, state.asideHistory);
-      syncCurrentAsideBubble(container, extractedAsideText, asideMessageId);
     }
   } catch (error) {
     /* ========================================================================
@@ -2744,7 +2862,12 @@ export function renderCurrentChatMessage(container, state, options = {}) {
        [区域标注·已完成·旁白模式] 旁白模式状态透传
        说明：传给 renderChatMessage → topBarHtml，控制爱心退出按钮显示。
        ====================================================================== */
-    asideModeActive: state.asideModeActive
+    asideModeActive: state.asideModeActive,
+    /* ======================================================================
+       [区域标注·已完成·旁白固定/穿插位置修复] 旁白显示模式透传
+       说明：完整渲染时必须知道 top/interleave，避免固定模式把旁白错误汇总到全会话第一条 AI 消息。
+       ====================================================================== */
+    asideDisplayMode: state.asideSettings?.displayMode || 'top'
     /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 
@@ -2763,11 +2886,12 @@ export function renderCurrentChatMessage(container, state, options = {}) {
 
 /* ========================================================================== */
 /* ==========================================================================
-   [区域标注·已完成·旁白开启期间即时显示修复] 当前轮旁白气泡局部插入
+   [区域标注·已完成·旁白固定/穿插位置修复] 旧版当前轮旁白插入函数（兼容保留）
    说明：
-   1. AI 回复气泡已增量追加到 DOM 后，旁白文本才会挂到最后一条 assistant 消息。
-   2. 本函数只把当前轮旁白局部插入到对应 AI 消息前方，避免整页重绘造成闪屏。
-   3. 不做任何持久化读写；消息与旁白历史保存仍由上方 DB.js / IndexedDB 流程完成。
+   1. 本次修复后，旁白已在 AI 消息入列前通过 bindAsideSegmentsToAiMessages 绑定到消息对象。
+   2. appendCurrentMessageBubble 会随消息一起渲染旁白，不再依赖“AI 全部回复结束后再插入旁白”的旧流程。
+   3. 本函数仅为旧调用兼容保留；当前主流程不再调用它，避免旁白总落在最后一条 AI 消息附近。
+   4. 不做任何持久化读写；持久化仍统一走 DB.js / IndexedDB。
    ========================================================================== */
 function syncCurrentAsideBubble(container, asideText = '', messageId = '') {
   const text = String(asideText || '').trim();
@@ -2806,11 +2930,12 @@ export function appendCurrentMessageBubble(container, state, message) {
   const emptyEl = listArea.querySelector('.msg-empty');
   if (emptyEl) emptyEl.remove();
 
-  listArea.insertAdjacentHTML('beforeend', renderMessageBubble(message, session, {
+  listArea.insertAdjacentHTML('beforeend', renderMessageWithAsideHtml(message, session, {
     userProfile: state.profile,
     selectedMessageId: state.selectedMessageId,
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
+    asideDisplayMode: state.asideSettings?.displayMode || 'top',
     /* ===== 闲谈：删除消息二次确认 START ===== */
     deleteConfirmMessageId: state.deleteConfirmMessageId,
     rewindConfirmMessageId: state.rewindConfirmMessageId,
@@ -2912,11 +3037,12 @@ export function refreshCurrentMessageListOnly(container, state) {
 
   const previousScrollTop = listArea.scrollTop;
   listArea.innerHTML = (state.currentMessages || []).length
-    ? state.currentMessages.map(message => renderMessageBubble(message, session, {
+    ? state.currentMessages.map(message => renderMessageWithAsideHtml(message, session, {
         userProfile: state.profile,
         selectedMessageId: state.selectedMessageId,
         multiSelectMode: state.multiSelectMode,
         selectedMessageIds: state.selectedMessageIds,
+        asideDisplayMode: state.asideSettings?.displayMode || 'top',
         deleteConfirmMessageId: state.deleteConfirmMessageId,
         rewindConfirmMessageId: state.rewindConfirmMessageId
       })).join('')

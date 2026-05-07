@@ -200,11 +200,13 @@ export function renderAsideBubbleHtml(asideText, asideId = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白模式] 从 AI 原始回复中提取旁白文本
+   [区域标注·已完成·旁白位置与穿插解析修复] 从 AI 原始回复中提取旁白文本
    说明：
    1. AI 在旁白模式下会用 [旁白]{文本}[/旁白] 标记旁白内容。
-   2. 提取后返回 { asideText, cleanedText }。
-   3. cleanedText 是去掉旁白标记后的纯回复文本。
+   2. 本区已修复“多段旁白被合并成一大段”的问题：除兼容旧字段 asideText 外，
+      同时返回 asideSegments，保留每段旁白在原文中的顺序与位置。
+   3. cleanedText 是去掉旁白标记后的纯回复文本，后续聊天协议解析不再看到旁白标记。
+   4. 本区只做文本解析，不读写任何持久化存储，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function extractAsideFromRawText(rawText) {
   const text = String(rawText || '');
@@ -212,18 +214,30 @@ export function extractAsideFromRawText(rawText) {
   const matches = [...text.matchAll(regex)];
 
   if (!matches.length) {
-    return { asideText: '', cleanedText: text };
+    return { asideText: '', asideSegments: [], cleanedText: text };
   }
 
-  const asideTexts = matches.map(m => String(m[1] || '').trim()).filter(Boolean);
-  const asideText = asideTexts.join('\n');
+  const asideSegments = matches
+    .map((match, index) => ({
+      id: `aside_segment_${index + 1}`,
+      text: String(match[1] || '').trim(),
+      startIndex: Number(match.index || 0),
+      endIndex: Number(match.index || 0) + String(match[0] || '').length,
+      rawText: String(match[0] || '')
+    }))
+    .filter(segment => segment.text);
+
+  const asideText = asideSegments.map(segment => segment.text).join('\n');
+
   let cleanedText = text;
-  for (const match of matches) {
-    cleanedText = cleanedText.replace(match[0], '');
-  }
+  [...matches].reverse().forEach(match => {
+    const start = Number(match.index || 0);
+    const end = start + String(match[0] || '').length;
+    cleanedText = `${cleanedText.slice(0, start)}${cleanedText.slice(end)}`;
+  });
   cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
 
-  return { asideText, cleanedText };
+  return { asideText, asideSegments, cleanedText };
 }
 
 /* ==========================================================================
@@ -268,12 +282,12 @@ export function buildAsideModeSystemPrompt(asideSettings = {}, context = {}) {
 2. 但必须明确：像礼物、转账、撤回、引用等协议内容都是在线上/社交软件上/屏幕上才能使用的。
 3. 当剧情/目前情况进展到角色与用户处于同一空间/地理位置的时候，需要自然从线上聊天过渡到线下见面。
 4. 旁白模式下，普通聊天消息仍然使用 [回复]/[表情] 等协议；旁白是额外的描述层，不替代聊天消息。
-5. 显示模式为"${settings.displayMode === 'top' ? '固定在AI消息上方' : '穿插在AI消息中'}"：${settings.displayMode === 'top' ? '把旁白放在所有 [回复] 协议块之前。' : '旁白可以穿插在 [回复] 协议块之间，伴随AI的回复消息穿插动作神态。'}
+5. 显示模式为"${settings.displayMode === 'top' ? '固定在AI消息上方' : '穿插在AI消息中'}"：${settings.displayMode === 'top' ? '本轮只在所有 [回复]/[表情]/[语音]/[图片]/[礼物]/[转账]/[卡片] 等可见协议块之前输出旁白。' : '可以多次输出 [旁白]...[/旁白]，分别放在回复前、回复中、回复后，用短旁白伴随角色动作神态；不要把所有动作合并成一整段固定旁白。'}
 
 ## 输出顺序
 ${settings.displayMode === 'top'
-    ? '先输出 [旁白]...[/旁白]，再输出 [回复]/[表情] 等可见协议块。'
-    : '可以先输出 [旁白]...[/旁白]，再输出部分 [回复]，再输出 [旁白]...[/旁白]，再输出 [回复] 等，自然穿插。'}`;
+    ? '先输出一段 [旁白]...[/旁白]，再输出本轮所有 [回复]/[表情]/[语音]/[图片]/[礼物]/[转账]/[卡片] 等可见协议块。'
+    : '可以先输出 [旁白]...[/旁白]，再输出部分 [回复]/[表情]/[语音]，再输出 [旁白]...[/旁白]，再输出后续可见协议块；允许一轮内出现多段旁白，位置可以在开头、中间、结尾。'}`;
 }
 
 /* ==========================================================================
