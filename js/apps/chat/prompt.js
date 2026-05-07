@@ -1765,7 +1765,10 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
   */
   const asideHistoryEntries = Array.isArray(context.asideHistory) ? context.asideHistory : [];
   if (!context.asideModeActive && asideHistoryEntries.length) {
-    const asideSummary = buildAsideHistorySummary(asideHistoryEntries);
+    const asideSummary = buildAsideHistorySummary(asideHistoryEntries, {
+      roleName: context.roleName || '',
+      userName: context.userName || ''
+    });
     if (asideSummary) {
       messages.push({ role: 'system', content: asideSummary });
     }

@@ -282,10 +282,14 @@ ${settings.displayMode === 'top'
    1. 退出旁白模式后，旁白部分对话历史需要添加到历史上下文中。
    2. 生成简短文本摘要，节省 token 并能让 AI 知道是什么情景下发生的。
    3. 每一轮写清楚旁白摘要，不需要每条消息都写。
+   4. 每轮摘要头部标注"旁白（角色=xx，用户=xx）"，防止 AI 混淆身份。
    ========================================================================== */
-export function buildAsideHistorySummary(asideHistory = []) {
+export function buildAsideHistorySummary(asideHistory = [], { roleName = '', userName = '' } = {}) {
   const entries = Array.isArray(asideHistory) ? asideHistory : [];
   if (!entries.length) return '';
+
+  const safeRoleName = String(roleName || '角色').trim();
+  const safeUserName = String(userName || '用户').trim();
 
   const lines = entries.map((entry, index) => {
     const roundLabel = `第${index + 1}轮`;
@@ -293,9 +297,9 @@ export function buildAsideHistorySummary(asideHistory = []) {
     const userMsg = String(entry.userMessage || '').trim();
     const aiMsg = String(entry.aiMessage || '').trim();
     const parts = [];
-    if (asideText) parts.push(`旁白：${asideText}`);
-    if (userMsg) parts.push(`用户：${userMsg}`);
-    if (aiMsg) parts.push(`角色：${aiMsg}`);
+    if (asideText) parts.push(`旁白（角色=${safeRoleName}，用户=${safeUserName}）：${asideText}`);
+    if (userMsg) parts.push(`${safeUserName}：${userMsg}`);
+    if (aiMsg) parts.push(`${safeRoleName}：${aiMsg}`);
     return `${roundLabel}——${parts.join('；')}`;
   });
 
