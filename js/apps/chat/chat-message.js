@@ -85,6 +85,20 @@ import {
   extractInnerVoiceFromRawText,
   persistInnerVoiceHistoryEntry
 } from './chat-inner-voice.js';
+/* ==========================================================================
+   [区域标注·已完成·旁白模式] 导入旁白模块函数
+   说明：
+   1. extractAsideFromRawText — 从 AI 原始回复中提取 [旁白]...[/旁白] 标记内容。
+   2. renderAsideBubbleHtml — 生成旁白气泡居中加粗 HTML。
+   3. renderAsideExitButtonHtml — 顶栏爱心退出按钮 HTML。
+   4. isAsideModeActive — 检测当前 state 是否处于旁白模式。
+   ========================================================================== */
+import {
+  extractAsideFromRawText,
+  renderAsideBubbleHtml,
+  renderAsideExitButtonHtml,
+  isAsideModeActive
+} from './chat-aside.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -989,6 +1003,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           <span class="msg-top-bar__status">${isSending ? '正在回复...' : '在线'}</span>
         </div>
       </div>
+      <!-- ====================================================================
+           [区域标注·已完成·旁白模式] 旁白模式开启时顶栏显示爱心退出按钮
+           说明：点击爱心按钮弹出退出旁白模式确认弹窗，由 index.js 处理退出逻辑。
+           ==================================================================== -->
+      ${isAsideModeActive(options) ? renderAsideExitButtonHtml() : ''}
       <button class="msg-top-bar__search ${options.chatSearchOpen ? 'is-active' : ''}" data-action="toggle-msg-search" type="button" aria-label="搜索聊天记录">${MSG_ICONS.search}</button>
       <button class="msg-top-bar__more" data-action="msg-more" type="button">${MSG_ICONS.more}</button>
     </div>
@@ -997,12 +1016,44 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
 
   /* ==========================================================================
-     [区域标注] 消息列表区域
-     说明：AI 回复中的 <think>...</think> 已在 prompt.js 里剥离，界面只展示最终回复。
+     [区域标注·已完成·旁白模式] 消息列表区域（含旁白气泡渲染）
+     说明：
+     1. AI 回复中的 <think>...</think> 已在 prompt.js 里剥离，界面只展示最终回复。
+     2. 旁白模式下，消息带有 asideText 字段的 assistant 消息会渲染旁白气泡。
+     3. displayMode='top' 时旁白气泡固定在第一条 AI 消息上方。
+     4. displayMode='interleave' 时旁白气泡紧跟在对应 AI 消息前。
   /* ========================================================================== */
-  const messagesHtml = msgs.length === 0
-    ? `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`
-    : msgs.map(msg => renderMessageBubble(msg, session, options)).join('');
+  let messagesHtml = '';
+  if (msgs.length === 0) {
+    messagesHtml = `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
+  } else {
+    const asideModeOn = isAsideModeActive(options);
+    const asideDisplayMode = String(options.asideDisplayMode || 'top');
+    /* 收集所有带旁白的消息（用于 top 模式：只在第一条 AI 消息上方渲染所有旁白） */
+    const topAsideTexts = [];
+    if (asideModeOn && asideDisplayMode === 'top') {
+      msgs.forEach(msg => {
+        if (msg?.role === 'assistant' && msg?.asideText) topAsideTexts.push(msg.asideText);
+      });
+    }
+    let topAsideRendered = false;
+    messagesHtml = msgs.map(msg => {
+      let prefix = '';
+      if (asideModeOn && msg?.role === 'assistant') {
+        if (asideDisplayMode === 'top' && !topAsideRendered && topAsideTexts.length) {
+          prefix = topAsideTexts.map(t => renderAsideBubbleHtml(t)).join('');
+          topAsideRendered = true;
+        } else if (asideDisplayMode === 'interleave' && msg?.asideText) {
+          prefix = renderAsideBubbleHtml(msg.asideText, String(msg.id || ''));
+        }
+      }
+      /* 非旁白模式下，已有旁白字段的消息也渲染旁白气泡（历史消息回看） */
+      if (!asideModeOn && msg?.role === 'assistant' && msg?.asideText) {
+        prefix = renderAsideBubbleHtml(msg.asideText, String(msg.id || ''));
+      }
+      return prefix + renderMessageBubble(msg, session, options);
+    }).join('');
+  }
 
   /* ==========================================================================
      [区域标注·已完成·咖啡功能区两行布局与旁白入口]
@@ -1602,7 +1653,17 @@ export async function sendMessage(container, state, db, content, settingsManager
       /* [区域标注·已完成·本次角色卡/用户面具上下文修复] 传入刚从 IndexedDB 刷新的完整档案上下文 */
       archiveData: latestArchiveDataForAi,
       /* [区域标注·本次需求3] 把全局表情包资产传给 prompt.js，由当前面具挂载分组决定 AI 可用资源 */
-      stickerData: state.stickerData
+      stickerData: state.stickerData,
+      /* ======================================================================
+         [区域标注·已完成·旁白模式] 旁白模式状态透传给 prompt.js 的 chat()
+         说明：
+         1. asideModeActive — 旁白模式是否开启，决定 system prompt 是否注入旁白提示词。
+         2. asideSettings — 旁白人称/风格/字数/显示模式，供 buildAsideModeSystemPrompt 使用。
+         3. asideHistory — 旁白历史摘要数组，退出旁白模式后由 buildAsideHistorySummary 注入上下文。
+         ====================================================================== */
+      asideModeActive: state.asideModeActive,
+      asideSettings: state.asideSettings,
+      asideHistory: state.asideHistory
     });
 
     const rawAiTextOriginal = result?.rawText || result?.text || '';
@@ -1615,9 +1676,28 @@ export async function sendMessage(container, state, db, content, settingsManager
        3. cleanedText 作为后续 buildAiReplyMessages 的输入，确保心声 JSON 不会以纯文本气泡显示在聊天界面。
        4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
        ======================================================================== */
-    const { innerVoice: extractedInnerVoice, cleanedText: rawAiText } = extractInnerVoiceFromRawText(rawAiTextOriginal);
+    const { innerVoice: extractedInnerVoice, cleanedText: rawAiTextAfterInnerVoice } = extractInnerVoiceFromRawText(rawAiTextOriginal);
     if (extractedInnerVoice) {
       appendChatConsoleRuntimeLog(state, 'info', `心声数据已提取：好感=${extractedInnerVoice.affection}%，醋意=${extractedInnerVoice.jealousy}%，心跳=${extractedInnerVoice.heartbeat}bpm`);
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·旁白模式] 从 AI 原始回复中提取旁白文本
+       说明：
+       1. 只在旁白模式开启时才提取 [旁白]...[/旁白] 标记。
+       2. 提取后的 asideText 生成旁白气泡，cleanedText 作为后续消息解析输入。
+       3. 旁白历史条目追加到 state.asideHistory，退出旁白模式时生成摘要注入上下文。
+       4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       ======================================================================== */
+    let rawAiText = rawAiTextAfterInnerVoice;
+    let extractedAsideText = '';
+    if (isAsideModeActive(state)) {
+      const { asideText, cleanedText } = extractAsideFromRawText(rawAiTextAfterInnerVoice);
+      extractedAsideText = asideText;
+      rawAiText = cleanedText;
+      if (extractedAsideText) {
+        appendChatConsoleRuntimeLog(state, 'info', `旁白文本已提取：${extractedAsideText.slice(0, 80)}${extractedAsideText.length > 80 ? '…' : ''}`);
+      }
     }
 
     if (!String(rawAiText || '').trim()) {
@@ -1758,6 +1838,38 @@ export async function sendMessage(container, state, db, content, settingsManager
         persistCurrentMessages(state, db),
         persistInnerVoiceHistoryEntry(db, state, extractedInnerVoice, innerVoiceMessageId)
       ]);
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·旁白模式] 旁白气泡插入消息列表 + 旁白历史持久化
+       说明：
+       1. 提取到旁白文本后，将旁白挂到最后一条 assistant 消息的 asideText 字段。
+       2. 同时追加到 state.asideHistory 数组，退出旁白模式时生成摘要注入上下文。
+       3. displayMode='top' 时旁白气泡显示在第一条 AI 消息上方；
+          displayMode='interleave' 时旁白穿插在 AI 消息中显示。
+       4. 持久化只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    if (extractedAsideText) {
+      for (let i = state.currentMessages.length - 1; i >= 0; i--) {
+        if (state.currentMessages[i]?.role === 'assistant') {
+          state.currentMessages[i].asideText = extractedAsideText;
+          break;
+        }
+      }
+      /* 追加旁白历史条目（运行时数组），退出旁白模式时用于生成摘要 */
+      if (!Array.isArray(state.asideHistory)) state.asideHistory = [];
+      const lastUserMsg = [...state.currentMessages].reverse().find(m => m.role === 'user');
+      const lastAiMsg = [...state.currentMessages].reverse().find(m => m.role === 'assistant');
+      state.asideHistory.push({
+        asideText: extractedAsideText,
+        userMessage: lastUserMsg ? String(lastUserMsg.content || '').slice(0, 200) : '',
+        aiMessage: lastAiMsg ? String(lastAiMsg.content || '').slice(0, 200) : '',
+        timestamp: Date.now()
+      });
+      await persistCurrentMessages(state, db);
+      /* 持久化旁白历史到 IndexedDB */
+      const asideHistoryKey = `chat_aside_history::${state.activeMaskId}::${state.currentChatId}`;
+      await dbPut(db, asideHistoryKey, state.asideHistory);
     }
   } catch (error) {
     /* ========================================================================
@@ -2572,7 +2684,12 @@ export function renderCurrentChatMessage(container, state, options = {}) {
        说明：仅运行时 UI 状态，不写入任何持久化存储。
        ====================================================================== */
     chatSearchOpen: state.chatMessageSearchOpen,
-    chatSearchKeyword: state.chatMessageSearchKeyword
+    chatSearchKeyword: state.chatMessageSearchKeyword,
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 旁白模式状态透传
+       说明：传给 renderChatMessage → topBarHtml，控制爱心退出按钮显示。
+       ====================================================================== */
+    asideModeActive: state.asideModeActive
     /* ===== 闲谈：删除消息二次确认 END ===== */
   });
 

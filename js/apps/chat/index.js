@@ -55,6 +55,18 @@ import {
 } from './chat-utils.js';
 import { chat, normalizeChatPromptSettings } from './prompt.js';
 import { renderChatList, getVisibleChatSessions, showAddChatModal, createChatListLongPressHandlers } from './chat-list.js';
+/* ======================================================================
+   [区域标注·已完成·旁白模式] 导入旁白模式独立模块
+   说明：旁白弹窗、设置读取、退出确认、状态检测等均由 chat-aside.js 提供。
+   ====================================================================== */
+import {
+  showAsideEnterModal,
+  readAsideSettingsFromModal,
+  showAsideExitConfirmModal,
+  isAsideModeActive,
+  getDefaultAsideSettings,
+  normalizeAsideSettings
+} from './chat-aside.js';
 import {
   renderContacts,
   showAddContactModal,
@@ -427,7 +439,12 @@ export async function mount(container, context) {
        [区域标注·已完成·语音板块独立样式预加载]
        说明：语音弹窗与语音气泡样式拆分到 chat-voice.css，挂载时预加载以避免首次打开闪屏。
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-voice.css', 'chat-voice-css')
+    loadCSS('./js/apps/chat/chat-voice.css', 'chat-voice-css'),
+    /* ======================================================================
+       [区域标注·已完成·旁白模式独立样式预加载]
+       说明：旁白弹窗、旁白气泡、顶栏退出按钮样式拆分到 chat-aside.css，挂载时预加载以避免首次打开闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-aside.css', 'chat-aside-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -503,6 +520,16 @@ export async function mount(container, context) {
     stickerPanelOpen: false,
     stickerPanelGroupId: normalizeStickerData(stickerData).activeGroupId || 'all',
     coffeeDockOpen: false,
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 旁白模式运行时状态字段
+       说明：
+       1. asideModeActive — 当前会话是否处于旁白模式（布尔值）。
+       2. asideSettings — 旁白人称/风格/字数/显示模式等设置对象。
+       3. asideHistory — 旁白模式期间每轮旁白摘要数组，退出后注入上下文。
+       ====================================================================== */
+    asideModeActive: false,
+    asideSettings: getDefaultAsideSettings(),
+    asideHistory: [],
     /* [区域标注·本次需求] 聊天 API 调用状态 */
     isAiSending: false,
     /* ==========================================================================
@@ -1740,6 +1767,81 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        2. 弹窗显示当前用户面具身份的钱包余额，余额来自 state.walletData（IndexedDB 已加载数据）。
        3. 弹窗 UI 与礼物字段由 chat-gift.js 独立维护。
        ======================================================================== */
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 打开旁白模式确认弹窗
+       说明：点击咖啡功能区"旁白"按钮后打开旁白设置弹窗。
+       ====================================================================== */
+    case 'open-msg-aside-modal':
+      showAsideEnterModal(container, state.asideSettings);
+      break;
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 旁白弹窗内选项按钮——角色人称切换
+       ====================================================================== */
+    case 'set-aside-role-person': {
+      const group = target.closest('[data-role="aside-role-person-group"]');
+      if (group) {
+        group.querySelectorAll('.aside-option-btn').forEach(b => b.classList.remove('is-active'));
+        target.classList.add('is-active');
+      }
+      break;
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 旁白弹窗内选项按钮——用户人称切换
+       ====================================================================== */
+    case 'set-aside-user-person': {
+      const group = target.closest('[data-role="aside-user-person-group"]');
+      if (group) {
+        group.querySelectorAll('.aside-option-btn').forEach(b => b.classList.remove('is-active'));
+        target.classList.add('is-active');
+      }
+      break;
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 旁白弹窗内选项按钮——显示模式切换
+       ====================================================================== */
+    case 'set-aside-display-mode': {
+      const group = target.closest('[data-role="aside-display-mode-group"]');
+      if (group) {
+        group.querySelectorAll('.aside-option-btn').forEach(b => b.classList.remove('is-active'));
+        target.classList.add('is-active');
+      }
+      break;
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 确认进入旁白模式
+       说明：从弹窗读取设置，激活旁白模式，关闭弹窗，重新渲染消息页。
+       ====================================================================== */
+    case 'confirm-enter-aside-mode': {
+      const asideSettings = readAsideSettingsFromModal(container);
+      state.asideModeActive = true;
+      state.asideSettings = asideSettings;
+      state.asideHistory = [];
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+      break;
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 点击顶栏爱心按钮——弹出退出旁白确认弹窗
+       ====================================================================== */
+    case 'exit-aside-mode':
+      showAsideExitConfirmModal(container);
+      break;
+
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] 确认退出旁白模式
+       说明：关闭旁白模式，清除旁白活跃标记，保留 asideHistory 供上下文摘要使用。
+       ====================================================================== */
+    case 'confirm-exit-aside-mode':
+      state.asideModeActive = false;
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+      break;
+
     case 'open-msg-gift-modal': {
       const walletDisplay = getWalletDisplayAmount(state.walletData || {});
       const activeMask = (state.archiveMasks || []).find(mask => String(mask?.id || '') === String(state.activeMaskId)) || {};

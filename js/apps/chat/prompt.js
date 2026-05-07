@@ -21,6 +21,14 @@ import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
    ========================================================================== */
 import { buildInnerVoiceSystemPrompt } from './chat-inner-voice.js';
 /* ==========================================================================
+   [区域标注·已完成·旁白模式] 导入旁白模式提示词构建函数
+   说明：
+   1. buildAsideModeSystemPrompt — 旁白模式开启时注入到 system prompt。
+   2. buildAsideHistorySummary — 退出旁白模式后，将旁白历史摘要注入上下文。
+   3. 旁白模块独立于 chat-aside.js，这里只导入提示词相关函数。
+   ========================================================================== */
+import { buildAsideModeSystemPrompt, buildAsideHistorySummary } from './chat-aside.js';
+/* ==========================================================================
    [区域标注·已完成·全局API报错弹窗] 导入结构化 API 错误工具
    说明：
    1. prompt.js 只负责在 API 失败时抛出带 apiErrorInfo 的结构化错误。
@@ -743,7 +751,14 @@ async function collectPromptRuntimeContext({
   userInput = '',
   history = [],
   settings = {},
-  conversationTimeContext = {}
+  conversationTimeContext = {},
+  /* ======================================================================
+     [区域标注·已完成·旁白模式] collectPromptRuntimeContext 接收旁白参数
+     说明：旁白模式相关字段透传到 runtimeContext，供 buildSystemPrompt / buildChatMessages 读取。
+     ====================================================================== */
+  asideModeActive = false,
+  asideSettings = null,
+  asideHistory = []
 } = {}) {
   /* ==========================================================================
      [区域标注·已完成·本次世情同步排查] 闲谈发送前实时读取世界书
@@ -773,7 +788,14 @@ async function collectPromptRuntimeContext({
     userInput,
     history,
     settings,
-    conversationTimeContext
+    conversationTimeContext,
+    /* ======================================================================
+       [区域标注·已完成·旁白模式] context 透传旁白字段
+       说明：asideModeActive / asideSettings / asideHistory 透传给 buildSystemPrompt 和 buildChatMessages。
+       ====================================================================== */
+    asideModeActive,
+    asideSettings,
+    asideHistory
   };
 
   return {
@@ -1701,6 +1723,19 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     /* ===== 闲谈应用：心声协议提示词注入 START ===== */
     buildInnerVoiceSystemPrompt(),
     /* ===== 闲谈应用：心声协议提示词注入 END ===== */
+    /* ===== [区域标注·已完成·旁白模式] 旁白模式系统提示词注入 START ===== */
+    /* 说明：
+       1. 仅在 context.asideModeActive === true 时注入旁白提示词。
+       2. 退出旁白模式后不再发送此提示词，不会让 AI 搞混旁白模式和普通聊天模式。
+       3. asideSettings / roleName / userName 由 chat-message.js 通过 context 传入。
+    */
+    runtimeContext.asideModeActive
+      ? buildAsideModeSystemPrompt(runtimeContext.asideSettings || {}, {
+          roleName: runtimeContext.roleName || '',
+          userName: runtimeContext.userName || ''
+        })
+      : '',
+    /* ===== [区域标注·已完成·旁白模式] 旁白模式系统提示词注入 END ===== */
     getThinkingInstruction({ settings: normalizedSettings })
   ].map(part => String(part || '').trim()).filter(Boolean).join('\n\n');
 }
@@ -1721,9 +1756,25 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
     messages.push({ role: 'system', content: systemPrompt });
   }
 
+  /* ===== [区域标注·已完成·旁白模式] 旁白历史摘要注入 START ===== */
+  /* 说明：
+     1. 退出旁白模式后，context.asideHistory 中保留旁白期间的对话摘要。
+     2. 将摘要作为 system 消息注入历史对话之前，节省 token 且让 AI 保持上下文记忆。
+     3. 旁白模式活跃期间不注入摘要（此时旁白提示词已在 systemPrompt 中）。
+     4. asideHistory 数据来源：chat-message.js 从 IndexedDB 读取，通过 context 传入。
+  */
+  const asideHistoryEntries = Array.isArray(context.asideHistory) ? context.asideHistory : [];
+  if (!context.asideModeActive && asideHistoryEntries.length) {
+    const asideSummary = buildAsideHistorySummary(asideHistoryEntries);
+    if (asideSummary) {
+      messages.push({ role: 'system', content: asideSummary });
+    }
+  }
+  /* ===== [区域标注·已完成·旁白模式] 旁白历史摘要注入 END ===== */
+
   messages.push(...getChatHistory({
     history,
-    /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入“按轮时间轴摘要”。 */
+    /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入"按轮时间轴摘要"。 */
     includeTimestamps: false
   }));
 
@@ -1983,7 +2034,17 @@ export async function chat({
   worldBooks = null,
   stickerData = null,
   currentUserRoundMessages = [],
-  conversationTimeContext = {}
+  conversationTimeContext = {},
+  /* ======================================================================
+     [区域标注·已完成·旁白模式] chat() 接收旁白模式参数
+     说明：
+     1. asideModeActive — 当前是否处于旁白模式。
+     2. asideSettings — 旁白人称/风格/字数/显示模式等设置。
+     3. asideHistory — 旁白模式期间每轮旁白摘要数组，退出后注入上下文。
+     ====================================================================== */
+  asideModeActive = false,
+  asideSettings = null,
+  asideHistory = []
 } = {}) {
   const promptContext = await collectPromptRuntimeContext({
     db,
@@ -1996,7 +2057,11 @@ export async function chat({
     userInput,
     history,
     settings: chatSettings,
-    conversationTimeContext
+    conversationTimeContext,
+    /* [区域标注·已完成·旁白模式] 旁白参数透传到 collectPromptRuntimeContext */
+    asideModeActive,
+    asideSettings,
+    asideHistory
   });
 
   /* ========================================================================

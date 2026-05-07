@@ -1,0 +1,211 @@
+/* ==========================================================================
+   文件名: js/apps/chat/chat-aside.css
+   用途: 闲谈应用 — 旁白模式独立样式
+   说明:
+   1. 旁白模式弹窗、旁白气泡、顶栏退出按钮的全部样式。
+   2. 与聊天消息页主题 UI 风格保持一致（暖色北欧风）。
+   3. 独立文件，方便后续针对性修改旁白视觉表现。
+   ========================================================================== */
+
+/* ==========================================================================
+   [区域标注·旁白模式弹窗] 确认进入/设置弹窗
+   ========================================================================== */
+.aside-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 0;
+}
+
+.aside-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aside-modal-section__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4A342A;
+}
+
+.aside-modal-section__desc {
+  font-size: 11px;
+  color: #8B7355;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式弹窗] 选项按钮组（人称/显示模式）
+   ========================================================================== */
+.aside-option-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aside-option-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1.5px solid #C4A882;
+  border-radius: 8px;
+  background: #FFF8F0;
+  color: #4A342A;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .18s, border-color .18s, color .18s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.aside-option-btn.is-active {
+  background: #4A342A;
+  color: #FFF8F0;
+  border-color: #4A342A;
+}
+
+.aside-option-btn:active {
+  opacity: .85;
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式弹窗] 字数范围输入
+   ========================================================================== */
+.aside-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aside-range-input {
+  width: 56px;
+  padding: 5px 6px;
+  border: 1.5px solid #C4A882;
+  border-radius: 6px;
+  background: #FFF8F0;
+  color: #4A342A;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+}
+
+.aside-range-input:focus {
+  border-color: #4A342A;
+}
+
+.aside-range-sep {
+  font-size: 13px;
+  color: #8B7355;
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式弹窗] 自定义描述风格输入
+   ========================================================================== */
+.aside-style-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1.5px solid #C4A882;
+  border-radius: 8px;
+  background: #FFF8F0;
+  color: #4A342A;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.aside-style-input:focus {
+  border-color: #4A342A;
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式] 顶栏退出旁白爱心按钮
+   ========================================================================== */
+.msg-top-bar__aside-exit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: #E25555;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  flex-shrink: 0;
+  transition: transform .18s;
+}
+
+.msg-top-bar__aside-exit svg {
+  width: 20px;
+  height: 20px;
+}
+
+.msg-top-bar__aside-exit:active {
+  transform: scale(1.18);
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式] 旁白气泡样式（居中加粗，区别于消息气泡）
+   ========================================================================== */
+.msg-aside-bubble {
+  display: flex;
+  justify-content: center;
+  padding: 10px 18px;
+  margin: 6px 0;
+}
+
+.msg-aside-bubble__text {
+  max-width: 88%;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #6B5744;
+  line-height: 1.65;
+  letter-spacing: .3px;
+  /* 区别于消息气泡：无背景色、无圆角、无阴影 */
+  padding: 8px 14px;
+  border-top: 1px dashed #C4A88266;
+  border-bottom: 1px dashed #C4A88266;
+  font-style: normal;
+}
+
+/* ==========================================================================
+   [区域标注·旁白模式] iPhone 风格滑动开关（复用聊天设置页样式命名）
+   说明：如果主 chat.css 已有 .msg-ios-switch 样式则可复用；此处做独立兜底。
+   ========================================================================== */
+.aside-modal-body .msg-ios-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border: none;
+  border-radius: 12px;
+  background: #C4A882;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background .25s;
+}
+
+.aside-modal-body .msg-ios-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .25s;
+}
+
+.aside-modal-body .msg-ios-switch.is-on {
+  background: #4A342A;
+}
+
+.aside-modal-body .msg-ios-switch.is-on::after {
+  transform: translateX(20px);
+}
