@@ -35,18 +35,36 @@ export function normalizeVoiceText(value = '') {
   return String(value || '').trim();
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次语音转文字清洗]
+   说明：
+   1. 仅服务语音消息的转文字内容展示与协议入库前整理。
+   2. 已清除 `{4}` / `{时长:4}` 这类时长残留，避免展开后出现在正文最前面。
+   3. 已移除中英文括号及括号内动作描写，例如 `（叹气）` / `(sigh)`。
+   4. 本区域只处理字符串，不涉及持久化存储，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+export function sanitizeVoiceTranscriptText(value = '') {
+  return normalizeVoiceText(value)
+    .replace(/^(?:\[语音\]\s*)+/g, '')
+    .replace(/^(?:\{\s*(?:(?:时长|duration)\s*[：:]\s*)?\d{1,2}\s*(?:秒|s)?\s*\}\s*)+/gi, '')
+    .replace(/（[^（）]*）|\([^()]*\)/g, '')
+    .replace(/\s+([，。！？；：、])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 export function getVoiceMessageDisplayText(message = {}) {
-  const text = normalizeVoiceText(message?.voiceText || message?.content || '');
+  const text = sanitizeVoiceTranscriptText(message?.voiceText || message?.content || '');
   return `[语音] ${text || '语音消息'}`;
 }
 
 export function buildVoiceAiContent(text = '') {
-  const safeText = normalizeVoiceText(text);
+  const safeText = sanitizeVoiceTranscriptText(text);
   return `用户发送了一条语音消息，语音转文字内容：${safeText}`;
 }
 
 export function createVoiceMessage(text = '', options = {}) {
-  const voiceText = normalizeVoiceText(text);
+  const voiceText = sanitizeVoiceTranscriptText(text);
   if (!voiceText) return null;
 
   const duration = Math.max(1, Math.min(60, Math.ceil(voiceText.length / 3)));
@@ -63,11 +81,11 @@ export function createVoiceMessage(text = '', options = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI语音消息协议解析]
+   [区域标注·已完成·本次语音协议解析修正]
    说明：
-   1. 解析 AI 输出的 `[语音] 角色名：{时长:xx}语音转写文本`，生成与用户语音共用的 voice_message 结构。
-   2. content 保留为 `[语音] 转写文本`，用于历史上下文摘要；voiceText 专供气泡展开显示转写。
-   3. 本区域只做运行时解析与消息对象创建；真正持久化仍由聊天消息页写入 DB.js / IndexedDB。
+   1. 已支持 AI 输出的 `[语音] 角色名：{时长:xx}语音转写文本` 与 `{4}语音转写文本` 两种时长格式。
+   2. `{4}` 会被解析为 voiceDuration=4，不再掉进 voiceText 导致展开时显示在正文前。
+   3. voiceText/content 均写入清洗后的转文字文本；持久化仍由聊天消息页写入 DB.js / IndexedDB。
    ========================================================================== */
 export function parseAiVoiceProtocolPayload(content = '') {
   const normalized = normalizeVoiceText(content)
@@ -76,8 +94,8 @@ export function parseAiVoiceProtocolPayload(content = '') {
     .trim();
   if (!normalized) return null;
 
-  const durationMatch = normalized.match(/^\{\s*时长\s*[：:]\s*(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i);
-  const voiceText = normalizeVoiceText(durationMatch ? durationMatch[2] : normalized);
+  const durationMatch = normalized.match(/^\{\s*(?:(?:时长|duration)\s*[：:]\s*)?(\d{1,2})\s*(?:秒|s)?\s*\}\s*([\s\S]*)$/i);
+  const voiceText = sanitizeVoiceTranscriptText(durationMatch ? durationMatch[2] : normalized);
   if (!voiceText) return null;
 
   const durationFromProtocol = durationMatch ? Number(durationMatch[1]) : 0;
@@ -119,14 +137,14 @@ export function renderVoiceFeatureButton() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI/用户语音气泡渲染]
+   [区域标注·已完成·本次语音气泡渲染修正]
    说明：
    1. 用户模拟语音与 AI 主动语音共用本气泡：语音波纹 + 秒数，默认不直接露出文字。
-   2. 双击气泡后切换 voiceExpanded，并在横线下方显示“语音转文字”内容。
+   2. 双击展开时显示已清洗的“语音转文字”，不显示 `{4}` 或括号动作描写。
    3. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成。
    ========================================================================== */
 export function renderVoiceBubble(message = {}) {
-  const text = normalizeVoiceText(message?.voiceText || message?.content || '');
+  const text = sanitizeVoiceTranscriptText(message?.voiceText || message?.content || '');
   const duration = Math.max(1, Math.min(60, Number(message?.voiceDuration || Math.ceil(text.length / 3) || 1)));
   const expanded = Boolean(message?.voiceExpanded);
 
@@ -137,7 +155,7 @@ export function renderVoiceBubble(message = {}) {
          title="双击展开/收起语音转文字">
       <div class="msg-voice-bubble__main">
         <span class="msg-voice-bubble__wave">${VOICE_ICONS.wave}</span>
-        <span class="msg-voice-bubble__duration">${escapeHtml(String(duration))}''</span>
+        <span class="msg-voice-bubble__duration">${escapeHtml(String(duration))}秒</span>
       </div>
       ${expanded ? `
         <div class="msg-voice-bubble__divider"></div>

@@ -23,22 +23,27 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·语音消息气泡样式]
+   [区域标注·已完成·本次语音气泡缩小与字体统一]
    说明：
-   1. 默认只显示语音波纹与秒数，模拟微信/QQ 社交软件语音气泡。
-   2. 双击后通过 .is-expanded 展开横线下方“语音转文字”内容。
-   3. 只做视觉展示，不涉及任何持久化存储逻辑。
+   1. 已去掉语音气泡过大的固定最小宽度，尺寸贴近普通一句话消息气泡。
+   2. 秒数与转文字内容统一继承闲谈消息页默认中文字体，字号按普通消息气泡对齐。
+   3. 双击后通过 .is-expanded 展开横线下方“语音转文字”内容；本区域只做视觉展示，不涉及持久化存储逻辑。
    ========================================================================== */
 .msg-bubble--voice {
-  min-width: 116px;
-  max-width: min(280px, 74vw);
+  min-width: 0;
+  width: fit-content;
+  max-width: min(260px, 72vw);
   padding: 0;
   overflow: hidden;
 }
 
 .msg-voice-bubble {
-  min-width: 116px;
-  max-width: min(280px, 74vw);
+  min-width: 0;
+  width: fit-content;
+  max-width: min(260px, 72vw);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
   cursor: pointer;
   user-select: none;
 }
@@ -46,16 +51,17 @@
 .msg-voice-bubble__main {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 8px 12px;
+  gap: 7px;
+  min-height: 0;
+  padding: 10px 14px;
 }
 
 .msg-voice-bubble__wave {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   color: currentColor;
+  flex-shrink: 0;
 }
 
 .msg-voice-bubble__wave svg {
@@ -64,14 +70,16 @@
 }
 
 .msg-voice-bubble__duration {
+  font-family: inherit;
   font-size: 14px;
-  font-weight: 800;
-  letter-spacing: .02em;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .msg-voice-bubble__divider {
   height: 1px;
-  margin: 0 12px;
+  margin: 0 14px;
   background: currentColor;
   opacity: .22;
 }
@@ -80,21 +88,25 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 9px 12px 11px;
+  padding: 9px 14px 11px;
+  font-family: inherit;
+  font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .msg-voice-bubble__label {
-  font-size: 11px;
-  font-weight: 800;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
   opacity: .62;
 }
 
 .msg-voice-bubble__text {
-  font-size: 13px;
-  font-weight: 650;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .msg-bubble-row--right .msg-voice-bubble__main {
