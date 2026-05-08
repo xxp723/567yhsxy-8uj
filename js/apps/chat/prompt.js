@@ -21,13 +21,13 @@ import { getHtmlCardFeaturePrompt } from './chat-html-card.js';
    ========================================================================== */
 import { buildInnerVoiceSystemPrompt } from './chat-inner-voice.js';
 /* ==========================================================================
-   [区域标注·已完成·旁白模式] 导入旁白模式提示词构建函数
+   [区域标注·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复] 导入旁白模式系统提示词构建函数
    说明：
-   1. buildAsideModeSystemPrompt — 旁白模式开启时注入到 system prompt。
-   2. buildAsideHistorySummary — 退出旁白模式后，将旁白历史摘要注入上下文。
-   3. 旁白模块独立于 chat-aside.js，这里只导入提示词相关函数。
+   1. buildAsideModeSystemPrompt — 仅在旁白模式开启时注入到 system prompt。
+   2. 本需求已取消 buildAsideHistorySummary 注入：短期记忆轮数是唯一边界，旁白历史只随原始短期历史发送。
+   3. 旁白模块独立于 chat-aside.js，这里只导入旁白模式系统提示词函数。
    ========================================================================== */
-import { buildAsideModeSystemPrompt, buildAsideHistorySummary } from './chat-aside.js';
+import { buildAsideModeSystemPrompt } from './chat-aside.js';
 /* ==========================================================================
    [区域标注·已完成·全局API报错弹窗] 导入结构化 API 错误工具
    说明：
@@ -410,6 +410,68 @@ function formatMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '',
   const messageId = normalizePlainText(message?.id);
   const idLine = messageId ? `可引用ID:${messageId}` : '';
   return [idLine, quoteLine, senderLine].filter(Boolean).join('\n');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复] 旁白历史原文格式化工具
+   说明：
+   1. 短期记忆轮数是唯一边界；本区只格式化调用方已经裁剪好的 history，不扩大历史范围。
+   2. 不注入旁白摘要，不剔除旁白原始轮次，不使用 localStorage/sessionStorage，不写双份存储兜底。
+   3. 含旁白的 assistant 历史每条只加一次身份锚定：
+      【旁白身份：你=旁白中的“我”/角色名；用户=旁白中的“你”/用户名；旁白=本轮已发生情景，不是第三人】
+   4. 旁白按当前消息对象保存的 before/after 顺序与正常“你：...”回复穿插，避免把旁白全部堆到每轮最前面。
+   5. 正常模式历史仍使用现有“用户：/你：”格式，不改成泛化 [回复]。
+   ========================================================================== */
+function getAsideIdentityAnchorForPrompt({ roleName = '', userName = '' } = {}) {
+  const safeRoleName = normalizePlainText(roleName) || '当前角色';
+  const safeUserName = normalizePlainText(userName) || '当前用户';
+  return `【旁白身份：你=旁白中的“我”/${safeRoleName}；用户=旁白中的“你”/${safeUserName}；旁白=本轮已发生情景，不是第三人】`;
+}
+
+function normalizeAsideSegmentsForPrompt(message = {}) {
+  const rawSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
+  const segments = rawSegments
+    .map(segment => ({
+      text: normalizePlainText(typeof segment === 'string' ? segment : segment?.text),
+      placement: String(typeof segment === 'string' ? 'before' : (segment?.placement || 'before')) === 'after' ? 'after' : 'before'
+    }))
+    .filter(segment => segment.text);
+
+  if (segments.length) return segments;
+
+  const legacyAsideText = normalizePlainText(message?.asideText);
+  return legacyAsideText
+    ? legacyAsideText.split(/\n+/).map(text => ({ text: text.trim(), placement: 'before' })).filter(segment => segment.text)
+    : [];
+}
+
+function formatAsideSegmentForPrompt(segment = {}) {
+  const text = normalizePlainText(segment?.text);
+  return text ? `[旁白]${text}[/旁白]` : '';
+}
+
+function formatAsideAwareMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '', options = {}) {
+  const normalText = formatMessageTextWithQuoteForPrompt(message, fallbackContent, options);
+  if (message?.role !== 'assistant') return normalText;
+
+  const asideSegments = normalizeAsideSegmentsForPrompt(message);
+  if (!asideSegments.length) return normalText;
+
+  const beforeAside = asideSegments
+    .filter(segment => segment.placement !== 'after')
+    .map(formatAsideSegmentForPrompt)
+    .filter(Boolean);
+  const afterAside = asideSegments
+    .filter(segment => segment.placement === 'after')
+    .map(formatAsideSegmentForPrompt)
+    .filter(Boolean);
+
+  return [
+    getAsideIdentityAnchorForPrompt(options),
+    ...beforeAside,
+    normalText,
+    ...afterAside
+  ].filter(Boolean).join('\n');
 }
 
 function extractSystemTempBlocks(text = '') {
@@ -1629,7 +1691,7 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
    2. 历史消息只保留轻量纯文本摘要，不再给每条历史注入可引用消息ID、消息类型结构或完整 quote 包装。
    3. 只有最新一轮用户消息会在“本轮用户消息·可引用”中保留极简 ID，避免影响 AI 本轮引用回复气泡。
    ========================================================================== */
-export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false } = {}) {
+export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false, roleName = '', userName = '' } = {}) {
   return Array.isArray(history)
     ? history
         .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
@@ -1654,7 +1716,11 @@ export function getChatHistory({ history = [], includeTimestamps = false, includ
              2. 历史图片/表情/卡片等仅保留纯文本摘要，避免每轮随历史累积大量无效 token。
              3. 最新一轮用户消息仍在 buildCurrentUserPromptContent 中保留最小可引用ID。
              ==================================================================== */
-          const textContent = formatMessageTextWithQuoteForPrompt(item, baseContent, { includeReferenceMeta: false });
+          const textContent = formatAsideAwareMessageTextWithQuoteForPrompt(item, baseContent, {
+            includeReferenceMeta: false,
+            roleName,
+            userName
+          });
           return {
             role: item.role,
             /* [历史图片省token] 历史 user 表情包/图片只保留文字摘要；只有当前轮用户图片会附带真实视觉输入。 */
@@ -1790,54 +1856,18 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白覆盖历史识别
-   说明：
-   1. 旁白摘要覆盖“进入旁白模式后的用户轮次 + 带旁白的 AI 轮次”。
-   2. 被旁白摘要覆盖的原始消息不再作为普通短期历史重复发送，避免 AI 同时读到摘要和原文造成重复理解。
-   3. 正常模式历史不带 asideText / asideSegments 标记，会继续保留并发送给 AI。
-   4. 本区只处理本轮请求 messages 的运行时数组，不读写持久化存储；聊天记录仍由 DB.js / IndexedDB 管理。
-   ========================================================================== */
-function hasAsideSummaryMarker(message = {}) {
-  const asideText = normalizePlainText(message?.asideText);
-  const asideSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
-  return Boolean(asideText || asideSegments.some(segment => normalizePlainText(typeof segment === 'string' ? segment : segment?.text)));
-}
-
-function getHistoryWithoutAsideCoveredRounds(history = [], asideHistory = []) {
-  const source = Array.isArray(history) ? history : [];
-  const hasAsideSummary = Array.isArray(asideHistory) && asideHistory.length > 0;
-  if (!hasAsideSummary || !source.length) return source;
-
-  const skippedIndexes = new Set();
-
-  source.forEach((message, index) => {
-    if (message?.role !== 'assistant' || !hasAsideSummaryMarker(message)) return;
-
-    skippedIndexes.add(index);
-
-    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-      const previous = source[cursor];
-      if (!previous || previous.role !== 'user') break;
-      skippedIndexes.add(cursor);
-    }
-  });
-
-  return source.filter((_, index) => !skippedIndexes.has(index));
-}
-
-/* ==========================================================================
-   [核心函数·已完成·旁白历史摘要身份统一与原文去重] buildChatMessages
+   [核心函数·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复] buildChatMessages
    说明：
    1. 第一条为 system。
-   2. 追加历史对话；已被旁白摘要覆盖的旁白模式原始轮次会先去重。
-   3. 旁白模式进行中：保留正常模式历史，并额外发送当前旁白摘要 + 旁白模式系统提示词。
-   4. 退出旁白模式后：保留正常模式历史 + 旁白摘要 + 退出后的正常历史，不重复发送旁白原文。
+   2. 追加调用方已经按短期记忆轮数裁剪好的原始历史；短期轮数是唯一边界。
+   3. 不再注入旁白历史摘要，也不再剔除带旁白的原始轮次，避免 AI 收不到上一轮/近 50 轮真实上下文。
+   4. 含旁白的 assistant 历史由 getChatHistory 保留旁白原文、身份锚定和 before/after 穿插顺序。
    5. 最后一条 user 消息由“当前指令 + 用户最新一轮消息”组成。
+   6. 本区只处理本轮请求 messages 的运行时数组；聊天记录仍由 DB.js / IndexedDB 管理，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function buildChatMessages({ userInput, history = [], currentUserRoundMessages = [], settings = {}, context = {} } = {}) {
   const normalizedSettings = normalizeChatPromptSettings(settings);
-  const asideHistoryEntries = Array.isArray(context.asideHistory) ? context.asideHistory : [];
-  const historyForPrompt = getHistoryWithoutAsideCoveredRounds(history, asideHistoryEntries);
+  const historyForPrompt = Array.isArray(history) ? history : [];
   const systemPrompt = buildSystemPrompt({ settings: normalizedSettings, context: { ...context, userInput, history: historyForPrompt } });
   const messages = [];
 
@@ -1845,28 +1875,12 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
     messages.push({ role: 'system', content: systemPrompt });
   }
 
-  /* ===== [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白历史摘要注入 START ===== */
-  /* 说明：
-     1. 旁白模式进行中和退出后，只要 context.asideHistory 有内容，都会注入统一身份锚点的旁白摘要。
-     2. 摘要放在普通历史之前，帮助 AI 先理解旁白模式期间的情景、动作、氛围与关系进展。
-     3. 正常模式历史继续由 getChatHistory 发送；被旁白摘要覆盖的旁白模式原始轮次会从普通历史中剔除。
-     4. asideHistory 数据来源：chat-message.js 从 IndexedDB 读取，通过 context 传入；本区不使用 localStorage/sessionStorage。
-  */
-  if (asideHistoryEntries.length) {
-    const asideSummary = buildAsideHistorySummary(asideHistoryEntries, {
-      roleName: context.roleName || '',
-      userName: context.userName || ''
-    });
-    if (asideSummary) {
-      messages.push({ role: 'system', content: asideSummary });
-    }
-  }
-  /* ===== [区域标注·已完成·旁白历史摘要身份统一与原文去重] 旁白历史摘要注入 END ===== */
-
   messages.push(...getChatHistory({
     history: historyForPrompt,
     /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入"按轮时间轴摘要"。 */
-    includeTimestamps: false
+    includeTimestamps: false,
+    roleName: context.roleName || '',
+    userName: context.userName || ''
   }));
 
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
