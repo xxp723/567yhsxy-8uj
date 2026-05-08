@@ -1273,6 +1273,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
         <div class="msg-settings-header__title">聊天设置</div>
       </div>
       <div class="msg-settings-body">
+        <!-- ==========================================================================
+             [区域标注·已完成·本次语言翻译设置入口显示修复] 语言翻译折叠栏板块
+             说明：
+             1. 本板块已前置到聊天设置页顶部，进入聊天设置后无需下滑即可看到「语言翻译」入口。
+             2. HTML 仍由 chat-translation.js 的 renderTranslationSettingsHtml() 生成。
+             3. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；本次只调整显示位置，不新增 localStorage/sessionStorage 逻辑。
+             ========================================================================== -->
+        ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
+
         <!-- ==================================================================
              [区域标注·已完成·当前会话头像设置]
              说明：
@@ -1436,15 +1445,6 @@ export function renderChatMessage(chatSession, messages, options = {}) {
           </label>
         </section>
         <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
-
-        <!-- ==========================================================================
-             [区域标注·已完成·语言翻译] 语言翻译折叠栏板块
-             说明：
-             1. 由 chat-translation.js 的 renderTranslationSettingsHtml() 生成 HTML。
-             2. 翻译设置独立存储于 IndexedDB，键名 chat_translation_settings::*。
-             3. 折叠栏包含总开关、角色/用户语言选择、翻译显示模式选择。
-             ========================================================================== -->
-        ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
 
         <!-- ==========================================================================
              [区域标注·本次需求4] 清空全部聊天记录入口
