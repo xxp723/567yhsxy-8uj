@@ -374,6 +374,39 @@ function formatMsgTime(ts) {
 }
 
 /* ========================================================================
+   [区域标注·已完成·本次聊天记录分段加载] 消息渲染数量控制
+   说明：
+   1. 聊天界面默认只渲染最新 100 条消息，避免历史消息过多导致页面卡顿。
+   2. 点击消息列表顶部居中的“加载更多消息”后，每次再向前显示 100 条旧消息。
+   3. 这里只控制“界面渲染/用户查看范围”；state.currentMessages 始终保留完整数组，
+      AI 发送历史上下文仍按原有逻辑读取完整 currentMessages，不受本区域影响。
+   4. 不读写 localStorage/sessionStorage，不新增任何持久化存储，也不按长文本字段过滤。
+   ======================================================================== */
+const CHAT_MESSAGE_INITIAL_VISIBLE_COUNT = 100;
+const CHAT_MESSAGE_LOAD_MORE_STEP = 100;
+
+function normalizeChatMessageVisibleCount(value) {
+  const count = Math.floor(Number(value));
+  return Number.isFinite(count) && count > 0 ? count : CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
+}
+
+function getVisibleChatMessagesForRender(messages = [], options = {}) {
+  const allMessages = Array.isArray(messages) ? messages : [];
+  const visibleCount = normalizeChatMessageVisibleCount(options.chatMessageVisibleCount);
+  const visibleMessages = allMessages.length > visibleCount
+    ? allMessages.slice(-visibleCount)
+    : allMessages.slice();
+  const hiddenMessageCount = Math.max(0, allMessages.length - visibleMessages.length);
+
+  return {
+    allMessages,
+    visibleMessages,
+    hiddenMessageCount,
+    nextLoadCount: Math.min(CHAT_MESSAGE_LOAD_MORE_STEP, hiddenMessageCount)
+  };
+}
+
+/* ========================================================================
    [区域标注·已完成·引用回复] 引用消息数据工具
    说明：
    1. 只从当前消息对象提取可读摘要，随回复消息的 quote 字段写入 IndexedDB。
@@ -988,6 +1021,67 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   `;
 }
 
+function renderLoadMoreChatMessagesHtml(hiddenMessageCount = 0, nextLoadCount = CHAT_MESSAGE_LOAD_MORE_STEP) {
+  const hiddenCount = Math.max(0, Number(hiddenMessageCount || 0) || 0);
+  if (!hiddenCount) return '';
+
+  return `
+    <!-- ======================================================================
+         [区域标注·已完成·本次聊天记录分段加载] 消息列表顶部加载更多按钮
+         说明：点击后只扩大当前界面可见聊天记录数量；完整 currentMessages 不被裁剪，
+               因此不会影响 AI 历史上下文组装，也不涉及任何持久化存储读写。
+         ====================================================================== -->
+    <div class="msg-load-more-row" data-role="msg-load-more-row">
+      <button class="msg-load-more-btn" data-action="load-more-chat-messages" type="button">加载更多消息</button>
+      <span class="msg-load-more-row__meta">还有 ${hiddenCount} 条更早消息，每次加载 ${Math.max(1, Number(nextLoadCount || 0) || CHAT_MESSAGE_LOAD_MORE_STEP)} 条</span>
+    </div>
+  `;
+}
+
+function renderChatMessageListHtml(session = {}, messages = [], options = {}) {
+  const {
+    allMessages,
+    visibleMessages: msgs,
+    hiddenMessageCount,
+    nextLoadCount
+  } = getVisibleChatMessagesForRender(messages, options);
+
+  if (allMessages.length === 0) {
+    return `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
+  }
+
+  const asideDisplayMode = String(options.asideDisplayMode || 'top');
+  const parts = [];
+
+  for (let index = 0; index < msgs.length; index += 1) {
+    const msg = msgs[index];
+
+    if (asideDisplayMode === 'top' && msg?.role === 'assistant') {
+      const run = [];
+      let cursor = index;
+      while (cursor < msgs.length && msgs[cursor]?.role === 'assistant') {
+        run.push(msgs[cursor]);
+        cursor += 1;
+      }
+
+      const runAsideHtml = run
+        .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => segment.text))
+        .filter(Boolean)
+        .map((text, asideIndex) => renderAsideBubbleHtml(text, `${String(run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`))
+        .join('');
+
+      if (runAsideHtml) parts.push(runAsideHtml);
+      run.forEach(item => parts.push(renderMessageBubble(item, session, options)));
+      index = cursor - 1;
+      continue;
+    }
+
+    parts.push(renderMessageWithAsideHtml(msg, session, options));
+  }
+
+  return `${renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount)}${parts.join('')}`;
+}
+
 /* ==========================================================================
    [区域标注] 渲染聊天消息页面 HTML
    参数：chatSession — 聊天会话对象
@@ -1004,7 +1098,8 @@ export function renderChatMessage(chatSession, messages, options = {}) {
      2. 备注仅用于本地 UI 显示，不用于 AI 提示词上下文。
      ======================================================================== */
   const name = String(session.remark ?? '').length ? String(session.remark) : (session.name || '聊天');
-  const msgs = messages || [];
+  const allMsgs = Array.isArray(messages) ? messages : [];
+  const { visibleMessages: msgs } = getVisibleChatMessagesForRender(allMsgs, options);
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
 
@@ -1081,49 +1176,14 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
 
   /* ==========================================================================
-     [区域标注·已完成·旁白固定/穿插位置修复] 消息列表区域（含旁白气泡渲染）
+     [区域标注·已完成·本次聊天记录分段加载] 消息列表区域（含旁白气泡渲染）
      说明：
-     1. AI 回复中的 <think>...</think> 已在 prompt.js 里剥离，界面只展示最终回复。
-     2. 本区不再把整段旁白统一收集到“全会话第一条 AI 消息”或“最后一条 AI 消息”附近。
-     3. displayMode='top' 的旁白按每轮 AI 连续回复分组，固定显示在该轮用户消息下方、第一条 AI/角色消息上方。
-     4. displayMode='interleave' 的旁白读取 asideSegments，可按段穿插在对应 AI 文本/表情包/语音/图片等消息前后。
-     5. 历史消息回看也复用相同规则；本区域只渲染，不读写 localStorage/sessionStorage。
-  /* ========================================================================== */
-  let messagesHtml = '';
-  if (msgs.length === 0) {
-    messagesHtml = `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
-  } else {
-    const asideDisplayMode = String(options.asideDisplayMode || 'top');
-    const parts = [];
-
-    for (let index = 0; index < msgs.length; index += 1) {
-      const msg = msgs[index];
-
-      if (asideDisplayMode === 'top' && msg?.role === 'assistant') {
-        const run = [];
-        let cursor = index;
-        while (cursor < msgs.length && msgs[cursor]?.role === 'assistant') {
-          run.push(msgs[cursor]);
-          cursor += 1;
-        }
-
-        const runAsideHtml = run
-          .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => segment.text))
-          .filter(Boolean)
-          .map((text, asideIndex) => renderAsideBubbleHtml(text, `${String(run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`))
-          .join('');
-
-        if (runAsideHtml) parts.push(runAsideHtml);
-        run.forEach(item => parts.push(renderMessageBubble(item, session, options)));
-        index = cursor - 1;
-        continue;
-      }
-
-      parts.push(renderMessageWithAsideHtml(msg, session, options));
-    }
-
-    messagesHtml = parts.join('');
-  }
+     1. 默认只渲染最新 100 条消息；更早消息通过顶部居中“加载更多消息”逐批显示。
+     2. 该限制只影响用户查看聊天记录，不裁剪 state.currentMessages，AI 历史上下文仍走原有完整数据。
+     3. 旁白固定/穿插位置规则继续复用 renderChatMessageListHtml 内部逻辑。
+     4. 本区域不读写 localStorage/sessionStorage，不做双份存储兜底。
+     ========================================================================== */
+  const messagesHtml = renderChatMessageListHtml(session, allMsgs, options);
 
   /* ==========================================================================
      [区域标注·已完成·咖啡功能区两行布局与旁白入口]
@@ -3079,7 +3139,9 @@ export function renderCurrentChatMessage(container, state, options = {}) {
   /* ===== 闲谈：多选模式滚动锁定 START ===== */
   const listBefore = msgWrap.querySelector('[data-role="msg-list"]');
   const shouldKeepScroll = Boolean(options.keepScroll);
+  const shouldPreservePrependPosition = Boolean(options.preservePrependPosition);
   const previousScrollTop = listBefore ? listBefore.scrollTop : 0;
+  const previousScrollHeight = listBefore ? listBefore.scrollHeight : 0;
   /* ===== 闲谈：多选模式滚动锁定 END ===== */
 
   msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
@@ -3123,6 +3185,11 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     chatSearchOpen: state.chatMessageSearchOpen,
     chatSearchKeyword: state.chatMessageSearchKeyword,
     /* ======================================================================
+       [区域标注·已完成·本次聊天记录分段加载] 当前界面可见消息数量
+       说明：只传给渲染层决定显示多少条；完整 currentMessages 不裁剪，不影响 AI 上下文。
+       ====================================================================== */
+    chatMessageVisibleCount: state.chatMessageVisibleCount,
+    /* ======================================================================
        [区域标注·已完成·旁白模式] 旁白模式状态透传
        说明：传给 renderChatMessage → topBarHtml，控制爱心退出按钮显示。
        ====================================================================== */
@@ -3138,6 +3205,15 @@ export function renderCurrentChatMessage(container, state, options = {}) {
   setTimeout(() => {
     const listArea = msgWrap.querySelector('[data-role="msg-list"]');
     if (!listArea) return;
+    /* ======================================================================
+       [区域标注·已完成·本次聊天记录分段加载] 加载旧消息后保持原阅读锚点
+       说明：点击“加载更多消息”会在列表顶部插入更早消息，此处用前后 scrollHeight 差值修正滚动位置，
+             避免页面跳到底部或丢失用户当前阅读位置。
+       ====================================================================== */
+    if (shouldPreservePrependPosition) {
+      listArea.scrollTop = previousScrollTop + Math.max(0, listArea.scrollHeight - previousScrollHeight);
+      return;
+    }
     /* ===== 闲谈：多选模式滚动锁定 START ===== */
     if (shouldKeepScroll) {
       listArea.scrollTop = previousScrollTop;
@@ -3180,6 +3256,47 @@ function syncCurrentAsideBubble(container, asideText = '', messageId = '') {
   return true;
 }
 
+function syncRenderedChatMessageLoadMoreControl(listArea, state) {
+  if (!listArea) return;
+  const existingRow = listArea.querySelector('[data-role="msg-load-more-row"]');
+  const { hiddenMessageCount, nextLoadCount } = getVisibleChatMessagesForRender(state.currentMessages, {
+    chatMessageVisibleCount: state.chatMessageVisibleCount
+  });
+
+  if (!hiddenMessageCount) {
+    existingRow?.remove();
+    return;
+  }
+
+  const nextHtml = renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount);
+  if (existingRow) {
+    existingRow.outerHTML = nextHtml;
+    return;
+  }
+
+  listArea.insertAdjacentHTML('afterbegin', nextHtml);
+}
+
+function trimRenderedChatMessageRowsToVisibleLimit(listArea, state) {
+  if (!listArea) return;
+  const visibleCount = normalizeChatMessageVisibleCount(state.chatMessageVisibleCount);
+  const messageRows = Array.from(listArea.children).filter(element => element.hasAttribute('data-message-id'));
+
+  while (messageRows.length > visibleCount) {
+    const row = messageRows.shift();
+    if (!row) break;
+
+    let previous = row.previousElementSibling;
+    while (previous && previous.classList.contains('msg-aside-bubble')) {
+      const toRemove = previous;
+      previous = previous.previousElementSibling;
+      toRemove.remove();
+    }
+
+    row.remove();
+  }
+}
+
 export function appendCurrentMessageBubble(container, state, message) {
   if (!message || !state.currentChatId) return;
 
@@ -3208,6 +3325,13 @@ export function appendCurrentMessageBubble(container, state, message) {
     pendingQuote: state.pendingQuote
     /* ===== 闲谈：删除消息二次确认 END ===== */
   }));
+  /* ======================================================================
+     [区域标注·已完成·本次聊天记录分段加载] 增量追加时维持可见上限
+     说明：用户/AI 新消息仍局部追加以防闪屏；若当前默认只显示 100 条，则同步移除最早的已渲染旧行，
+           并补上“加载更多消息”入口，避免长会话在当前页面越堆越多。
+     ====================================================================== */
+  trimRenderedChatMessageRowsToVisibleLimit(listArea, state);
+  syncRenderedChatMessageLoadMoreControl(listArea, state);
   listArea.scrollTop = listArea.scrollHeight;
 }
 
@@ -3302,17 +3426,16 @@ export function refreshCurrentMessageListOnly(container, state) {
   }
 
   const previousScrollTop = listArea.scrollTop;
-  listArea.innerHTML = (state.currentMessages || []).length
-    ? state.currentMessages.map(message => renderMessageWithAsideHtml(message, session, {
-        userProfile: state.profile,
-        selectedMessageId: state.selectedMessageId,
-        multiSelectMode: state.multiSelectMode,
-        selectedMessageIds: state.selectedMessageIds,
-        asideDisplayMode: state.asideSettings?.displayMode || 'top',
-        deleteConfirmMessageId: state.deleteConfirmMessageId,
-        rewindConfirmMessageId: state.rewindConfirmMessageId
-      })).join('')
-    : `<div class="msg-empty"></div>`;
+  listArea.innerHTML = renderChatMessageListHtml(session, state.currentMessages, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    asideDisplayMode: state.asideSettings?.displayMode || 'top',
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
+    chatMessageVisibleCount: state.chatMessageVisibleCount
+  });
   listArea.scrollTop = previousScrollTop;
 }
 
@@ -3941,6 +4064,22 @@ function renderChatConsoleDockHtml({
 } = {}) {
   if (!chatConsoleEnabled) return '';
 
+  /* ======================================================================
+     [区域标注·已完成·本次控制台默认最新日志显示] 日志只调整显示顺序
+     说明：
+     1. 控制台展开后默认从最新时间的一条开始显示，避免每次都先看到最早日志。
+     2. 这里只反转/排序渲染用数组，不改 state.chatConsoleLogs 原始队列，
+        不影响 IndexedDB 持久化顺序、复制日志或后台记录逻辑。
+     3. 不使用 localStorage/sessionStorage，不新增双份存储兜底。
+     ====================================================================== */
+  const displayConsoleLogs = (Array.isArray(visibleConsoleLogs) ? visibleConsoleLogs : [])
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (
+      (Number(b.item?.ts || 0) - Number(a.item?.ts || 0))
+      || (b.index - a.index)
+    ))
+    .map(entry => entry.item);
+
   return `
     <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
       <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
@@ -3955,8 +4094,8 @@ function renderChatConsoleDockHtml({
           <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
         </div>
         <div class="msg-console-dock__list" data-role="msg-console-list">
-          ${visibleConsoleLogs.length
-            ? visibleConsoleLogs.map(item => `
+          ${displayConsoleLogs.length
+            ? displayConsoleLogs.map(item => `
                 <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
                   <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
                   <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>

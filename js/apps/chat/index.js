@@ -225,6 +225,16 @@ const DATA_KEY_CHAT_CONSOLE_ENABLED = (maskId, chatId) => `chat_console_enabled:
 /* ===== [区域标注·已完成·语言翻译] IndexedDB 数据键 ===== */
 const DATA_KEY_CHAT_TRANSLATION_SETTINGS = (maskId, chatId) => `chat_translation_settings::${maskId || 'default'}::${chatId || 'none'}`;
 
+/* ========================================================================
+   [区域标注·已完成·本次聊天记录分段加载] 消息页可见数量运行时配置
+   说明：
+   1. 默认只让聊天界面渲染最新 100 条消息，点击“加载更多消息”后每次增加 100 条。
+   2. 该值仅作为当前页面运行时查看状态，不写入 IndexedDB，也不使用 localStorage/sessionStorage。
+   3. state.currentMessages 始终保留完整聊天记录，AI 历史上下文不受本区域影响。
+   ======================================================================== */
+const CHAT_MESSAGE_INITIAL_VISIBLE_COUNT = 100;
+const CHAT_MESSAGE_LOAD_MORE_STEP = 100;
+
 function normalizeChatConsoleLogs(logs) {
   return Array.isArray(logs)
     ? logs.slice(-500).map(item => ({
@@ -511,6 +521,11 @@ export async function mount(container, context) {
     profile: {},                    // 用户资料（由面具数据生成）
     currentChatId: null,            // 当前打开的聊天会话 ID（null 表示未打开）
     currentMessages: [],            // 当前聊天消息列表
+    /* ========================================================================
+       [区域标注·已完成·本次聊天记录分段加载] 当前聊天界面可见消息数量
+       说明：只影响当前页面渲染多少条历史消息；不裁剪 currentMessages，不影响 AI 上下文。
+       ======================================================================== */
+    chatMessageVisibleCount: CHAT_MESSAGE_INITIAL_VISIBLE_COUNT,
     destroyed: false,               // 是否已销毁
     /* [修改5] 当前激活面具ID */
     activeMaskId: currentActiveMaskId,
@@ -993,6 +1008,11 @@ async function openChatMessage(container, state, db, chatId) {
   /* [区域标注·已完成·聊天记录搜索] 进入会话时重置搜索框，避免上一个聊天的关键词残留 */
   state.chatMessageSearchOpen = false;
   state.chatMessageSearchKeyword = '';
+  /* ========================================================================
+     [区域标注·已完成·本次聊天记录分段加载] 进入会话重置为默认最新 100 条
+     说明：只重置本次查看范围；完整聊天记录稍后仍从 IndexedDB 载入 currentMessages。
+     ======================================================================== */
+  state.chatMessageVisibleCount = CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
@@ -1118,6 +1138,11 @@ function closeChatMessage(container, state) {
   /* [区域标注·已完成·聊天记录搜索] 退出消息页时清空搜索运行时状态，不写任何持久化存储 */
   state.chatMessageSearchOpen = false;
   state.chatMessageSearchKeyword = '';
+  /* ========================================================================
+     [区域标注·已完成·本次聊天记录分段加载] 退出消息页时恢复默认可见数量
+     说明：运行时查看范围不持久化，下次进入仍默认显示最新 100 条。
+     ======================================================================== */
+  state.chatMessageVisibleCount = CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
 
   const topBar = container.querySelector('.chat-top-bar');
   const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
@@ -2386,6 +2411,23 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       e.stopPropagation();
       const messageId = String(target.dataset.messageId || '').trim();
       if (messageId) scrollToChatSearchResult(container, messageId);
+      break;
+    }
+
+    /* ========================================================================
+       [区域标注·已完成·本次聊天记录分段加载] 顶部“加载更多消息”按钮
+       说明：
+       1. 每次点击只把当前界面可见消息数量增加 100 条，再局部重渲染消息页。
+       2. state.currentMessages 不被裁剪，AI 发送历史上下文仍保留完整聊天记录。
+       3. 本运行时状态不写入 IndexedDB，不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    case 'load-more-chat-messages': {
+      e.preventDefault();
+      e.stopPropagation();
+      const total = Array.isArray(state.currentMessages) ? state.currentMessages.length : 0;
+      const currentVisible = Math.max(CHAT_MESSAGE_INITIAL_VISIBLE_COUNT, Math.floor(Number(state.chatMessageVisibleCount || 0)) || CHAT_MESSAGE_INITIAL_VISIBLE_COUNT);
+      state.chatMessageVisibleCount = Math.min(total, currentVisible + CHAT_MESSAGE_LOAD_MORE_STEP);
+      renderCurrentChatMessage(container, state, { preservePrependPosition: true });
       break;
     }
 
@@ -3909,6 +3951,7 @@ async function loadMaskData(state, db, maskId) {
   state.moments = moments || [];
   state.currentChatId = null;
   state.currentMessages = [];
+  state.chatMessageVisibleCount = CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
   resetMessageSelectionState(state);
   /* [区域标注·已完成·本次钱包需求] 切换面具时同步加载对应钱包数据 */
   state.walletData = normalizeWalletData(walletData);
