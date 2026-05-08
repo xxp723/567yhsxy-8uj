@@ -90,8 +90,13 @@ function escapeHtml(text) {
   return String(text || '').replace(/[&<>"']/g, m => map[m]);
 }
 
-// ===== 语言翻译：渲染设置页折叠栏 HTML =====
-// 注意：所有 data-action 使用 "trans-" 前缀，与 index.js 事件委托 action.startsWith('trans-') 对齐
+/* ==========================================================================
+   [区域标注·已完成·本次语言翻译设置去图标] 渲染设置页折叠栏 HTML
+   说明：
+   1. 本区域负责聊天设置页「语言翻译」折叠栏 HTML。
+   2. 本次已移除标题左侧翻译图标，仅保留标题文字、展开箭头与 iPhone 风格开关。
+   3. 所有 data-action 继续使用 "trans-" 前缀，与 index.js 事件委托 action.startsWith('trans-') 对齐。
+   ========================================================================== */
 export function renderTranslationSettingsHtml(translationSettings, session, userAvatar, userName) {
   const ts = normalizeTranslationSettings(translationSettings);
   const isOpen = false; // 折叠栏默认折叠
@@ -107,7 +112,6 @@ export function renderTranslationSettingsHtml(translationSettings, session, user
     <div class="msg-translation-section ${isOpen ? 'is-open' : ''}" data-role="trans-section">
       <div class="msg-translation-header" data-action="trans-toggle-section">
         <div class="msg-translation-header__left">
-          ${TRANSLATION_ICONS.translate}
           <span class="msg-translation-header__title">语言翻译</span>
           <span class="msg-translation-header__arrow">${TRANSLATION_ICONS.arrowDown}</span>
         </div>

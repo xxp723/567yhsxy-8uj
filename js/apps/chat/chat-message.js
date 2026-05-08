@@ -1333,15 +1333,6 @@ export function renderChatMessage(chatSession, messages, options = {}) {
         <div class="msg-settings-header__title">聊天设置</div>
       </div>
       <div class="msg-settings-body">
-        <!-- ==========================================================================
-             [区域标注·已完成·本次语言翻译设置入口显示修复] 语言翻译折叠栏板块
-             说明：
-             1. 本板块已前置到聊天设置页顶部，进入聊天设置后无需下滑即可看到「语言翻译」入口。
-             2. HTML 仍由 chat-translation.js 的 renderTranslationSettingsHtml() 生成。
-             3. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；本次只调整显示位置，不新增 localStorage/sessionStorage 逻辑。
-             ========================================================================== -->
-        ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
-
         <!-- ==================================================================
              [区域标注·已完成·当前会话头像设置]
              说明：
@@ -1429,6 +1420,15 @@ export function renderChatMessage(chatSession, messages, options = {}) {
             <button class="msg-ios-switch ${chatSettings.htmlCardEnabled ? 'is-on' : ''}" data-action="toggle-html-card" type="button" aria-label="HTML卡片"></button>
           </div>
         </section>
+
+        <!-- ==========================================================================
+             [区域标注·已完成·本次语言翻译设置位置调整] 语言翻译折叠栏板块
+             说明：
+             1. 本板块已按本次要求下移到「HTML卡片」板块下方、「查看控制台日志」板块上方。
+             2. HTML 仍由 chat-translation.js 的 renderTranslationSettingsHtml() 生成；板块标题图标已在该模块中移除。
+             3. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；本次只调整显示位置，不新增 localStorage/sessionStorage 逻辑。
+             ========================================================================== -->
+        ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
 
         <!-- ==================================================================
              [区域标注·已完成·本次控制台日志开关] 聊天设置页新增开关
