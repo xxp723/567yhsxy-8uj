@@ -116,6 +116,7 @@ import {
    3. 持久化仍由 index.js 通过 DB.js / IndexedDB 完成；不使用 localStorage/sessionStorage。
    ========================================================================== */
 import { renderChatExportImportSettingsSection } from './chat-export-import.js';
+import { renderChatCleanupSettingsSection } from './chat-cleanup-settings.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -778,8 +779,17 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
      3. 消息字段随 currentMessages 写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
      ======================================================================== */
   const isVoiceBubbleMessage = isVoiceMessage(msg);
-  const isImageMessage = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
-  const isZoomableImage = isImageMessage;
+  /* ========================================================================
+     [区域标注·已完成·本窗口图片清理过期态]
+     说明：
+     1. 清理本窗口图片后，消息保留 type:image 与图片描述，但 imageUrl 已删除。
+     2. 过期图片在聊天界面显示“已过期”，不再提供点击放大入口。
+     3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const hasImageUrl = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
+  const isExpiredImageMessage = String(msg?.type || '') === 'image' && Boolean(msg?.imageExpired);
+  const isImageMessage = Boolean(hasImageUrl || isExpiredImageMessage);
+  const isZoomableImage = Boolean(hasImageUrl && !isExpiredImageMessage);
   /* ========================================================================
      [区域标注·已完成·本次转账显示优化] 转账消息类型与状态表现
      说明：
@@ -850,7 +860,17 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         : (isVoiceBubbleMessage
             ? renderVoiceBubble(msg)
             : (isImageMessage
-        ? `
+        ? (isExpiredImageMessage
+          ? `
+          <!-- ==================================================================
+               [区域标注·已完成·本窗口图片清理过期态]
+               说明：清理后只显示“已过期”占位；图片描述仍保留在消息字段中供 AI 历史文字上下文读取。
+               ================================================================== -->
+          <div class="msg-image-bubble msg-image-bubble--expired" title="已过期">
+            <span class="msg-image-bubble__expired-text">已过期</span>
+          </div>
+        `
+          : `
           <!-- ==================================================================
                [区域标注·已完成·图片单击居中放大入口]
                说明：AI生成图片/发送图片统一挂载 data-action，由 index.js 打开消息页中间预览层，仅放大，不改聊天背景。
@@ -860,7 +880,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
                title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
             <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" decoding="async">
           </div>
-        `
+        `)
         : (isTransferMessage
             ? `
               <div class="msg-transfer-bubble msg-transfer-bubble--${escapeHtml(transferStatus)}" title="转账">
@@ -1516,19 +1536,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
 
         ${renderChatExportImportSettingsSection()}
 
-        <!-- ==========================================================================
-             [区域标注·已完成·清空全部聊天记录入口]
-             说明：点击后由 index.js 打开应用内确认弹窗；聊天记录导入/导出板块已放在本区域上方。
-             ========================================================================== -->
-        <section class="msg-settings-card msg-settings-danger-card">
-          <button class="msg-settings-danger-action" data-action="open-clear-all-messages-modal" type="button">
-            <span class="msg-settings-danger-action__icon">${MSG_ICONS.broom}</span>
-            <span class="msg-settings-danger-action__text">
-              <strong>清空全部聊天记录</strong>
-              <em>仅清空当前聊天界面的消息记录</em>
-            </span>
-          </button>
-        </section>
+        ${renderChatCleanupSettingsSection({ broomIcon: MSG_ICONS.broom })}
       </div>
     </div>
   `;
@@ -4567,30 +4575,6 @@ export async function buildChatAvatarFromCropModal(container, mode = 'cropped') 
   ctx.fillRect(0, 0, size, size);
   ctx.drawImage(image, sx, sy, sw, sh, 0, 0, size, size);
   return canvas.toDataURL('image/jpeg', quality);
-}
-
-export function showClearAllMessagesModal(container, state) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
-  if (!mask || !panel || !session) return;
-
-  panel.innerHTML = `
-    <!-- [区域标注·本次需求4] 清空全部聊天记录确认弹窗 -->
-    <div class="chat-modal-header">
-      <span>清空聊天记录</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <div class="chat-modal-hint">是否清空与“${escapeHtml(session.name || '未命名')}”的全部聊天记录？<br>此操作只清空当前聊天界面的消息，不删除联系人。</div>
-    </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-clear-all-messages" type="button">清空</button>
-    </div>
-  `;
-
-  mask.classList.remove('is-hidden');
 }
 
 /* ========================================================================== */

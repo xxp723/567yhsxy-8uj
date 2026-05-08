@@ -100,7 +100,6 @@ import {
   syncChatConsoleDock,
   renderMsgStickerPanelGrid,
   syncMountedStickerGroupButtons,
-  showClearAllMessagesModal,
   showAiFormatRepairTypeModal,
   showAiWithdrawnMessageModal,
   showUserWithdrawMessageModal,
@@ -120,6 +119,12 @@ import {
   syncChatMessageSearchPanel,
   scrollToChatSearchResult
 } from './chat-message.js';
+import {
+  clearCurrentChatMessages,
+  expireCurrentChatImages,
+  showClearAllMessagesModal,
+  showClearCurrentChatImagesModal
+} from './chat-cleanup-settings.js';
 import {
   renderProfile,
   buildProfileFromMask,
@@ -2563,6 +2568,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     /* ==========================================================================
        [区域标注·本次需求4] 聊天设置页 — 打开清空全部聊天记录确认弹窗
        ========================================================================== */
+    case 'open-clear-current-chat-images-modal':
+      showClearCurrentChatImagesModal(container, state);
+      break;
+
     case 'open-clear-all-messages-modal':
       showClearAllMessagesModal(container, state);
       break;
@@ -2570,8 +2579,33 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     /* ==========================================================================
        [区域标注·本次需求4] 聊天设置页 — 确认清空当前聊天全部记录
        ========================================================================== */
+    case 'confirm-clear-current-chat-images': {
+      /* ======================================================================
+         [区域标注·已完成·清理本窗口图片事件]
+         说明：
+         1. 只清理当前聊天窗口 type:image 消息里的 imageUrl，并标记 imageExpired。
+         2. 图片描述字段保留，后续 AI 历史上下文仍可读取文字描述。
+         3. 持久化只调用 persistCurrentMessages/dbPut → DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+         ====================================================================== */
+      const { changedIds } = expireCurrentChatImages(state.currentMessages);
+      if (!changedIds.length) {
+        closeModal(container);
+        break;
+      }
+
+      resetMessageSelectionState(state);
+      refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      closeModal(container);
+      refreshMessageBubbleRows(container, state, changedIds);
+      break;
+    }
+
     case 'confirm-clear-all-messages': {
-      state.currentMessages = [];
+      clearCurrentChatMessages(state);
       resetMessageSelectionState(state);
       refreshCurrentSessionLastMessage(state);
       await Promise.all([
