@@ -7,6 +7,8 @@
  * 2. 导入仅接受本模块从聊天设置页导出的 JSON 格式，并替换当前会话消息。
  * 3. 持久化由调用方通过 DB.js / IndexedDB 写入；本模块不使用 localStorage/sessionStorage。
  * 4. 不做双份存储兜底，不按长文本字段过滤消息内容。
+ * 5. [已完成·心声导出导入] 每轮消息对象上的 innerVoice 字段会随 JSON 原样导出/导入；
+ *    TXT / HTML 导出会在对应轮数消息后显示“心声”板块。
  */
 
 import { TAB_ICONS, escapeHtml } from './chat-utils.js';
@@ -143,16 +145,19 @@ function getCurrentChatExportDisplayName(state) {
    说明：
    1. roleId 用于导入时校验“是否同一个联系人/角色”。
    2. messages 原样完整保存，不做长文本过滤，不删除图片 / HTML 卡片 / 礼物 / 转账字段。
+   3. [已完成·心声导出导入] 每轮消息对象上的 innerVoice 字段保留在 messages 内；
+      导入 JSON 后会跟随对应消息恢复，不另写双份心声存储。
    ========================================================================== */
 export function buildCurrentChatExportPayload(state) {
   const session = getCurrentChatExportSession(state);
   if (!session || !state?.currentChatId) throw new Error('当前没有打开聊天联系人，无法导出。');
   const exportedAt = Date.now();
   const roleId = getCurrentChatExportRoleId(state);
+  const messages = cloneJsonSafe(Array.isArray(state.currentMessages) ? state.currentMessages : []);
   return {
     app: 'miniphone-chat',
     kind: 'single-contact-chat-messages',
-    version: 1,
+    version: 2,
     exportedAt,
     maskId: String(state.activeMaskId || ''),
     chatId: String(state.currentChatId || ''),
@@ -166,7 +171,12 @@ export function buildCurrentChatExportPayload(state) {
       type: String(session.type || 'private'),
       avatar: String(session.avatar || '')
     },
-    messages: cloneJsonSafe(Array.isArray(state.currentMessages) ? state.currentMessages : [])
+    innerVoiceExport: {
+      mode: 'message-innerVoice-field',
+      field: 'innerVoice',
+      count: countMessagesWithInnerVoice(messages)
+    },
+    messages
   };
 }
 
@@ -179,6 +189,94 @@ function getMessageReadableText(message = {}) {
   if (type === 'gift') return `[礼物] ${String(message.giftTitle || message.content || '礼物').trim()}${String(message.giftDisplayPrice || '').trim() ? ` · ${String(message.giftDisplayPrice).trim()}` : ''}`;
   if (type === 'voice_message') return `[语音] ${String(message.voiceText || message.content || '语音消息').trim()}`;
   return String(message.content || '').trim();
+}
+
+/* ==========================================================================
+   [区域标注·已完成·心声导出导入] 对应轮数心声读取与格式化
+   说明：
+   1. 只读取当前消息对象上的 innerVoice 字段；该字段已随 currentMessages 写入 DB.js / IndexedDB。
+   2. JSON 导出/导入会原样保留 innerVoice，TXT / HTML 导出会把它显示在对应消息后方。
+   3. 不读取独立心声历史，不写 localStorage/sessionStorage，不做双份存储兜底，不按长文本过滤。
+   ========================================================================== */
+function pickInnerVoiceValue(raw = {}, keys = []) {
+  for (const key of keys) {
+    const value = raw?.[key];
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function getMessageInnerVoiceExportData(message = {}) {
+  const raw = message?.innerVoice;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const data = {
+    status: pickInnerVoiceValue(raw, ['status', '状态']),
+    action: pickInnerVoiceValue(raw, ['action', '动作']),
+    mood: pickInnerVoiceValue(raw, ['mood', '心情']),
+    heartbeat: pickInnerVoiceValue(raw, ['heartbeat', '心跳']),
+    jealousy: pickInnerVoiceValue(raw, ['jealousy', '醋意']),
+    affection: pickInnerVoiceValue(raw, ['affection', '好感', '好感度']),
+    desire: pickInnerVoiceValue(raw, ['desire', '性欲', '性欲值']),
+    voice: pickInnerVoiceValue(raw, ['voice', '心声', '真实心声', '真实想法']),
+    fantasy: pickInnerVoiceValue(raw, ['fantasy', '性幻想'])
+  };
+
+  return Object.values(data).some(value => String(value || '').trim()) ? data : null;
+}
+
+function countMessagesWithInnerVoice(messages = []) {
+  return (Array.isArray(messages) ? messages : []).filter(message => getMessageInnerVoiceExportData(message)).length;
+}
+
+function buildInnerVoiceTxtLines(message = {}) {
+  const data = getMessageInnerVoiceExportData(message);
+  if (!data) return [];
+
+  const lines = ['    【心声】'];
+  if (data.status) lines.push(`    状态：${data.status}`);
+  if (data.action) lines.push(`    动作：${data.action}`);
+  if (data.mood) lines.push(`    心情：${data.mood}`);
+  if (data.heartbeat) lines.push(`    心跳：${data.heartbeat}`);
+  if (data.jealousy) lines.push(`    醋意：${data.jealousy}`);
+  if (data.affection) lines.push(`    好感：${data.affection}`);
+  if (data.desire) lines.push(`    性欲：${data.desire}`);
+  if (data.voice) lines.push(`    真实心声：${data.voice}`);
+  if (data.fantasy) lines.push(`    性幻想：${data.fantasy}`);
+  return lines;
+}
+
+function renderInnerVoiceExportHtml(message = {}) {
+  const data = getMessageInnerVoiceExportData(message);
+  if (!data) return '';
+
+  const items = [
+    ['状态', data.status],
+    ['动作', data.action],
+    ['心情', data.mood],
+    ['心跳', data.heartbeat],
+    ['醋意', data.jealousy],
+    ['好感', data.affection],
+    ['性欲', data.desire],
+    ['真实心声', data.voice],
+    ['性幻想', data.fantasy]
+  ].filter(([, value]) => String(value || '').trim());
+
+  if (!items.length) return '';
+
+  return `
+      <div class="chat-export-inner-voice">
+        <div class="chat-export-inner-voice__title">心声</div>
+        ${items.map(([label, value]) => `
+          <div class="chat-export-inner-voice__item">
+            <span>${escapeHtml(label)}</span>
+            <p>${escapeHtml(value)}</p>
+          </div>
+        `).join('')}
+      </div>
+  `;
 }
 
 function formatMessageTime(timestamp = 0) {
@@ -204,9 +302,15 @@ function buildCurrentChatTxtExport(payload = {}) {
   ];
   (Array.isArray(payload.messages) ? payload.messages : []).forEach((message, index) => {
     const text = getMessageReadableText(message);
-    if (!text) return;
-    lines.push(`[${index + 1}] ${formatMessageTime(message.timestamp)} ${getSenderName(message, payload)}：${text}`);
+    const innerVoiceLines = buildInnerVoiceTxtLines(message);
+    if (!text && !innerVoiceLines.length) return;
+    if (text) {
+      lines.push(`[${index + 1}] ${formatMessageTime(message.timestamp)} ${getSenderName(message, payload)}：${text}`);
+    } else {
+      lines.push(`[${index + 1}] ${formatMessageTime(message.timestamp)} ${getSenderName(message, payload)}：`);
+    }
     if (message.quote?.text) lines.push(`    引用：${message.quote.senderName || ''} ${message.quote.text}`);
+    lines.push(...innerVoiceLines);
   });
   return `${lines.join('\n')}\n`;
 }
@@ -238,11 +342,13 @@ function renderStandaloneMessageHtml(message = {}, payload = {}) {
   const quoteHtml = message.quote?.text
     ? `<div class="chat-export-quote">${escapeHtml(message.quote.senderName || '')}：${escapeHtml(message.quote.text || '')}</div>`
     : '';
+  const innerVoiceHtml = renderInnerVoiceExportHtml(message);
 
   return `
     <div class="chat-export-row ${isUser ? 'is-user' : 'is-other'}">
       <div class="chat-export-meta">${escapeHtml(getSenderName(message, payload))} · ${escapeHtml(formatMessageTime(message.timestamp))}</div>
       <div class="chat-export-bubble">${quoteHtml}${bodyHtml}</div>
+      ${innerVoiceHtml}
     </div>
   `;
 }
@@ -257,7 +363,7 @@ function buildCurrentChatHtmlExport(payload = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>
-body{margin:0;background:#f6eee5;color:#3f2d25;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.chat-export-page{max-width:760px;margin:0 auto;min-height:100vh;padding:22px 14px 36px;box-sizing:border-box;background:linear-gradient(180deg,#fff8f1,#f2e3d5)}.chat-export-header{position:sticky;top:0;z-index:2;margin:-22px -14px 18px;padding:18px;background:rgba(255,248,241,.94);backdrop-filter:blur(14px);border-bottom:1px solid rgba(103,72,55,.12)}.chat-export-header h1{margin:0 0 6px;font-size:22px}.chat-export-header p{margin:0;color:#8b6b5a;font-size:13px}.chat-export-row{display:flex;flex-direction:column;align-items:flex-start;margin:12px 0}.chat-export-row.is-user{align-items:flex-end}.chat-export-meta{font-size:11px;color:#9a7b68;margin:0 8px 4px}.chat-export-bubble{max-width:78%;padding:10px 12px;border-radius:18px;background:#fff;border:1px solid rgba(103,72,55,.12);box-shadow:0 6px 18px rgba(74,52,42,.08);white-space:pre-wrap;word-break:break-word}.chat-export-row.is-user .chat-export-bubble{background:#d9f0c7}.chat-export-system{text-align:center;color:#a08372;font-size:12px;margin:12px auto}.chat-export-quote{border-left:3px solid rgba(103,72,55,.22);padding-left:8px;margin-bottom:7px;color:#7f6658;font-size:12px}.chat-export-image{display:block;max-width:260px;max-height:360px;border-radius:14px;margin-bottom:6px}.chat-export-sticker{display:block;max-width:128px;max-height:128px;object-fit:contain}.chat-export-card-frame{width:320px;max-width:100%;height:420px;border:0;border-radius:14px;background:#fff}.chat-export-card-title,.chat-export-transfer strong,.chat-export-gift strong{display:block;margin-bottom:6px}.chat-export-transfer span,.chat-export-gift span,.chat-export-gift em{display:block;color:#7f6658;font-style:normal;font-size:13px}
+body{margin:0;background:#f6eee5;color:#3f2d25;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.chat-export-page{max-width:760px;margin:0 auto;min-height:100vh;padding:22px 14px 36px;box-sizing:border-box;background:linear-gradient(180deg,#fff8f1,#f2e3d5)}.chat-export-header{position:sticky;top:0;z-index:2;margin:-22px -14px 18px;padding:18px;background:rgba(255,248,241,.94);backdrop-filter:blur(14px);border-bottom:1px solid rgba(103,72,55,.12)}.chat-export-header h1{margin:0 0 6px;font-size:22px}.chat-export-header p{margin:0;color:#8b6b5a;font-size:13px}.chat-export-row{display:flex;flex-direction:column;align-items:flex-start;margin:12px 0}.chat-export-row.is-user{align-items:flex-end}.chat-export-meta{font-size:11px;color:#9a7b68;margin:0 8px 4px}.chat-export-bubble{max-width:78%;padding:10px 12px;border-radius:18px;background:#fff;border:1px solid rgba(103,72,55,.12);box-shadow:0 6px 18px rgba(74,52,42,.08);white-space:pre-wrap;word-break:break-word}.chat-export-row.is-user .chat-export-bubble{background:#d9f0c7}.chat-export-system{text-align:center;color:#a08372;font-size:12px;margin:12px auto}.chat-export-quote{border-left:3px solid rgba(103,72,55,.22);padding-left:8px;margin-bottom:7px;color:#7f6658;font-size:12px}.chat-export-image{display:block;max-width:260px;max-height:360px;border-radius:14px;margin-bottom:6px}.chat-export-sticker{display:block;max-width:128px;max-height:128px;object-fit:contain}.chat-export-card-frame{width:320px;max-width:100%;height:420px;border:0;border-radius:14px;background:#fff}.chat-export-card-title,.chat-export-transfer strong,.chat-export-gift strong{display:block;margin-bottom:6px}.chat-export-transfer span,.chat-export-gift span,.chat-export-gift em{display:block;color:#7f6658;font-style:normal;font-size:13px}.chat-export-inner-voice{max-width:78%;margin:7px 4px 0;padding:10px 12px;border-radius:16px;background:rgba(255,248,241,.9);border:1px solid rgba(184,129,94,.28);box-shadow:0 6px 16px rgba(122,83,58,.08);box-sizing:border-box}.chat-export-row.is-user .chat-export-inner-voice{background:rgba(247,255,239,.9)}.chat-export-inner-voice__title{font-size:13px;font-weight:800;color:#7b4d36;margin-bottom:7px;letter-spacing:.08em}.chat-export-inner-voice__item{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;margin:4px 0;font-size:12px;line-height:1.55}.chat-export-inner-voice__item span{color:#9a6d54;font-weight:700}.chat-export-inner-voice__item p{margin:0;color:#4d3428;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -287,7 +393,10 @@ function downloadTextFile(filename, content, mimeType) {
 
 /* ==========================================================================
    [区域标注·已完成·聊天记录导出执行]
-   说明：导出只读取当前运行时 state.currentMessages，不写任何持久化存储。
+   说明：
+   1. 导出只读取当前运行时 state.currentMessages，不写任何持久化存储。
+   2. [已完成·心声导出导入] TXT / HTML 会展示每条消息携带的 innerVoice；
+      JSON 会原样保留 innerVoice，供导入后恢复对应轮数心声。
    ========================================================================== */
 export function exportCurrentChatMessages(state, format) {
   const payload = buildCurrentChatExportPayload(state);
@@ -318,6 +427,8 @@ export function exportCurrentChatMessages(state, format) {
    1. 只接受本模块导出的 single-contact-chat-messages JSON。
    2. 必须匹配当前联系人/角色 ID，防止导入到其它联系人窗口。
    3. 返回完整 messages 数组，不做长文本字段过滤。
+   4. [已完成·心声导出导入] messages 内每条消息的 innerVoice 字段会原样返回，
+      由 index.js 写回当前会话消息后恢复对应轮数心声。
    ========================================================================== */
 export async function readAndValidateChatImportJsonFile(file, state) {
   if (!file) throw new Error('请选择 JSON 文件。');
