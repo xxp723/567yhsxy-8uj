@@ -1,0 +1,85 @@
+/**
+ * 文件名: js/apps/chat/chat-export-import.css
+ * 用途: 闲谈应用 — 当前联系人聊天记录导入/导出板块样式。
+ * 说明：
+ * 1. 仅服务聊天设置页“聊天记录导入导出”板块与导出格式弹窗。
+ * 2. 样式延续闲谈应用暖色卡片主题，不使用浏览器原生弹窗样式。
+ */
+
+/* ==========================================================================
+   [区域标注·已完成·聊天记录导入导出板块样式]
+   说明：设置页中“导出聊天记录 / 导入聊天记录”同一行左右按钮。
+   ========================================================================== */
+.msg-settings-export-import-card {
+  gap: 8px;
+}
+
+.msg-export-import-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.msg-export-import-action {
+  border: 1px solid rgba(116, 78, 55, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffaf4 0%, #f4e3d4 100%);
+  color: #5a3a2a;
+  box-shadow: 0 8px 18px rgba(92, 58, 38, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 11px 8px;
+  min-height: 42px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.msg-export-import-action:active {
+  transform: scale(0.98);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·聊天记录导出格式弹窗样式]
+   说明：应用内格式选择按钮，避免浏览器原生选择器。
+   ========================================================================== */
+.msg-export-format-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.msg-export-format-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  border: 1px solid rgba(116, 78, 55, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 250, 244, 0.92);
+  color: #4d3024;
+  padding: 12px 13px;
+  text-align: left;
+  box-shadow: 0 8px 20px rgba(92, 58, 38, 0.07);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.msg-export-format-option strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.msg-export-format-option em {
+  color: #8b6b5a;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.msg-export-format-option:active {
+  transform: scale(0.99);
+}

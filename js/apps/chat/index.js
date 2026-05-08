@@ -212,6 +212,20 @@ import {
   parseVoiceDraftFromModal,
   showVoiceMessageModal
 } from './chat-voice.js';
+/* ========================================================================
+   [区域标注·已完成·聊天记录导入导出入口接入]
+   说明：
+   1. 导入/导出 UI、格式构建、JSON 校验均由 chat-export-import.js 独立维护，后续只改该文件即可调整本板块功能。
+   2. 本入口文件只负责事件接线与 DB.js / IndexedDB 落库，禁止 localStorage/sessionStorage。
+   3. 导入后直接替换当前会话消息并刷新聊天消息页，不写双份兜底，不按长文本字段过滤。
+   ======================================================================== */
+import {
+  exportCurrentChatMessages,
+  openChatImportJsonFilePicker,
+  readAndValidateChatImportJsonFile,
+  showChatExportFormatModal,
+  showChatExportImportNoticeModal
+} from './chat-export-import.js';
 
 /* ========================================================================
    [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天日志与显示开关存储键（IndexedDB）
@@ -475,7 +489,12 @@ export async function mount(container, context) {
     /* ======================================================================
        [区域标注·已完成·语言翻译CSS] 预加载语言翻译折叠栏 & 翻译气泡样式
        ====================================================================== */
-    loadCSS('./js/apps/chat/chat-translation.css', 'chat-translation-css')
+    loadCSS('./js/apps/chat/chat-translation.css', 'chat-translation-css'),
+    /* ======================================================================
+       [区域标注·已完成·聊天记录导入导出CSS] 预加载设置页导入导出板块样式
+       说明：样式拆分到 chat-export-import.css，挂载时预加载以避免首次进入聊天设置页闪屏。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-export-import.css', 'chat-export-import-css')
   ]);
 
   const archiveRecord = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
@@ -816,6 +835,7 @@ export async function mount(container, context) {
       removeCSS('chat-inner-voice-css');
       removeCSS('chat-aside-css');
       removeCSS('chat-translation-css');
+      removeCSS('chat-export-import-css');
     }
   };
 }
@@ -2495,6 +2515,50 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       }
       break;
     }
+
+    /* ==========================================================================
+       [区域标注·已完成·聊天记录导入导出] 聊天设置页 — 打开导出格式选择弹窗
+       说明：弹窗沿用闲谈应用内 chat-modal 样式，不使用原生 alert/confirm/prompt 或浏览器原生选择器。
+       ========================================================================== */
+    case 'open-chat-export-modal':
+      showChatExportFormatModal(container);
+      break;
+
+    /* ==========================================================================
+       [区域标注·已完成·聊天记录导入导出] 聊天设置页 — 执行当前会话导出
+       说明：
+       1. 仅导出当前聊天设置页对应联系人 state.currentMessages。
+       2. 导出不写任何持久化存储；JSON/HTML/TXT 构建由 chat-export-import.js 负责。
+       ========================================================================== */
+    case 'confirm-chat-export': {
+      try {
+        const format = String(target.dataset.exportFormat || '').trim();
+        const count = exportCurrentChatMessages(state, format);
+        showChatExportImportNoticeModal(container, {
+          title: '导出完成',
+          message: `已导出当前联系人 ${count} 条聊天记录。`
+        });
+      } catch (error) {
+        showChatExportImportNoticeModal(container, {
+          title: '导出失败',
+          message: error?.message || '聊天记录导出失败，请稍后重试。'
+        });
+      }
+      break;
+    }
+
+    /* ==========================================================================
+       [区域标注·已完成·聊天记录导入导出] 聊天设置页 — 打开 JSON 导入文件选择
+       说明：仅触发本板块隐藏文件输入；JSON 校验与落库在 handleChange 中完成。
+       ========================================================================== */
+    case 'open-chat-import-json-picker':
+      if (!openChatImportJsonFilePicker(container)) {
+        showChatExportImportNoticeModal(container, {
+          title: '导入失败',
+          message: '当前页面未找到导入入口，请重新进入聊天设置页后再试。'
+        });
+      }
+      break;
 
     /* ==========================================================================
        [区域标注·本次需求4] 聊天设置页 — 打开清空全部聊天记录确认弹窗
@@ -4270,6 +4334,42 @@ function handleInput(e, state, container, db) {
    ========================================================================== */
 async function handleChange(e, state, container, db) {
   const target = e.target;
+
+  /* ========================================================================
+     [区域标注·已完成·聊天记录导入导出] JSON 导入文件读取、校验与 IndexedDB 落库
+     说明：
+     1. 仅接受 chat-export-import.js 从聊天设置页导出的 JSON。
+     2. 导入后直接替换当前联系人会话消息，并通过 persistCurrentMessages/dbPut 写入 DB.js / IndexedDB。
+     3. 不使用 localStorage/sessionStorage，不写双份兜底，不按长文本字段过滤消息内容。
+     ======================================================================== */
+  if (target?.matches?.('[data-role="chat-import-json-file-input"]')) {
+    const file = target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedMessages = await readAndValidateChatImportJsonFile(file, state);
+      state.currentMessages = Array.isArray(importedMessages) ? importedMessages : [];
+      resetMessageSelectionState(state);
+      state.chatMessageVisibleCount = CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
+      refreshCurrentSessionLastMessage(state);
+
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+
+      closeModal(container);
+      renderCurrentChatMessage(container, state);
+    } catch (error) {
+      showChatExportImportNoticeModal(container, {
+        title: '导入失败',
+        message: error?.message || '聊天记录导入失败，请确认 JSON 文件来源。'
+      });
+    } finally {
+      target.value = '';
+    }
+    return;
+  }
 
   /* ========================================================================
      [区域标注·已完成·当前会话头像本地上传]

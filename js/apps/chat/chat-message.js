@@ -108,6 +108,14 @@ import {
   renderTranslationBubbleHtml,
   normalizeTranslationSettings
 } from './chat-translation.js';
+/* ==========================================================================
+   [区域标注·已完成·聊天记录导入导出板块接入]
+   说明：
+   1. 设置页板块 HTML 由 chat-export-import.js 独立维护，方便后续只改导入/导出功能。
+   2. 本文件只负责把板块插入“清空全部聊天记录”上方。
+   3. 持久化仍由 index.js 通过 DB.js / IndexedDB 完成；不使用 localStorage/sessionStorage。
+   ========================================================================== */
+import { renderChatExportImportSettingsSection } from './chat-export-import.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -1506,9 +1514,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
         </section>
         <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
 
+        ${renderChatExportImportSettingsSection()}
+
         <!-- ==========================================================================
-             [区域标注·本次需求4] 清空全部聊天记录入口
-             说明：点击后由 index.js 打开应用内确认弹窗；不使用原生浏览器弹窗。
+             [区域标注·已完成·清空全部聊天记录入口]
+             说明：点击后由 index.js 打开应用内确认弹窗；聊天记录导入/导出板块已放在本区域上方。
              ========================================================================== -->
         <section class="msg-settings-card msg-settings-danger-card">
           <button class="msg-settings-danger-action" data-action="open-clear-all-messages-modal" type="button">
