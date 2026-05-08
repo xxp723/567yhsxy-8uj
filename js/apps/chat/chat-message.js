@@ -2222,17 +2222,152 @@ export function repairAiTextMessageFormatIfPossible(message) {
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·本次引用掉格式修复] AI 引用文字转引用气泡工具
+   说明：
+   1. 修正按钮“引用”已支持 `{引用ID:xxx}` 标准协议，也支持截图中的“› 引用了某人：‘原文’”这类纯文字掉格式。
+   2. 能匹配到当前聊天记录原消息时使用真实 quote payload；匹配不到时用文字里的被引用人/原文生成可渲染引用预览。
+   3. 只修改当前 AI 消息对象的 content/quote 字段；保存仍由 index.js 写入 DB.js / IndexedDB。
+   4. 不使用 localStorage/sessionStorage，不写双份存储兜底，不按长文本字段过滤。
+   ======================================================================== */
+function normalizeAiQuoteLookupText(value = '') {
+  return cleanAiVisibleBubbleText(value)
+    .replace(/^[›>]\s*/, '')
+    .replace(/^引用(?:了|自)?\s*[^：:「“"'\n]{0,40}\s*[：:]\s*/i, '')
+    .replace(/[「」“”"'‘’]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function splitLooseAiQuoteBody(body = '') {
+  const value = String(body || '').trim();
+  if (!value) return { quoteText: '', replyText: '' };
+
+  const firstChar = value.charAt(0);
+  const quotePairs = {
+    '“': '”',
+    '‘': '’',
+    '"': '"',
+    "'": "'",
+    '「': '」'
+  };
+
+  if (quotePairs[firstChar]) {
+    const closeChar = quotePairs[firstChar];
+    const closeIndex = value.indexOf(closeChar, 1);
+    if (closeIndex > 0) {
+      return {
+        quoteText: value.slice(1, closeIndex).trim(),
+        replyText: cleanAiVisibleBubbleText(value.slice(closeIndex + 1).replace(/^[\s：:，,。；;\-—]+/, ''))
+      };
+    }
+
+    return {
+      quoteText: value.slice(1).replace(/[”’"'}」]+$/g, '').trim(),
+      replyText: ''
+    };
+  }
+
+  const lines = value.split(/\n+/).map(item => item.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    return {
+      quoteText: lines[0].replace(/[”’"'}」]+$/g, '').trim(),
+      replyText: cleanAiVisibleBubbleText(lines.slice(1).join('\n'))
+    };
+  }
+
+  return {
+    quoteText: value.replace(/[”’"'}」]+$/g, '').trim(),
+    replyText: ''
+  };
+}
+
+function parseLooseAiQuoteText(raw = '', fallbackSenderName = '') {
+  const text = cleanAiProtocolBlockContent(raw)
+    .replace(/^[›>]\s*/, '')
+    .trim();
+  if (!/引用/.test(text)) return null;
+
+  const withoutProtocol = text.replace(/^(?:\[\s*引用\s*\]\s*)/i, '').trim();
+  const quoteIdMatch = withoutProtocol.match(/\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
+  if (quoteIdMatch) {
+    return {
+      quoteId: String(quoteIdMatch[1] || '').trim(),
+      senderName: String(fallbackSenderName || '').trim(),
+      quoteText: '',
+      replyText: cleanAiVisibleBubbleText(quoteIdMatch[2])
+    };
+  }
+
+  const colonMatch = withoutProtocol.match(/^(?:引用(?:了|自)?\s*)?([^：:「“"'\n]{0,40})\s*[：:]\s*([\s\S]*)$/i);
+  if (!colonMatch) return null;
+
+  const senderName = String(colonMatch[1] || fallbackSenderName || '')
+    .replace(/^引用(?:了|自)?\s*/i, '')
+    .trim();
+  const { quoteText, replyText } = splitLooseAiQuoteBody(colonMatch[2]);
+  if (!quoteText && !replyText) return null;
+
+  return {
+    quoteId: '',
+    senderName,
+    quoteText,
+    replyText
+  };
+}
+
+function resolveAiQuotePayloadByLooseText(state, quoteText = '', senderName = '', sourceMessageId = '') {
+  const targetText = String(quoteText || '').trim();
+  if (!targetText) return null;
+
+  const session = state.sessions?.find?.(item => String(item.id) === String(state.currentChatId)) || {};
+  const normalizedTarget = normalizeAiQuoteLookupText(targetText);
+  const messages = Array.isArray(state.currentMessages) ? state.currentMessages : [];
+
+  for (const message of [...messages].reverse()) {
+    if (sourceMessageId && String(message?.id || '') === String(sourceMessageId)) continue;
+
+    const payload = createQuotePayloadFromMessage(message, session, state.profile || {});
+    const payloadText = String(payload?.text || '').trim();
+    const normalizedPayloadText = normalizeAiQuoteLookupText(payloadText);
+    const payloadSender = String(payload?.senderName || '').trim();
+    const safeSender = String(senderName || '').trim();
+
+    const textMatched = normalizedTarget
+      && normalizedPayloadText
+      && (normalizedPayloadText.includes(normalizedTarget) || normalizedTarget.includes(normalizedPayloadText));
+    const senderMatched = !safeSender || !payloadSender || payloadSender.includes(safeSender) || safeSender.includes(payloadSender);
+
+    if (textMatched && senderMatched) return payload;
+  }
+
+  const syntheticText = targetText.replace(/\s+/g, ' ').trim();
+  return syntheticText
+    ? {
+        id: '',
+        role: 'assistant',
+        senderName: String(senderName || session?.name || '对方').trim() || '对方',
+        text: syntheticText.length > 86 ? `${syntheticText.slice(0, 86)}…` : syntheticText,
+        type: 'text',
+        timestamp: 0
+      }
+    : null;
+}
+
 export function repairAiQuoteMessageFormatIfPossible(message, state) {
   if (!message || message.role !== 'assistant') return null;
   if (['sticker', 'image', 'transfer', 'gift'].includes(String(message.type || ''))) return null;
 
   const raw = String(message.content || '').trim();
   const quoteMatch = raw.match(/(?:\[\s*引用\s*\]\s*[^：:\n`*]+?\s*[：:]\s*)?\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
-  if (!quoteMatch) return null;
+  const looseQuote = quoteMatch ? null : parseLooseAiQuoteText(raw);
+  if (!quoteMatch && !looseQuote) return null;
 
-  const quotePayload = resolveAiQuotePayloadById(state, quoteMatch[1]);
-  const replyText = cleanAiVisibleBubbleText(quoteMatch[2]);
-  if (!quotePayload || !replyText) return null;
+  const quotePayload = quoteMatch
+    ? resolveAiQuotePayloadById(state, quoteMatch[1])
+    : resolveAiQuotePayloadByLooseText(state, looseQuote.quoteText, looseQuote.senderName, message.id);
+  const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : looseQuote.replyText);
+  if (!quotePayload) return null;
 
   return {
     ...message,
@@ -2361,12 +2496,15 @@ function parseProtocolRoleAndContent(raw = '', type = '') {
     return { roleName: '', content: text };
   }
 
-  /* 标准：角色名：内容（角色名 1-40 字） */
+  /* 标准：角色名：内容（角色名 1-40 字）
+     [区域标注·已完成·本次表情包前置空回复修复]
+     说明：如果 AI 输出 `[回复] 角色名：` 后紧跟 `[表情]`，这里返回空 content，让 extractAiProtocolBlocks 丢弃该空回复块，
+           避免聊天界面单独显示“角色名：”文字气泡。 */
   const roleAndContentMatch = text.match(/^([^：:\n`*]{1,40})\s*[：:]\s*([\s\S]*)$/);
   if (roleAndContentMatch) {
     const roleName = String(roleAndContentMatch[1] || '').trim();
     const content = cleanAiProtocolBlockContent(roleAndContentMatch[2] || '');
-    if (content) return { roleName, content };
+    if (roleName) return { roleName, content };
   }
 
   return { roleName: '', content: text };
@@ -2611,13 +2749,30 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
 
     if (block.type === '引用') {
       /* ======================================================================
-         [区域标注·已完成·AI引用回复] AI [引用] 协议解析
-         说明：AI 输出 {引用ID:xxx}文字 时，前端解析为 quote 字段并随 AI 消息写入 DB.js / IndexedDB。
+         [区域标注·已完成·本次引用掉格式修复] AI [引用] 协议解析
+         说明：
+         1. 标准 `{引用ID:xxx}文字` 会解析为真实 quote 字段。
+         2. 兼容“引用了某人：‘原文’”这类掉格式纯文字，避免截图中的引用说明露成普通气泡。
+         3. quote 字段随 AI 消息写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
          ====================================================================== */
       const quoteMatch = String(block.content || '').match(/^\s*\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
-      const quotePayload = quoteMatch ? resolveAiQuotePayloadById(state, quoteMatch[1]) : null;
-      const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : block.content);
-      splitStrictSentenceBubbles(replyText).forEach(content => {
+      const looseQuote = quoteMatch ? null : parseLooseAiQuoteText(block.content, block.roleName);
+      const quotePayload = quoteMatch
+        ? resolveAiQuotePayloadById(state, quoteMatch[1])
+        : (looseQuote ? resolveAiQuotePayloadByLooseText(state, looseQuote.quoteText, looseQuote.senderName) : null);
+      const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : (looseQuote ? looseQuote.replyText : block.content));
+      const replyParts = splitStrictSentenceBubbles(replyText);
+
+      if (quotePayload && !replyParts.length) {
+        builtMessages.push({
+          role: 'assistant',
+          content: '',
+          quote: quotePayload
+        });
+        return;
+      }
+
+      replyParts.forEach(content => {
         builtMessages.push({
           role: 'assistant',
           content,
@@ -3580,6 +3735,9 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
             return message;
           }
           const content = cleanAiVisibleBubbleText(message.content);
+          if (!content && message.quote && String(message.quote.text || '').trim()) {
+            return { ...message, content: '' };
+          }
           return content ? { ...message, content } : null;
         })
         .filter(Boolean)
@@ -4209,19 +4367,20 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
 
   panel.innerHTML = `
     <!-- ======================================================================
-         [区域标注·已完成·本次语音掉格式修正入口] AI 消息格式修正类别选择
+         [区域标注·已完成·本次引用掉格式修复入口] AI 消息格式修正类别选择
          说明：
-         1. “语音”按钮专门把含 [语音] / 【语音】残片的 AI 文字气泡修正为语音气泡。
-         2. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
-         3. 仍由 index.js 调用对应 repairAi*FormatIfPossible 后写入 DB.js / IndexedDB。
-         4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+         1. “引用”按钮已支持把出现“引用/引用了”文字的 AI 普通气泡修正为引用气泡。
+         2. “语音”按钮专门把含 [语音] / 【语音】残片的 AI 文字气泡修正为语音气泡。
+         3. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
+         4. 仍由 index.js 调用对应 repairAi*FormatIfPossible 后写入 DB.js / IndexedDB。
+         5. 不使用 localStorage/sessionStorage，不做双份存储兜底。
          ====================================================================== -->
     <div class="chat-modal-header">
       <span>选择修正类别</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">如果普通文字气泡里露出了 [语音]，请选择“语音”；普通回复协议掉格式请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
+      <div class="chat-modal-hint">如果普通文字气泡里露出了“引用/引用了”，请选择“引用”；露出 [语音] 请选择“语音”；普通回复协议掉格式请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
       <div class="msg-format-repair-grid">
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="sticker" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.sticker}</span>
@@ -4241,7 +4400,7 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="quote" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.quote}</span>
           <strong>引用</strong>
-          <em>修复引用ID为引用气泡</em>
+          <em>修复“引用”文字为引用气泡</em>
         </button>
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="system" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.systemTip}</span>
