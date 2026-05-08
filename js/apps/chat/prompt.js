@@ -474,6 +474,43 @@ function formatAsideAwareMessageTextWithQuoteForPrompt(message = {}, fallbackCon
   ].filter(Boolean).join('\n');
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次修复：最近心声状态短期上下文]
+   说明：
+   1. 只读取短期历史消息对象自身已有的 innerVoice 字段，不读取独立心声历史，不新增持久化存储。
+   2. 只给 getChatHistory 已裁剪短期历史中“最近一条带心声的 assistant 消息”追加极短状态锚点，不给每轮都追加，避免 token 随轮数膨胀。
+   3. 仅透传“状态/动作”两个字段，并做 30 字以内长度保护；不扩写、不总结、不加入真实心声/性幻想等高 token 字段。
+   4. 不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本字段过滤。
+   ========================================================================== */
+function pickInnerVoicePromptField(innerVoice = {}, keys = []) {
+  return keys
+    .map(key => normalizePlainText(innerVoice?.[key]))
+    .find(Boolean) || '';
+}
+
+function formatShortInnerVoicePromptValue(value = '', maxLength = 30) {
+  const text = normalizePlainText(value).replace(/\s+/g, ' ');
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function formatRecentInnerVoiceStateForPrompt(message = {}) {
+  const innerVoice = message?.innerVoice;
+  if (!innerVoice || typeof innerVoice !== 'object') return '';
+
+  const state = formatShortInnerVoicePromptValue(
+    pickInnerVoicePromptField(innerVoice, ['state', 'status', '状态'])
+  );
+  const action = formatShortInnerVoicePromptValue(
+    pickInnerVoicePromptField(innerVoice, ['action', '动作'])
+  );
+  const parts = [];
+  if (state) parts.push(`状态：${state}`);
+  if (action) parts.push(`动作：${action}`);
+
+  return parts.length ? `[最近心声]${parts.join('；')}[/最近心声]` : '';
+}
+
 function extractSystemTempBlocks(text = '') {
   return String(text || '').match(/\[SYSTEM_TEMP\][\s\S]*?\[\/SYSTEM_TEMP\]/g) || [];
 }
@@ -1685,50 +1722,62 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 9降token：聊天历史轻量文本摘要]
+   [提示词区域 9降token·已完成·最近心声状态短期上下文]
    说明：
    1. 返回数组 [{ role:'user'|'assistant', content:string }]，直接追加到 messages。
    2. 历史消息只保留轻量纯文本摘要，不再给每条历史注入可引用消息ID、消息类型结构或完整 quote 包装。
    3. 只有最新一轮用户消息会在“本轮用户消息·可引用”中保留极简 ID，避免影响 AI 本轮引用回复气泡。
+   4. 本区已完成最近心声状态短期上下文修复：只在调用方已裁剪的短期历史内，给最近一条带 innerVoice 的 assistant 消息追加极短 [最近心声]状态/动作[/最近心声]。
+   5. 更早轮次的 innerVoice 不追加；不扩大历史范围，不读取独立心声历史，不新增存储，不使用 localStorage/sessionStorage，不做双份兜底或长文本字段过滤。
    ========================================================================== */
 export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false, roleName = '', userName = '' } = {}) {
-  return Array.isArray(history)
-    ? history
-        .filter(item => item && (item.role === 'user' || item.role === 'assistant'))
-        .map(item => {
-          /* ====================================================================
-             [HTML卡片历史上下文摘要化]
-             说明：
-             1. HTML 卡片在历史上下文里只保留剥离 HTML 后的文字摘要。
-             2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文发送给 AI，避免浪费 token。
-             3. 时间感知开启时仍保留消息发送时间标注，但摘要正文保持纯文本。
-             ==================================================================== */
-          const readableContent = String(item?.type || '') === 'card'
-            ? formatHtmlCardHistorySummaryForPrompt(item)
-            : String(item.content || '');
-          const baseContent = includeTimestamps
-            ? formatHistoryMessageContentForTimeAwareness({ ...item, content: readableContent })
-            : readableContent;
-          /* ====================================================================
-             [降token：历史消息轻量摘要]
-             说明：
-             1. 历史消息不再发送可引用消息ID、消息类型结构或完整 quote 包装。
-             2. 历史图片/表情/卡片等仅保留纯文本摘要，避免每轮随历史累积大量无效 token。
-             3. 最新一轮用户消息仍在 buildCurrentUserPromptContent 中保留最小可引用ID。
-             ==================================================================== */
-          const textContent = formatAsideAwareMessageTextWithQuoteForPrompt(item, baseContent, {
-            includeReferenceMeta: false,
-            roleName,
-            userName
-          });
-          return {
-            role: item.role,
-            /* [历史图片省token] 历史 user 表情包/图片只保留文字摘要；只有当前轮用户图片会附带真实视觉输入。 */
-            content: createVisionMessageContent(item, textContent, { includeVisual: includeHistoryVision })
-          };
-        })
-        .filter(item => hasMessageContent(item.content))
-    : [];
+  if (!Array.isArray(history)) return [];
+
+  const normalizedHistory = history.filter(item => item && (item.role === 'user' || item.role === 'assistant'));
+  const latestInnerVoiceAssistantIndex = normalizedHistory.reduce((latestIndex, item, index) => (
+    item?.role === 'assistant' && formatRecentInnerVoiceStateForPrompt(item) ? index : latestIndex
+  ), -1);
+
+  return normalizedHistory
+    .map((item, index) => {
+      /* ====================================================================
+         [HTML卡片历史上下文摘要化]
+         说明：
+         1. HTML 卡片在历史上下文里只保留剥离 HTML 后的文字摘要。
+         2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文发送给 AI，避免浪费 token。
+         3. 时间感知开启时仍保留消息发送时间标注，但摘要正文保持纯文本。
+         ==================================================================== */
+      const readableContent = String(item?.type || '') === 'card'
+        ? formatHtmlCardHistorySummaryForPrompt(item)
+        : String(item.content || '');
+      const baseContent = includeTimestamps
+        ? formatHistoryMessageContentForTimeAwareness({ ...item, content: readableContent })
+        : readableContent;
+      /* ====================================================================
+         [降token：历史消息轻量摘要 + 最近心声状态锚点]
+         说明：
+         1. 历史消息不再发送可引用消息ID、消息类型结构或完整 quote 包装。
+         2. 历史图片/表情/卡片等仅保留纯文本摘要，避免每轮随历史累积大量无效 token。
+         3. 最新一轮用户消息仍在 buildCurrentUserPromptContent 中保留最小可引用ID。
+         4. 只有短期历史中最近一条带 innerVoice 的 assistant 消息会追加极短 [最近心声]状态/动作[/最近心声]，用于下一轮承接地点、状态和动作。
+         ==================================================================== */
+      const formattedHistoryText = formatAsideAwareMessageTextWithQuoteForPrompt(item, baseContent, {
+        includeReferenceMeta: false,
+        roleName,
+        userName
+      });
+      const recentInnerVoiceState = index === latestInnerVoiceAssistantIndex
+        ? formatRecentInnerVoiceStateForPrompt(item)
+        : '';
+      const textContent = [formattedHistoryText, recentInnerVoiceState].filter(Boolean).join('\n');
+
+      return {
+        role: item.role,
+        /* [历史图片省token] 历史 user 表情包/图片只保留文字摘要；只有当前轮用户图片会附带真实视觉输入。 */
+        content: createVisionMessageContent(item, textContent, { includeVisual: includeHistoryVision })
+      };
+    })
+    .filter(item => hasMessageContent(item.content));
 }
 
 /* ==========================================================================
