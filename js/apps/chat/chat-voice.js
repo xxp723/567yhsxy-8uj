@@ -17,7 +17,10 @@ import { TAB_ICONS, escapeHtml } from './chat-utils.js';
    ========================================================================== */
 const VOICE_ICONS = {
   voice: `<svg viewBox="0 0 48 48" fill="none"><rect x="17" y="5" width="14" height="24" rx="7" stroke="currentColor" stroke-width="3"/><path d="M10 22c0 8 6 14 14 14s14-6 14-14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M24 36v7M17 43h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
-  wave: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 16c3 3 4.5 5.7 4.5 8S21 29 18 32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M25 10c5.5 5 8 9.5 8 14s-2.5 9-8 14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M32 5c8 7 12 13.5 12 19S40 36 32 43" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  wave: `<svg viewBox="0 0 48 48" fill="none"><path d="M18 16c3 3 4.5 5.7 4.5 8S21 29 18 32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M25 10c5.5 5 8 9.5 8 14s-2.5 9-8 14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M32 5c8 7 12 13.5 12 19S40 36 32 43" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  play: `<svg viewBox="0 0 48 48" fill="none"><path d="M17 12v24l20-12L17 12Z" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/></svg>`,
+  download: `<svg viewBox="0 0 48 48" fill="none"><path d="M24 6v24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="m14 21 10 10 10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 38h28" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  sparkle: `<svg viewBox="0 0 48 48" fill="none"><path d="M23 4c1.8 9.1 5.9 13.2 15 15-9.1 1.8-13.2 5.9-15 15-1.8-9.1-5.9-13.2-15-15 9.1-1.8 13.2-5.9 15-15Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M38 30c.8 4.2 2.8 6.2 7 7-4.2.8-6.2 2.8-7 7-.8-4.2-2.8-6.2-7-7 4.2-.8 6.2-2.8 7-7Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -159,16 +162,22 @@ export function renderVoiceFeatureButton() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音气泡渲染修正]
+   [区域标注·已完成·本次语音展开气泡仿图样式]
    说明：
-   1. 用户模拟语音与 AI 主动语音共用本气泡：语音波纹 + 秒数，默认不直接露出文字。
-   2. 双击展开时显示已清洗的“语音转文字”，不显示 `{4}` 或括号动作描写。
-   3. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成。
+   1. 用户模拟语音与 AI 主动语音共用本气泡：播放键 + 波长条 + 0:xx 秒数，默认不直接露出文字。
+   2. 双击展开后显示“隐藏文字”提示行，并将已清洗的转文字放入独立浅色小方框。
+   3. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成，不使用 localStorage/sessionStorage。
    ========================================================================== */
+function formatVoiceBubbleDuration(seconds = 1) {
+  const safeSeconds = Math.max(1, Math.min(60, Math.floor(Number(seconds) || 1)));
+  return `0:${String(safeSeconds).padStart(2, '0')}`;
+}
+
 export function renderVoiceBubble(message = {}) {
   const text = sanitizeVoiceTranscriptText(message?.voiceText || message?.content || '');
   const duration = Math.max(1, Math.min(60, Number(message?.voiceDuration || Math.ceil(text.length / 3) || 1)));
   const expanded = Boolean(message?.voiceExpanded);
+  const waveBars = [18, 24, 30, 22, 34, 40, 28, 36, 44, 30, 38, 24];
 
   return `
     <div class="msg-voice-bubble ${expanded ? 'is-expanded' : ''}"
@@ -176,13 +185,19 @@ export function renderVoiceBubble(message = {}) {
          data-message-id="${escapeHtml(message?.id || '')}"
          title="双击展开/收起语音转文字">
       <div class="msg-voice-bubble__main">
-        <span class="msg-voice-bubble__wave">${VOICE_ICONS.wave}</span>
-        <span class="msg-voice-bubble__duration">${escapeHtml(String(duration))}秒</span>
+        <span class="msg-voice-bubble__play" aria-hidden="true">${VOICE_ICONS.play}</span>
+        <span class="msg-voice-bubble__wave" aria-hidden="true">
+          ${waveBars.map((height) => `<i style="--bar-height:${height}%"></i>`).join('')}
+        </span>
+        <span class="msg-voice-bubble__duration">${escapeHtml(formatVoiceBubbleDuration(duration))}</span>
+        <span class="msg-voice-bubble__download" aria-hidden="true">${VOICE_ICONS.download}</span>
       </div>
       ${expanded ? `
-        <div class="msg-voice-bubble__divider"></div>
+        <div class="msg-voice-bubble__toggle-hint">
+          <span class="msg-voice-bubble__sparkle" aria-hidden="true">${VOICE_ICONS.sparkle}</span>
+          <span>隐藏文字</span>
+        </div>
         <div class="msg-voice-bubble__transcript">
-          <span class="msg-voice-bubble__label">语音转文字</span>
           <span class="msg-voice-bubble__text">${escapeHtml(text)}</span>
         </div>
       ` : ''}

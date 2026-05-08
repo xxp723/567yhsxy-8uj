@@ -23,96 +23,140 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音气泡缩小与字体统一]
+   [区域标注·已完成·本次语音展开气泡仿图样式]
    说明：
-   1. 已去掉语音气泡过大的固定最小宽度，尺寸贴近普通一句话消息气泡。
-   2. 秒数与转文字内容统一继承闲谈消息页默认中文字体，字号按普通消息气泡对齐。
-   3. 双击后通过 .is-expanded 展开横线下方“语音转文字”内容；本区域只做视觉展示，不涉及持久化存储逻辑。
+   1. 已将展开后的语音气泡调整为参考图结构：播放键、波长条、0:xx 秒数与右侧下载图标。
+   2. 展开文字区已改为“隐藏文字”提示行 + 独立浅色小方框，方便后续直接定位修改。
+   3. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
   min-width: 0;
   width: fit-content;
-  max-width: min(260px, 72vw);
+  max-width: min(330px, 78vw);
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .msg-voice-bubble {
-  min-width: 0;
-  width: fit-content;
-  max-width: min(260px, 72vw);
+  width: min(310px, 78vw);
+  max-width: 100%;
+  padding: 14px 15px 15px;
+  color: #765b63;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
+  background: rgba(255, 255, 255, .86);
+  border: 2px solid rgba(118, 91, 99, .78);
+  border-radius: 22px;
+  box-shadow: 0 8px 20px rgba(118, 91, 99, .08);
   cursor: pointer;
   user-select: none;
 }
 
 .msg-voice-bubble__main {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(112px, 1fr) auto 22px;
   align-items: center;
-  gap: 7px;
-  min-height: 0;
-  padding: 10px 14px;
+  gap: 13px;
+  min-height: 28px;
 }
 
-.msg-voice-bubble__wave {
+.msg-voice-bubble__play,
+.msg-voice-bubble__download,
+.msg-voice-bubble__sparkle {
   display: inline-flex;
-  width: 20px;
-  height: 20px;
+  align-items: center;
+  justify-content: center;
   color: currentColor;
   flex-shrink: 0;
 }
 
-.msg-voice-bubble__wave svg {
+.msg-voice-bubble__play {
+  width: 28px;
+  height: 28px;
+}
+
+.msg-voice-bubble__download {
+  width: 22px;
+  height: 22px;
+  opacity: .38;
+}
+
+.msg-voice-bubble__play svg,
+.msg-voice-bubble__download svg,
+.msg-voice-bubble__sparkle svg {
   width: 100%;
   height: 100%;
 }
 
-.msg-voice-bubble__duration {
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-  font-weight: 700;
-  letter-spacing: 0;
+.msg-voice-bubble__wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  min-width: 0;
+  color: rgba(118, 91, 99, .22);
+  overflow: hidden;
 }
 
-.msg-voice-bubble__divider {
-  height: 1px;
-  margin: 0 14px;
+.msg-voice-bubble__wave i {
+  display: block;
+  width: 7px;
+  height: var(--bar-height);
+  min-height: 13px;
+  max-height: 34px;
   background: currentColor;
-  opacity: .22;
+  border-radius: 999px;
+}
+
+.msg-voice-bubble__duration {
+  min-width: 42px;
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: .01em;
+  color: currentColor;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.msg-voice-bubble__toggle-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(118, 91, 99, .74);
+}
+
+.msg-voice-bubble__sparkle {
+  width: 18px;
+  height: 18px;
 }
 
 .msg-voice-bubble__transcript {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 9px 14px 11px;
+  margin-top: 14px;
+  padding: 15px 16px;
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 17px;
+  line-height: 1.75;
+  color: rgba(90, 67, 74, .9);
+  background: rgba(246, 244, 247, .95);
+  border-radius: 13px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.msg-voice-bubble__label {
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  opacity: .62;
-}
-
 .msg-voice-bubble__text {
   font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.msg-bubble-row--right .msg-voice-bubble__main {
-  flex-direction: row-reverse;
+  font-size: inherit;
+  font-weight: 500;
 }
 
 .msg-bubble-row--right .msg-voice-bubble__transcript {
-  text-align: right;
+  text-align: left;
 }
