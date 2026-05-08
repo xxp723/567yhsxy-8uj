@@ -2842,18 +2842,30 @@ export async function mount(container, context) {
     }
   };
 
-  /* [修改标注·本次需求1] 角色卡导入后在档案应用内立即落地世界书到 IndexedDB（worldbook::all-books） */
+  /* ========================================================================
+     [区域标注·已完成·本次酒馆角色卡主要关键字同步修复]
+     说明：
+     1. 角色卡导入后在档案应用内立即落地世界书到 IndexedDB（worldbook::all-books）。
+     2. 酒馆/CharacterBook 条目的“主要关键字”常见字段为 keys；此前只读取 keywords/key，
+        导致 keys 没有同步进世情世界书条目的 keywords 数组。
+     3. 本区仅补齐 keys -> keywords 的导入映射；仍只使用 DB.js / IndexedDB，
+        不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本过滤。
+     ======================================================================== */
   const normalizeWorldBookEntryFromRaw = (rawEntry = {}, index = 0) => {
     const safe = rawEntry && typeof rawEntry === 'object' ? rawEntry : {};
     const keywords = Array.isArray(safe.keywords)
       ? safe.keywords
       : Array.isArray(safe.key)
         ? safe.key
-        : typeof safe.keywords === 'string'
-          ? safe.keywords.split(/[,，\s]+/)
-          : typeof safe.key === 'string'
-            ? safe.key.split(/[,，\s]+/)
-            : [];
+        : Array.isArray(safe.keys)
+          ? safe.keys
+          : typeof safe.keywords === 'string'
+            ? safe.keywords.split(/[,，\s]+/)
+            : typeof safe.key === 'string'
+              ? safe.key.split(/[,，\s]+/)
+              : typeof safe.keys === 'string'
+                ? safe.keys.split(/[,，\s]+/)
+                : [];
 
     let position = 'afterChar';
     if (safe.position === 4 || safe.position === 'top') position = 'top';
