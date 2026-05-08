@@ -1788,7 +1788,7 @@ export async function sendMessage(container, state, db, content, settingsManager
       /* [区域标注·已完成·AI识图当前轮媒体] 把本轮用户图片/表情包消息原始字段传给 prompt.js 组装视觉输入。 */
       currentUserRoundMessages: promptPayload.currentUserRoundMessages,
       chatSettings: state.chatPromptSettings,
-      /* [区域标注·已修改] 时间感知请求上下文：把最新用户消息时间与最近聊天时间传给 prompt.js，避免 AI 时间停在旧消息发送时 */
+      /* [区域标注·已完成·本次时间断层强化] 时间感知请求上下文：把当前用户轮次、上一条 AI 回复与上一条历史聊天记录时间传给 prompt.js，避免 AI 把凌晨旧语境误当成早上当前语境。 */
       conversationTimeContext: promptPayload.conversationTimeContext,
       settingsManager,
       /* [区域标注·本次需求] 提示词真实上下文：把当前会话/联系人/面具/档案/DB 传给 prompt.js，供 AI 读取有效信息 */
@@ -3273,10 +3273,28 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   const currentRoundMessageIds = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
   const previous = (latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized)
     .filter(item => !currentRoundMessageIds.has(String(item?.id || '')));
-  /* [区域标注·已修改] 强化时间感知：即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。 */
+  /* ========================================================================
+     [区域标注·已完成·本次时间断层强化] 时间感知运行时上下文
+     说明：
+     1. 即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。
+     2. currentUserRound* 表示用户本轮实际回复时间；previousLatest* 表示排除本轮用户消息后的上一段聊天时间。
+     3. previousLatestAssistantTimestamp 专门用于判断“上一轮 AI 凌晨回复 → 用户早上才回”的真实跨度，避免 AI 继续停留在凌晨语境劝睡。
+     4. 本区只做运行时计算，不使用 localStorage/sessionStorage，不写双份存储兜底。
+     ======================================================================== */
+  const previousLatestAnyMessage = [...previous].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
+  const previousLatestUserMessage = [...previous].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0) || null;
+  const previousLatestAssistantMessage = [...previous].reverse().find(item => item.role === 'assistant' && Number(item?.timestamp || 0) > 0) || null;
+  const currentRoundTimestamps = currentRoundMessages
+    .map(item => Number(item?.timestamp || 0) || 0)
+    .filter(Boolean);
   const conversationTimeContext = {
     latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
-    latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0
+    latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0,
+    currentUserRoundFirstTimestamp: currentRoundTimestamps.length ? Math.min(...currentRoundTimestamps) : 0,
+    currentUserRoundLastTimestamp: currentRoundTimestamps.length ? Math.max(...currentRoundTimestamps) : 0,
+    previousLatestAnyTimestamp: Number(previousLatestAnyMessage?.timestamp || 0) || 0,
+    previousLatestUserTimestamp: Number(previousLatestUserMessage?.timestamp || 0) || 0,
+    previousLatestAssistantTimestamp: Number(previousLatestAssistantMessage?.timestamp || 0) || 0
   };
   const currentUserRoundMessages = currentRoundMessages.map(item => ({
     /* ======================================================================

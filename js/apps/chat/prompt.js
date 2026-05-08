@@ -1304,13 +1304,14 @@ export function getMountedStickerPrompt({ settings = {}, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 8-A·已完成·本次需求1：时间认知错乱修正] 强化时间感知
+   [提示词区域 8-A·已完成·本次需求1：时间断层感知强化] 强化时间感知
    说明：
    1. 只有当前聊天对象的聊天设置页“时间感知”开关开启时才注入。
    2. 当前真实时间在每次请求 API 时即时生成，不写入持久化存储。
-   3. 会同时给出本轮 API 请求时间、最近一条用户消息时间、距上次聊天间隔，帮助 AI 感知“过了多久才回复”。
-   4. 已保留原 17 条规则的有效核心，剔除重复表达，并加入“跨日/超过30分钟禁止误称刚才”的硬约束。
+   3. 已补充“本轮用户实际回复时间、上一条 AI 回复时间、上一段聊天到本轮的间隔、是否跨自然日”，用于纠正“凌晨旧回复被早上继续当作现在”的错乱。
+   4. 已强化“忘记回/刚看到/之前忘回”类表达：必须先按本轮真实时间与上一条 AI 回复时间计算跨度，不允许停在上一轮旧时段。
    5. 保留跨零点相对日期重算、真实时段感知、现实耗时约束、久未回复感、睡眠时段纠偏与禁止泄露后台时间标注。
+   6. 本区域只做运行时提示词注入；不使用 localStorage/sessionStorage，不写双份存储兜底。
    ========================================================================== */
 function getCurrentRealDate() {
   return new Date();
@@ -1541,11 +1542,29 @@ function buildConversationTimeContext({ history = [], userInput = '', now = getC
   const latestAnyMessage = [...normalizedHistory].reverse().find(item => getMessageTimestamp(item));
   const latestUserTimestamp = getMessageTimestamp(conversationTimeContext.latestUserMessage) || Number(conversationTimeContext.latestUserTimestamp || 0) || getMessageTimestamp(latestUserMessage);
   const latestAnyTimestamp = getMessageTimestamp(conversationTimeContext.latestAnyMessage) || Number(conversationTimeContext.latestAnyTimestamp || 0) || getMessageTimestamp(latestAnyMessage);
+  const currentUserRoundFirstTimestamp = Number(conversationTimeContext.currentUserRoundFirstTimestamp || 0) || latestUserTimestamp;
+  const currentUserRoundLastTimestamp = Number(conversationTimeContext.currentUserRoundLastTimestamp || 0) || latestUserTimestamp;
+  const previousLatestAnyTimestamp = Number(conversationTimeContext.previousLatestAnyTimestamp || 0) || 0;
+  const previousLatestUserTimestamp = Number(conversationTimeContext.previousLatestUserTimestamp || 0) || 0;
+  const previousLatestAssistantTimestamp = Number(conversationTimeContext.previousLatestAssistantTimestamp || 0) || 0;
   const roundTimeline = buildConversationRoundTimeline(normalizedHistory, 10, now);
+
+  const formatTimeDistanceLine = (label, timestamp) => {
+    const value = Number(timestamp || 0) || 0;
+    if (!value) return `${label}：无可用时间戳。`;
+    const date = new Date(value);
+    const crossedDay = isDifferentShanghaiDate(date, now) ? '是' : '否';
+    return `${label}：${formatDateForTimeAwareness(date)}；距本轮 API 实际请求：${formatRelativeDurationForPrompt(nowMs - value)}；是否跨自然日：${crossedDay}。`;
+  };
 
   const lines = [
     `本轮 API 实际请求时间：${formatDateForTimeAwareness(now)}。`,
-    `本轮用户最新一轮消息内容：${normalizePlainText(userInput) || '（无额外文字，可能是点按重新回复/纸飞机触发）'}。`
+    `本轮用户最新一轮消息内容：${normalizePlainText(userInput) || '（无额外文字，可能是点按重新回复/纸飞机触发）'}。`,
+    formatTimeDistanceLine('本轮用户实际回复开始时间', currentUserRoundFirstTimestamp),
+    formatTimeDistanceLine('本轮用户实际回复最后一条时间', currentUserRoundLastTimestamp),
+    formatTimeDistanceLine('上一条 AI 回复时间（排除本轮用户消息）', previousLatestAssistantTimestamp),
+    formatTimeDistanceLine('上一条历史聊天记录时间（排除本轮用户消息）', previousLatestAnyTimestamp),
+    formatTimeDistanceLine('上一条历史用户消息时间（排除本轮用户消息）', previousLatestUserTimestamp)
   ];
 
   if (latestUserTimestamp) {
@@ -1560,6 +1579,12 @@ function buildConversationTimeContext({ history = [], userInput = '', now = getC
     lines.push(`距上次聊天记录已经过去：${formatRelativeDurationForPrompt(nowMs - latestAnyTimestamp)}。`);
   } else {
     lines.push('最近一条聊天记录时间：无可用时间戳。');
+  }
+
+  if (currentUserRoundLastTimestamp && previousLatestAssistantTimestamp) {
+    const previousAssistantDate = new Date(previousLatestAssistantTimestamp);
+    const currentUserDate = new Date(currentUserRoundLastTimestamp);
+    lines.push(`上一条 AI 回复到本轮用户回复的真实间隔：${formatRelativeDurationForPrompt(currentUserRoundLastTimestamp - previousLatestAssistantTimestamp)}；是否跨自然日：${isDifferentShanghaiDate(previousAssistantDate, currentUserDate) ? '是' : '否'}。`);
   }
 
   if (roundTimeline) {
@@ -1583,17 +1608,18 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
 
 # 时间感知聊天规则
 1. 唯一当前时间：只以“本轮 API 实际请求时间”为现在；上一条用户消息、上一轮 AI 回复和历史正文都只是当时记录，不能被当作正在发生。
-2. 相对日期换算：历史里的“昨天/今天/明天/后天/过几小时/过几天/今晚/明早”等，必须先锚定到该消息发送时间，再换算到本轮请求时间；跨零点后必须随真实日期推进重算，禁止停留在旧锚点。
-3. 跨日纠偏：零点一过就是新的一天；用户零点前说“明天早点起/明天要上班上学”，本轮跨到 00:00 后必须按“今天”理解；“后天出差回家”等计划也要随当前真实日期改称“明天/今天/已经过去”等。
-4. “刚才”硬阈值：判断“刚才/刚刚/刚发生/刚说完”前必须先查对应消息时间；超过 30 分钟，或已经跨自然日，禁止使用这些说法。昨天晚上发生的事，到今天下午只能称“昨晚/昨天那会儿/昨天晚上”，不能称“刚才”。
-5. 回复延迟与事件时间分离：可以自然表达“我才看到/隔了会儿才回/好久没聊”，但这只表示回复延迟，绝不能把历史事件说成刚发生；久别感也不要每轮强行提。
-6. 现实耗时判断：结合“距上次聊天多久”、轮次时间轴和历史时间戳判断事情是否来得及完成；买菜购物、做饭、洗澡、通勤、排队、取快递、办事、跨城区/跨城市移动等必须符合常识，禁止把几分钟内不可能完成的事直接写成已完成。
-7. 过程状态判断：如果历史只说“准备出门/在路上/准备做饭/准备处理某事”，而本轮只过了几分钟，只能推断“刚开始、还在路上、还没那么快”等；若历史明确完成，或间隔确实足够长，可以承认完成，但要自然衔接。
-8. 真实时段敏感：早上 06:00-08:59，上午 09:00-11:59，中午 12:00-13:59，下午 14:00-17:59，晚上 18:00-23:59，凌晨 00:00-05:59；不同时间段应匹配生活语境，避免把下午说成中午、把凌晨说成晚上。
-9. 睡眠语境纠偏：关心睡觉、晚安、早点睡只能基于本轮真实时段，或用户本轮明确说要睡；当前是下午/白天时，禁止因为历史夜晚内容、昨晚聊天或旧的“晚安/早点睡”语境劝用户现在早点睡。
-10. 自然表达：把当前真实时间内化成角色生活感；只有用户询问时间、情景适合，或当前时刻明显影响角色反应时才自然提及，平时不要机械报时，也不要说自己被注入真实时间。
-11. 回答时间：用户问“现在几点了/什么时间了”等时，必须按本轮实际请求时间，用真人聊天口吻回答，可自然带关心、调侃或场景感，但必须符合角色人设与关系。
-12. 后台校准：回复前先在后台核对当前时间、历史事件时间、二者间隔、是否跨日和现实耗时；校准只用于理解，最终回复绝对禁止输出 \`[消息发送时间：...]\`、\`本轮 API 实际请求时间\`、\`最近一条聊天记录时间\`、时间轴字段或任何后台标注。`);
+2. 本轮优先级：用户说“我之前忘记回你了/刚看到/忘回了/隔了一会儿才回”等延迟回复表达时，必须优先读取“本轮用户实际回复时间”和“上一条 AI 回复时间”，自行计算跨度与是否跨自然日；不能因为用户没说“昨天晚上”就停留在上一条 AI 回复的旧时段。
+3. 相对日期换算：历史里的“昨天/今天/明天/后天/过几小时/过几天/今晚/明早”等，必须先锚定到该消息发送时间，再换算到本轮请求时间；跨零点后必须随真实日期推进重算，禁止停留在旧锚点。
+4. 跨日纠偏：零点一过就是新的一天；用户零点前说“明天早点起/明天要上班上学”，本轮跨到 00:00 后必须按“今天”理解；“后天出差回家”等计划也要随当前真实日期改称“明天/今天/已经过去”等。
+5. “刚才”硬阈值：判断“刚才/刚刚/刚发生/刚说完”前必须先查对应消息时间；超过 30 分钟，或已经跨自然日，禁止使用这些说法。凌晨两点的回复，到早上七点多只能称“凌晨那会儿/之前/昨晚到今早这段”，不能称“刚才”，也不能继续按凌晨气氛劝睡。
+6. 回复延迟与事件时间分离：可以自然表达“我才看到/隔了会儿才回/好久没聊”，但这只表示回复延迟，绝不能把历史事件说成刚发生；久别感也不要每轮强行提。
+7. 现实耗时判断：结合“距上次聊天多久”、轮次时间轴和历史时间戳判断事情是否来得及完成；买菜购物、做饭、洗澡、通勤、排队、取快递、办事、跨城区/跨城市移动等必须符合常识，禁止把几分钟内不可能完成的事直接写成已完成。
+8. 过程状态判断：如果历史只说“准备出门/在路上/准备做饭/准备处理某事”，而本轮只过了几分钟，只能推断“刚开始、还在路上、还没那么快”等；若历史明确完成，或间隔确实足够长，可以承认完成，但要自然衔接。
+9. 真实时段敏感：早上 06:00-08:59，上午 09:00-11:59，中午 12:00-13:59，下午 14:00-17:59，晚上 18:00-23:59，凌晨 00:00-05:59；不同时间段应匹配生活语境，避免把早上说成凌晨/晚上、把下午说成中午。
+10. 睡眠语境纠偏：关心睡觉、晚安、早点睡只能基于本轮真实时段，或用户本轮明确说要睡；当前是早上/上午/下午/白天时，禁止因为历史夜晚内容、昨晚聊天或旧的“晚安/早点睡”语境劝用户现在早点睡。
+11. 自然表达：把当前真实时间内化成角色生活感；只有用户询问时间、情景适合，或当前时刻明显影响角色反应时才自然提及，平时不要机械报时，也不要说自己被注入真实时间。
+12. 回答时间：用户问“现在几点了/什么时间了”等时，必须按本轮实际请求时间，用真人聊天口吻回答，可自然带关心、调侃或场景感，但必须符合角色人设与关系。
+13. 后台校准：回复前先在后台核对当前时间、历史事件时间、上一条 AI 回复到本轮用户回复的间隔、是否跨日和现实耗时；校准只用于理解，最终回复绝对禁止输出 \`[消息发送时间：...]\`、\`本轮 API 实际请求时间\`、\`最近一条聊天记录时间\`、时间轴字段或任何后台标注。`);
 }
 
 /* ==========================================================================
