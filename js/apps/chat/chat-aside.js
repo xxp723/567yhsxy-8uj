@@ -9,7 +9,7 @@
  * 架构层: 应用层（闲谈子模块）
  */
 
-import { escapeHtml } from './chat-utils.js';
+import { dbGet, dbPut, escapeHtml } from './chat-utils.js';
 
 /* ==========================================================================
    [区域标注·已完成·旁白模式] IconPark 图标 SVG
@@ -65,6 +65,42 @@ export function normalizeAsideSettings(raw) {
    ========================================================================== */
 export function isAsideModeActive(stateOrOptions = {}) {
   return Boolean(stateOrOptions?.asideModeActive);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旁白模式防自动退出修复] 旁白模式会话状态 IndexedDB 存取
+   说明：
+   1. 旁白模式是否开启、旁白设置、旁白历史按“当前面具 + 当前会话”保存。
+   2. 只有点击顶栏爱心并确认退出时，才会把 active 写为 false。
+   3. 重新进入会话或闲谈应用重新挂载时从 DB.js / IndexedDB 恢复，避免未点爱心却自动退出。
+   4. 禁止 localStorage/sessionStorage，不写双份兜底，不使用长文本字段过滤。
+   ========================================================================== */
+export const DATA_KEY_CHAT_ASIDE_MODE_STATE = (maskId, chatId) => `chat_aside_state::${maskId || 'default'}::${chatId || 'none'}`;
+
+export function normalizeAsideModeState(raw = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    active: Boolean(source.active),
+    settings: normalizeAsideSettings(source.settings || source.asideSettings || null),
+    history: Array.isArray(source.history || source.asideHistory) ? (source.history || source.asideHistory) : [],
+    updatedAt: Number(source.updatedAt || 0) || 0
+  };
+}
+
+export async function loadAsideModeState(db, maskId, chatId) {
+  const stored = await dbGet(db, DATA_KEY_CHAT_ASIDE_MODE_STATE(maskId, chatId));
+  return stored ? normalizeAsideModeState(stored) : null;
+}
+
+export async function persistAsideModeState(db, maskId, chatId, stateOrPatch = {}) {
+  if (!chatId) return;
+  const normalized = normalizeAsideModeState({
+    active: stateOrPatch.active ?? stateOrPatch.asideModeActive,
+    settings: stateOrPatch.settings || stateOrPatch.asideSettings,
+    history: stateOrPatch.history || stateOrPatch.asideHistory,
+    updatedAt: Date.now()
+  });
+  await dbPut(db, DATA_KEY_CHAT_ASIDE_MODE_STATE(maskId, chatId), normalized);
 }
 
 /* ==========================================================================

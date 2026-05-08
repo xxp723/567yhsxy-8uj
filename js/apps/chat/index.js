@@ -65,7 +65,9 @@ import {
   showAsideExitConfirmModal,
   isAsideModeActive,
   getDefaultAsideSettings,
-  normalizeAsideSettings
+  normalizeAsideSettings,
+  loadAsideModeState,
+  persistAsideModeState
 } from './chat-aside.js';
 import {
   renderContacts,
@@ -540,11 +542,12 @@ export async function mount(container, context) {
     stickerPanelGroupId: normalizeStickerData(stickerData).activeGroupId || 'all',
     coffeeDockOpen: false,
     /* ======================================================================
-       [区域标注·已完成·旁白模式] 旁白模式运行时状态字段
+       [区域标注·已完成·旁白模式防自动退出修复] 旁白模式运行时状态字段
        说明：
-       1. asideModeActive — 当前会话是否处于旁白模式（布尔值）。
+       1. asideModeActive — 当前会话是否处于旁白模式（打开会话时会从 IndexedDB 恢复）。
        2. asideSettings — 旁白人称/风格/字数/显示模式等设置对象。
-       3. asideHistory — 旁白模式期间每轮旁白摘要数组，退出后注入上下文。
+       3. asideHistory — 旁白模式期间每轮旁白摘要数组，随旁白状态一起写入 IndexedDB。
+       4. 只有点击顶栏爱心并确认退出，才会将 active:false 持久化。
        ====================================================================== */
     asideModeActive: false,
     asideSettings: getDefaultAsideSettings(),
@@ -993,6 +996,19 @@ async function openChatMessage(container, state, db, chatId) {
 
   /* [区域标注] 从 IndexedDB 加载该会话的消息记录 */
   state.currentMessages = (await dbGet(db, DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId)) || [];
+
+  /* ========================================================================
+     [区域标注·已完成·旁白模式防自动退出修复] 打开会话时恢复旁白模式状态
+     说明：
+     1. 旁白模式 active/settings/history 按“当前面具 + 当前会话”从 DB.js / IndexedDB 读取。
+     2. 这样闲谈应用重新挂载、刷新或重新进入会话时，不会在未点击爱心的情况下自动退出旁白模式。
+     3. 不使用 localStorage/sessionStorage，不写双份兜底，不使用长文本字段过滤。
+     ======================================================================== */
+  const asideModeState = await loadAsideModeState(db, state.activeMaskId, chatId);
+  state.asideModeActive = Boolean(asideModeState?.active);
+  state.asideSettings = normalizeAsideSettings(asideModeState?.settings || getDefaultAsideSettings());
+  state.asideHistory = Array.isArray(asideModeState?.history) ? asideModeState.history : [];
+
   /* ===== 闲谈聊天设置按联系人独立存储 START ===== */
   state.chatPromptSettings = normalizeChatPromptSettings(await dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, chatId)));
   /* ===== 闲谈聊天设置按联系人独立存储 END ===== */
@@ -1838,14 +1854,22 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
 
     /* ======================================================================
-       [区域标注·已完成·旁白模式] 确认进入旁白模式
-       说明：从弹窗读取设置，激活旁白模式，关闭弹窗，重新渲染消息页。
+       [区域标注·已完成·旁白模式防自动退出修复] 确认进入旁白模式
+       说明：
+       1. 从弹窗读取设置，激活旁白模式，并立即写入 DB.js / IndexedDB。
+       2. 后续重新进入会话会恢复 active:true，避免未点击爱心却自动退出。
+       3. 不使用 localStorage/sessionStorage，不写双份兜底。
        ====================================================================== */
     case 'confirm-enter-aside-mode': {
       const asideSettings = readAsideSettingsFromModal(container);
       state.asideModeActive = true;
       state.asideSettings = asideSettings;
       state.asideHistory = [];
+      await persistAsideModeState(db, state.activeMaskId, state.currentChatId, {
+        active: true,
+        settings: state.asideSettings,
+        history: state.asideHistory
+      });
       closeModal(container);
       renderCurrentChatMessage(container, state);
       break;
@@ -1859,11 +1883,19 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
 
     /* ======================================================================
-       [区域标注·已完成·旁白模式] 确认退出旁白模式
-       说明：关闭旁白模式，清除旁白活跃标记，保留 asideHistory 供上下文摘要使用。
+       [区域标注·已完成·旁白模式防自动退出修复] 确认退出旁白模式
+       说明：
+       1. 只有用户点击顶栏爱心并确认退出时，才把 active:false 写入 IndexedDB。
+       2. 保留 asideHistory 供上下文摘要使用，不清空历史。
+       3. 不使用 localStorage/sessionStorage，不写双份兜底。
        ====================================================================== */
     case 'confirm-exit-aside-mode':
       state.asideModeActive = false;
+      await persistAsideModeState(db, state.activeMaskId, state.currentChatId, {
+        active: false,
+        settings: state.asideSettings,
+        history: state.asideHistory
+      });
       closeModal(container);
       renderCurrentChatMessage(container, state);
       break;
