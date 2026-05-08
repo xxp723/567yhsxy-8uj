@@ -1858,8 +1858,18 @@ export async function sendMessage(container, state, db, content, settingsManager
        ======================================================================== */
     const latestArchiveDataForAi = await refreshArchiveContextForAiRequest(state, db, session);
 
-    /* [区域标注·本次需求] 调用 prompt.js 的 chat()：按指定顺序组装 messages 后调用设置应用主 API */
-    appendChatConsoleRuntimeLog(state, 'info', `开始请求 AI：history=${promptPayload.history.length}，currentRound=${promptPayload.currentUserRoundMessages.length}`);
+    /* ========================================================================
+       [区域标注·已完成·需求1·请求轮次日志释义修复] 调用 prompt.js 的 chat()
+       说明：
+       1. conversationRound 才是“当前聊到第几轮”的用户对话轮次序号。
+       2. currentRoundMessages 只表示本轮连续用户消息/撤回提示条数，不再误写成 currentRound，避免误判短期记忆未刷新。
+       3. historyRounds/historyMessages 只展示本次短期记忆实际携带范围；不改变 promptPayload.history 的发送内容。
+       ======================================================================== */
+    appendChatConsoleRuntimeLog(
+      state,
+      'info',
+      `开始请求 AI：conversationRound=第${promptPayload.conversationRoundIndex || 0}轮，historyRounds=${promptPayload.historyRoundCount || 0}，historyMessages=${promptPayload.historyMessageCount ?? promptPayload.history.length}，currentRoundMessages=${promptPayload.currentRoundMessageCount ?? promptPayload.currentUserRoundMessages.length}`
+    );
     const result = await chat({
       userInput: userInputForAi,
       history: promptPayload.history,
@@ -3655,6 +3665,26 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   const currentRoundMessageIds = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
   const previous = (latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized)
     .filter(item => !currentRoundMessageIds.has(String(item?.id || '')));
+
+  /* ========================================================================
+     [区域标注·已完成·需求1·控制台轮次统计元数据]
+     说明：
+     1. conversationRoundIndex 按“连续 user 消息组 = 1 轮”统计当前会话总用户轮次，用于控制台显示真正聊到第几轮。
+     2. currentRoundMessageCount 仅表示本轮用户连续发送的消息条数，以及被并入本轮的撤回系统提示条数。
+     3. 本区域只返回运行时日志元数据，不新增持久化存储，不改变 history/currentUserRoundMessages 的 AI 请求内容。
+     ======================================================================== */
+  const countUserConversationRounds = (items = []) => {
+    let count = 0;
+    let previousRole = '';
+    (Array.isArray(items) ? items : []).forEach(item => {
+      if (item?.role === 'user' && previousRole !== 'user') count += 1;
+      previousRole = String(item?.role || '');
+    });
+    return count;
+  };
+  const conversationRoundIndex = countUserConversationRounds(normalized);
+  const currentRoundMessageCount = currentRoundMessages.length;
+
   /* ========================================================================
      [区域标注·已完成·本次时间断层强化] 时间感知运行时上下文
      说明：
@@ -3700,7 +3730,12 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
       userInput,
       history: [],
       currentUserRoundMessages,
-      conversationTimeContext
+      conversationTimeContext,
+      /* [区域标注·已完成·需求1·短期记忆为0时日志元数据] 仅供控制台展示，不影响 AI 请求历史内容。 */
+      conversationRoundIndex,
+      currentRoundMessageCount,
+      historyRoundCount: 0,
+      historyMessageCount: 0
     };
   }
 
@@ -3731,11 +3766,25 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
   });
   if (current.length) rounds.push(current);
 
+  /* ========================================================================
+     [区域标注·已完成·需求1·短期记忆日志统计]
+     说明：
+     1. selectedHistoryRounds 是本次短期记忆实际携带的历史轮次数组。
+     2. historyMessageCount 仍按最终 history 消息条数显示，方便排查 token 与气泡拆分数量。
+     3. 这里只增加控制台日志元数据，不改变 history 扁平化结果，也不改变发送给 AI 的短期记忆内容。
+     ======================================================================== */
+  const selectedHistoryRounds = rounds.slice(-roundLimit);
+  const selectedHistoryMessages = selectedHistoryRounds.flat();
+
   return {
     userInput,
-    history: rounds.slice(-roundLimit).flat(),
+    history: selectedHistoryMessages,
     currentUserRoundMessages,
-    conversationTimeContext
+    conversationTimeContext,
+    conversationRoundIndex,
+    currentRoundMessageCount,
+    historyRoundCount: selectedHistoryRounds.length,
+    historyMessageCount: selectedHistoryMessages.length
   };
 }
 
