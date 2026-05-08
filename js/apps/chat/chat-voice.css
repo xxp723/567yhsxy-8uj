@@ -23,42 +23,43 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音展开气泡仿图样式]
+   [区域标注·已完成·语音消息气泡普通尺寸化]
    说明：
-   1. 已将展开后的语音气泡调整为参考图结构：播放键、波长条、0:xx 秒数与右侧下载图标。
-   2. 展开文字区已改为“隐藏文字”提示行 + 独立浅色小方框，方便后续直接定位修改。
+   1. 已将语音消息气泡改为接近普通文字气泡的紧凑尺寸，避免独立语音气泡过大。
+   2. 已去除语音气泡独立粗边框与右侧下载箭头，仅保留播放键、波形条与 0:xx 秒数。
    3. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
   min-width: 0;
   width: fit-content;
-  max-width: min(330px, 78vw);
-  padding: 0;
+  max-width: min(220px, 72vw);
+  padding: 10px 14px;
+  border: none;
   overflow: visible;
 }
 
 .msg-voice-bubble {
-  width: min(310px, 78vw);
+  width: min(168px, 54vw);
   max-width: 100%;
-  padding: 14px 15px 15px;
+  padding: 0;
   color: #765b63;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
-  background: rgba(255, 255, 255, .86);
-  border: 2px solid rgba(118, 91, 99, .78);
-  border-radius: 22px;
-  box-shadow: 0 8px 20px rgba(118, 91, 99, .08);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   cursor: pointer;
   user-select: none;
 }
 
 .msg-voice-bubble__main {
   display: grid;
-  grid-template-columns: 28px minmax(112px, 1fr) auto 22px;
+  grid-template-columns: 18px minmax(64px, 1fr) auto;
   align-items: center;
-  gap: 13px;
-  min-height: 28px;
+  gap: 8px;
+  min-height: 22px;
 }
 
 .msg-voice-bubble__play,
@@ -72,14 +73,12 @@
 }
 
 .msg-voice-bubble__play {
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
 }
 
 .msg-voice-bubble__download {
-  width: 22px;
-  height: 22px;
-  opacity: .38;
+  display: none;
 }
 
 .msg-voice-bubble__play svg,
@@ -93,8 +92,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: 34px;
+  gap: 3px;
+  height: 20px;
   min-width: 0;
   color: rgba(118, 91, 99, .22);
   overflow: hidden;
@@ -102,20 +101,20 @@
 
 .msg-voice-bubble__wave i {
   display: block;
-  width: 7px;
+  width: 4px;
   height: var(--bar-height);
-  min-height: 13px;
-  max-height: 34px;
+  min-height: 8px;
+  max-height: 20px;
   background: currentColor;
   border-radius: 999px;
 }
 
 .msg-voice-bubble__duration {
-  min-width: 42px;
+  min-width: 34px;
   font-family: inherit;
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: .01em;
   color: currentColor;
   text-align: right;
