@@ -1888,18 +1888,27 @@ export async function sendMessage(container, state, db, content, settingsManager
         imageSource: 'ai_generated',
         imagePrompt: String(item?.prompt || '').trim(),
         imageRoleName: String(item?.roleName || session?.name || '对方').trim(),
-        imageGeneratedAt: Date.now() + imageIndex
+        imageGeneratedAt: Date.now() + imageIndex,
+        /* ====================================================================
+           [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] AI 生图运行时顺序
+           说明：protocolOrder 来自 prompt.js / chat-image-generation.js 对 [图片] 协议原文位置的解析；
+                 仅用于本轮显示排序，入库前会剥离，不新增任何持久化字段。
+           ==================================================================== */
+        __protocolOrder: Number(item?.protocolOrder ?? item?.startIndex ?? imageIndex) || 0,
+        __protocolEndIndex: Number(item?.endIndex ?? item?.startIndex ?? imageIndex) || 0
       }))
       .filter(item => item.imageUrl);
 
+    const orderedAiMessages = sortAiMessagesByRuntimeProtocolOrder([
+      ...buildAiReplyMessages(rawAiText, state, {
+        /* [区域标注·已完成·AI文字图/生图互斥前端接收] 生图 API 开启时前端丢弃 [文字图]；未开启时才把 [文字图] 渲染为文字图气泡。 */
+        textImageProtocolEnabled: Boolean(result?.textImageProtocolEnabled)
+      }),
+      ...generatedImageMessages
+    ]);
+
     const aiMessages = bindAsideSegmentsToAiMessages(
-      [
-        ...buildAiReplyMessages(rawAiText, state, {
-          /* [区域标注·已完成·AI文字图/生图互斥前端接收] 生图 API 开启时前端丢弃 [文字图]；未开启时才把 [文字图] 渲染为文字图气泡。 */
-          textImageProtocolEnabled: Boolean(result?.textImageProtocolEnabled)
-        }),
-        ...generatedImageMessages
-      ],
+      orderedAiMessages.map(stripAiRuntimeProtocolOrderFields),
       extractedAsideSegments,
       state.asideSettings?.displayMode || 'top',
       rawAiTextAfterInnerVoice
@@ -2435,6 +2444,39 @@ export function cleanAiProtocolBlockContent(content) {
     .trim();
 }
 
+/* ========================================================================
+   [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] 本轮消息运行时排序工具
+   说明：
+   1. __protocolOrder / __protocolEndIndex 只在本轮 AI 回复解析与排序时使用，写入 currentMessages 前会剥离。
+   2. AI 生图与 HTML 卡片都按原文中 [图片]/[卡片] 协议位置插回文字、语音、礼物等消息之间，不再统一落到本轮最下方。
+   3. 本区域不读写持久化存储；消息最终仍只通过 DB.js / IndexedDB 保存，不使用 localStorage/sessionStorage。
+   ======================================================================== */
+function getAiRuntimeProtocolOrder(message = {}, fallbackIndex = 0) {
+  const value = Number(message?.__protocolOrder);
+  return Number.isFinite(value) ? value : Number(fallbackIndex || 0);
+}
+
+function sortAiMessagesByRuntimeProtocolOrder(messages = []) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((message, index) => ({
+      message,
+      index,
+      order: getAiRuntimeProtocolOrder(message, index)
+    }))
+    .sort((a, b) => (a.order - b.order) || (a.index - b.index))
+    .map(item => item.message);
+}
+
+function stripAiRuntimeProtocolOrderFields(message = {}) {
+  const {
+    __protocolOrder,
+    __protocolEndIndex,
+    __protocolIndex,
+    ...cleanMessage
+  } = message || {};
+  return cleanMessage;
+}
+
 /* ==========================================================================
    [区域标注·已完成·角色主动转账协议解析] AI 转账协议内容解析
    说明：
@@ -2539,7 +2581,14 @@ export function extractAiProtocolBlocks(rawText) {
       return {
         type,
         roleName: parsed.roleName,
-        content: parsed.content
+        content: parsed.content,
+        /* ====================================================================
+           [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] 普通协议块运行时顺序
+           说明：保留每个协议头在 AI 原文里的位置，供本轮把图片/HTML卡片插回正确聊天节奏。
+           ==================================================================== */
+        __protocolOrder: Number(match.index || 0) || 0,
+        __protocolEndIndex: contentEnd,
+        __protocolIndex: index
       };
     })
     .filter(item => item.type && item.content);
@@ -2649,14 +2698,16 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
         ).trim();
         if (!withdrawnText) continue;
 
-        builtMessages.push({
-          role: 'user',
-          type: 'ai_withdraw_system',
-          content: `${roleName} 撤回了一条消息`,
-          withdrawnContent: withdrawnText,
-          aiVisibleWithdrawnSummary: withdrawnText,
-          withdrawnRoleName: roleName
-        });
+          builtMessages.push({
+            role: 'user',
+            type: 'ai_withdraw_system',
+            content: `${roleName} 撤回了一条消息`,
+            withdrawnContent: withdrawnText,
+            aiVisibleWithdrawnSummary: withdrawnText,
+            withdrawnRoleName: roleName,
+            __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+            __protocolEndIndex: block.__protocolEndIndex
+          });
       }
       return;
     }
@@ -2670,7 +2721,9 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
           content: `[表情包] ${sticker.name}`,
           stickerId: sticker.id,
           stickerName: sticker.name,
-          stickerUrl: sticker.url
+          stickerUrl: sticker.url,
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+          __protocolEndIndex: block.__protocolEndIndex
         });
       }
       /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
@@ -2686,7 +2739,13 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
          3. 语音消息随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
          ====================================================================== */
       const voiceMessage = createAiVoiceMessageFromProtocol(block);
-      if (voiceMessage) builtMessages.push(voiceMessage);
+      if (voiceMessage) {
+        builtMessages.push({
+          ...voiceMessage,
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+          __protocolEndIndex: block.__protocolEndIndex
+        });
+      }
       return;
     }
 
@@ -2700,7 +2759,13 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
          ====================================================================== */
       if (textImageProtocolEnabled) {
         const textImageMessage = createAiTextImageMessageFromProtocol(block.content);
-        if (textImageMessage) builtMessages.push(textImageMessage);
+        if (textImageMessage) {
+          builtMessages.push({
+            ...textImageMessage,
+            __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+            __protocolEndIndex: block.__protocolEndIndex
+          });
+        }
       }
       return;
     }
@@ -2727,7 +2792,9 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
           transferDirection: 'incoming',
           transferStatus: 'pending',
           transferCounterpartyName: String(block.roleName || '').trim(),
-          ...transferPayload
+          ...transferPayload,
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+          __protocolEndIndex: block.__protocolEndIndex
         });
       }
       /* [区域标注·已完成·角色主动转账协议容错] 转账协议格式不合法时直接丢弃，避免残缺协议原样露出 */
@@ -2743,7 +2810,13 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
          3. 协议格式不合法时直接丢弃，避免残缺 [礼物] 协议露出为普通文本。
          ====================================================================== */
       const giftMessage = createAiGiftMessageFromProtocol(block);
-      if (giftMessage) builtMessages.push(giftMessage);
+      if (giftMessage) {
+        builtMessages.push({
+          ...giftMessage,
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+          __protocolEndIndex: block.__protocolEndIndex
+        });
+      }
       return;
     }
 
@@ -2767,16 +2840,20 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
         builtMessages.push({
           role: 'assistant',
           content: '',
-          quote: quotePayload
+          quote: quotePayload,
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
+          __protocolEndIndex: block.__protocolEndIndex
         });
         return;
       }
 
-      replyParts.forEach(content => {
+      replyParts.forEach((content, replyIndex) => {
         builtMessages.push({
           role: 'assistant',
           content,
-          ...(quotePayload ? { quote: quotePayload } : {})
+          ...(quotePayload ? { quote: quotePayload } : {}),
+          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length) + replyIndex / 1000,
+          __protocolEndIndex: block.__protocolEndIndex
         });
       });
       return;
@@ -2791,10 +2868,12 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
        ======================================================================== */
     if (block.type === '卡片') return;
 
-    splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach(content => {
+    splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach((content, replyIndex) => {
       builtMessages.push({
         role: 'assistant',
-        content
+        content,
+        __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length) + replyIndex / 1000,
+        __protocolEndIndex: block.__protocolEndIndex
       });
     });
   });
@@ -2811,7 +2890,14 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
         cardRoleName: String(block?.roleName || '').trim(),
         cardTitle: `${String(block?.roleName || '').trim() || '互动'}的卡片`,
         cardHtml: safeHtml,
-        cardOrder: index
+        cardOrder: index,
+        /* ====================================================================
+           [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] HTML 卡片运行时顺序
+           说明：protocolOrder 来自 chat-html-card.js 对 [卡片] 协议原文位置的解析；
+                 仅用于本轮排序，写入 IndexedDB 前会统一剥离。
+           ==================================================================== */
+        __protocolOrder: Number(block?.protocolOrder ?? block?.startIndex ?? index) || 0,
+        __protocolEndIndex: Number(block?.endIndex ?? block?.startIndex ?? index) || 0
       });
     });
   }
@@ -2820,7 +2906,7 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
 
   return enforceAiReplyMessageCount(
     builtMessages.length
-      ? builtMessages
+      ? sortAiMessagesByRuntimeProtocolOrder(builtMessages)
       : [{ role: 'assistant', content: '（AI 没有返回内容）' }],
     state.chatPromptSettings
   );
