@@ -35,15 +35,18 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次需求5] 聊天消息页顶部栏
-   说明：匹配 chat-message.js 的 .msg-top-bar / .msg-top-bar__* 类名。
+   [区域标注·已完成·顶部栏扁平化纯色] 聊天消息页顶部栏
+   说明：
+   1. 仅作用于聊天消息页顶部栏 .msg-top-bar。
+   2. 本次已去除顶部栏渐变背景，改为与消息页统一的纯色扁平化样式。
+   3. 不修改消息气泡、输入栏、设置卡片或其它无关区域。
    ========================================================================== */
 .msg-top-bar {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
+  background: #f8f4ef;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
@@ -1804,31 +1807,53 @@
   overflow: hidden;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·聊天设置页顶部栏扁平化纯色]
+   说明：
+   1. 仅作用于聊天设置页顶部栏 .msg-settings-header。
+   2. 本次已去除顶部栏渐变背景，改为与消息页统一的纯色扁平化样式。
+   3. 不修改聊天设置页卡片、输入控件、开关或其它无关区域。
+   ========================================================================== */
 .msg-settings-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(180deg, #ede7df 0%, #f8f4ef 100%);
+  background: #f8f4ef;
   flex-shrink: 0;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·设置页返回按钮对齐消息页返回按钮]
+   说明：
+   1. 已去除聊天设置页左上角返回按钮的圆形背景。
+   2. 尺寸、图标大小与聊天消息页返回上一级 “<” 按钮保持一致。
+   3. 仅修改聊天设置页顶部栏返回按钮，不影响其它页面按钮。
+   ========================================================================== */
 .msg-settings-header__back {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
-  background: rgba(74, 52, 42, 0.08);
+  background: transparent;
   color: #4A342A;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.msg-settings-header__back:active {
+  background: transparent;
+  opacity: 0.72;
+  transform: scale(0.92);
 }
 
 .msg-settings-header__back svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 .msg-settings-header__title {
