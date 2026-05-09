@@ -413,19 +413,21 @@ function formatMessageTextWithQuoteForPrompt(message = {}, fallbackContent = '',
 }
 
 /* ==========================================================================
-   [区域标注·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复] 旁白历史原文格式化工具
+   [区域标注·已完成·旁白身份锚点与称呼锁定修复] 旁白历史原文格式化工具
    说明：
    1. 短期记忆轮数是唯一边界；本区只格式化调用方已经裁剪好的 history，不扩大历史范围。
    2. 不注入旁白摘要，不剔除旁白原始轮次，不使用 localStorage/sessionStorage，不写双份存储兜底。
-   3. 含旁白的 assistant 历史每条只加一次身份锚定：
-      【旁白身份：你=旁白中的“我”/角色名；用户=旁白中的“你”/用户名；旁白=本轮已发生情景，不是第三人】
-   4. 旁白按当前消息对象保存的 before/after 顺序与正常“你：...”回复穿插，避免把旁白全部堆到每轮最前面。
-   5. 正常模式历史仍使用现有“用户：/你：”格式，不改成泛化 [回复]。
+   3. 含旁白的 assistant 历史每条只加一次身份锚定，并明确“用户：/你：”只是后台消息标签，不能原样搬到旁白正文里。
+   4. 用户若选择第二人称，则旁白正文对用户的称呼固定为“你”；若选择第三人称，则固定为真实用户名。
+   5. 旁白按当前消息对象保存的 before/after 顺序与正常“你：...”回复穿插，避免把旁白全部堆到每轮最前面。
+   6. 正常模式历史仍使用现有“用户：/你：”格式，不改成泛化 [回复]。
    ========================================================================== */
-function getAsideIdentityAnchorForPrompt({ roleName = '', userName = '' } = {}) {
+function getAsideIdentityAnchorForPrompt({ roleName = '', userName = '', asideSettings = null } = {}) {
   const safeRoleName = normalizePlainText(roleName) || '当前角色';
   const safeUserName = normalizePlainText(userName) || '当前用户';
-  return `【旁白身份：你=旁白中的“我”/${safeRoleName}；用户=旁白中的“你”/${safeUserName}；旁白=本轮已发生情景，不是第三人】`;
+  const safeAsideSettings = asideSettings && typeof asideSettings === 'object' ? asideSettings : {};
+  const userRef = safeAsideSettings.userPerson === 'third' ? safeUserName : '你';
+  return `【旁白身份锚点：旁白里的“我”=${safeRoleName}；旁白正文里对话对象称呼=${userRef}；历史里的“用户：/你：”只是后台消息标签，不是旁白正文称呼；旁白=本轮已发生情景，不是第三人】`;
 }
 
 function normalizeAsideSegmentsForPrompt(message = {}) {
@@ -726,6 +728,23 @@ function getCurrentMask(context = {}) {
   const activeMaskId = context.activeMaskId || context.archiveData?.activeMaskId || '';
   const masks = Array.isArray(context.archiveData?.masks) ? context.archiveData.masks : [];
   return masks.find(item => String(item?.id || '') === String(activeMaskId)) || context.currentMask || null;
+}
+
+function getAsidePromptIdentityNames(context = {}) {
+  const character = context.currentCharacter || getCurrentCharacter(context);
+  const mask = context.currentMask || getCurrentMask(context);
+  const roleName = normalizePlainText(
+    character?.name
+    || context.currentContact?.name
+    || context.currentSession?.name
+    || context.roleName
+  ) || '角色';
+  const userName = normalizePlainText(
+    mask?.name
+    || context.userName
+  ) || '用户';
+
+  return { roleName, userName };
 }
 
 /* ==========================================================================
@@ -1730,7 +1749,7 @@ export function getTimeAwarenessPrompt({ enabled = false, context = {} } = {}) {
    4. 本区已完成最近心声状态短期上下文修复：只在调用方已裁剪的短期历史内，给最近一条带 innerVoice 的 assistant 消息追加极短 [最近心声]状态/动作[/最近心声]。
    5. 更早轮次的 innerVoice 不追加；不扩大历史范围，不读取独立心声历史，不新增存储，不使用 localStorage/sessionStorage，不做双份兜底或长文本字段过滤。
    ========================================================================== */
-export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false, roleName = '', userName = '' } = {}) {
+export function getChatHistory({ history = [], includeTimestamps = false, includeHistoryVision = false, roleName = '', userName = '', asideSettings = null } = {}) {
   if (!Array.isArray(history)) return [];
 
   const normalizedHistory = history.filter(item => item && (item.role === 'user' || item.role === 'assistant'));
@@ -1764,7 +1783,8 @@ export function getChatHistory({ history = [], includeTimestamps = false, includ
       const formattedHistoryText = formatAsideAwareMessageTextWithQuoteForPrompt(item, baseContent, {
         includeReferenceMeta: false,
         roleName,
-        userName
+        userName,
+        asideSettings
       });
       const recentInnerVoiceState = index === latestInnerVoiceAssistantIndex
         ? formatRecentInnerVoiceStateForPrompt(item)
@@ -1894,10 +1914,13 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
        3. asideSettings / roleName / userName 由 chat-message.js 通过 context 传入。
     */
     runtimeContext.asideModeActive
-      ? buildAsideModeSystemPrompt(runtimeContext.asideSettings || {}, {
-          roleName: runtimeContext.roleName || '',
-          userName: runtimeContext.userName || ''
-        })
+      ? (() => {
+          const asideIdentity = getAsidePromptIdentityNames(runtimeContext);
+          return buildAsideModeSystemPrompt(runtimeContext.asideSettings || {}, {
+            roleName: asideIdentity.roleName,
+            userName: asideIdentity.userName
+          });
+        })()
       : '',
     /* ===== [区域标注·已完成·旁白模式] 旁白模式系统提示词注入 END ===== */
     getThinkingInstruction({ settings: normalizedSettings })
@@ -1924,12 +1947,15 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
     messages.push({ role: 'system', content: systemPrompt });
   }
 
+  const asideIdentity = getAsidePromptIdentityNames(context);
+
   messages.push(...getChatHistory({
     history: historyForPrompt,
     /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入"按轮时间轴摘要"。 */
     includeTimestamps: false,
-    roleName: context.roleName || '',
-    userName: context.userName || ''
+    roleName: asideIdentity.roleName,
+    userName: asideIdentity.userName,
+    asideSettings: context.asideSettings || null
   }));
 
   const currentCommand = getCurrentCommand({ settings: normalizedSettings });
