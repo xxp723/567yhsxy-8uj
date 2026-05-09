@@ -1096,8 +1096,12 @@ export function getUserPersona(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 4] 角色记忆
-   说明：把当前会话、联系人备注等可读信息整理给 AI；预留给后续长期记忆系统。
+   [提示词区域 4·已完成·角色记忆 / 长期记忆 / 短期记忆说明]
+   说明：
+   1. 本区域负责当前会话、联系人备注等角色记忆，并作为后续长期记忆入口。
+   2. 本区域同时注入短期记忆说明，让 AI 知道随后追加的 user/assistant 历史是最近短期对话历史。
+   3. 短期历史正文不塞进本 system 区域，仍由 buildChatMessages -> getChatHistory 以真实 user/assistant messages 追加。
+   4. 本区只处理本轮请求提示词；不读写持久化存储，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function getMemories(context = {}) {
   const lines = [];
@@ -1123,7 +1127,12 @@ export function getMemories(context = {}) {
     if (contactText) lines.push(`联系人资料：\n${contactText}`);
   }
 
-  return createPromptSection('角色记忆', lines.join('\n\n'));
+  const shortTermMemoryNotice = buildShortTermMemoryNotice(context.history);
+
+  return createPromptSection('角色记忆 / 长期记忆 / 短期记忆说明', [
+    lines.join('\n\n'),
+    shortTermMemoryNotice
+  ].filter(Boolean).join('\n\n'));
 }
 
 /* ==========================================================================
@@ -1805,6 +1814,31 @@ export function getChatHistory({ history = [], includeTimestamps = false, includ
 }
 
 /* ==========================================================================
+   [区域标注·已完成·提示词区域4短期记忆说明]
+   说明：
+   1. 本提示由 getMemories(context) 注入到【角色记忆 / 长期记忆 / 短期记忆说明】区域。
+   2. 只在调用方已经传入短期历史时输出，告诉 AI system 后紧接着的 history 是最近短期对话历史。
+   3. 短期记忆范围仍由 chat-message.js 按“真实对话轮”裁剪；本区不扩大历史范围、不重新裁剪。
+   4. 短期历史正文仍保持 user/assistant messages，不塞进 system 文本；本区只解释其用途。
+   5. 本区只处理本轮请求提示词；不读写持久化存储，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function buildShortTermMemoryNotice(history = []) {
+  const historyMessageCount = Array.isArray(history)
+    ? history.filter(item => item && (item.role === 'user' || item.role === 'assistant')).length
+    : 0;
+
+  if (!historyMessageCount) return '';
+
+  return [
+    '短期记忆说明：',
+    '下面紧接着的 user/assistant 消息是本次请求携带的最近短期对话历史，已由前端按“对话轮”从旧到新截取。',
+    '这些历史用于承接你和用户刚才的聊天记忆；回答涉及过去对话、时间、约定、事件，或用户问“刚才/第一轮/之前说过什么”时，必须优先在这些短期历史中查找依据。',
+    '如果短期历史里没有依据，必须自然说明不确定或询问用户补充，禁止编造不存在的旧对话细节。',
+    '历史里的“用户：/你：”只是后台说话人标签，不要原样复制到最终回复里。'
+  ].join('\n');
+}
+
+/* ==========================================================================
    [提示词区域 10] 当前指令
    说明：来自聊天消息界面设置页的“当前指令”区域。
    ========================================================================== */
@@ -1940,9 +1974,9 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
 }
 
 /* ==========================================================================
-   [核心函数·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复] buildChatMessages
+   [核心函数·已完成·需求1·旁白短期记忆原文发送、身份锚定与顺序保持修复；已完成·提示词区域4短期记忆说明归位] buildChatMessages
    说明：
-   1. 第一条为 system。
+   1. 第一条为 system；短期记忆说明已归入提示词区域 4，短期历史正文仍在 system 后按 user/assistant messages 追加。
    2. 追加调用方已经按短期记忆轮数裁剪好的原始历史；短期轮数是唯一边界。
    3. 不再注入旁白历史摘要，也不再剔除带旁白的原始轮次，避免 AI 收不到上一轮/近 50 轮真实上下文。
    4. 含旁白的 assistant 历史由 getChatHistory 保留旁白原文、身份锚定和 before/after 穿插顺序。
@@ -1961,6 +1995,13 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
 
   const asideIdentity = getAsidePromptIdentityNames(context);
 
+  /* ========================================================================
+     [区域标注·已完成·提示词区域4短期记忆说明归位] 短期历史正文追加
+     说明：
+     1. historyForPrompt 已由 chat-message.js 先按最近 N 轮选择，再展开为 API 需要的扁平消息数组。
+     2. 这里仅把已裁剪历史格式化为 user/assistant messages，不按消息条数二次截断。
+     3. 短期记忆说明已由 getMemories(context) 放入提示词区域 4，本区只负责追加历史正文。
+     ======================================================================== */
   messages.push(...getChatHistory({
     history: historyForPrompt,
     /* [区域标注·已更新·需求1·时间感知降token] 不再给历史每条消息正文追加时间戳，改由时间感知区域统一注入"按轮时间轴摘要"。 */

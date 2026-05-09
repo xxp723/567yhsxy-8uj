@@ -3873,39 +3873,57 @@ export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMem
     };
   }
 
+  const toHistoryPromptItem = (item = {}) => ({
+    /* ======================================================================
+       [区域标注·已完成·AI引用回复] 历史消息可引用 ID
+       说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用短期记忆范围内的消息；不新增存储。
+       ====================================================================== */
+    id: item.id || '',
+    role: item.role,
+    content: getAiVisibleContentForMessage(item, { historySummary: true }),
+    quote: item.quote || null,
+    type: item.type || '',
+    stickerUrl: item.stickerUrl || '',
+    stickerName: item.stickerName || '',
+    imageUrl: item.imageUrl || '',
+    imageName: item.imageName || '',
+    /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
+    timestamp: Number(item.timestamp || 0) || 0
+  });
+
+  /* ========================================================================
+     [区域标注·已完成·本次短期记忆按轮截取修复] 历史消息按真实对话轮分组
+     说明：
+     1. 一轮 = 连续用户消息组 + 随后 AI 返回消息组；用户连续发多条不拆轮，AI 多气泡回复也不拆轮。
+     2. 短期记忆设置 shortTermMemoryRounds 表示“历史轮数”，不是“历史消息条数”。
+     3. 这里先按轮选择最近 N 轮，再展开为 prompt.js/API 需要的扁平 messages 数组。
+     4. 本区只处理运行时请求上下文，不新增持久化存储，不使用 localStorage/sessionStorage。
+     ======================================================================== */
   const rounds = [];
   let current = [];
+  let currentHasAssistantMessages = false;
+
   previous.forEach(item => {
-    if (item.role === 'user' && current.length) {
+    if (item.role === 'user' && current.length && currentHasAssistantMessages) {
       rounds.push(current);
       current = [];
+      currentHasAssistantMessages = false;
     }
-    current.push({
-      /* ======================================================================
-         [区域标注·已完成·AI引用回复] 历史消息可引用 ID
-         说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用短期记忆范围内的消息；不新增存储。
-         ====================================================================== */
-      id: item.id || '',
-      role: item.role,
-      content: getAiVisibleContentForMessage(item, { historySummary: true }),
-      quote: item.quote || null,
-      type: item.type || '',
-      stickerUrl: item.stickerUrl || '',
-      stickerName: item.stickerName || '',
-      imageUrl: item.imageUrl || '',
-      imageName: item.imageName || '',
-      /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
-      timestamp: Number(item.timestamp || 0) || 0
-    });
+
+    current.push(toHistoryPromptItem(item));
+
+    if (item.role === 'assistant') {
+      currentHasAssistantMessages = true;
+    }
   });
   if (current.length) rounds.push(current);
 
   /* ========================================================================
-     [区域标注·已完成·需求1·短期记忆日志统计]
+     [区域标注·已完成·本次短期记忆按轮截取修复] 短期记忆日志统计
      说明：
-     1. selectedHistoryRounds 是本次短期记忆实际携带的历史轮次数组。
-     2. historyMessageCount 仍按最终 history 消息条数显示，方便排查 token 与气泡拆分数量。
-     3. 这里只增加控制台日志元数据，不改变 history 扁平化结果，也不改变发送给 AI 的短期记忆内容。
+     1. selectedHistoryRounds 是本次短期记忆实际携带的历史轮次数组，historyRoundCount 按“轮”统计。
+     2. historyMessageCount 按最终展开后的 history 消息条数统计，仅用于排查 token 与气泡拆分数量。
+     3. 发送给 AI 时仍是扁平 messages 数组，但截取边界已按“最近 N 轮历史”计算，不再按 N 条消息卡掉早期轮次。
      ======================================================================== */
   const selectedHistoryRounds = rounds.slice(-roundLimit);
   const selectedHistoryMessages = selectedHistoryRounds.flat();
