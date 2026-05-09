@@ -19,10 +19,38 @@ import { TAB_ICONS, escapeHtml, renderModalNotice } from './chat-utils.js';
 
 const TEXT_IMAGE_ICON = `<svg viewBox="0 0 48 48" fill="none"><path d="M8 8h32v32H8V8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M15 17h18M15 24h18M15 31h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M36 34l4 6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`;
 
+/* ==========================================================================
+   [区域标注·已完成·本次文字图掉格式解析增强]
+   说明：
+   1. 前端增强 AI / 用户文字图内容清洗，兼容轻微掉格式：`[文字图]`、`【文字图】`、Markdown 包裹、说明头、角色名前缀等。
+   2. 只清理文字图协议残片与包装噪音，尽量保留正文内部换行排版，不改持久化结构。
+   3. 不使用 localStorage/sessionStorage，不做双份兜底；消息落库仍由调用方统一走 DB.js / IndexedDB。
+   ========================================================================== */
 function normalizeTextImageText(value = '') {
-  return String(value || '')
+  let text = String(value || '')
     .replace(/\r\n/g, '\n')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .trim();
+
+  text = text
+    .replace(/^```(?:text|txt|md|markdown)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  text = text
+    .replace(/^\s*(?:\*\*)?\s*`?\s*(?:\[\s*文字图\s*\]|【\s*文字图\s*】)\s*`?(?:\*\*)?\s*/i, '')
+    .replace(/^\s*(?:以下是|这是|生成的|输出的)?\s*(?:文字图|图片内容|正文内容|内容正文)\s*[：:]\s*/i, '')
+    .replace(/^\s*[^：:\n`*]{1,40}\s*[：:]\s*(?=\S)/, '')
+    .replace(/^\s*(?:内容|正文|文本|图中文字)\s*[：:]\s*/i, '')
+    .trim();
+
+  text = text
+    .replace(/^[`"'“”‘’]+|[`"'“”‘’]+$/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
 }
 
 export function isTextImageMessage(message = {}) {

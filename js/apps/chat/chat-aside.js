@@ -262,16 +262,28 @@ export function showAsideExitConfirmModal(container) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白模式] 旁白气泡 HTML（居中加粗）
+   [区域标注·已完成·本次旁白功能栏接入] 旁白气泡 HTML（居中加粗 + 复用普通消息功能栏）
    说明：
-   1. 旁白放置在聊天消息界面中央，字体加粗，区别于消息气泡内的字体。
-   2. data-aside-id 标记旁白 ID，方便定位。
+   1. 旁白仍放置在聊天消息界面中央，字体加粗，区别于普通消息气泡正文。
+   2. 本区已接入与普通消息一致的选择态入口：支持 data-action="msg-bubble-select" 与 data-message-id。
+   3. 旁白功能栏本身仍由 chat-message.js 按当前 owner message 的运行时状态生成，这里只负责承载与渲染。
+   4. 不新增独立旁白消息对象，不改持久化结构，不使用 localStorage/sessionStorage。
    ========================================================================== */
-export function renderAsideBubbleHtml(asideText, asideId = '') {
+export function renderAsideBubbleHtml(asideText, asideId = '', options = {}) {
   const text = String(asideText || '').trim();
   if (!text) return '';
+
+  const ownerMessageId = String(options?.ownerMessageId || '').trim();
+  const toolbarHtml = String(options?.toolbarHtml || '');
+  const isToolbarOpen = Boolean(options?.isToolbarOpen);
+  const isSelectable = Boolean(ownerMessageId);
+  const selectableAttrs = isSelectable
+    ? ` data-message-id="${escapeHtml(ownerMessageId)}" data-action="msg-bubble-select"`
+    : '';
+
   return `
-    <div class="msg-aside-bubble" data-aside-id="${escapeHtml(asideId)}">
+    <div class="msg-aside-bubble ${isToolbarOpen ? 'is-action-open' : ''}" data-aside-id="${escapeHtml(asideId)}"${selectableAttrs}>
+      ${toolbarHtml}
       <div class="msg-aside-bubble__text">${escapeHtml(text)}</div>
     </div>
   `;

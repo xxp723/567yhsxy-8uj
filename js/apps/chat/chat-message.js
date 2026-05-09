@@ -715,18 +715,47 @@ function getAsideSegmentsFromMessage(message = {}) {
     : [];
 }
 
-function renderMessageAsideHtml(message = {}, placement = 'before') {
+function hasRenderableAsideContent(message = {}) {
+  return getAsideSegmentsFromMessage(message).length > 0;
+}
+
+/* ========================================================================
+   [区域标注·已完成·本次旁白功能栏接入] 旁白复用普通消息功能栏 HTML
+   说明：
+   1. 旁白不新增独立 action 体系，直接复用所属 assistant 消息现有 toolbar 按钮与 data-action。
+   2. 这里只抽取普通消息气泡已生成好的 .msg-bubble-toolbar，保证按钮样式、图标、交互与普通气泡完全一致。
+   3. 不新增持久化字段，不使用 localStorage/sessionStorage。
+   ======================================================================== */
+function renderAsideToolbarHtml(message = {}, chatSession, options = {}) {
+  const holder = document.createElement('div');
+  holder.innerHTML = renderMessageBubble(message, chatSession, options).trim();
+  return holder.querySelector('[data-role="msg-bubble-toolbar"]')?.outerHTML || '';
+}
+
+function renderMessageAsideHtml(message = {}, placement = 'before', chatSession = {}, options = {}) {
   const targetPlacement = placement === 'after' ? 'after' : 'before';
+  const messageId = String(message?.id || '').trim();
+  const isToolbarOpen = !Boolean(options.multiSelectMode) && String(options.selectedMessageId || '') === messageId;
+  const toolbarHtml = isToolbarOpen ? renderAsideToolbarHtml(message, chatSession, options) : '';
+
   return getAsideSegmentsFromMessage(message)
     .filter(segment => segment.placement === targetPlacement)
-    .map((segment, index) => renderAsideBubbleHtml(segment.text, `${String(segment.id || message?.id || 'aside')}_${targetPlacement}_${index + 1}`))
+    .map((segment, index) => renderAsideBubbleHtml(
+      segment.text,
+      `${String(segment.id || message?.id || 'aside')}_${targetPlacement}_${index + 1}`,
+      {
+        ownerMessageId: messageId,
+        isToolbarOpen,
+        toolbarHtml
+      }
+    ))
     .join('');
 }
 
 function renderMessageWithAsideHtml(message, chatSession, options = {}) {
-  const beforeAsideHtml = renderMessageAsideHtml(message, 'before');
+  const beforeAsideHtml = renderMessageAsideHtml(message, 'before', chatSession, options);
   const bubbleHtml = renderMessageBubble(message, chatSession, options);
-  const afterAsideHtml = renderMessageAsideHtml(message, 'after');
+  const afterAsideHtml = renderMessageAsideHtml(message, 'after', chatSession, options);
   return `${beforeAsideHtml}${bubbleHtml}${afterAsideHtml}`;
 }
 
@@ -1093,9 +1122,26 @@ function renderChatMessageListHtml(session = {}, messages = [], options = {}) {
       }
 
       const runAsideHtml = run
-        .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => segment.text))
-        .filter(Boolean)
-        .map((text, asideIndex) => renderAsideBubbleHtml(text, `${String(run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`))
+        .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => ({
+          ownerMessageId: String(item?.id || '').trim(),
+          segment
+        })))
+        .filter(item => item.segment?.text)
+        .map((item, asideIndex) => {
+          const ownerMessageId = String(item.ownerMessageId || '').trim();
+          const isToolbarOpen = !Boolean(options.multiSelectMode) && String(options.selectedMessageId || '') === ownerMessageId;
+          return renderAsideBubbleHtml(
+            item.segment.text,
+            `${String(item.segment.id || run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`,
+            {
+              ownerMessageId,
+              isToolbarOpen,
+              toolbarHtml: isToolbarOpen
+                ? renderAsideToolbarHtml(run.find(message => String(message?.id || '') === ownerMessageId) || {}, session, options)
+                : ''
+            }
+          );
+        })
         .join('');
 
       if (runAsideHtml) parts.push(runAsideHtml);
@@ -1743,7 +1789,7 @@ function bindAsideSegmentsToAiMessages(aiMessages = [], asideSegments = [], disp
   }
 
   const source = String(rawTextWithAside || '');
-  const protocolMarkerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音)\s*】)\s*/g;
+  const protocolMarkerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音|文字图)\s*】)\s*/g;
   const protocolMarkers = [...source.matchAll(protocolMarkerRegex)]
     .map(match => Number(match.index || 0))
     .sort((a, b) => a - b);
@@ -2680,11 +2726,11 @@ export function extractAiProtocolBlocks(rawText) {
      [区域标注·已完成·本次语音掉格式强容错解析] 宽松协议头识别
      说明：
      1. 协议头仅要求出现 [类型]，不再强依赖“角色名：”紧跟在后。
-     2. [语音] 支持 `[ 语音 ]` 与 `【语音】`，AI 掉 Markdown/空格/全角括号时仍会进入语音解析。
+     2. [语音] / [文字图] 同时支持方括号与全角书名号写法：`[ 语音 ]` / `[ 文字图 ]` / `【语音】` / `【文字图】`。
      3. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
      4. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
      ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音)\s*】)\s*/g;
+  const markerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音|文字图)\s*】)\s*/g;
   const matches = [...visibleText.matchAll(markerRegex)];
   if (!matches.length) return [];
 
@@ -2750,6 +2796,20 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
           voiceExpanded: false,
           ...voicePayload
         }], state.chatPromptSettings);
+      }
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·本次文字图掉格式解析增强] 无标准协议块时的文字图兜底解析
+       说明：
+       1. 当模型仍输出 `[文字图]` / `【文字图】`，但整体格式不足以进入标准协议块识别时，前端仍尝试转成文字图气泡。
+       2. 仅在 textImageProtocolEnabled=true 时启用；生图 API 开启后依旧丢弃文字图协议，避免双份视觉通道。
+       3. 文字图内容清洗复用 chat-text-image.js 的 createAiTextImageMessageFromProtocol / normalizeTextImageText，不改持久化结构。
+       ====================================================================== */
+    if (textImageProtocolEnabled && /(?:\[\s*文字图\s*\]|【\s*文字图\s*】)/i.test(String(rawText || ''))) {
+      const textImageMessage = createAiTextImageMessageFromProtocol(rawText);
+      if (textImageMessage) {
+        return enforceAiReplyMessageCount([textImageMessage], state.chatPromptSettings);
       }
     }
 
@@ -3448,12 +3508,29 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
   if (!listArea || !session) return false;
 
   const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
+  const shouldRefreshWholeListForAside = uniqueIds.some(messageId => {
+    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+    return hasRenderableAsideContent(message);
+  });
+
+  /* ======================================================================
+     [区域标注·已完成·本次旁白功能栏接入] 旁白选择态整列表刷新
+     说明：
+     1. 旁白会复用所属消息的 data-message-id；若仍按单个 row querySelector 局部替换，top 模式下可能先命中旁白节点。
+     2. 当目标消息带有旁白时，直接刷新当前消息列表区域，让旁白与所属普通消息的功能栏同步开合，避免误替换节点与闪屏。
+     3. 只重绘消息列表，不重建整页壳子；不涉及任何持久化存储。
+     ====================================================================== */
+  if (shouldRefreshWholeListForAside) {
+    refreshCurrentMessageListOnly(container, state);
+    return true;
+  }
+
   uniqueIds.forEach(messageId => {
     /* ======================================================================
        [区域标注·已完成·系统提示小字删除] 局部刷新支持系统提示行
        说明：普通气泡和中间系统提示都通过 data-message-id 局部替换，不重绘整页。
        ====================================================================== */
-    const row = listArea.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"], .msg-transfer-system-row[data-message-id="${CSS.escape(messageId)}"]`);
     const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
     if (!row || !message) return;
 
