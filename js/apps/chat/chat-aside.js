@@ -274,15 +274,19 @@ export function renderAsideBubbleHtml(asideText, asideId = '', options = {}) {
   if (!text) return '';
 
   const ownerMessageId = String(options?.ownerMessageId || '').trim();
+  const asideSegmentId = String(options?.asideSegmentId || '').trim();
   const toolbarHtml = String(options?.toolbarHtml || '');
   const isToolbarOpen = Boolean(options?.isToolbarOpen);
   const isSelectable = Boolean(ownerMessageId);
   const selectableAttrs = isSelectable
     ? ` data-message-id="${escapeHtml(ownerMessageId)}" data-action="msg-bubble-select"`
     : '';
+  const asideSegmentAttr = asideSegmentId
+    ? ` data-aside-segment-id="${escapeHtml(asideSegmentId)}"`
+    : '';
 
   return `
-    <div class="msg-aside-bubble ${isToolbarOpen ? 'is-action-open' : ''}" data-aside-id="${escapeHtml(asideId)}"${selectableAttrs}>
+    <div class="msg-aside-bubble ${isToolbarOpen ? 'is-action-open' : ''}" data-aside-id="${escapeHtml(asideId)}"${asideSegmentAttr}${selectableAttrs}>
       ${toolbarHtml}
       <div class="msg-aside-bubble__text">${escapeHtml(text)}</div>
     </div>

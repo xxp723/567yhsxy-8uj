@@ -720,11 +720,12 @@ function hasRenderableAsideContent(message = {}) {
 }
 
 /* ========================================================================
-   [区域标注·已完成·本次旁白功能栏接入] 旁白复用普通消息功能栏 HTML
+   [区域标注·已完成·本次旁白功能栏编辑指向修复] 旁白复用普通消息功能栏 HTML
    说明：
-   1. 旁白不新增独立 action 体系，直接复用所属 assistant 消息现有 toolbar 按钮与 data-action。
-   2. 这里只抽取普通消息气泡已生成好的 .msg-bubble-toolbar，保证按钮样式、图标、交互与普通气泡完全一致。
-   3. 不新增持久化字段，不使用 localStorage/sessionStorage。
+   1. 旁白仍复用所属 assistant 消息现有 toolbar 样式、IconPark 图标与按钮布局，保持与普通气泡一致。
+   2. 本区已按真实旁白段 id 精确控制工具栏开合：点击普通消息只显示普通气泡功能栏，点击旁白只显示该段旁白功能栏。
+   3. 旁白工具栏里的“编辑”由 index.js 根据 .msg-aside-bubble 拦截为旁白专用编辑，不再误编辑 owner 消息正文。
+   4. 不新增独立旁白消息对象，不改持久化结构，不使用 localStorage/sessionStorage。
    ======================================================================== */
 function renderAsideToolbarHtml(message = {}, chatSession, options = {}) {
   const holder = document.createElement('div');
@@ -735,20 +736,28 @@ function renderAsideToolbarHtml(message = {}, chatSession, options = {}) {
 function renderMessageAsideHtml(message = {}, placement = 'before', chatSession = {}, options = {}) {
   const targetPlacement = placement === 'after' ? 'after' : 'before';
   const messageId = String(message?.id || '').trim();
-  const isToolbarOpen = !Boolean(options.multiSelectMode) && String(options.selectedMessageId || '') === messageId;
-  const toolbarHtml = isToolbarOpen ? renderAsideToolbarHtml(message, chatSession, options) : '';
+  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
 
   return getAsideSegmentsFromMessage(message)
     .filter(segment => segment.placement === targetPlacement)
-    .map((segment, index) => renderAsideBubbleHtml(
-      segment.text,
-      `${String(segment.id || message?.id || 'aside')}_${targetPlacement}_${index + 1}`,
-      {
-        ownerMessageId: messageId,
-        isToolbarOpen,
-        toolbarHtml
-      }
-    ))
+    .map((segment, index) => {
+      const asideSegmentId = String(segment.id || `${message?.id || 'aside'}_${index + 1}`);
+      const isToolbarOpen = !Boolean(options.multiSelectMode)
+        && String(options.selectedMessageId || '') === messageId
+        && selectedAsideSegmentId === asideSegmentId;
+      const toolbarHtml = isToolbarOpen ? renderAsideToolbarHtml(message, chatSession, options) : '';
+
+      return renderAsideBubbleHtml(
+        segment.text,
+        `${asideSegmentId}_${targetPlacement}_${index + 1}`,
+        {
+          ownerMessageId: messageId,
+          asideSegmentId,
+          isToolbarOpen,
+          toolbarHtml
+        }
+      );
+    })
     .join('');
 }
 
@@ -766,6 +775,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const userAvatar = userProfile.avatar || '';
   const userName = userProfile.nickname || '我';
   const selectedMessageId = String(options.selectedMessageId || '');
+  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
   const multiSelectMode = Boolean(options.multiSelectMode);
   /* ===== 闲谈：删除消息二次确认 START ===== */
@@ -780,7 +790,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const messageId = String(msg?.id || '');
   const isUser = msg?.role === 'user';
   const isAssistant = msg?.role === 'assistant' || msg?.role === 'other';
-  const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId;
+  const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId && !selectedAsideSegmentId;
   const isSelected = selectedMessageIds.includes(messageId);
   /* ===== 闲谈：删除消息二次确认 START ===== */
   const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
@@ -1129,12 +1139,16 @@ function renderChatMessageListHtml(session = {}, messages = [], options = {}) {
         .filter(item => item.segment?.text)
         .map((item, asideIndex) => {
           const ownerMessageId = String(item.ownerMessageId || '').trim();
-          const isToolbarOpen = !Boolean(options.multiSelectMode) && String(options.selectedMessageId || '') === ownerMessageId;
+          const asideSegmentId = String(item.segment?.id || `${run[0]?.id || 'aside_run'}_${asideIndex + 1}`);
+          const isToolbarOpen = !Boolean(options.multiSelectMode)
+            && String(options.selectedMessageId || '') === ownerMessageId
+            && String(options.selectedAsideSegmentId || '').trim() === asideSegmentId;
           return renderAsideBubbleHtml(
             item.segment.text,
-            `${String(item.segment.id || run[0]?.id || 'aside_run')}_top_${asideIndex + 1}`,
+            `${asideSegmentId}_top_${asideIndex + 1}`,
             {
               ownerMessageId,
+              asideSegmentId,
               isToolbarOpen,
               toolbarHtml: isToolbarOpen
                 ? renderAsideToolbarHtml(run.find(message => String(message?.id || '') === ownerMessageId) || {}, session, options)
@@ -3307,6 +3321,7 @@ export function renderCurrentChatMessage(container, state, options = {}) {
 
     /* [区域标注·本次需求5] 消息气泡功能栏与多选状态 */
     selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     /* ===== 闲谈：删除消息二次确认 START ===== */
@@ -3459,6 +3474,7 @@ export function appendCurrentMessageBubble(container, state, message) {
   listArea.insertAdjacentHTML('beforeend', renderMessageWithAsideHtml(message, session, {
     userProfile: state.profile,
     selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     asideDisplayMode: state.asideSettings?.displayMode || 'top',
@@ -3497,6 +3513,7 @@ function syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, stat
   holder.innerHTML = renderMessageBubble(message, session, {
     userProfile: state.profile,
     selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     deleteConfirmMessageId: state.deleteConfirmMessageId,
@@ -3567,6 +3584,7 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
     row.outerHTML = renderMessageBubble(message, session, {
       userProfile: state.profile,
       selectedMessageId: state.selectedMessageId,
+      selectedAsideSegmentId: state.selectedAsideSegmentId,
       multiSelectMode: state.multiSelectMode,
       selectedMessageIds: state.selectedMessageIds,
       deleteConfirmMessageId: state.deleteConfirmMessageId,
@@ -3591,6 +3609,7 @@ export function refreshCurrentMessageListOnly(container, state) {
   listArea.innerHTML = renderChatMessageListHtml(session, state.currentMessages, {
     userProfile: state.profile,
     selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,
     selectedMessageIds: state.selectedMessageIds,
     asideDisplayMode: state.asideSettings?.displayMode || 'top',
@@ -3616,6 +3635,11 @@ export function updateMultiSelectActionBar(container, state) {
 /* ========================================================================== */
 export function resetMessageSelectionState(state) {
   state.selectedMessageId = '';
+  /* ========================================================================
+     [区域标注·已完成·本次旁白功能栏编辑指向修复] 重置旁白段选中态
+     说明：清空当前选中的旁白段 id，避免关闭/切换选择后旁白工具栏残留。
+     ======================================================================== */
+  state.selectedAsideSegmentId = '';
   state.multiSelectMode = false;
   state.selectedMessageIds = [];
   /* ===== 闲谈：删除消息二次确认 START ===== */
@@ -4934,7 +4958,10 @@ export function showEditMessageModal(container, state, messageId) {
   if (!mask || !panel || !message) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·气泡编辑弹窗] 编辑聊天气泡文字，不使用原生弹窗 -->
+    <!-- ======================================================================
+         [区域标注·已完成·普通气泡编辑弹窗] 编辑聊天气泡正文
+         说明：仅编辑 message.content；旁白编辑请看下方 showEditAsideModal。
+         ====================================================================== -->
     <div class="chat-modal-header">
       <span>编辑消息</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -4950,6 +4977,44 @@ export function showEditMessageModal(container, state, messageId) {
   `;
   mask.classList.remove('is-hidden');
   setTimeout(() => panel.querySelector('[data-role="edit-message-content-input"]')?.focus(), 30);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次旁白编辑弹窗指向修复] 旁白专用编辑弹窗
+   说明：
+   1. 只读取并编辑 owner 消息上的 asideSegments[].text / 兼容 asideText，不读取 message.content。
+   2. 弹窗沿用闲谈应用 chat-modal 主题样式，不使用浏览器原生弹窗或原生选择器。
+   3. 保存 action 为 confirm-edit-aside，由 index.js 写回 currentMessages 并通过 DB.js / IndexedDB 持久化。
+   ========================================================================== */
+export function showEditAsideModal(container, state, messageId, asideSegmentId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const message = (state.currentMessages || []).find(item => String(item.id) === String(messageId));
+  const safeAsideSegmentId = String(asideSegmentId || '').trim();
+  const asideSegment = getAsideSegmentsFromMessage(message)
+    .find(segment => String(segment.id || '') === safeAsideSegmentId);
+  if (!mask || !panel || !message || !asideSegment) return;
+
+  panel.innerHTML = `
+    <!-- ======================================================================
+         [区域标注·已完成·本次旁白编辑弹窗指向修复] 编辑旁白内容
+         说明：此弹窗只编辑当前旁白段文本，不会改动所属 AI 消息正文 content。
+         ====================================================================== -->
+    <div class="chat-modal-header">
+      <span>编辑旁白</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <textarea class="chat-modal-search" data-role="edit-aside-content-input" maxlength="2000" style="min-height:108px;resize:none;">${escapeHtml(asideSegment.text || '')}</textarea>
+      <div class="chat-modal-notice" data-role="modal-notice"></div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-edit-aside" data-message-id="${escapeHtml(messageId)}" data-aside-segment-id="${escapeHtml(safeAsideSegmentId)}" type="button">保存</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  setTimeout(() => panel.querySelector('[data-role="edit-aside-content-input"]')?.focus(), 30);
 }
 
 /* ========================================================================== */

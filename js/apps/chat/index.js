@@ -106,6 +106,7 @@ import {
   showUserWithdrawMessageModal,
   showAiFormatRepairResultModal,
   showEditMessageModal,
+  showEditAsideModal,
   showForwardMessagesModal,
   showMessageImageModal,
   showMessageTransferModal,
@@ -599,6 +600,13 @@ export async function mount(container, context) {
        说明：仅保存在运行时；消息持久化仍只写 DB.js / IndexedDB。
        ========================================================================== */
     selectedMessageId: '',
+    /* ========================================================================
+       [区域标注·已完成·本次旁白功能栏编辑指向修复] 当前选中的旁白段 id
+       说明：
+       1. 用于区分当前打开工具栏的是普通消息气泡还是旁白气泡。
+       2. 仅运行时保存，不写入 DB.js / IndexedDB。
+       ======================================================================== */
+    selectedAsideSegmentId: '',
     multiSelectMode: false,
     selectedMessageIds: [],
     /* ===== 闲谈：删除消息二次确认 START ===== */
@@ -1390,6 +1398,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     }
     const shouldOnlyClose = !['msg-bubble-select', 'msg-system-tip-select'].includes(clickedAction) || clickedMessageId === openedMessageId;
     state.selectedMessageId = '';
+    state.selectedAsideSegmentId = '';
     state.deleteConfirmMessageId = '';
     state.rewindConfirmMessageId = '';
     refreshMessageBubbleRows(container, state, [openedMessageId, previousDeleteConfirmId, previousRewindConfirmId, clickedMessageId]);
@@ -2674,6 +2683,15 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
     case 'msg-bubble-select': {
       const messageId = String(target.dataset.messageId || '');
       if (!messageId) break;
+      /* ======================================================================
+         [区域标注·已完成·本次旁白功能栏编辑指向修复] 区分旁白段与普通消息气泡选中态
+         说明：
+         1. 点击旁白气泡时记录真实旁白段 id，只打开该旁白的功能栏。
+         2. 点击普通消息气泡时清空 selectedAsideSegmentId，只打开普通消息功能栏。
+         3. 所有状态仅保存在运行时，不写入 DB.js / IndexedDB。
+         ====================================================================== */
+      const asideBubble = target.closest('.msg-aside-bubble');
+      const asideSegmentId = String(asideBubble?.dataset?.asideSegmentId || '').trim();
       /* ===== 闲谈：气泡功能区局部刷新防闪屏 START ===== */
       const previousSelectedId = state.selectedMessageId;
       const previousDeleteConfirmId = state.deleteConfirmMessageId;
@@ -2681,6 +2699,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       state.multiSelectMode = false;
       state.selectedMessageIds = [];
       state.selectedMessageId = messageId;
+      state.selectedAsideSegmentId = asideSegmentId;
       state.deleteConfirmMessageId = '';
       state.rewindConfirmMessageId = '';
       refreshMessageBubbleRows(container, state, [previousSelectedId, previousDeleteConfirmId, previousRewindConfirmId, messageId]);
@@ -2801,6 +2820,23 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
        ========================================================================== */
     case 'msg-bubble-edit': {
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
+      const asideBubble = target.closest('.msg-aside-bubble');
+      const asideSegmentId = String(
+        target.dataset.asideSegmentId
+        || asideBubble?.dataset?.asideSegmentId
+        || state.selectedAsideSegmentId
+        || ''
+      ).trim();
+      /* ======================================================================
+         [区域标注·已完成·本次旁白编辑弹窗指向修复] 旁白编辑入口分流
+         说明：
+         1. 若编辑按钮来自旁白功能栏，则打开旁白专用编辑弹窗，只编辑 asideSegments/asideText。
+         2. 其它情况保持原普通消息编辑逻辑，只编辑 message.content。
+         ====================================================================== */
+      if (messageId && asideBubble && asideSegmentId) {
+        showEditAsideModal(container, state, messageId, asideSegmentId);
+        break;
+      }
       if (messageId) showEditMessageModal(container, state, messageId);
       break;
     }
@@ -2928,8 +2964,65 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       if (index < 0) break;
       state.currentMessages[index] = { ...state.currentMessages[index], content: value, editedAt: Date.now() };
       state.selectedMessageId = messageId;
+      state.selectedAsideSegmentId = '';
       state.deleteConfirmMessageId = '';
       refreshCurrentSessionLastMessage(state);
+      await Promise.all([
+        persistCurrentMessages(state, db),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
+      ]);
+      closeModal(container);
+      refreshMessageBubbleRows(container, state, [messageId]);
+      break;
+    }
+
+    /* ======================================================================
+       [区域标注·已完成·本次旁白编辑弹窗指向修复] 保存旁白编辑结果
+       说明：
+       1. 只更新当前 owner 消息上的 asideSegments[].text，并同步兼容字段 asideText。
+       2. 不改动所属 AI 消息正文 content。
+       3. 持久化仍统一只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       ====================================================================== */
+    case 'confirm-edit-aside': {
+      const messageId = String(target.dataset.messageId || '').trim();
+      const asideSegmentId = String(target.dataset.asideSegmentId || '').trim();
+      const input = container.querySelector('[data-role="edit-aside-content-input"]');
+      const value = String(input?.value || '').trim();
+      if (!messageId || !asideSegmentId || !value) {
+        renderModalNotice(container, '请输入旁白内容');
+        break;
+      }
+
+      const index = (state.currentMessages || []).findIndex(message => String(message.id) === messageId);
+      if (index < 0) break;
+
+      const sourceMessage = state.currentMessages[index] || {};
+      const nextAsideSegments = Array.isArray(sourceMessage.asideSegments)
+        ? sourceMessage.asideSegments.map((segment, segmentIndex) => {
+            const fallbackId = String(segment?.id || `${sourceMessage?.id || 'aside'}_${segmentIndex + 1}`);
+            return fallbackId === asideSegmentId
+              ? { ...segment, id: fallbackId, text: value }
+              : { ...segment, id: fallbackId };
+          })
+        : [];
+
+      const hasMatchedAsideSegment = nextAsideSegments.some(segment => String(segment?.id || '') === asideSegmentId);
+      if (!hasMatchedAsideSegment && !String(sourceMessage.asideText || '').trim()) break;
+
+      state.currentMessages[index] = {
+        ...sourceMessage,
+        asideSegments: hasMatchedAsideSegment ? nextAsideSegments : sourceMessage.asideSegments,
+        asideText: hasMatchedAsideSegment
+          ? nextAsideSegments
+              .map(segment => String(segment?.text || '').trim())
+              .filter(Boolean)
+              .join('\n')
+          : value,
+        editedAt: Date.now()
+      };
+      state.selectedMessageId = messageId;
+      state.selectedAsideSegmentId = asideSegmentId;
+      state.deleteConfirmMessageId = '';
       await Promise.all([
         persistCurrentMessages(state, db),
         dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions)
@@ -3131,6 +3224,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const messageId = String(target.dataset.messageId || state.selectedMessageId || '');
       if (!messageId) break;
       state.selectedMessageId = '';
+      state.selectedAsideSegmentId = '';
       state.deleteConfirmMessageId = '';
       state.multiSelectMode = true;
       state.selectedMessageIds = [messageId];
