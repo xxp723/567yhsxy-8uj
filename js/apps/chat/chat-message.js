@@ -2598,8 +2598,21 @@ export function repairAiSystemTipFormatIfPossible(message) {
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·本次引用回复合并与闭合标签残片清理] AI 协议闭合标签清理工具
+   说明：
+   1. 统一清理 `[/回复]`、`[/引用]`、`[/语音]`、`[/文字图]`、`[/图片]`、`[/卡片]` 等闭合协议残片。
+   2. 仅服务聊天前端协议解析与可见文本清洗，不改 DB.js / IndexedDB 持久化结构。
+   3. 本次用于修复“闭合标签单独掉成普通气泡/普通文本”的问题，并为引用+回复合并提供更稳定的前置清洗。
+   ======================================================================== */
+const AI_PROTOCOL_CLOSING_TAG_REGEX = /(?:\[\s*\/\s*(?:回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片|旁白|心声)\s*\]|【\s*\/\s*(?:语音|文字图)\s*】)/gi;
+
+function stripAiProtocolClosingTags(value = '') {
+  return String(value || '').replace(AI_PROTOCOL_CLOSING_TAG_REGEX, ' ');
+}
+
 export function cleanAiProtocolBlockContent(content) {
-  return String(content || '')
+  return stripAiProtocolClosingTags(String(content || ''))
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^\s*(?:`|\*\*)+/g, '')
     .replace(/(?:`|\*\*)+\s*$/g, '')
@@ -2716,7 +2729,7 @@ function parseProtocolRoleAndContent(raw = '', type = '') {
 }
 
 export function extractAiProtocolBlocks(rawText) {
-  const visibleText = String(rawText || '')
+  const visibleText = stripAiProtocolClosingTags(String(rawText || ''))
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     .trim();
@@ -2835,9 +2848,11 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
   }
 
   const builtMessages = [];
+  const skippedProtocolIndexes = new Set();
   let hasImageGenerationProtocol = false;
   let hasHtmlCardProtocol = false;
-  protocolBlocks.forEach(block => {
+  protocolBlocks.forEach((block, blockIndex) => {
+    if (skippedProtocolIndexes.has(Number(block?.__protocolIndex ?? blockIndex))) return;
     if (block.type === '撤回') {
       /* ======================================================================
          [区域标注·已完成·AI本轮撤回协议解析]
@@ -2999,18 +3014,31 @@ export function buildAiReplyMessages(rawText, state, options = {}) {
 
     if (block.type === '引用') {
       /* ======================================================================
-         [区域标注·已完成·本次引用掉格式修复] AI [引用] 协议解析
+         [区域标注·已完成·本次引用回复合并修复] AI [引用] + [回复] 协议合并解析
          说明：
-         1. 标准 `{引用ID:xxx}文字` 会解析为真实 quote 字段。
-         2. 兼容“引用了某人：‘原文’”这类掉格式纯文字，避免截图中的引用说明露成普通气泡。
-         3. quote 字段随 AI 消息写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+         1. 当 AI 先输出 [引用]，再紧跟 [回复] 时，前端会直接合并成同一条带 quote 的引用回复气泡。
+         2. 若 [引用] 自身已带正文，则优先使用 [引用] 内正文；否则自动吞并下一条 [回复] 的正文，避免拆成两个气泡。
+         3. 仍兼容 `{引用ID:xxx}` 标准协议与“引用了某人：原文”宽松掉格式文本。
          ====================================================================== */
       const quoteMatch = String(block.content || '').match(/^\s*\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
       const looseQuote = quoteMatch ? null : parseLooseAiQuoteText(block.content, block.roleName);
       const quotePayload = quoteMatch
         ? resolveAiQuotePayloadById(state, quoteMatch[1])
         : (looseQuote ? resolveAiQuotePayloadByLooseText(state, looseQuote.quoteText, looseQuote.senderName) : null);
-      const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : (looseQuote ? looseQuote.replyText : block.content));
+
+      let replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : (looseQuote ? looseQuote.replyText : block.content));
+
+      if (!replyText) {
+        const nextBlock = protocolBlocks[blockIndex + 1];
+        if (nextBlock?.type === '回复') {
+          const nextReplyText = cleanAiVisibleBubbleText(nextBlock.content);
+          if (nextReplyText) {
+            replyText = nextReplyText;
+            skippedProtocolIndexes.add(Number(nextBlock?.__protocolIndex ?? (blockIndex + 1)));
+          }
+        }
+      }
+
       const replyParts = splitStrictSentenceBubbles(replyText);
 
       if (quotePayload && !replyParts.length) {
@@ -3976,7 +4004,7 @@ export function sanitizeAiVisibleReply(text) {
 
 
 export function splitStrictSentenceBubbles(text) {
-  const normalized = String(text || '')
+  const normalized = stripAiProtocolClosingTags(String(text || ''))
     /* ===== 闲谈：通用消息协议解析 START ===== */
     .replace(/\*\*`?\s*\[回复\]\s*[^：:\n`]+?\s*[：:]\s*/g, '')
     .replace(/`?\*\*/g, '')
@@ -4029,7 +4057,7 @@ export function getReplyBubbleCountRange(chatSettings = {}) {
 
 /* ========================================================================== */
 export function cleanAiVisibleBubbleText(text) {
-  return String(text || '')
+  return stripAiProtocolClosingTags(String(text || ''))
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     /* ======================================================================

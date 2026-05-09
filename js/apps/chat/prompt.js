@@ -364,8 +364,11 @@ function formatPromptQuoteLine(quote = {}, { includeReferenceId = false } = {}) 
   if (!quoteText) return '';
 
   const senderName = normalizePlainText(quote?.senderName || (quote?.role === 'user' ? '我' : '对方')) || '对方';
-  const quoteId = includeReferenceId ? normalizePlainText(quote?.id) : '';
-  return `> 引用了${quoteId ? `ID:${quoteId}，` : ''}${senderName}：“${quoteText}”`;
+  return [
+    includeReferenceId ? '以下引用信息仅供你理解上下文，绝不能原样复制到最终回复里。' : '',
+    `引用原消息发送者：${senderName}`,
+    `引用原消息内容：${quoteText}`
+  ].filter(Boolean).join('\n');
 }
 
 function getPromptSenderLabel(message = {}) {
@@ -532,6 +535,7 @@ function buildCurrentUserPromptContent(rawUserInput = '', currentUserRoundMessag
     '【本轮用户消息·可引用】',
     '仅以下本轮用户消息可被 [引用] 协议引用；历史消息不提供引用ID。',
     '“用户：”后面的内容是用户发来的原话，不是你要复述的台词；如果使用 [引用]，{引用ID:xxx} 后必须写你作为角色的新回应。',
+    '其中“可引用ID:”“引用原消息发送者：”“引用原消息内容：”这些行只是后台提示，绝不能原样复制到最终回复里。',
     formattedRoundMessages,
     ...systemTempBlocks
   ].filter(Boolean).join('\n');
@@ -1308,7 +1312,7 @@ export function getFeaturePrompts({ settings = {}, imageApi = null } = {}) {
 2. 已开放格式：
 ${availableFormats.map(item => `- ${item}`).join('\n')}
 3. [回复] 是普通文字；[表情] 只能用【AI可用表情包资源】里的资源ID或完全一致表情名；[引用] 只能用【本轮用户消息·可引用】提供的ID，且 {引用ID:xxx} 后只能写角色自己的新回应；[转账]/[礼物]/[语音]/[${visualProtocolName}] 需符合对应能力、人设和当前情景；${imageApiReady ? '生图 API 已开启，严禁输出 [文字图]；' : '当前只开放 [文字图]，严禁输出 [图片]；'}${htmlCardEnabled ? '[卡片] 也必须严格符合当前对话场景与卡片能力要求；' : 'HTML 卡片未开启，严禁输出 [卡片]；'}不确定就改用 [回复]。
-4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID，禁止把被引用原文或用户最新原话搬到正文里，禁止在正文开头写“我：”“用户：”“对方：”等说话人前缀。
+4. 表情包只代表图片内容，不代表用户真人神态；引用必须同时理解“被引用原消息 + 用户新输入”，禁止编造历史引用ID，禁止把被引用原文或用户最新原话搬到正文里，禁止在正文开头写“我：”“用户：”“对方：”等说话人前缀；禁止输出“可引用ID:”“引用原消息发送者：”“引用原消息内容：”等后台提示字段。
 5. 转账：主动转账用 **\`[转账] 角色名：{金额:88.88,备注:奶茶钱}\`**；处理待确认转账只用 **\`{操作:接收/退回,转账ID:系统给出的ID,备注:可选}\`**。
 6. 礼物：**\`[礼物] 角色名：{名称:一束白郁金香,备注:路过花店时觉得很适合你}\`**；备注短且自然，禁止价格、URL、系统说明。
 7. 撤回：只在角色真实有动机时使用 **\`[撤回] 角色名：{目标:上一条}\`**，且只能撤回本轮位于它前面的上一条 AI 消息；多条撤回必须逐条输出，禁止 {条数:N}/{目标:全部}/“撤回了N条消息”。
