@@ -41,6 +41,73 @@ const INNER_VOICE_OPEN_TAG = '[心声]';
 const INNER_VOICE_CLOSE_TAG = '[/心声]';
 
 /* ==========================================================================
+   [区域标注·已完成·本次修正：心声异常标签兼容与性别称谓锁定工具]
+   说明：
+   1. 兼容 AI 偶发输出的异常心声标签，如 [\心心声]、[/心心声]、[心心声]、带空格/反斜杠的近似变体。
+   2. 统一把全角竖线、换行与标签残片清理后再做九段解析，降低“掉格式”导致整块串段的概率。
+   3. 为心声协议提示词提供当前用户面具姓名/性别锁定，防止把“男/双性”用户误称为“她”。
+   ========================================================================== */
+const INNER_VOICE_OPEN_PATTERN = /\[\s*(?:\\+|\/+)?\s*心(?:心)?声\s*\]/i;
+const INNER_VOICE_CLOSE_PATTERN = /\[\s*(?:\\+|\/+)\s*心(?:心)?声\s*\]/i;
+
+function normalizeInnerVoiceGenderValue(gender) {
+  return String(gender || '').trim();
+}
+
+function resolveInnerVoiceUserReferenceOptions(options = {}) {
+  const userName = String(options.userName || '').trim();
+  const gender = normalizeInnerVoiceGenderValue(options.userGender);
+  const isMaleLike = /男|双性/i.test(gender);
+  const isFemaleLike = /女/i.test(gender) && !isMaleLike;
+
+  if (isMaleLike) {
+    return {
+      userName,
+      gender,
+      allowedReferenceText: userName
+        ? `提到用户时只能使用“${userName}”或“他”`
+        : '提到用户时只能使用“他”',
+      forbiddenReferenceText: '禁止使用“她”“她们”或任何女性指代',
+      exampleUserRef: userName || '他'
+    };
+  }
+
+  if (isFemaleLike) {
+    return {
+      userName,
+      gender,
+      allowedReferenceText: userName
+        ? `提到用户时只能使用“${userName}”或“她”`
+        : '提到用户时只能使用“她”',
+      forbiddenReferenceText: '禁止使用“他”“他们”或任何男性指代',
+      exampleUserRef: userName || '她'
+    };
+  }
+
+  return {
+    userName,
+    gender,
+    allowedReferenceText: userName
+      ? `提到用户时优先且尽量直接使用“${userName}”`
+      : '提到用户时优先使用明确的人名；若未知则避免随意使用“他/她”',
+    forbiddenReferenceText: '禁止在性别不确定时乱用“他/她”并禁止使用“会话对象”',
+    exampleUserRef: userName || '对方'
+  };
+}
+
+function sanitizeInnerVoicePayloadText(raw) {
+  return String(raw || '')
+    .replace(/\[\s*(?:\\+|\/+)?\s*心(?:心)?声\s*\]/gi, ' ')
+    .replace(/\[\s*(?:\\+|\/+)\s*心(?:心)?声\s*\]/gi, ' ')
+    .replace(/[｜¦‖]/g, '|')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n+/g, ' ')
+    .replace(/\s*\|\s*/g, '|')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/* ==========================================================================
    [区域标注·已修改·心声历史独立存储] IndexedDB 存储键与标准化
    说明：
    1. 心声历史独立保存在 DB.js / IndexedDB，不依赖 currentMessages。
@@ -121,8 +188,7 @@ export async function persistInnerVoiceHistoryEntry(db, state, innerVoice, messa
    ========================================================================== */
 export function extractInnerVoiceFromRawText(rawText) {
   const text = String(rawText || '');
-  const openPattern = /\[\s*心声\s*\]/i;
-  const openMatch = text.match(openPattern);
+  const openMatch = text.match(INNER_VOICE_OPEN_PATTERN);
 
   if (!openMatch || typeof openMatch.index !== 'number') {
     return { innerVoice: null, cleanedText: text };
@@ -130,9 +196,8 @@ export function extractInnerVoiceFromRawText(rawText) {
 
   const openIndex = openMatch.index;
   const openEnd = openIndex + String(openMatch[0] || INNER_VOICE_OPEN_TAG).length;
-  const closePattern = /\[\s*\/\s*心声\s*\]/i;
   const afterOpenText = text.slice(openEnd);
-  const closeMatch = afterOpenText.match(closePattern);
+  const closeMatch = afterOpenText.match(INNER_VOICE_CLOSE_PATTERN);
   const closeIndex = closeMatch && typeof closeMatch.index === 'number'
     ? openEnd + closeMatch.index
     : text.length;
@@ -141,19 +206,21 @@ export function extractInnerVoiceFromRawText(rawText) {
     : text.length;
 
   const innerVoiceText = text.slice(openEnd, closeIndex).trim();
-  const cleanedText = (text.slice(0, openIndex) + text.slice(closeEnd)).trim();
+  const cleanedText = (text.slice(0, openIndex) + text.slice(closeEnd))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
   const innerVoice = parseInnerVoicePayload(innerVoiceText);
   return { innerVoice, cleanedText };
 }
 
 function parseInnerVoicePayload(raw) {
-  const s = String(raw || '').trim();
-  if (!s) return null;
+  const originalText = String(raw || '').trim();
+  if (!originalText) return null;
 
-  if (s.startsWith('{') && s.endsWith('}')) {
+  if (originalText.startsWith('{') && originalText.endsWith('}')) {
     try {
-      const parsed = JSON.parse(s);
+      const parsed = JSON.parse(originalText);
       if (parsed && typeof parsed === 'object') {
         return normalizeInnerVoiceData(parsed);
       }
@@ -162,14 +229,18 @@ function parseInnerVoicePayload(raw) {
     }
   }
 
+  const s = sanitizeInnerVoicePayloadText(originalText);
+  if (!s) return null;
+
   /* ========================================================================
      [区域标注·已完成·本次修正：九段短格式转心声面板数据]
      说明：
      1. 新格式为：状态|动作|心情|心跳|醋意|好感|性欲|真实心声|性幻想。
-     2. 前 8 段固定映射面板字段；第 9 段允许包含分隔符，会自动合并回性幻想正文。
-     3. 仍兼容旧七段格式，确保旧心声历史可继续读取。
+     2. 本次已补强掉格式兼容：先统一清理异常标签残片、全角竖线、换行与竖线两侧空格，再做九段拆分。
+     3. 前 8 段固定映射面板字段；第 9 段允许包含分隔符，会自动合并回性幻想正文。
+     4. 仍兼容旧七段格式与宽松键值文本，确保旧心声历史可继续读取。
      ======================================================================== */
-  const pipeParts = s.split('|').map(part => part.trim());
+  const pipeParts = s.split('|').map(part => part.trim()).filter((part, index, arr) => part || index < arr.length - 1);
   if (pipeParts.length >= 9) {
     return normalizeInnerVoiceData({
       status: pipeParts[0],
@@ -787,16 +858,18 @@ function switchInnerVoiceTab(overlayOrPanel, tabId) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次修复：心声短期剧情连续性锚点]
+   [区域标注·已完成·本次修正：心声称谓锁定与短期剧情连续性锚点]
    说明：
    1. 本函数返回追加到 AI 系统提示词中的心声格式要求。
-   2. 本区已完成称呼修复：真实心声提到用户时只能用“他/她/用户名字”，优先使用已知用户名字。
-   3. 本区已完成短期剧情连续性锚点修复：心声生成前必须先抽取最近一轮的地点、姿态、动作、已完成事件与线上/线下状态，再在该锚点上顺推。
+   2. 本次已完成称谓锁定：根据当前用户面具姓名/性别，把心声里对用户的第三人称指代锁定为“他/她/用户名字”，防止把“男/双性”用户误写成“她”。
+   3. 本区继续保留短期剧情连续性锚点修复：心声生成前必须先抽取最近一轮的地点、姿态、动作、已完成事件与线上/线下状态，再在该锚点上顺推。
    4. 已明确禁止无依据跳场景、跳地点、回退已完成动作，避免上一轮在晚宴/门边/车里，下一轮突然出现在书房或倒退回车内。
    5. 已明确禁止使用“会话对象”，避免 AI 可见回复叫对用户名字、心声却把用户写成泛称。
    6. 继续禁止在心声里用“你/你们”，保持心声第三人称表达；未改动存储、弹窗、图标或其它聊天逻辑。
    ========================================================================== */
-export function buildInnerVoiceSystemPrompt() {
+export function buildInnerVoiceSystemPrompt(options = {}) {
+  const referenceOptions = resolveInnerVoiceUserReferenceOptions(options);
+
   return `
 【心声协议·强制】
 每轮回复都必须在本轮所有可见协议块最后，额外追加且只追加 1 段心声：
@@ -810,8 +883,8 @@ export function buildInnerVoiceSystemPrompt() {
 5. 醋意：整数，0-100。
 6. 好感：整数，0-100。
 7. 性欲：整数，0-100。
-8. 真实心声：第一人称，≤150字，要体现与表面消息的反差；提到用户时只能用“他/她/用户名字”，优先使用已知他/她；禁止使用“会话对象”，不要用“你/你们”。
-9. 性幻想：第一人称，≤100字，必须符合角色人设与当前关系阶段。
+8. 真实心声：第一人称，≤150字，要体现与表面消息的反差；${referenceOptions.allowedReferenceText}；${referenceOptions.forbiddenReferenceText}；禁止使用“会话对象”，不要用“你/你们”。
+9. 性幻想：第一人称，≤100字，必须符合角色人设与当前关系阶段；若提到用户，同样遵守上一条称谓锁定。
 
 历史连续性硬规则：
 - 生成心声前必须先读取最近短期对话历史，尤其是上一轮用户消息、上一轮 AI 可见回复、上一轮旁白以及上一轮心声中的地点、姿态、动作、正在做的事和刚发生的事件。
@@ -823,7 +896,7 @@ export function buildInnerVoiceSystemPrompt() {
 - 历史有冲突时，以最近一轮原文为准；无法判断时宁可保守承接“还在刚才的位置/继续刚才的动作”，不要编造新场景。
 
 强格式规则：
-- [心声] 与 [/心声] 必须完全照写，不能改字、漏写、错写、加空格或变体符号。
+- [心声] 与 [/心声] 必须完全照写，不能改字、漏写、错写、加空格或标准标签以外的变体符号。
 - 心声块必须放在本轮最后，且单独一行；不能放进 [回复]/[引用]/[卡片] 等任何可见协议块里。
 - 心声块内部必须正好 9 段，也就是正好 8 个英文竖线 |；不得缺段，不得多段。
 - 九段内容里禁止再出现 |、[、]、换行、Markdown、代码块、字段名、JSON、解释或任何检查文字。
@@ -832,7 +905,7 @@ export function buildInnerVoiceSystemPrompt() {
 - 可见回复写完后，最后直接补这一行心声，不要在心声前后再加任何别的文本。
 
 示例：
-[心声]焦躁地等待她的回复ing|一边吃东西，一边盯着屏幕等她的下一条消息|面上平静，心里其实很害羞🥺|96|14|78|21|表面还在装无所谓，其实已经开始反复回想她刚才那句话了|脑子里短暂闪过把她抱进怀里哄好的画面，又立刻被自己压下去[/心声]
+[心声]焦躁地等待${referenceOptions.exampleUserRef}的回复ing|一边吃东西，一边盯着屏幕等${referenceOptions.exampleUserRef}的下一条消息|面上平静，心里其实很害羞🥺|96|14|78|21|表面还在装无所谓，其实已经开始反复回想${referenceOptions.exampleUserRef}刚才那句话了|脑子里短暂闪过把${referenceOptions.exampleUserRef}抱进怀里哄好的画面，又立刻被自己压下去[/心声]
 `.trim();
 }
 

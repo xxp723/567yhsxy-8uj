@@ -1905,7 +1905,15 @@ export function buildSystemPrompt({ settings = {}, context = {} } = {}) {
     getTimeAwarenessPrompt({ enabled: normalizedSettings.timeAwarenessEnabled, context: runtimeContext }),
     /* ===== 闲谈应用：时间感知提示词注入 END ===== */
     /* ===== 闲谈应用：心声协议提示词注入 START ===== */
-    buildInnerVoiceSystemPrompt(),
+    /* [区域标注·已完成·本次修正：用户面具姓名与性别透传到心声协议]
+       说明：
+       1. 将当前用户面具的姓名/性别透传给心声系统提示词，用于旁白模式下锁定第三人称称谓。
+       2. 只读取 runtimeContext.currentMask 中已存在的档案字段，不新增存储，不使用 localStorage/sessionStorage。
+    */
+    buildInnerVoiceSystemPrompt({
+      userName: runtimeContext.currentMask?.name || '',
+      userGender: runtimeContext.currentMask?.gender || ''
+    }),
     /* ===== 闲谈应用：心声协议提示词注入 END ===== */
     /* ===== [区域标注·已完成·旁白模式] 旁白模式系统提示词注入 START ===== */
     /* 说明：
