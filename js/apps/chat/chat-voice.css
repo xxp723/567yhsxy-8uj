@@ -23,11 +23,12 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·语音消息气泡普通尺寸化]
+   [区域标注·已完成·语音消息气泡与展开文字正常尺寸化]
    说明：
    1. 已将语音消息气泡改为接近普通文字气泡的紧凑尺寸，避免独立语音气泡过大。
    2. 已去除语音气泡独立粗边框与右侧下载箭头，仅保留播放键、波形条与 0:xx 秒数。
-   3. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
+   3. 已将双击展开后的转文字区域恢复为普通消息大小：自适应内容宽度、左对齐、继承正常气泡字体与行高。
+   4. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
   min-width: 0;
@@ -138,11 +139,15 @@
 }
 
 .msg-voice-bubble__transcript {
-  margin-top: 14px;
-  padding: 15px 16px;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 7px 10px;
   font-family: inherit;
-  font-size: 17px;
-  line-height: 1.75;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
   color: rgba(90, 67, 74, .9);
   background: rgba(246, 244, 247, .95);
   border-radius: 13px;
