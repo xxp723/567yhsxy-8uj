@@ -2283,13 +2283,14 @@ export function repairAiMessageFormatIfPossible(message, state) {
 
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音掉格式修复] 文本/引用/语音掉格式修复工具
+   [区域标注·已完成·本次旁白掉格式修正] 文本/引用/语音/旁白掉格式修复工具
    说明：
    1. “修正 → 文本”用于修复普通文字气泡掉格式：裸露 [回复] 协议头、Markdown 加粗/反引号、格式检查前缀或“修正后内容”等说明文字。
    2. “修正 → 语音”用于把含 [语音] / 【语音】残片的 AI 文字气泡修正为 type=voice_message 语音气泡。
-   3. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
-   4. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
-   5. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
+   3. “修正 → 旁白”用于把露出“旁白”字样或 [旁白] 残片的 AI 文字气泡修正为旁白气泡。
+   4. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
+   5. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
+   6. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
    ========================================================================== */
 export function repairAiTextMessageFormatIfPossible(message) {
   if (!message || message.role !== 'assistant') return null;
@@ -2496,6 +2497,34 @@ export function repairAiVoiceMessageFormatIfPossible(message) {
     type: 'voice_message',
     voiceExpanded: false,
     ...payload
+  };
+}
+
+export function repairAiAsideMessageFormatIfPossible(message) {
+  if (!message || message.role !== 'assistant') return null;
+  if (['sticker', 'image', 'transfer', 'gift', 'card'].includes(String(message.type || ''))) return null;
+
+  const raw = String(message.content || '').trim();
+  if (!/旁白/i.test(raw)) return null;
+
+  const { asideText, asideSegments, cleanedText } = extractAsideFromRawText(raw);
+  const normalizedSegments = (Array.isArray(asideSegments) ? asideSegments : [])
+    .map((segment, index) => ({
+      id: String(segment?.id || `${message.id || 'aside_repair'}_${index + 1}`),
+      text: String(segment?.text || '').trim(),
+      placement: 'before'
+    }))
+    .filter(segment => segment.text);
+
+  if (!asideText || !normalizedSegments.length) return null;
+
+  return {
+    ...message,
+    role: 'assistant',
+    type: '',
+    content: cleanAiVisibleBubbleText(cleanedText || ''),
+    asideText,
+    asideSegments: normalizedSegments
   };
 }
 
@@ -4635,20 +4664,21 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
 
   panel.innerHTML = `
     <!-- ======================================================================
-         [区域标注·已完成·本次引用掉格式修复入口] AI 消息格式修正类别选择
+         [区域标注·已完成·本次旁白掉格式修正入口] AI 消息格式修正类别选择
          说明：
          1. “引用”按钮已支持把出现“引用/引用了”文字的 AI 普通气泡修正为引用气泡。
          2. “语音”按钮专门把含 [语音] / 【语音】残片的 AI 文字气泡修正为语音气泡。
-         3. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
-         4. 仍由 index.js 调用对应 repairAi*FormatIfPossible 后写入 DB.js / IndexedDB。
-         5. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+         3. “旁白”按钮专门把露出“旁白”字样或 [旁白] 残片的 AI 普通气泡修正为旁白气泡。
+         4. “系统提示”按钮专门修复 ai_withdraw_system 中间小字格式。
+         5. 仍由 index.js 调用对应 repairAi*FormatIfPossible 后写入 DB.js / IndexedDB。
+         6. 不使用 localStorage/sessionStorage，不做双份存储兜底。
          ====================================================================== -->
     <div class="chat-modal-header">
       <span>选择修正类别</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
     <div class="chat-modal-body">
-      <div class="chat-modal-hint">如果普通文字气泡里露出了“引用/引用了”，请选择“引用”；露出 [语音] 请选择“语音”；普通回复协议掉格式请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
+      <div class="chat-modal-hint">如果普通文字气泡里露出了“旁白”字样，请选择“旁白”；露出“引用/引用了”请选择“引用”；露出 [语音] 请选择“语音”；普通回复协议掉格式请选择“文本”。修复后只更新当前消息，并通过 DB.js / IndexedDB 保存。</div>
       <div class="msg-format-repair-grid">
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="sticker" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.sticker}</span>
@@ -4669,6 +4699,11 @@ export function showAiFormatRepairTypeModal(container, messageId = '') {
           <span class="msg-format-repair-option__icon">${MSG_ICONS.quote}</span>
           <strong>引用</strong>
           <em>修复“引用”文字为引用气泡</em>
+        </button>
+        <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="aside" data-message-id="${escapeHtml(safeMessageId)}" type="button">
+          <span class="msg-format-repair-option__icon">${MSG_ICONS.aside}</span>
+          <strong>旁白</strong>
+          <em>修复“旁白”文字为旁白气泡</em>
         </button>
         <button class="msg-format-repair-option" data-action="apply-ai-format-repair" data-repair-type="system" data-message-id="${escapeHtml(safeMessageId)}" type="button">
           <span class="msg-format-repair-option__icon">${MSG_ICONS.systemTip}</span>

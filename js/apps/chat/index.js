@@ -85,6 +85,7 @@ import {
   repairAiQuoteMessageFormatIfPossible,
   repairAiSystemTipFormatIfPossible,
   repairAiVoiceMessageFormatIfPossible,
+  repairAiAsideMessageFormatIfPossible,
   sendStickerMessage,
   sendImageMessage,
   renderCurrentChatMessage,
@@ -2755,7 +2756,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
                 ? repairAiSystemTipFormatIfPossible(sourceMessage, state)
                 : (repairType === 'voice'
                     ? repairAiVoiceMessageFormatIfPossible(sourceMessage, state)
-                    : repairAiMessageFormatIfPossible(sourceMessage, state))));
+                    : (repairType === 'aside'
+                        ? repairAiAsideMessageFormatIfPossible(sourceMessage, state)
+                        : repairAiMessageFormatIfPossible(sourceMessage, state)))));
 
       const repairLabel = repairType === 'text'
         ? '文本'
@@ -2763,7 +2766,9 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
             ? '引用'
             : (repairType === 'system'
                 ? '系统提示'
-                : (repairType === 'voice' ? '语音' : '表情包')));
+                : (repairType === 'voice'
+                    ? '语音'
+                    : (repairType === 'aside' ? '旁白' : '表情包'))));
 
       if (!repairedMessage) {
         showAiFormatRepairResultModal(container, {

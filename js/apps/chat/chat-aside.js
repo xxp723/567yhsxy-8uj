@@ -278,44 +278,116 @@ export function renderAsideBubbleHtml(asideText, asideId = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旁白位置与穿插解析修复] 从 AI 原始回复中提取旁白文本
+   [区域标注·已完成·本次旁白掉格式解析修复] 从 AI 原始回复中提取旁白文本
    说明：
-   1. AI 在旁白模式下会用 [旁白]{文本}[/旁白] 标记旁白内容。
-   2. 本区已修复“多段旁白被合并成一大段”的问题：除兼容旧字段 asideText 外，
-      同时返回 asideSegments，保留每段旁白在原文中的顺序与位置。
+   1. AI 标准旁白格式为 [旁白]{文本}[/旁白]，本区继续兼容多段标准旁白。
+   2. 本区已新增“旁白”掉格式解析：兼容 【旁白】、缺少结束标签、旁白：文本、
+      Markdown/反引号包裹的 [旁白] 等常见输出残片，避免旁白露成普通聊天气泡。
    3. cleanedText 是去掉旁白标记后的纯回复文本，后续聊天协议解析不再看到旁白标记。
-   4. 本区只做文本解析，不读写任何持久化存储，不使用 localStorage/sessionStorage。
+   4. 本区只做文本解析，不读写任何持久化存储，不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 export function extractAsideFromRawText(rawText) {
   const text = String(rawText || '');
-  const regex = /\[旁白\]([\s\S]*?)\[\/旁白\]/gi;
-  const matches = [...text.matchAll(regex)];
+  if (!text) return { asideText: '', asideSegments: [], cleanedText: '' };
 
-  if (!matches.length) {
+  const protocolBoundaryRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片|心声)\s*\]|【\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片|心声)\s*】)\s*/gi;
+  const markerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(\/)?\s*旁白\s*\]|【\s*(\/)?\s*旁白\s*】)\s*`?(?:\*\*)?|(?:^|[\n\r])\s*(旁白)\s*[：:]\s*/gi;
+  const markers = [...text.matchAll(markerRegex)]
+    .map(match => {
+      const isClose = Boolean(match[1] || match[2]);
+      const isColon = Boolean(match[3]);
+      const markerStart = Number(match.index || 0);
+      const full = String(match[0] || '');
+      const prefixLength = isColon ? (full.match(/^[\n\r]/) ? 1 : 0) : 0;
+      const startIndex = markerStart + prefixLength;
+      return {
+        isClose,
+        isColon,
+        startIndex,
+        contentStart: markerStart + full.length,
+        rawMarker: full.slice(prefixLength)
+      };
+    })
+    .filter(marker => marker.rawMarker);
+
+  if (!markers.some(marker => !marker.isClose)) {
     return { asideText: '', asideSegments: [], cleanedText: text };
   }
 
-  const asideSegments = matches
-    .map((match, index) => ({
-      id: `aside_segment_${index + 1}`,
-      text: String(match[1] || '').trim(),
-      startIndex: Number(match.index || 0),
-      endIndex: Number(match.index || 0) + String(match[0] || '').length,
-      rawText: String(match[0] || '')
-    }))
-    .filter(segment => segment.text);
+  const boundaries = [...text.matchAll(protocolBoundaryRegex)]
+    .map(match => Number(match.index || 0))
+    .sort((a, b) => a - b);
 
-  const asideText = asideSegments.map(segment => segment.text).join('\n');
+  const segments = [];
+  markers.forEach((marker, markerIndex) => {
+    if (marker.isClose) return;
+
+    const explicitClose = markers.find((candidate, candidateIndex) => (
+      candidateIndex > markerIndex
+      && candidate.isClose
+      && candidate.startIndex >= marker.contentStart
+    ));
+    const nextOpen = markers.find((candidate, candidateIndex) => (
+      candidateIndex > markerIndex
+      && !candidate.isClose
+      && candidate.startIndex >= marker.contentStart
+    ));
+    const nextProtocol = boundaries.find(position => position > marker.contentStart);
+    const endCandidates = [
+      explicitClose ? explicitClose.startIndex : 0,
+      nextOpen ? nextOpen.startIndex : 0,
+      nextProtocol || 0,
+      text.length
+    ].filter(position => position > marker.contentStart);
+    const contentEnd = Math.min(...endCandidates);
+    const removeEnd = explicitClose && explicitClose.startIndex === contentEnd
+      ? explicitClose.contentStart
+      : contentEnd;
+    const asideText = text.slice(marker.contentStart, contentEnd)
+      .replace(/^[\s"'“”‘’`*_：:，,。；;、-]+|[\s"'“”‘’`*_]+$/g, '')
+      .trim();
+
+    if (!asideText) return;
+    segments.push({
+      text: asideText,
+      startIndex: marker.startIndex,
+      endIndex: removeEnd,
+      rawText: text.slice(marker.startIndex, removeEnd)
+    });
+  });
+
+  const uniqueSegments = [];
+  segments
+    .sort((a, b) => a.startIndex - b.startIndex || b.endIndex - a.endIndex)
+    .forEach(segment => {
+      if (uniqueSegments.some(item => segment.startIndex >= item.startIndex && segment.endIndex <= item.endIndex)) return;
+      uniqueSegments.push({
+        id: `aside_segment_${uniqueSegments.length + 1}`,
+        text: segment.text,
+        startIndex: segment.startIndex,
+        endIndex: segment.endIndex,
+        rawText: segment.rawText
+      });
+    });
+
+  if (!uniqueSegments.length) {
+    return { asideText: '', asideSegments: [], cleanedText: text };
+  }
 
   let cleanedText = text;
-  [...matches].reverse().forEach(match => {
-    const start = Number(match.index || 0);
-    const end = start + String(match[0] || '').length;
-    cleanedText = `${cleanedText.slice(0, start)}${cleanedText.slice(end)}`;
+  [...uniqueSegments].reverse().forEach(segment => {
+    cleanedText = `${cleanedText.slice(0, segment.startIndex)}${cleanedText.slice(segment.endIndex)}`;
   });
-  cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+  cleanedText = cleanedText
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
-  return { asideText, asideSegments, cleanedText };
+  return {
+    asideText: uniqueSegments.map(segment => segment.text).join('\n'),
+    asideSegments: uniqueSegments,
+    cleanedText
+  };
 }
 
 /* ==========================================================================
