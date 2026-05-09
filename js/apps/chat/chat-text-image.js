@@ -13,7 +13,7 @@ import { TAB_ICONS, escapeHtml, renderModalNotice } from './chat-utils.js';
    说明：
    1. 本模块只服务聊天消息界面咖啡功能区“文字图”。
    2. 文字图不会生成真实图片、不会写 imageUrl、不会触发视觉识别 token。
-   3. AI 只会收到精简文本：用户发送了一张文字图图片，图片内容：……
+   3. AI 只会收到精简文本：用户发来一张可见的文字图样式图片，图中文字：……
    4. 持久化由调用方写入 DB.js / IndexedDB；本模块不使用浏览器同步键值存储。
    ========================================================================== */
 
@@ -61,7 +61,7 @@ export function isTextImageMessage(message = {}) {
 
 export function buildTextImageAiContent(text = '') {
   const safeText = normalizeTextImageText(text);
-  return safeText ? `用户发送了一张文字图图片，图片内容：${safeText}` : '';
+  return safeText ? `用户发来一张可见的文字图样式图片，图中文字：${safeText}` : '';
 }
 
 export function createTextImageMessage(text = '', options = {}) {

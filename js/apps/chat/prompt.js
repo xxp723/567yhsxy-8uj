@@ -380,8 +380,16 @@ function formatCompactMessageContentForPrompt(message = {}, fallbackContent = ''
   const content = normalizePlainText(fallbackContent || message?.content);
 
   if (type === 'sticker') return `[表情包] ${normalizePlainText(message?.stickerName || content || '表情包')}`;
+  /* ======================================================================
+     [区域标注·已完成·本次修复：用户文字图按可见图片样式理解]
+     说明：
+     1. 用户发送的文字图是聊天界面里可见的图片样式消息，不是 AI 输出用的 [文字图] 协议。
+     2. 这里避免把用户消息写成 “[文字图] ...”，防止模型误以为用户只发了协议标签或纯文字。
+     3. 不添加 imageUrl，不触发真实视觉识别 token；仅调整 prompt 文本表达。
+     ====================================================================== */
   if (type === 'image' && (String(message?.imageSource || '') === 'text-image' || normalizePlainText(message?.textImageText))) {
-    return `[文字图] ${normalizePlainText(message?.textImageText || content || '文字图')}`;
+    const textImageText = normalizePlainText(message?.textImageText || content || '文字图');
+    return `用户发来一张可见的文字图样式图片；图中文字：${textImageText}。请按已经看到这张图片的版式和文字内容来回应，禁止说看不到实物或这只是文字图。`;
   }
   if (type === 'image') return `[图片] ${normalizePlainText(message?.imageName || content || '图片')}`;
   if (type === 'card') return content || '[HTML卡片] 互动卡片';
