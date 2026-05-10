@@ -145,6 +145,54 @@
 }
 
 /* ==========================================================================
+   [区域标注·本次朋友圈标题栏按钮] Moments 顶部左右图标按钮
+   说明：
+   1. 仅服务朋友圈标题栏左侧 “+” 与右侧爱心按钮。
+   2. Chat/Contacts 仍使用上方 .chat-top-bar__add 小按钮，不受本样式影响。
+   3. 按钮本身不涉及任何持久化存储逻辑。
+   ========================================================================== */
+.chat-top-bar__moments-action {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  z-index: 2;
+}
+
+.chat-top-bar__moments-action--left {
+  left: 16px;
+  transform: translateY(-50%);
+}
+
+.chat-top-bar__moments-action--right {
+  right: 16px;
+  transform: translateY(-50%);
+}
+
+.chat-top-bar__moments-action:active {
+  background: rgba(74, 52, 42, 0.08);
+}
+
+.chat-top-bar__moments-action--left:active,
+.chat-top-bar__moments-action--right:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.chat-top-bar__moments-action svg {
+  width: 32px;
+  height: 32px;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次主题色需求] 聊天列表内部 TAB 栏（All / Private / Group 切换）
    说明：紧跟顶部导航栏下方，三个选项卡横向排列；背景使用 Linen #F5F1EA 纯色。
    ========================================================================== */

@@ -246,6 +246,9 @@ const DATA_KEY_CHAT_CONSOLE_ENABLED = (maskId, chatId) => `chat_console_enabled:
 /* ===== [区域标注·已完成·语言翻译] IndexedDB 数据键 ===== */
 const DATA_KEY_CHAT_TRANSLATION_SETTINGS = (maskId, chatId) => `chat_translation_settings::${maskId || 'default'}::${chatId || 'none'}`;
 
+/* ===== [区域标注·本次朋友圈标题栏按钮] Moments 右侧爱心图标，仅用于朋友圈标题栏运行时显示 ===== */
+const ICON_MOMENTS_HEART = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M15 8C8.925 8 4 12.925 4 19c0 11 13 21 20 23.326C31 40 44 30 44 19c0-6.075-4.925-11-11-11c-3.72 0-7.01 1.847-9 4.674A11.007 11.007 0 0 0 15 8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`;
+
 /* ========================================================================
    [区域标注·已完成·本次聊天记录分段加载] 消息页可见数量运行时配置
    说明：
@@ -877,6 +880,11 @@ export async function unmount(instance) {
    说明：包含顶部栏、四大板块容器、底部悬浮TAB栏、弹窗层
    ========================================================================== */
 function buildAppShell(state) {
+  const panelTitles = { chatList: 'Chat', contacts: 'Contacts', moments: 'Moments', profile: 'Me' };
+  const shellTitle = panelTitles[state.activePanel] || 'Chat';
+  const showDefaultAdd = state.activePanel === 'chatList' || state.activePanel === 'contacts';
+  const showMomentsActions = state.activePanel === 'moments';
+
   return `
     <!-- [区域标注] 闲谈应用根容器 -->
     <!-- [区域标注·本次需求2] data-active-panel 用于精确控制通讯录/朋友圈/用户主页标题栏顶部间距 -->
@@ -887,11 +895,14 @@ function buildAppShell(state) {
            说明：左上角">"返回桌面，中间花体字"Chat"，右上角"+"添加
            ================================================================ -->
       <div class="chat-top-bar">
+        <!-- [区域标注·本次朋友圈标题栏按钮] 朋友圈页标题左侧“+”与右侧爱心，仅在 Moments 板块显示 -->
+        <button class="chat-top-bar__moments-action chat-top-bar__moments-action--left" data-action="moments-compose" type="button" aria-label="发布朋友圈" style="${showMomentsActions ? '' : 'display:none;'}">${TAB_ICONS.plus}</button>
         <!-- [区域标注·本次需求4] Chat/Contacts 标题组：右侧紧跟缩小后的 IconPark "+" 按钮 -->
         <div class="chat-top-bar__title-wrap">
-          <button class="chat-top-bar__title" data-action="go-home" type="button">Chat</button>
-          <button class="chat-top-bar__add" data-action="add-chat" type="button" aria-label="添加">${TAB_ICONS.plus}</button>
+          <button class="chat-top-bar__title" data-action="go-home" type="button">${shellTitle}</button>
+          <button class="chat-top-bar__add" data-action="add-chat" type="button" aria-label="添加" style="${showDefaultAdd ? '' : 'display:none;'}">${TAB_ICONS.plus}</button>
         </div>
+        <button class="chat-top-bar__moments-action chat-top-bar__moments-action--right" data-action="moments-notifications" type="button" aria-label="朋友圈互动通知" style="${showMomentsActions ? '' : 'display:none;'}">${ICON_MOMENTS_HEART}</button>
       </div>
 
       <!-- ================================================================
@@ -1030,8 +1041,14 @@ function switchPanel(container, state, panelKey) {
   }
 
   /* [区域标注·本次需求2] "+"按钮在聊天列表与通讯录板块显示：聊天列表添加聊天，通讯录搜索添加联系人 */
+  const isMomentsPanel = panelKey === 'moments';
   const addBtn = container.querySelector('.chat-top-bar__add');
-  if (addBtn) addBtn.style.display = (panelKey === 'chatList' || panelKey === 'contacts') ? '' : 'none';
+  if (addBtn) addBtn.style.display = (!isMomentsPanel && (panelKey === 'chatList' || panelKey === 'contacts')) ? '' : 'none';
+
+  /* [区域标注·本次朋友圈标题栏按钮] Moments 板块显示标题左右按钮，其它板块隐藏 */
+  container.querySelectorAll('.chat-top-bar__moments-action').forEach(btn => {
+    btn.style.display = isMomentsPanel ? '' : 'none';
+  });
 }
 
 /* ==========================================================================
@@ -1476,6 +1493,16 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       } else {
         showAddChatModal(container, state);
       }
+      break;
+
+    /* [区域标注·本次朋友圈标题栏按钮] 朋友圈标题左侧“+”：预留发布动态入口，使用应用内提示 */
+    case 'moments-compose':
+      renderModalNotice(container, '发布动态功能待接入');
+      break;
+
+    /* [区域标注·本次朋友圈标题栏按钮] 朋友圈标题右侧爱心：预留互动通知入口，使用应用内提示 */
+    case 'moments-notifications':
+      renderModalNotice(container, '暂无互动通知');
       break;
 
     /* [区域标注] 关闭弹窗 */
