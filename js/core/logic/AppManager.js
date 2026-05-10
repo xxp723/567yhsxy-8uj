@@ -134,11 +134,16 @@ export class AppManager {
   }
 
   /* ==========================================================================
-     [区域标注·本次需求2·闲谈应用关键 CSS 预加载]
-     说明：只预加载闲谈自己的样式，不写任何持久化数据。
+     [区域标注·已完成·本次朋友圈独立样式预加载] 闲谈应用关键 CSS 预加载
+     说明：
+     1. 预加载闲谈主样式与朋友圈独立样式，避免窗口显示或首次切换朋友圈时无样式闪烁。
+     2. 只处理 CSS 资源，不写任何持久化数据，不使用 localStorage/sessionStorage。
      ========================================================================== */
   async preloadChatCriticalStyles() {
-    await this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css');
+    await Promise.all([
+      this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css'),
+      this.preloadStylesheet('./js/apps/chat/moments.css', 'chat-moments-css')
+    ]);
   }
 
   /* ==========================================================================
@@ -186,6 +191,11 @@ export class AppManager {
   async warmupCriticalApps(appIds = ['settings', 'worldbook', 'archive', 'chat']) {
     const cssTasks = [
       this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css'),
+      /* ======================================================================
+         [区域标注·已完成·本次朋友圈独立样式预加载] 预热朋友圈独立 CSS
+         说明：与闲谈主样式同时预热，避免首次进入朋友圈板块出现无样式闪屏。
+         ====================================================================== */
+      this.preloadStylesheet('./js/apps/chat/moments.css', 'chat-moments-css'),
       this.preloadStylesheet('./js/apps/chat/chat-message.css', 'chat-msg-css'),
       this.preloadStylesheet('./js/apps/archive/archive.css', 'archive-app-css'),
       this.preloadStylesheet('./js/apps/worldbook/worldbook.css', 'worldbook-app-css')

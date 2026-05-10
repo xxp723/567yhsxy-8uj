@@ -458,6 +458,14 @@ export async function mount(container, context) {
      ========================================================================== */
   await Promise.all([
     loadCSS('./js/apps/chat/chat.css', 'chat-app-css'),
+    /* ======================================================================
+       [区域标注·已完成·本次朋友圈独立样式预加载] 朋友圈页面专用 CSS
+       说明：
+       1. 朋友圈 Editorial Minimal UI 样式已拆分到 moments.css。
+       2. 挂载阶段与闲谈主样式并行加载，避免首次切到朋友圈时出现无样式闪屏。
+       3. 仅服务朋友圈页面，不改变其它闲谈板块样式加载逻辑。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/moments.css', 'chat-moments-css'),
     /* [区域标注·本次需求5] 等待聊天消息页 CSS 加载完成，避免首次进入消息页时未样式化 */
     loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css'),
     /* ======================================================================
@@ -841,6 +849,7 @@ export async function mount(container, context) {
       eventBus.off('archive:active-mask-changed', onMaskChanged);
       eventBus.off('archive:data-changed', onArchiveDataChanged);
       removeCSS('chat-app-css');
+      removeCSS('chat-moments-css');
       removeCSS('chat-msg-css');
       removeCSS('chat-html-card-css');
       removeCSS('chat-gift-css');
