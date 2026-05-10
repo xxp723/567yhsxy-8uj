@@ -1,7 +1,7 @@
 /**
  * 文件名: js/apps/chat/moments.css
  * 用途: 闲谈应用 — 朋友圈页面独立样式。
- *       Editorial Minimal UI / Instagram-like Feed / 朋友圈可复用视觉控件。
+ *       Instagram-like Story Strip / Feed 视觉样式。
  * 架构层: 应用层 CSS（仅服务朋友圈板块）
  */
 
@@ -10,7 +10,7 @@
    说明：
    1. 所有朋友圈样式均限定在 [data-panel="moments"] / .moments-* 范围内。
    2. 颜色引用项目主题变量，并提供同色系 fallback。
-   3. 本文件不包含任何持久化存储逻辑，不使用 localStorage/sessionStorage。
+   3. 本文件不包含任何持久化存储逻辑。
    ========================================================================== */
 [data-panel="moments"] {
   --moments-bg: var(--c-bg-wallpaper, #F5F1EA);
@@ -31,7 +31,7 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] 页面滚动容器
+   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 页面滚动容器
    ========================================================================== */
 .moments-page {
   flex: 1;
@@ -52,335 +52,115 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] 顶部杂志风标题区
-   说明：大标题使用优雅衬线字体；仅用留白和细线建立层级。
+   [区域标注·已完成·本次朋友圈标题栏下方头像横滑栏] 仿 Instagram 横向头像栏
+   说明：
+   1. 第一枚头像固定为当前已开启用户面具身份头像。
+   2. 后续联系人头像由 index.js 传入 state.contacts，仅运行时渲染。
+   3. 本区域不涉及任何持久化存储逻辑。
    ========================================================================== */
-.moments-editorial-hero {
-  padding: 18px 0 18px 0;
+.moments-story-strip {
+  margin: 0 -16px;
+  padding: 12px 0 14px 0;
   border-bottom: 1px solid var(--moments-line);
+  background: var(--moments-bg);
 }
 
-.moments-editorial-hero__eyebrow {
-  margin: 0 0 6px 0;
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--moments-faint);
-  font-family: var(--moments-font-sans);
-}
-
-.moments-editorial-hero__main {
+.moments-story-strip__scroller {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.moments-editorial-hero__title {
-  margin: 0;
-  color: var(--moments-text);
-  font-family: var(--moments-font-serif);
-  font-size: clamp(36px, 12vw, 56px);
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 0.92;
-}
-
-.moments-editorial-hero__meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-  padding-bottom: 4px;
-  color: var(--moments-muted);
-  font-family: var(--moments-font-sans);
-  font-size: 12px;
-  line-height: 1.35;
-  text-align: right;
-}
-
-.moments-editorial-hero__count {
-  color: var(--moments-text);
-  font-size: 18px;
-  font-weight: 800;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] 通用细分割线
-   ========================================================================== */
-.moments-divider {
-  width: 100%;
-  height: 1px;
-  margin: 18px 0;
-  background: var(--moments-line);
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] 静态发布入口 / 无框输入样式
-   说明：仅作为朋友圈编辑风视觉入口，不绑定真实发布逻辑。
-   ========================================================================== */
-.moments-compose-card {
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: 14px;
-  padding: 18px 0 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
 }
 
-.moments-compose-card__top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.moments-story-strip__scroller::-webkit-scrollbar {
+  display: none;
 }
 
-.moments-compose-card__icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1px solid var(--moments-line);
-  color: var(--moments-accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: transparent;
-}
-
-.moments-compose-card__icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.moments-compose-card__field {
+.moments-story-avatar {
+  width: 66px;
+  flex: 0 0 66px;
   min-width: 0;
-  flex: 1;
-}
-
-.moments-underline-input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 0;
-  border-bottom: 1px solid var(--moments-line);
-  border-radius: 0;
-  outline: none;
-  padding: 8px 0 9px 0;
-  background: transparent;
-  color: var(--moments-text);
-  font-family: var(--moments-font-sans);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.moments-underline-input::placeholder {
-  color: var(--moments-faint);
-}
-
-.moments-underline-input:focus {
-  border-bottom-color: var(--moments-accent);
-}
-
-.moments-compose-card__tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.moments-tool-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.moments-tool-chip {
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--moments-muted);
-  padding: 5px 0;
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--moments-font-sans);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.moments-tool-chip:active {
-  color: var(--moments-accent);
-  transform: scale(0.98);
-}
-
-.moments-tool-chip svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] iPhone 风格滑动开关
-   说明：视觉组件使用 button/aria-pressed，不使用浏览器原生开关控件。
-   ========================================================================== */
-.moments-switch {
-  width: 48px;
-  height: 28px;
-  border: 0;
-  border-radius: 999px;
-  padding: 2px;
-  background: var(--ui-switch-off, rgba(125, 125, 130, 0.38));
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  cursor: pointer;
-  transition: background 0.18s ease;
-}
-
-.moments-switch::before {
-  content: "";
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--ui-switch-thumb, #fff);
-  box-shadow: 0 2px 6px rgba(44, 32, 22, 0.16);
-  transform: translateX(0);
-  transition: transform 0.18s ease;
-}
-
-.moments-switch.is-on,
-.moments-switch[aria-pressed="true"] {
-  background: var(--ui-switch-on, #4A342A);
-}
-
-.moments-switch.is-on::before,
-.moments-switch[aria-pressed="true"]::before {
-  transform: translateX(20px);
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] 分段控制按钮
-   ========================================================================== */
-.moments-segmented-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  border: 1px solid var(--moments-line-soft);
-  background: rgba(255, 255, 255, 0.34);
-}
-
-.moments-segmented-btn {
-  border: 0;
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: transparent;
-  color: var(--moments-text);
-  font-family: var(--moments-font-sans);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.1s ease;
-}
-
-.moments-segmented-btn:active {
-  transform: scale(0.96);
-}
-
-.moments-segmented-btn.is-active {
-  background: var(--moments-accent);
-  color: #fff;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] 单选按钮
-   ========================================================================== */
-.moments-radio-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.moments-radio-option {
-  border: 0;
-  background: transparent;
-  color: var(--moments-muted);
-  padding: 4px 0;
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   gap: 7px;
+  color: var(--moments-text);
   font-family: var(--moments-font-sans);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  scroll-snap-align: start;
 }
 
-.moments-radio-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1px solid var(--moments-line);
+.moments-story-avatar__ring {
+  width: 58px;
+  height: 58px;
   box-sizing: border-box;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(145deg, var(--moments-text), var(--moments-accent-soft));
+  color: var(--moments-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(44, 32, 22, 0.08);
 }
 
-.moments-radio-option.is-active {
+.moments-story-avatar--self .moments-story-avatar__ring {
+  background: linear-gradient(145deg, var(--moments-accent), var(--moments-text));
+}
+
+.moments-story-avatar__ring img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: block;
+  object-fit: cover;
+  background: var(--moments-accent-soft);
+}
+
+.moments-story-avatar__initial {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--moments-accent-soft);
+  color: var(--moments-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.moments-story-avatar__name {
+  width: 100%;
+  color: var(--moments-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moments-story-avatar--self .moments-story-avatar__name {
   color: var(--moments-text);
 }
 
-.moments-radio-option.is-active .moments-radio-dot {
-  border-color: var(--moments-accent);
-}
-
-.moments-radio-option.is-active .moments-radio-dot::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--moments-accent);
-}
-
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈可复用控件] 控件展示区
-   说明：为后续扩展朋友圈筛选/隐私/发布控件预留统一基础样式。
-   ========================================================================== */
-.moments-control-lab {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 0 0 0;
-}
-
-.moments-control-lab__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.moments-control-lab__label {
-  min-width: 0;
-  color: var(--moments-muted);
-  font-family: var(--moments-font-sans);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] Feed 列表与动态卡片
+   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] Feed 列表与动态卡片
    ========================================================================== */
 .moments-feed {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding-top: 4px;
+  padding-top: 8px;
 }
 
 .moments-card {
@@ -529,7 +309,7 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] 互动栏
+   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 互动栏
    ========================================================================== */
 .moments-card__actions {
   display: flex;
@@ -578,7 +358,7 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] 评论区
+   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 评论区
    ========================================================================== */
 .moments-comments {
   margin-top: 13px;
@@ -606,21 +386,15 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈编辑风改造] 空状态
+   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 空状态
    ========================================================================== */
 .moments-empty-state {
-  min-height: 100%;
+  flex: 1;
+  min-height: 320px;
   display: flex;
   flex-direction: column;
-  padding: 0 16px 104px 16px;
   background: var(--moments-bg);
   color: var(--moments-text);
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.moments-empty-state::-webkit-scrollbar {
-  display: none;
 }
 
 .moments-empty-state__body {
@@ -678,31 +452,29 @@
     padding-right: 14px;
   }
 
-  .moments-editorial-hero__main {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
+  .moments-story-strip {
+    margin-left: -14px;
+    margin-right: -14px;
   }
 
-  .moments-editorial-hero__meta {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  .moments-compose-card__tools,
-  .moments-control-lab__row {
-    align-items: flex-start;
-    flex-direction: column;
+  .moments-story-strip__scroller {
     gap: 12px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
-  .moments-segmented-control {
-    width: 100%;
-    box-sizing: border-box;
+  .moments-story-avatar {
+    width: 62px;
+    flex-basis: 62px;
   }
 
-  .moments-segmented-btn {
-    flex: 1;
+  .moments-story-avatar__ring {
+    width: 54px;
+    height: 54px;
+  }
+
+  .moments-story-avatar__name {
+    font-size: 10px;
   }
 
   .moments-card__name-row,

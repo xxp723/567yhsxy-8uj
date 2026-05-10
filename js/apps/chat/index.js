@@ -917,7 +917,7 @@ function buildAppShell(state) {
       </div>
       <!-- [区域标注] 朋友圈板块 -->
       <div class="chat-panel ${state.activePanel === 'moments' ? 'is-active' : ''}" data-panel="moments">
-        ${renderMoments(state.moments)}
+        ${renderMoments(state.moments, { profile: state.profile, contacts: state.contacts })}
       </div>
       <!-- [区域标注] 用户主页板块 -->
       <div class="chat-panel ${state.activePanel === 'profile' ? 'is-active' : ''}" data-panel="profile">
@@ -989,7 +989,7 @@ function refreshPanel(container, state, panelKey) {
       panelEl.innerHTML = renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId);
       break;
     case 'moments':
-      panelEl.innerHTML = renderMoments(state.moments);
+      panelEl.innerHTML = renderMoments(state.moments, { profile: state.profile, contacts: state.contacts });
       break;
     case 'profile':
       panelEl.innerHTML = renderProfile(state.profile);
@@ -1667,6 +1667,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
         buildProfileFromMask(state);
         refreshPanel(container, state, 'contacts');
         refreshPanel(container, state, 'profile');
+        refreshPanel(container, state, 'moments');
       }
       showContactGroupPickerModal(container, state, role.id);
       break;
