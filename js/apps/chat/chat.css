@@ -88,6 +88,10 @@
   justify-content: center;
   width: 100%;
   max-width: 100%;
+  /* [区域标注·已完成·本次朋友圈标题栏点击修复] 给左右图标按钮预留安全点击区，避免中间标题包裹层覆盖 Moments 左右按钮热区。 */
+  box-sizing: border-box;
+  padding: 0 52px;
+  pointer-events: none;
 }
 
 /* [区域标注] 花体字标题按钮 — 点击标题区域返回桌面 */
@@ -107,6 +111,7 @@
   border-radius: 14px;
   transition: background 0.15s ease, transform 0.1s ease;
   z-index: 1;
+  pointer-events: auto;
 }
 
 .chat-top-bar__title:active {
@@ -145,7 +150,7 @@
 }
 
 /* ==========================================================================
-   [区域标注·本次朋友圈标题栏按钮] Moments 顶部左右图标按钮
+   [区域标注·已完成·本次朋友圈标题栏按钮] Moments 顶部左右图标按钮
    说明：
    1. 仅服务朋友圈标题栏左侧 “+” 与右侧爱心按钮。
    2. Chat/Contacts 仍使用上方 .chat-top-bar__add 小按钮，不受本样式影响。
@@ -154,8 +159,8 @@
 .chat-top-bar__moments-action {
   position: absolute;
   top: 50%;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -188,8 +193,8 @@
 }
 
 .chat-top-bar__moments-action svg {
-  width: 32px;
-  height: 32px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ==========================================================================

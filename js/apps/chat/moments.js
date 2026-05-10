@@ -22,7 +22,21 @@ const ICONS = {
   /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 位置图标 */
   location: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 44S40 30 40 18A16 16 0 1 0 8 18C8 30 24 44 24 44Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="18" r="5" stroke="currentColor" stroke-width="3"/></svg>`,
   /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 收藏图标 */
-  bookmark: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M12 6h24v36L24 34L12 42V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`
+  bookmark: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M12 6h24v36L24 34L12 42V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 返回图标 */
+  back: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M31 36L19 24L31 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 发送图标 */
+  send: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M44 24L4 6l8 18l-8 18l40-18Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M12 24h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 图片图标 */
+  image: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="6" y="8" width="36" height="32" rx="3" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="19" r="3" stroke="currentColor" stroke-width="3"/><path d="M41 33l-11-11l-14 14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 链接图标 */
+  link: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M19 25l10-10a7 7 0 1 1 10 10L29 35" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 23L19 33a7 7 0 1 1-10-10L19 13" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 分享图标 */
+  share: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="12" cy="24" r="4" stroke="currentColor" stroke-width="3"/><circle cx="36" cy="12" r="4" stroke="currentColor" stroke-width="3"/><circle cx="36" cy="36" r="4" stroke="currentColor" stroke-width="3"/><path d="M15.5 22.5L32.5 13.5M15.5 25.5l17 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 可见范围图标 */
+  visible: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 12C13 12 6.5 24 6.5 24S13 36 24 36s17.5-12 17.5-12S35 12 24 12Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="24" r="5" stroke="currentColor" stroke-width="3"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈独立发帖页] 关闭/删除图标 */
+  close: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -254,6 +268,148 @@ function renderEmptyState(profile, contacts) {
         </div>
       </div>
     </div>
+  `;
+}
+
+function renderComposeAvatar(name, avatar) {
+  const safeName = escapeHtml(name || '当前身份');
+  return avatar
+    ? `<img src="${escapeHtml(avatar)}" alt="${safeName}">`
+    : `<span>${escapeHtml(getInitial(name))}</span>`;
+}
+
+function renderComposeImages(images) {
+  const list = Array.isArray(images) ? images.filter(item => item?.src).slice(0, 9) : [];
+  if (!list.length) {
+    return `
+      <div class="moments-compose-empty">
+        <span class="moments-compose-empty__icon">${ICONS.image}</span>
+        <p class="moments-compose-empty__text">支持添加本地图片或 URL 图片，图文可一起发布。</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="moments-compose-image-grid">
+      ${list.map((image, index) => `
+        <div class="moments-compose-image-card">
+          <img src="${escapeHtml(image.src)}" alt="待发布图片 ${index + 1}">
+          <button
+            class="moments-compose-image-card__remove"
+            type="button"
+            data-action="remove-moments-compose-image"
+            data-image-id="${escapeHtml(image.id || '')}"
+            aria-label="删除图片">
+            ${ICONS.close}
+          </button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈独立发帖页] 独立发帖页渲染
+   参数：
+   - draft — 当前发帖草稿（仅运行时）
+   - options.profile — 当前已开启用户面具身份资料
+   - options.shareTargetName — 已选择的聊天联系人名
+   - options.visibilityLabel — 当前可见范围文案
+   说明：
+   1. 仅负责渲染发帖页，不包含任何持久化存储逻辑。
+   2. 发帖身份固定为当前已开启用户面具身份，不提供其它身份切换入口。
+   3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗/选择器。
+   ========================================================================== */
+export function renderMomentsComposePage(draft, options = {}) {
+  const profile = options?.profile || {};
+  const safeDraft = draft && typeof draft === 'object' ? draft : {};
+  const text = String(safeDraft.text || '');
+  const location = String(safeDraft.location || '').trim();
+  const shareTargetName = String(options?.shareTargetName || '').trim();
+  const visibilityLabel = String(options?.visibilityLabel || '公开').trim() || '公开';
+  const maskName = profile?.nickname || profile?.name || '当前面具身份';
+  const maskSignature = String(profile?.signature || '').trim();
+  const imageCount = Array.isArray(safeDraft.images) ? safeDraft.images.filter(item => item?.src).length : 0;
+
+  return `
+    <!-- [区域标注·已完成·本次朋友圈独立发帖页] 朋友圈独立发帖页 -->
+    <section class="moments-compose-page" aria-label="发布朋友圈">
+      <header class="moments-compose-top-bar">
+        <button class="moments-compose-top-bar__btn" type="button" data-action="moments-compose-back" aria-label="返回">
+          ${ICONS.back}
+        </button>
+        <div class="moments-compose-top-bar__title-wrap">
+          <h2 class="moments-compose-top-bar__title">发朋友圈</h2>
+          <p class="moments-compose-top-bar__subtitle">仅使用当前已开启的用户面具身份</p>
+        </div>
+        <button class="moments-compose-top-bar__btn moments-compose-top-bar__btn--send" type="button" data-action="submit-moments-compose" aria-label="发送朋友圈">
+          ${ICONS.send}
+        </button>
+      </header>
+
+      <div class="moments-compose-scroll">
+        <section class="moments-compose-identity">
+          <span class="moments-compose-identity__avatar">${renderComposeAvatar(maskName, profile?.avatar || '')}</span>
+          <div class="moments-compose-identity__meta">
+            <strong class="moments-compose-identity__name">${escapeHtml(maskName)}</strong>
+            <span class="moments-compose-identity__hint">${escapeHtml(maskSignature || '以当前用户面具身份发布动态')}</span>
+          </div>
+        </section>
+
+        <section class="moments-compose-block">
+          <div class="moments-compose-block__header">
+            <h3>图片</h3>
+            <span>${imageCount ? `${imageCount}/9` : '可选'}</span>
+          </div>
+          <div class="moments-compose-media-actions">
+            <button class="moments-compose-media-btn" type="button" data-action="open-moments-compose-local-picker">
+              ${ICONS.image}
+              <span>本地图片</span>
+            </button>
+            <button class="moments-compose-media-btn" type="button" data-action="open-moments-compose-image-url-modal">
+              ${ICONS.link}
+              <span>URL 图片</span>
+            </button>
+          </div>
+          <input class="moments-compose-file-input" data-role="moments-compose-local-input" type="file" accept="image/*">
+          ${renderComposeImages(safeDraft.images)}
+        </section>
+
+        <section class="moments-compose-block">
+          <div class="moments-compose-block__header">
+            <h3>文字</h3>
+            <span>支持纯文本或图文一起发</span>
+          </div>
+          <textarea
+            class="moments-compose-textarea"
+            data-role="moments-compose-textarea"
+            placeholder="这一刻想分享点什么？"
+          >${escapeHtml(text)}</textarea>
+        </section>
+
+        <section class="moments-compose-block">
+          <div class="moments-compose-options">
+            <button class="moments-compose-option" type="button" data-action="open-moments-compose-location-modal">
+              <span class="moments-compose-option__icon">${ICONS.location}</span>
+              <span class="moments-compose-option__label">所在地点</span>
+              <span class="moments-compose-option__value">${escapeHtml(location || '点击添加地点')}</span>
+            </button>
+
+            <button class="moments-compose-option" type="button" data-action="open-moments-compose-share-modal">
+              <span class="moments-compose-option__icon">${ICONS.share}</span>
+              <span class="moments-compose-option__label">分享帖子</span>
+              <span class="moments-compose-option__value">${escapeHtml(shareTargetName || '不分享到聊天')}</span>
+            </button>
+
+            <button class="moments-compose-option" type="button" data-action="open-moments-compose-visibility-modal">
+              <span class="moments-compose-option__icon">${ICONS.visible}</span>
+              <span class="moments-compose-option__label">可见范围</span>
+              <span class="moments-compose-option__value">${escapeHtml(visibilityLabel)}</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
   `;
 }
 

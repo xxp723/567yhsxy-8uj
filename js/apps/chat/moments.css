@@ -444,6 +444,363 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·本次朋友圈独立发帖页样式] 发帖页专属布局
+   说明：
+   1. 仅服务朋友圈独立发帖页，不改动聊天消息页、聊天列表或其它设置页样式。
+   2. 样式预加载已在 mount() 中完成，用于避免首次进入发帖页闪屏。
+   3. 不涉及任何持久化存储逻辑。
+   ========================================================================== */
+.moments-compose-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--moments-bg);
+  color: var(--moments-text);
+}
+
+.moments-compose-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--moments-line);
+  background: rgba(245, 241, 234, 0.96);
+  backdrop-filter: blur(16px);
+}
+
+.moments-compose-top-bar__btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--moments-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-compose-top-bar__btn:active,
+.moments-compose-media-btn:active,
+.moments-compose-option:active,
+.moments-compose-image-card__remove:active {
+  transform: scale(0.96);
+}
+
+.moments-compose-top-bar__btn:hover,
+.moments-compose-media-btn:hover,
+.moments-compose-option:hover {
+  background: rgba(125, 90, 68, 0.08);
+}
+
+.moments-compose-top-bar__btn svg,
+.moments-compose-image-card__remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+.moments-compose-top-bar__btn--send {
+  color: var(--moments-accent);
+}
+
+.moments-compose-top-bar__title-wrap {
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+}
+
+.moments-compose-top-bar__title {
+  margin: 0;
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.moments-compose-top-bar__subtitle {
+  margin: 3px 0 0;
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.moments-compose-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 16px 112px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.moments-compose-identity,
+.moments-compose-block {
+  border: 1px solid var(--moments-line);
+  background: var(--moments-surface-strong);
+  box-shadow: 0 12px 28px rgba(44, 32, 22, 0.06);
+}
+
+.moments-compose-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+}
+
+.moments-compose-identity__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--moments-line);
+  background: var(--moments-accent-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-family: var(--moments-font-sans);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.moments-compose-identity__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moments-compose-identity__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moments-compose-identity__name {
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.moments-compose-identity__hint {
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.moments-compose-block {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 20px;
+}
+
+.moments-compose-block__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.moments-compose-block__header h3 {
+  margin: 0;
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.moments-compose-block__header span {
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.moments-compose-media-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.moments-compose-media-btn {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--moments-line);
+  border-radius: 14px;
+  background: rgba(255, 252, 247, 0.72);
+  color: var(--moments-text);
+  padding: 11px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--moments-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-compose-media-btn svg,
+.moments-compose-option__icon svg,
+.moments-compose-empty__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.moments-compose-file-input {
+  display: none;
+}
+
+.moments-compose-empty {
+  min-height: 148px;
+  border: 1px dashed var(--moments-line);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.42);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  text-align: center;
+}
+
+.moments-compose-empty__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(125, 90, 68, 0.08);
+  color: var(--moments-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moments-compose-empty__text {
+  margin: 0;
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.moments-compose-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.moments-compose-image-card {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(74, 52, 42, 0.08);
+}
+
+.moments-compose-image-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.moments-compose-image-card__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(24, 18, 14, 0.72);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.moments-compose-textarea {
+  width: 100%;
+  min-height: 168px;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 15px;
+  line-height: 1.85;
+  padding: 0;
+}
+
+.moments-compose-textarea::placeholder {
+  color: var(--moments-faint);
+}
+
+.moments-compose-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.moments-compose-option {
+  width: 100%;
+  border: 1px solid var(--moments-line);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.64);
+  color: var(--moments-text);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 20px 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-compose-option__icon {
+  color: var(--moments-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moments-compose-option__label {
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.moments-compose-option__value {
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次朋友圈移动端适配] 小屏布局修正
    ========================================================================== */
 @media (max-width: 380px) {
@@ -482,5 +839,19 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .moments-compose-top-bar,
+  .moments-compose-scroll {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .moments-compose-option {
+    grid-template-columns: 20px 58px minmax(0, 1fr);
+  }
+
+  .moments-compose-media-actions {
+    flex-direction: column;
   }
 }
