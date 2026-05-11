@@ -88,7 +88,7 @@
   justify-content: center;
   width: 100%;
   max-width: 100%;
-  /* [区域标注·已完成·本次朋友圈标题栏点击修复] 给左右图标按钮预留安全点击区，避免中间标题包裹层覆盖 Moments 左右按钮热区。 */
+  /* [区域标注·已完成·本次标题栏点击热区修复] 给左右图标按钮预留安全点击区，避免中间标题包裹层覆盖两侧按钮热区。 */
   box-sizing: border-box;
   padding: 0 52px;
   pointer-events: none;
@@ -145,54 +145,6 @@
 }
 
 .chat-top-bar__add svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈标题栏按钮] Moments 顶部左右图标按钮
-   说明：
-   1. 仅服务朋友圈标题栏左侧 “+” 与右侧爱心按钮。
-   2. Chat/Contacts 仍使用上方 .chat-top-bar__add 小按钮，不受本样式影响。
-   3. 按钮本身不涉及任何持久化存储逻辑。
-   ========================================================================== */
-.chat-top-bar__moments-action {
-  position: absolute;
-  top: 50%;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: #4A342A;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
-  z-index: 2;
-}
-
-.chat-top-bar__moments-action--left {
-  left: 16px;
-  transform: translateY(-50%);
-}
-
-.chat-top-bar__moments-action--right {
-  right: 16px;
-  transform: translateY(-50%);
-}
-
-.chat-top-bar__moments-action:active {
-  background: rgba(74, 52, 42, 0.08);
-}
-
-.chat-top-bar__moments-action--left:active,
-.chat-top-bar__moments-action--right:active {
-  transform: translateY(-50%) scale(0.92);
-}
-
-.chat-top-bar__moments-action svg {
   width: 14px;
   height: 14px;
 }
@@ -596,7 +548,7 @@
 
 /* ==========================================================================
    [区域标注] 四大板块容器 — 用于切换显示
-   说明：聊天列表、通讯录、朋友圈、用户主页 的显隐控制
+   说明：四个主板块容器的显隐控制
    ========================================================================== */
 .chat-panel {
   display: none;
@@ -808,15 +760,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈独立样式迁移] 朋友圈板块样式已迁移
-   说明：
-   1. 朋友圈页面样式已独立到 js/apps/chat/moments.css。
-   2. 本区域保留迁移说明，避免旧 .moment-item/.moments-* 样式残留造成重复覆盖。
-   3. 后续修改朋友圈视觉时请直接维护 moments.css。
-   4. 本迁移不涉及任何持久化存储逻辑，不使用 localStorage/sessionStorage。
-   ========================================================================== */
 
 /* ==========================================================================
    [区域标注] 用户主页板块样式

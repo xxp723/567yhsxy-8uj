@@ -156,7 +156,22 @@ import {
   getWalletDisplayAmount,
   formatWalletMoney
 } from './profile.js';
-import { renderMoments, renderMomentsComposePage } from './moments.js';
+import {
+  renderMoments,
+  MOMENTS_COMPOSE_MAX_IMAGES,
+  createMomentsComposeDraft,
+  normalizeMomentsComposeDraft,
+  ensureMomentsComposeDraft,
+  getMomentsComposeShareTarget,
+  buildMomentsComposeShareMessage,
+  renderMomentsComposeIntoPage,
+  openMomentsComposePage,
+  closeMomentsComposePage,
+  openMomentsComposeImageUrlModal,
+  openMomentsComposeLocationModal,
+  openMomentsComposeShareModal,
+  openMomentsComposeVisibilityModal
+} from './moments.js';
 /* ==========================================================================
    [区域标注·已完成·语言翻译] 导入语言翻译独立模块
    说明：
@@ -1518,7 +1533,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
 
     /* [区域标注·已完成·本次朋友圈独立发帖页接线] 发帖页返回：关闭独立发帖页并保留当前草稿 */
     case 'moments-compose-back':
-      closeMomentsComposePage(container, state);
+      closeMomentsComposePage(container, state, PANEL_KEYS);
       break;
 
     /* [区域标注·已完成·本次朋友圈独立发帖页接线] 发帖页发送：写入朋友圈并可选分享到聊天 */
@@ -1604,7 +1619,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       await Promise.all(tasks);
       refreshPanel(container, state, 'moments');
       if (shareTarget) refreshPanel(container, state, 'chatList');
-      closeMomentsComposePage(container, state, { resetDraft: true });
+      closeMomentsComposePage(container, state, PANEL_KEYS, { resetDraft: true });
       break;
     }
 
@@ -4592,310 +4607,6 @@ function refreshFavoriteSearchResultsOnly(container, state) {
   draft.innerHTML = renderSubPage(state, 'favorite');
   const nextGrid = draft.querySelector('.favorite-grid');
   if (nextGrid) currentGrid.innerHTML = nextGrid.innerHTML;
-}
-
-/* ==========================================================================
-   [区域标注·已完成·本次朋友圈独立发帖页接线] 发帖页运行时工具函数
-   说明：
-   1. 仅服务朋友圈标题栏“+”打开的独立发帖页，不改动聊天列表、通讯录、用户主页等未提到区域。
-   2. 发帖草稿仅保存在运行时；正式发布和可选分享时才通过 DB.js / IndexedDB 写入。
-   3. 分享候选严格来自当前聊天列表可见会话；发帖身份固定为当前已开启用户面具身份。
-   4. 全程不使用 localStorage/sessionStorage，不使用 alert/confirm/prompt。
-   ========================================================================== */
-const MOMENTS_COMPOSE_MAX_IMAGES = 9;
-
-function createMomentsComposeDraft() {
-  return {
-    text: '',
-    images: [],
-    location: '',
-    shareChatId: '',
-    visibilityMode: 'public',
-    visibleContactIds: []
-  };
-}
-
-function normalizeMomentsComposeDraft(draft) {
-  const safeDraft = draft && typeof draft === 'object' ? draft : {};
-  return {
-    text: String(safeDraft.text || ''),
-    images: Array.isArray(safeDraft.images)
-      ? safeDraft.images
-          .map((item, index) => ({
-            id: String(item?.id || `moments_compose_image_${index + 1}`),
-            src: String(item?.src || '').trim(),
-            name: String(item?.name || '').trim()
-          }))
-          .filter(item => item.src)
-          .slice(0, MOMENTS_COMPOSE_MAX_IMAGES)
-      : [],
-    location: String(safeDraft.location || '').trim(),
-    shareChatId: String(safeDraft.shareChatId || '').trim(),
-    visibilityMode: String(safeDraft.visibilityMode || 'public') === 'contacts' ? 'contacts' : 'public',
-    visibleContactIds: Array.from(new Set(
-      Array.isArray(safeDraft.visibleContactIds)
-        ? safeDraft.visibleContactIds.map(id => String(id || '').trim()).filter(Boolean)
-        : []
-    ))
-  };
-}
-
-function ensureMomentsComposeDraft(state) {
-  state.momentsComposeDraft = normalizeMomentsComposeDraft(state.momentsComposeDraft);
-  return state.momentsComposeDraft;
-}
-
-function getMomentsComposeShareSessions(state) {
-  return getVisibleChatSessions(state).filter(session => session && String(session.id || '').trim());
-}
-
-function getMomentsComposeShareTarget(state) {
-  const draft = ensureMomentsComposeDraft(state);
-  return getMomentsComposeShareSessions(state).find(session => String(session.id) === String(draft.shareChatId)) || null;
-}
-
-function getMomentsComposeShareTargetName(state) {
-  const targetSession = getMomentsComposeShareTarget(state);
-  if (!targetSession) return '';
-  return String(targetSession.remark || targetSession.name || '').trim() || '未命名聊天';
-}
-
-function getMomentsComposeVisibilityLabel(state) {
-  const draft = ensureMomentsComposeDraft(state);
-  if (draft.visibilityMode !== 'contacts') return '公开';
-
-  const pickedNames = (Array.isArray(state.contacts) ? state.contacts : [])
-    .filter(contact => draft.visibleContactIds.includes(String(contact?.id || '').trim()))
-    .map(contact => String(contact?.name || contact?.nickname || contact?.contact || '').trim())
-    .filter(Boolean);
-
-  if (!pickedNames.length) return '通讯录中个别人能看';
-  if (pickedNames.length <= 2) return `通讯录中个别人能看（${pickedNames.join('、')}）`;
-  return `通讯录中个别人能看（${pickedNames.slice(0, 2).join('、')}等${pickedNames.length}人）`;
-}
-
-function buildMomentsComposeShareMessage(draft) {
-  const text = String(draft?.text || '').trim();
-  const imageCount = Array.isArray(draft?.images) ? draft.images.filter(item => item?.src).length : 0;
-  const location = String(draft?.location || '').trim();
-
-  const summaryParts = [];
-  if (text) summaryParts.push(text);
-  if (imageCount > 0) summaryParts.push(`[图片x${imageCount}]`);
-  if (location) summaryParts.push(`@${location}`);
-
-  return summaryParts.length
-    ? `我分享了一条朋友圈动态：${summaryParts.join(' ')}`
-    : '我分享了一条朋友圈动态';
-}
-
-function renderMomentsComposeIntoPage(container, state) {
-  const draft = ensureMomentsComposeDraft(state);
-  const topBar = container.querySelector('.chat-top-bar');
-  const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
-  const bottomTab = container.querySelector('[data-role="bottom-tab"]');
-  const panels = container.querySelectorAll('.chat-panel');
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-
-  if (topBar) topBar.style.display = 'none';
-  if (subTabs) subTabs.style.display = 'none';
-  if (bottomTab) bottomTab.style.display = 'none';
-  panels.forEach(panel => {
-    panel.style.display = 'none';
-  });
-
-  if (msgWrap) {
-    msgWrap.style.display = 'flex';
-    msgWrap.innerHTML = renderMomentsComposePage(draft, {
-      profile: state.profile,
-      shareTargetName: getMomentsComposeShareTargetName(state),
-      visibilityLabel: getMomentsComposeVisibilityLabel(state)
-    });
-  }
-}
-
-function openMomentsComposePage(container, state) {
-  state.momentsComposeOpen = true;
-  renderMomentsComposeIntoPage(container, state);
-}
-
-function closeMomentsComposePage(container, state, options = {}) {
-  state.momentsComposeOpen = false;
-  if (options?.resetDraft) {
-    state.momentsComposeDraft = createMomentsComposeDraft();
-  }
-
-  const topBar = container.querySelector('.chat-top-bar');
-  const subTabs = container.querySelector('[data-role="chat-sub-tabs"]');
-  const bottomTab = container.querySelector('[data-role="bottom-tab"]');
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-
-  if (topBar) topBar.style.display = '';
-  if (subTabs) subTabs.style.display = state.activePanel === 'chatList' ? '' : 'none';
-  if (bottomTab) bottomTab.style.display = '';
-
-  PANEL_KEYS.forEach(key => {
-    const panel = container.querySelector(`[data-panel="${key}"]`);
-    if (!panel) return;
-    panel.style.display = '';
-    panel.classList.toggle('is-active', key === state.activePanel);
-  });
-
-  if (msgWrap) {
-    msgWrap.style.display = 'none';
-    msgWrap.innerHTML = '';
-  }
-}
-
-function openMomentsComposeImageUrlModal(container) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  if (!mask || !panel) return;
-
-  panel.innerHTML = `
-    <div class="chat-modal-header">
-      <span>添加 URL 图片</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <label class="chat-modal-field">
-        <span class="chat-modal-field__label">图片链接</span>
-        <input class="chat-modal-input" data-role="moments-compose-image-url-input" type="url" placeholder="https://example.com/image.jpg">
-      </label>
-    </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-moments-compose-image-url" type="button">添加图片</button>
-    </div>
-  `;
-  mask.classList.remove('is-hidden');
-}
-
-function openMomentsComposeLocationModal(container, state) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  const draft = ensureMomentsComposeDraft(state);
-  if (!mask || !panel) return;
-
-  panel.innerHTML = `
-    <div class="chat-modal-header">
-      <span>所在地点</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <label class="chat-modal-field">
-        <span class="chat-modal-field__label">地点名称</span>
-        <input class="chat-modal-input" data-role="moments-compose-location-input" type="text" value="${escapeHtml(draft.location)}" placeholder="例如：上海 · 静安">
-      </label>
-    </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn" data-action="clear-moments-compose-location" type="button">清空</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-moments-compose-location" type="button">保存地点</button>
-    </div>
-  `;
-  mask.classList.remove('is-hidden');
-}
-
-function openMomentsComposeShareModal(container, state) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  const draft = ensureMomentsComposeDraft(state);
-  const sessions = getMomentsComposeShareSessions(state);
-  if (!mask || !panel) return;
-
-  panel.innerHTML = `
-    <div class="chat-modal-header">
-      <span>分享帖子</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <button
-        class="chat-modal-contact"
-        data-action="select-moments-compose-share"
-        data-chat-id=""
-        type="button"
-        aria-pressed="${draft.shareChatId ? 'false' : 'true'}">
-        <span class="chat-modal-contact__name">不分享到聊天</span>
-        <span class="chat-modal-contact__meta">${draft.shareChatId ? '' : ICON_CHECK}</span>
-      </button>
-      ${sessions.length ? sessions.map(session => {
-        const sessionName = escapeHtml(String(session?.remark || session?.name || '未命名聊天').trim() || '未命名聊天');
-        const sessionMeta = escapeHtml(String(session?.lastMessage || '').trim() || '聊天列表中的联系人');
-        const isSelected = String(session?.id || '') === String(draft.shareChatId || '');
-        return `
-          <button
-            class="chat-modal-contact"
-            data-action="select-moments-compose-share"
-            data-chat-id="${escapeHtml(String(session?.id || ''))}"
-            type="button"
-            aria-pressed="${isSelected ? 'true' : 'false'}">
-            <span>
-              <span class="chat-modal-contact__name">${sessionName}</span>
-              <span class="chat-modal-contact__meta">${sessionMeta}</span>
-            </span>
-            <span class="chat-modal-contact__meta">${isSelected ? ICON_CHECK : ''}</span>
-          </button>
-        `;
-      }).join('') : '<p class="chat-modal-empty">当前聊天列表暂无可分享联系人。</p>'}
-    </div>
-  `;
-  mask.classList.remove('is-hidden');
-}
-
-function openMomentsComposeVisibilityModal(container, state) {
-  const mask = container.querySelector('[data-role="modal-mask"]');
-  const panel = container.querySelector('[data-role="modal-panel"]');
-  const draft = ensureMomentsComposeDraft(state);
-  const contacts = Array.isArray(state.contacts) ? state.contacts : [];
-  if (!mask || !panel) return;
-
-  panel.innerHTML = `
-    <div class="chat-modal-header">
-      <span>可见范围</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
-    </div>
-    <div class="chat-modal-body">
-      <div class="chat-modal-actions">
-        <button
-          class="chat-modal-btn ${draft.visibilityMode === 'public' ? 'chat-modal-btn--primary' : ''}"
-          data-action="set-moments-compose-visibility-mode"
-          data-visibility-mode="public"
-          type="button">
-          公开
-        </button>
-        <button
-          class="chat-modal-btn ${draft.visibilityMode === 'contacts' ? 'chat-modal-btn--primary' : ''}"
-          data-action="set-moments-compose-visibility-mode"
-          data-visibility-mode="contacts"
-          type="button">
-          通讯录中个别人能看
-        </button>
-      </div>
-      ${draft.visibilityMode === 'contacts' ? `
-        <div class="chat-modal-section">
-          ${(contacts.length ? contacts : []).map(contact => {
-            const contactId = String(contact?.id || '').trim();
-            const contactName = escapeHtml(String(contact?.name || contact?.nickname || contact?.contact || '未命名联系人').trim() || '未命名联系人');
-            const checked = draft.visibleContactIds.includes(contactId);
-            return `
-              <button
-                class="chat-modal-contact"
-                data-action="toggle-moments-compose-visible-contact"
-                data-contact-id="${escapeHtml(contactId)}"
-                type="button"
-                aria-pressed="${checked ? 'true' : 'false'}">
-                <span class="chat-modal-contact__name">${contactName}</span>
-                <span class="chat-modal-contact__meta">${checked ? ICON_CHECK : ''}</span>
-              </button>
-            `;
-          }).join('') || '<p class="chat-modal-empty">当前通讯录暂无可选联系人。</p>'}
-        </div>
-      ` : ''}
-    </div>
-    <div class="chat-modal-footer">
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">完成</button>
-    </div>
-  `;
-  mask.classList.remove('is-hidden');
 }
 
 /* ==========================================================================

@@ -31,6 +31,54 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·本次朋友圈标题栏按钮迁移] Moments 顶部左右图标按钮
+   说明：
+   1. 按钮 DOM 位于通用 .chat-top-bar 中，不在 [data-panel="moments"] 面板内部。
+   2. 因此通过 .chat-app[data-active-panel="moments"] 做作用域限制，仅在朋友圈板块激活时生效。
+   3. 视觉参数沿用原 chat.css，避免影响现有按钮尺寸、位置与点击反馈。
+   ========================================================================== */
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #4A342A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  z-index: 2;
+}
+
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action--left {
+  left: 16px;
+  transform: translateY(-50%);
+}
+
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action--right {
+  right: 16px;
+  transform: translateY(-50%);
+}
+
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action:active {
+  background: rgba(74, 52, 42, 0.08);
+}
+
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action--left:active,
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action--right:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.chat-app[data-active-panel="moments"] .chat-top-bar__moments-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 页面滚动容器
    ========================================================================== */
 .moments-page {
