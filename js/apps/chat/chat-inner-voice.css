@@ -11,6 +11,7 @@
    8. [已完成·心声面板日期时间] 当前心声面板显示日期和时间，历史下载按日期排序。
    9. [已完成·本次修正：性幻想与性欲值] Voice 页新增“性幻想”，Now 页新增“性欲值”进度条。
    10. [已完成·本次修正：心声面板标题与板块间距] FANTASY/ACTION/METERS 标题与板块间距已统一为更舒展的面板节奏。
+   11. [已完成·本次修正：心声掉格式防溢出约束] 面板文本、标签、历史条目与数值头部已补充收缩与强制换行约束，防止长文本/残留分隔符撑破布局。
    ========================================================================== */
 
 /* ===== [已完成·花体字体导入] Google Fonts Dancing Script 加粗花体 ===== */
@@ -93,6 +94,7 @@
 
 .iv-tab {
   flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -239,11 +241,15 @@
   margin-bottom: 10px;
   background: rgba(255, 255, 255, 0.72);
   position: relative;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .iv-cell__label {
   position: absolute;
   top: -9px;
   left: 12px;
+  max-width: calc(100% - 24px);
   background: var(--c-white-rice);
   padding: 0 7px;
   font-size: 10px;
@@ -252,12 +258,19 @@
   color: var(--c-border);
   text-transform: uppercase;
   opacity: 0.62;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 .iv-cell__text {
+  min-width: 0;
+  max-width: 100%;
   font-size: 13.5px;
   line-height: 1.65;
   color: var(--c-text-main);
   word-break: break-word;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -305,9 +318,10 @@
   display: flex;
   gap: 10px;
   margin-bottom: 0;
+  flex-wrap: wrap;
 }
 .iv-grid-row > .iv-cell {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
 }
 
@@ -350,18 +364,27 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 5px;
 }
 .iv-meter__name {
+  min-width: 0;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--c-border);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .iv-meter__value {
+  min-width: 0;
   font-size: 11px;
   font-weight: 700;
   color: var(--c-text-main);
   letter-spacing: 0.3px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .iv-meter__bar {
@@ -438,6 +461,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  width: 100%;
   padding: 10px 14px;
   margin-bottom: 8px;
   border: 1px solid var(--c-gray-light);
@@ -445,6 +469,7 @@
   background: rgba(255,255,255,0.72);
   transition: background 0.15s;
   position: relative;
+  box-sizing: border-box;
 }
 
 .iv-history-item.is-selected {
@@ -490,6 +515,7 @@
   color: var(--c-text-main);
   font-style: italic;
   word-break: break-word;
+  overflow-wrap: anywhere;
   margin-bottom: 4px;
 }
 

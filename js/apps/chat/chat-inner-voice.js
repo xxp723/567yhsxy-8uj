@@ -100,11 +100,124 @@ function sanitizeInnerVoicePayloadText(raw) {
     .replace(/\[\s*(?:\\+|\/+)?\s*心(?:心)?声\s*\]/gi, ' ')
     .replace(/\[\s*(?:\\+|\/+)\s*心(?:心)?声\s*\]/gi, ' ')
     .replace(/[｜¦‖]/g, '|')
+    .replace(/[［【｢「]/g, '[')
+    .replace(/[］】｣」]/g, ']')
     .replace(/\r\n/g, '\n')
     .replace(/\n+/g, ' ')
     .replace(/\s*\|\s*/g, '|')
+    .replace(/\s*[：:]\s*/g, ':')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/* ========================================================================== 
+   [区域标注·已完成·本次修正：心声掉格式字段归位解析]
+   说明：
+   1. 专门处理“字段名混入竖线格式 / 字段顺序错乱 / 缺字段”的掉格式心声。
+   2. 优先按字段名归位，避免把“105”误放进 INNER VOICE，或把“醋意|5|好感|80...”整串放进 FANTASY。
+   3. 只做心声面板前端解析增强，不新增持久化存储，不使用 localStorage/sessionStorage，不写双份兜底。
+   ========================================================================== */
+const INNER_VOICE_FIELD_ALIASES = {
+  status: ['状态', '当前状态', 'status'],
+  action: ['动作', '当前动作', '正在做的动作', 'action'],
+  mood: ['心情', '真实心情', 'mood'],
+  heartbeat: ['心跳', '心跳频率', '心调频率', 'heartbeat', 'bpm'],
+  jealousy: ['醋意', '酷意', '醋意指数', 'jealousy'],
+  affection: ['好感', '好感度', 'affection'],
+  desire: ['性欲', '性欲值', 'desire'],
+  voice: ['真实心声', '心声', '真实想法', '内心想法', 'inner voice', 'voice'],
+  fantasy: ['性幻想', '幻想', 'fantasy']
+};
+
+const INNER_VOICE_LABEL_WORDS = Object.values(INNER_VOICE_FIELD_ALIASES)
+  .flat()
+  .sort((a, b) => String(b).length - String(a).length)
+  .map(item => String(item).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+const INNER_VOICE_LABEL_RE = new RegExp(`(${INNER_VOICE_LABEL_WORDS.join('|')})\\s*[：:]`, 'gi');
+
+function normalizeInnerVoiceFieldKey(rawKey) {
+  const key = String(rawKey || '')
+    .trim()
+    .replace(/^[\s"'“”‘’`~\-—_[\]【】{}()（）]+|[\s"'“”‘’`~\-—_[\]【】{}()（）]+$/g, '')
+    .replace(/值|指数|频率|当前|正在做的/g, '')
+    .toLowerCase();
+
+  for (const [field, aliases] of Object.entries(INNER_VOICE_FIELD_ALIASES)) {
+    if (aliases.some(alias => key === String(alias).replace(/值|指数|频率|当前|正在做的/g, '').toLowerCase())) {
+      return field;
+    }
+  }
+  return '';
+}
+
+function cleanInnerVoiceFieldValue(value) {
+  return String(value || '')
+    .replace(/\[\s*(?:\\+|\/+)?\s*心(?:心)?声\s*\]/gi, ' ')
+    .replace(/\[\s*(?:\\+|\/+)\s*心(?:心)?声\s*\]/gi, ' ')
+    .replace(/[｜¦‖]/g, '|')
+    .replace(/[［【｢「]/g, '[')
+    .replace(/[］】｣」]/g, ']')
+    .replace(/^[\s"'“”‘’`~\-—_[\]【】{}()（）:：|]+|[\s"'“”‘’`~\-—_[\]【】{}()（）:：|]+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function hasMeaningfulInnerVoiceData(data) {
+  return Boolean(data && Object.values(data).some(value => String(value ?? '').trim()));
+}
+
+function parseInnerVoiceLabeledPayload(s) {
+  const text = sanitizeInnerVoicePayloadText(s);
+  if (!text) return null;
+
+  const data = {};
+  const pipeParts = text.split('|').map(part => part.trim());
+  const hasPipeLabel = pipeParts.some(part => normalizeInnerVoiceFieldKey(part) || normalizeInnerVoiceFieldKey(part.split(':')[0]));
+
+  if (hasPipeLabel) {
+    for (let i = 0; i < pipeParts.length; i++) {
+      const part = pipeParts[i] || '';
+      const colonIndex = part.indexOf(':');
+      const inlineKey = colonIndex >= 0 ? normalizeInnerVoiceFieldKey(part.slice(0, colonIndex)) : '';
+      const inlineValue = colonIndex >= 0 ? part.slice(colonIndex + 1) : '';
+
+      if (inlineKey) {
+        data[inlineKey] = cleanInnerVoiceFieldValue(inlineValue || pipeParts[i + 1] || '');
+        if (!inlineValue) i++;
+        continue;
+      }
+
+      const field = normalizeInnerVoiceFieldKey(part);
+      if (!field) continue;
+
+      let valueParts = [];
+      for (let j = i + 1; j < pipeParts.length; j++) {
+        const nextPart = pipeParts[j] || '';
+        const nextColonIndex = nextPart.indexOf(':');
+        const nextKey = normalizeInnerVoiceFieldKey(nextPart) || (nextColonIndex >= 0 ? normalizeInnerVoiceFieldKey(nextPart.slice(0, nextColonIndex)) : '');
+        if (nextKey) break;
+        valueParts.push(nextPart);
+        i = j;
+      }
+      data[field] = cleanInnerVoiceFieldValue(valueParts.join('|'));
+    }
+  }
+
+  const labeledMatches = Array.from(text.matchAll(INNER_VOICE_LABEL_RE));
+  if (labeledMatches.length) {
+    for (let i = 0; i < labeledMatches.length; i++) {
+      const match = labeledMatches[i];
+      const field = normalizeInnerVoiceFieldKey(match[1]);
+      if (!field) continue;
+      const start = Number(match.index || 0) + String(match[0] || '').length;
+      const end = i + 1 < labeledMatches.length ? Number(labeledMatches[i + 1].index || text.length) : text.length;
+      const value = cleanInnerVoiceFieldValue(text.slice(start, end));
+      if (value) data[field] = value;
+    }
+  }
+
+  return hasMeaningfulInnerVoiceData(data) ? normalizeInnerVoiceData(data) : null;
 }
 
 /* ==========================================================================
@@ -233,14 +346,17 @@ function parseInnerVoicePayload(raw) {
   if (!s) return null;
 
   /* ========================================================================
-     [区域标注·已完成·本次修正：九段短格式转心声面板数据]
+     [区域标注·已完成·本次修正：心声掉格式解析与九段短格式归位]
      说明：
      1. 新格式为：状态|动作|心情|心跳|醋意|好感|性欲|真实心声|性幻想。
-     2. 本次已补强掉格式兼容：先统一清理异常标签残片、全角竖线、换行与竖线两侧空格，再做九段拆分。
-     3. 前 8 段固定映射面板字段；第 9 段允许包含分隔符，会自动合并回性幻想正文。
-     4. 仍兼容旧七段格式与宽松键值文本，确保旧心声历史可继续读取。
+     2. 已补强掉格式兼容：字段名混入、字段顺序错乱、缺字段、中文冒号/英文冒号与全角竖线都会先尝试按字段名归位。
+     3. 若没有字段名，再按九段/旧七段位置映射；第 9 段允许包含分隔符，会自动合并回性幻想正文。
+     4. 仍兼容旧 JSON 与宽松键值文本，确保旧心声历史可继续读取。
      ======================================================================== */
-  const pipeParts = s.split('|').map(part => part.trim()).filter((part, index, arr) => part || index < arr.length - 1);
+  const labeledData = parseInnerVoiceLabeledPayload(s);
+  if (labeledData) return labeledData;
+
+  const pipeParts = s.split('|').map(part => cleanInnerVoiceFieldValue(part)).filter((part, index, arr) => part || index < arr.length - 1);
   if (pipeParts.length >= 9) {
     return normalizeInnerVoiceData({
       status: pipeParts[0],
@@ -282,9 +398,10 @@ function parseInnerVoiceLoose(raw) {
   if (!s) return null;
 
   const extract = (key) => {
-    const re = new RegExp(`["']?${key}["']?\\s*[：:]\\s*["']?([^"'，,}]+)`, 'i');
+    const escapedKey = String(key || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`["']?${escapedKey}["']?\\s*[：:]\\s*["']?([^"'，,}\\n\\|]+)`, 'i');
     const m = s.match(re);
-    return m ? String(m[1] || '').trim() : '';
+    return m ? cleanInnerVoiceFieldValue(m[1] || '') : '';
   };
   const extractNum = (key, fallback = 0) => {
     const v = extract(key);
@@ -292,15 +409,18 @@ function parseInnerVoiceLoose(raw) {
     return Number.isFinite(n) ? n : fallback;
   };
 
+  const labeledData = parseInnerVoiceLabeledPayload(s);
+  if (labeledData) return labeledData;
+
   const data = {
     status: extract('状态') || extract('status'),
     action: extract('动作') || extract('action'),
     mood: extract('心情') || extract('mood'),
     heartbeat: extractNum('心跳频率') || extractNum('心调频率') || extractNum('heartbeat') || extractNum('心跳'),
-    jealousy: extractNum('醋意指数') || extractNum('jealousy') || extractNum('醋意'),
+    jealousy: extractNum('醋意指数') || extractNum('jealousy') || extractNum('醋意') || extractNum('酷意'),
     affection: extractNum('好感度') || extractNum('affection') || extractNum('好感'),
     desire: extractNum('性欲值') || extractNum('desire') || extractNum('性欲'),
-    voice: extract('心声') || extract('voice') || extract('真实想法'),
+    voice: extract('真实心声') || extract('心声') || extract('voice') || extract('真实想法'),
     fantasy: extract('性幻想') || extract('fantasy')
   };
 
@@ -317,7 +437,7 @@ function parseInnerVoiceLoose(raw) {
 export function normalizeInnerVoiceData(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
-  const clampStr = (v, max) => String(v || '').trim().slice(0, max);
+  const clampStr = (v, max) => cleanInnerVoiceFieldValue(v).slice(0, max);
   const clampNum = (v, min, max) => {
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : min;
