@@ -1007,12 +1007,17 @@ export async function sendMessage(container, state, db, content, settingsManager
       ...generatedImageMessages
     ]);
 
-    const aiMessages = bindAsideSegmentsToAiMessages(
-      orderedAiMessages.map(stripAiRuntimeProtocolOrderFields),
-      extractedAsideSegments,
-      state.asideSettings?.displayMode || 'top',
-      rawAiTextAfterInnerVoice
-    );
+        const aiMessagesWithoutCurrentUserEcho = filterCurrentUserRoundEchoFromAiMessages(
+          orderedAiMessages.map(stripAiRuntimeProtocolOrderFields),
+          promptPayload.currentUserRoundMessages
+        );
+
+        const aiMessages = bindAsideSegmentsToAiMessages(
+          aiMessagesWithoutCurrentUserEcho,
+          extractedAsideSegments,
+          state.asideSettings?.displayMode || 'top',
+          rawAiTextAfterInnerVoice
+        );
     if (!aiMessages.length) {
       appendChatConsoleRuntimeLog(state, 'warn', '解析后无可显示消息');
     } else {
@@ -1623,6 +1628,124 @@ function stripAiRuntimeProtocolOrderFields(message = {}) {
     ...cleanMessage
   } = message || {};
   return cleanMessage;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次用户本轮消息回显拦截] AI 普通文字回复去除本轮用户原话回显
+   说明：
+   1. 只处理普通 assistant 文字气泡；不处理表情、图片、语音、礼物、转账、卡片、撤回系统提示、文字图等特殊类型。
+   2. 若 AI 普通文字气泡与本轮某条用户原话一致，则直接丢弃该气泡。
+   3. 若 AI 普通文字气泡开头先复述本轮某条用户原话，再接真正回复，则剥离开头复述，仅保留后续回复。
+   4. 拦截发生在消息落库/渲染前，因此不会闪屏，也不会把重复内容写入 DB.js / IndexedDB。
+   ========================================================================== */
+function normalizeCurrentUserEchoCompareText(value = '') {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .replace(/[`*_]/g, '')
+    .replace(/[“”"'‘’「」『』《》〈〉（）()【】\[\]{}]/g, '')
+    .replace(/[\s\u3000]+/g, '')
+    .replace(/[，,。.!！？?、；;：:~～…\-—]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getCurrentUserRoundComparableTexts(currentUserRoundMessages = []) {
+  return (Array.isArray(currentUserRoundMessages) ? currentUserRoundMessages : [])
+    .filter(message => String(message?.role || '') === 'user' && !String(message?.type || '').trim())
+    .map(message => {
+      const raw = String(message?.content || '').trim();
+      const normalized = normalizeCurrentUserEchoCompareText(raw);
+      return raw && normalized ? { raw, normalized } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.normalized.length - a.normalized.length) || (b.raw.length - a.raw.length));
+}
+
+function stripLeadingCurrentUserEchoFromAiText(aiText = '', currentUserTexts = []) {
+  const sourceText = String(aiText || '').trim();
+  const comparableTexts = Array.isArray(currentUserTexts) ? currentUserTexts : [];
+  if (!sourceText || !comparableTexts.length) return sourceText;
+
+  const getLeadingEchoCutIndex = (text, comparable) => {
+    const targetNormalized = String(comparable?.normalized || '').trim();
+    if (!targetNormalized) return -1;
+
+    let collected = '';
+    for (let index = 0; index < text.length; index += 1) {
+      const normalizedChar = normalizeCurrentUserEchoCompareText(text.charAt(index));
+      if (!normalizedChar) continue;
+
+      collected += normalizedChar;
+      if (!targetNormalized.startsWith(collected)) return -1;
+
+      if (collected === targetNormalized) {
+        let cutIndex = index + 1;
+        const trailingMatch = text
+          .slice(cutIndex)
+          .match(/^[\s\u3000，,。.!！？?、；;：:~～…\-—"'“”‘’「」『』《》〈〉（）()【】\[\]{}]+/);
+        if (trailingMatch) cutIndex += trailingMatch[0].length;
+        return cutIndex;
+      }
+    }
+
+    return -1;
+  };
+
+  let remaining = sourceText;
+  let previousText = '';
+
+  while (remaining && remaining !== previousText) {
+    previousText = remaining;
+    let matchedCutIndex = -1;
+
+    comparableTexts.forEach(item => {
+      const currentCutIndex = getLeadingEchoCutIndex(remaining, item);
+      if (currentCutIndex > matchedCutIndex) matchedCutIndex = currentCutIndex;
+    });
+
+    if (matchedCutIndex < 0) break;
+    remaining = remaining.slice(matchedCutIndex).trim();
+  }
+
+  return remaining;
+}
+
+function filterCurrentUserRoundEchoFromAiMessages(aiMessages = [], currentUserRoundMessages = []) {
+  const messages = Array.isArray(aiMessages) ? aiMessages : [];
+  const currentUserTexts = getCurrentUserRoundComparableTexts(currentUserRoundMessages);
+  if (!currentUserTexts.length) return messages;
+
+  return messages.reduce((list, message) => {
+    if (!message || String(message?.role || '') !== 'assistant') {
+      list.push(message);
+      return list;
+    }
+
+    if (String(message?.type || '').trim()) {
+      list.push(message);
+      return list;
+    }
+
+    const originalText = String(message?.content || '').trim();
+    if (!originalText) {
+      list.push(message);
+      return list;
+    }
+
+    const normalizedOriginalText = normalizeCurrentUserEchoCompareText(originalText);
+    if (currentUserTexts.some(item => item.normalized === normalizedOriginalText)) {
+      return list;
+    }
+
+    const strippedText = stripLeadingCurrentUserEchoFromAiText(originalText, currentUserTexts);
+    if (!strippedText) {
+      return list;
+    }
+
+    list.push(strippedText === originalText ? message : { ...message, content: strippedText });
+    return list;
+  }, []);
 }
 
 /* ==========================================================================
