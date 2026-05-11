@@ -6,7 +6,19 @@
  * 架构层: 应用层（闲谈子模块）
  */
 
-import { TAB_ICONS, ICON_CHECK, escapeHtml, findRoleByContact } from './chat-utils.js';
+import {
+  TAB_ICONS,
+  ICON_CHECK,
+  DATA_KEY_CONTACTS,
+  DATA_KEY_CONTACT_GROUPS,
+  dbPut,
+  escapeHtml,
+  findRoleByContact,
+  createUid,
+  getBoundRoleCandidates,
+  renderModalNotice,
+  closeModal
+} from './chat-utils.js';
 
 /* ==========================================================================
    [区域标注] IconPark 图标 SVG 定义
@@ -339,6 +351,141 @@ export function showDeleteContactGroupModal(container, state, groupId) {
   `;
 
   mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·通讯录事件逻辑迁移]
+   说明：
+     1. 通讯录分组切换、新建/删除分组、搜索添加联系人、联系人分组分配的点击逻辑已从 index.js 迁移至本文件。
+     2. index.js 只负责把 click/input 事件转交给本模块，并提供 refreshPanel/buildProfileFromMask 等接线回调。
+     3. 持久化统一使用 DB.js / IndexedDB（dbPut），禁止 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+export function openContactsAddModal(container, state) {
+  showAddContactModal(container, state);
+}
+
+export async function handleContactsClickAction({
+  action,
+  target,
+  state,
+  container,
+  db,
+  refreshPanel,
+  buildProfileFromMask
+}) {
+  switch (action) {
+    case 'switch-contact-group': {
+      if (target.dataset.longPressTriggered === '1') {
+        delete target.dataset.longPressTriggered;
+        return true;
+      }
+      const groupId = target.dataset.contactGroupId || 'all';
+      const exists = groupId === 'all' || state.contactGroups.some(group => group.id === groupId);
+      state.activeContactGroupId = exists ? groupId : 'all';
+      refreshPanel(container, state, 'contacts');
+      return true;
+    }
+
+    case 'create-contact-group':
+      showCreateContactGroupModal(container);
+      return true;
+
+    case 'confirm-create-contact-group': {
+      const input = container.querySelector('[data-role="contact-group-name-input"]');
+      const name = String(input?.value || '').trim();
+      if (!name) {
+        renderModalNotice(container, '请输入分组名称');
+        return true;
+      }
+      const group = { id: createUid('contact_group'), name };
+      state.contactGroups.push(group);
+      state.activeContactGroupId = group.id;
+      await dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups);
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
+      return true;
+    }
+
+    case 'confirm-delete-contact-group': {
+      const groupId = target.dataset.contactGroupId || '';
+      const exists = groupId && state.contactGroups.some(group => group.id === groupId);
+      if (!exists) return true;
+
+      state.contactGroups = state.contactGroups.filter(group => group.id !== groupId);
+      state.contacts = state.contacts.map(contact => (
+        contact.groupId === groupId ? { ...contact, groupId: '' } : contact
+      ));
+      if (state.activeContactGroupId === groupId) state.activeContactGroupId = 'all';
+
+      await Promise.all([
+        dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups),
+        dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts)
+      ]);
+
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
+      return true;
+    }
+
+    case 'add-contact-from-search': {
+      const roleId = target.dataset.roleId;
+      const role = getBoundRoleCandidates(state).find(item => item.id === roleId);
+      if (!role) {
+        renderModalNotice(container, '未找到可添加的绑定角色');
+        return true;
+      }
+      if (!state.contacts.some(contact => contact.id === role.id)) {
+        state.contacts.push({
+          id: role.id,
+          roleId: role.id,
+          name: role.name || '未命名角色',
+          avatar: role.avatar || '',
+          signature: role.signature || role.basicSetting || '',
+          contact: role.contact || '',
+          groupId: '',
+          addedAt: Date.now()
+        });
+        await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
+        buildProfileFromMask(state);
+        refreshPanel(container, state, 'contacts');
+        refreshPanel(container, state, 'profile');
+        refreshPanel(container, state, 'moments');
+      }
+      showContactGroupPickerModal(container, state, role.id);
+      return true;
+    }
+
+    case 'view-contact': {
+      const contactId = target.dataset.contactId;
+      if (contactId) showContactGroupPickerModal(container, state, contactId);
+      return true;
+    }
+
+    case 'assign-contact-group': {
+      const contactId = target.dataset.contactId;
+      const groupId = target.dataset.contactGroupId || '';
+      const safeGroupId = groupId && state.contactGroups.some(group => group.id === groupId) ? groupId : '';
+      state.contacts = state.contacts.map(contact => (
+        contact.id === contactId ? { ...contact, groupId: safeGroupId } : contact
+      ));
+      await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
+      closeModal(container);
+      refreshPanel(container, state, 'contacts');
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+export function handleContactsInput(e, state, container) {
+  const target = e.target;
+  if (target?.matches?.('[data-role="contact-add-search-input"]')) {
+    renderContactSearchResults(container, state, target.value || '');
+    return true;
+  }
+  return false;
 }
 
 /* ==========================================================================

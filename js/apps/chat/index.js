@@ -32,7 +32,6 @@ import {
   PANEL_LABELS,
   PANEL_ICON_KEYS,
   ICON_BACK,
-  ICON_CHECK,
   loadCSS,
   removeCSS,
   dbGet,
@@ -48,7 +47,6 @@ import {
   loadStickerDataFromDb,
   persistStickerData,
   createUid,
-  getBoundRoleCandidates,
   dbGetArchiveData,
   renderModalNotice,
   closeModal
@@ -71,10 +69,9 @@ import {
 } from './chat-aside.js';
 import {
   renderContacts,
-  showAddContactModal,
-  renderContactSearchResults,
-  showCreateContactGroupModal,
-  showContactGroupPickerModal,
+  openContactsAddModal,
+  handleContactsClickAction,
+  handleContactsInput,
   createContactGroupLongPressHandlers
 } from './contacts.js';
 import {
@@ -1530,10 +1527,10 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* [区域标注·本次需求2] 右上角"+"：聊天列表添加聊天；通讯录搜索添加联系人 */
+    /* [区域标注·已完成·通讯录事件逻辑迁移] 右上角"+"：聊天列表添加聊天；通讯录搜索添加联系人 */
     case 'add-chat':
       if (state.activePanel === 'contacts') {
-        showAddContactModal(container, state);
+        openContactsAddModal(container, state);
       } else {
         showAddChatModal(container, state);
       }
@@ -1902,127 +1899,26 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       break;
     }
 
-    /* ==========================================================================
-       [区域标注·本次需求1] 通讯录分组 TAB 切换
-       ========================================================================== */
-    case 'switch-contact-group': {
-      if (target.dataset.longPressTriggered === '1') {
-        delete target.dataset.longPressTriggered;
-        break;
-      }
-      const groupId = target.dataset.contactGroupId || 'all';
-      const exists = groupId === 'all' || state.contactGroups.some(group => group.id === groupId);
-      state.activeContactGroupId = exists ? groupId : 'all';
-      refreshPanel(container, state, 'contacts');
-      break;
-    }
-
-    /* ==========================================================================
-       [区域标注·本次需求1] 打开新建通讯录分组弹窗
-       ========================================================================== */
+    /* ========================================================================
+       [区域标注·已完成·通讯录事件逻辑迁移] 通讯录点击业务已迁移到 contacts.js；index.js 这里只保留事件接线。
+       ======================================================================== */
+    case 'switch-contact-group':
     case 'create-contact-group':
-      showCreateContactGroupModal(container);
+    case 'confirm-create-contact-group':
+    case 'confirm-delete-contact-group':
+    case 'add-contact-from-search':
+    case 'view-contact':
+    case 'assign-contact-group':
+      await handleContactsClickAction({
+        action,
+        target,
+        state,
+        container,
+        db,
+        refreshPanel,
+        buildProfileFromMask
+      });
       break;
-
-    /* ==========================================================================
-       [区域标注·本次需求1] 确认创建通讯录分组
-       ========================================================================== */
-    case 'confirm-create-contact-group': {
-      const input = container.querySelector('[data-role="contact-group-name-input"]');
-      const name = String(input?.value || '').trim();
-      if (!name) {
-        renderModalNotice(container, '请输入分组名称');
-        break;
-      }
-      const group = { id: createUid('contact_group'), name };
-      state.contactGroups.push(group);
-      state.activeContactGroupId = group.id;
-      await dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups);
-      closeModal(container);
-      refreshPanel(container, state, 'contacts');
-      break;
-    }
-
-    /* ==========================================================================
-       [区域标注·本次需求1] 确认删除通讯录分组标签
-       说明：只删除分组标签；该分组下联系人 groupId 清空，联系人继续保留在 All。
-       ========================================================================== */
-    case 'confirm-delete-contact-group': {
-      const groupId = target.dataset.contactGroupId || '';
-      const exists = groupId && state.contactGroups.some(group => group.id === groupId);
-      if (!exists) break;
-
-      state.contactGroups = state.contactGroups.filter(group => group.id !== groupId);
-      state.contacts = state.contacts.map(contact => (
-        contact.groupId === groupId ? { ...contact, groupId: '' } : contact
-      ));
-      if (state.activeContactGroupId === groupId) state.activeContactGroupId = 'all';
-
-      await Promise.all([
-        dbPut(db, DATA_KEY_CONTACT_GROUPS(state.activeMaskId), state.contactGroups),
-        dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts)
-      ]);
-
-      closeModal(container);
-      refreshPanel(container, state, 'contacts');
-      break;
-    }
-
-    /* ==========================================================================
-       [区域标注·本次需求2] 从搜索结果添加角色到通讯录
-       ========================================================================== */
-    case 'add-contact-from-search': {
-      const roleId = target.dataset.roleId;
-      const role = getBoundRoleCandidates(state).find(item => item.id === roleId);
-      if (!role) {
-        renderModalNotice(container, '未找到可添加的绑定角色');
-        break;
-      }
-      if (!state.contacts.some(contact => contact.id === role.id)) {
-        state.contacts.push({
-          id: role.id,
-          roleId: role.id,
-          name: role.name || '未命名角色',
-          avatar: role.avatar || '',
-          signature: role.signature || role.basicSetting || '',
-          contact: role.contact || '',
-          groupId: '',
-          addedAt: Date.now()
-        });
-        await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
-        buildProfileFromMask(state);
-        refreshPanel(container, state, 'contacts');
-        refreshPanel(container, state, 'profile');
-        refreshPanel(container, state, 'moments');
-      }
-      showContactGroupPickerModal(container, state, role.id);
-      break;
-    }
-
-    /* ==========================================================================
-       [区域标注·本次需求2] 点击联系人后打开通讯录分组选择弹窗
-       ========================================================================== */
-    case 'view-contact': {
-      const contactId = target.dataset.contactId;
-      if (contactId) showContactGroupPickerModal(container, state, contactId);
-      break;
-    }
-
-    /* ==========================================================================
-       [区域标注·本次需求2] 保存联系人所属通讯录分组
-       ========================================================================== */
-    case 'assign-contact-group': {
-      const contactId = target.dataset.contactId;
-      const groupId = target.dataset.contactGroupId || '';
-      const safeGroupId = groupId && state.contactGroups.some(group => group.id === groupId) ? groupId : '';
-      state.contacts = state.contacts.map(contact => (
-        contact.id === contactId ? { ...contact, groupId: safeGroupId } : contact
-      ));
-      await dbPut(db, DATA_KEY_CONTACTS(state.activeMaskId), state.contacts);
-      closeModal(container);
-      refreshPanel(container, state, 'contacts');
-      break;
-    }
 
     /* ========================================================================
        [区域标注·已完成·本次返回按钮点击修复] 返回聊天列表按钮兜底
@@ -4717,13 +4613,10 @@ function handleInput(e, state, container, db) {
   }
 
   /* ==========================================================================
-     [区域标注·本次需求2] 通讯录弹窗联系方式搜索输入
-     说明：只在弹窗内搜索，通讯录页面内不保留搜索框
+     [区域标注·已完成·通讯录事件逻辑迁移] 通讯录弹窗联系方式搜索输入
+     说明：输入处理已迁移到 contacts.js；index.js 这里只保留事件接线。
      ========================================================================== */
-  if (target.matches('[data-role="contact-add-search-input"]')) {
-    renderContactSearchResults(container, state, target.value || '');
-    return;
-  }
+  if (handleContactsInput(e, state, container)) return;
 
   if (target.matches('[data-role="favorite-search-input"]')) {
     /* ==========================================================================
