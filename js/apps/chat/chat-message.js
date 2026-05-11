@@ -1582,7 +1582,13 @@ export function cleanAiProtocolBlockContent(content) {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^\s*(?:`|\*\*)+/g, '')
     .replace(/(?:`|\*\*)+\s*$/g, '')
-    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    /* ======================================================================
+       [区域标注·已完成·普通气泡引号保留与省略号残片合并] 协议正文引号保护
+       说明：
+       1. 不再清理正文首尾的 “ ” / " / '，避免 “预备”一下？ 被显示成 预备”一下？。
+       2. 这里只继续清理 Markdown/协议包裹残片；可见聊天正文标点必须原样保留。
+       3. 本区域只影响前端运行时解析，不读写 localStorage/sessionStorage，不改持久化结构。
+       ====================================================================== */
     .trim();
 }
 
@@ -2684,6 +2690,29 @@ export function sanitizeAiVisibleReply(text) {
 }
 
 
+function mergeAiPunctuationOnlyBubbleFragments(parts = []) {
+  /* ========================================================================
+     [区域标注·已完成·普通气泡引号保留与省略号残片合并] 省略号残片合并
+     说明：
+     1. 修复 AI 输出连续点号/省略号后，又残留单独 "." / "。" / "…" 时被拆成独立气泡的问题。
+     2. 只合并“纯标点残片”，不合并正常文字句子，不改变多句回复的原有拆泡逻辑。
+     3. 本区域只处理前端运行时解析；不读写 localStorage/sessionStorage，不做双份存储兜底。
+     ======================================================================== */
+  const merged = [];
+  (Array.isArray(parts) ? parts : []).forEach(part => {
+    const value = String(part || '').trim();
+    if (!value) return;
+
+    if (merged.length && /^[.。…]+$/.test(value)) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]}${value}`;
+      return;
+    }
+
+    merged.push(value);
+  });
+  return merged;
+}
+
 export function splitStrictSentenceBubbles(text) {
   const normalized = stripAiProtocolClosingTags(String(text || ''))
     /* ===== 闲谈：通用消息协议解析 START ===== */
@@ -2700,13 +2729,16 @@ export function splitStrictSentenceBubbles(text) {
      说明：
      1. 这里仅基于已有换行和已有终止标点做分句，不给文本追加任何句末标点。
      2. 若 AI 输出是无句号口语短句（如“行 我马上来”“哈哈哈”），保持原样，不做“补句号”。
+     3. 已补充省略号/连续点号后的纯标点残片合并，避免一个 "." 被拆成独立消息气泡。
      ======================================================================== */
-  return normalized
-    .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
-    .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
-    .split(/\n+/)
-    .map(item => item.trim())
-    .filter(Boolean);
+  return mergeAiPunctuationOnlyBubbleFragments(
+    normalized
+      .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
+      .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
+      .split(/\n+/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  );
 }
 
 /* ===== 闲谈：用户最新一轮消息触发AI END ===== */
@@ -2761,7 +2793,13 @@ export function cleanAiVisibleBubbleText(text) {
     .filter(line => !/^\d{4}年\d{1,2}月\d{1,2}日(?:星期[一二三四五六日天])?\s+\d{1,2}:\d{2}(?::\d{2})?\]$/.test(line))
     .filter(Boolean)
     .join('\n')
-    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+    /* ======================================================================
+       [区域标注·已完成·普通气泡引号保留与省略号残片合并] 可见正文引号保护
+       说明：
+       1. 不再删除气泡正文首尾引号，避免中文前引号、英文引号被前端清洗误删。
+       2. 协议头、闭合标签、Markdown 包裹符仍在上方清理；这里保留用户实际看到的正文标点。
+       3. 本区域不涉及任何持久化存储，不使用 localStorage/sessionStorage。
+       ====================================================================== */
     .trim();
 }
 
