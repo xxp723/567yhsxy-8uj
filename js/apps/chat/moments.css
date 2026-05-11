@@ -357,33 +357,40 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 互动栏
+   [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 互动栏
+   说明：
+   1. 仅调整单条朋友圈动态下方图标行，不影响评论区、发帖页或其它聊天页面。
+   2. 左侧按图片参考呈现爱心、评论、转发、分享，书签固定在同一行最右侧。
    ========================================================================== */
 .moments-card__actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  width: 100%;
   margin-top: 15px;
 }
 
 .moments-card__action-group {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .moments-action-btn {
+  min-width: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--moments-muted);
-  padding: 5px 0;
+  color: var(--moments-text);
+  padding: 4px 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-family: var(--moments-font-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -396,13 +403,19 @@
 }
 
 .moments-action-btn svg {
-  width: 17px;
-  height: 17px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
+  stroke-width: 2.8;
 }
 
-.moments-action-btn--quiet {
-  color: var(--moments-faint);
+.moments-action-btn--bookmark {
+  margin-left: auto;
+  color: var(--moments-text);
+}
+
+.moments-action-btn--static {
+  cursor: default;
 }
 
 /* ==========================================================================
@@ -882,11 +895,28 @@
     font-size: 10px;
   }
 
-  .moments-card__name-row,
-  .moments-card__actions {
+  .moments-card__name-row {
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .moments-card__actions {
+    gap: 10px;
+  }
+
+  .moments-card__action-group {
+    gap: 10px;
+  }
+
+  .moments-action-btn {
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .moments-action-btn svg {
+    width: 20px;
+    height: 20px;
   }
 
   .moments-compose-top-bar,

@@ -16,16 +16,20 @@ import { getVisibleChatSessions } from './chat-list.js';
    2. 本文件仅内联渲染 SVG，不引入额外依赖。
    ========================================================================== */
 const ICONS = {
-  /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 点赞/爱心图标 */
+  /* [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 点赞/爱心图标 */
   like: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M15 8C8.925 8 4 12.925 4 19c0 11 13 21 20 23.326C31 40 44 30 44 19c0-6.075-4.925-11-11-11c-3.72 0-7.01 1.847-9 4.674A11.007 11.007 0 0 0 15 8Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
-  /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 评论图标 */
-  comment: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M44 6H4v30h14l6 6l6-6h14V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 评论图标 */
+  comment: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 40c9.941 0 18-7.163 18-16S33.941 8 24 8S6 15.163 6 24c0 4.144 1.774 7.922 4.686 10.763L9 42l7.543-3.534A19.837 19.837 0 0 0 24 40Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈空状态图标 */
   earth: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3"/><path d="M4 24h40M24 4c-5.333 6.667-8 13.333-8 20s2.667 13.333 8 20c5.333-6.667 8-13.333 8-20s-2.667-13.333-8-20Z" stroke="currentColor" stroke-width="3"/></svg>`,
   /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 位置图标 */
   location: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 44S40 30 40 18A16 16 0 1 0 8 18C8 30 24 44 24 44Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="18" r="5" stroke="currentColor" stroke-width="3"/></svg>`,
-  /* [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 收藏图标 */
+  /* [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 收藏图标 */
   bookmark: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M12 6h24v36L24 34L12 42V6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 转发图标 */
+  repost: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M34 8l6 6l-6 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 22v-2a6 6 0 0 1 6-6h26" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 40l-6-6l6-6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 26v2a6 6 0 0 1-6 6H8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 分享图标（纸飞机） */
+  feedShare: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M44 6L24 42l-4-18L4 17L44 6Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20 24L44 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   /* [区域标注·已完成·本次朋友圈独立发帖页] 返回图标 */
   back: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M31 36L19 24L31 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   /* [区域标注·已完成·本次朋友圈独立发帖页] 发送图标 */
@@ -214,6 +218,8 @@ function renderMomentCard(moment) {
   const comments = Array.isArray(moment?.comments) ? moment.comments : [];
   const likeCount = getCount(moment?.likes);
   const commentCount = comments.length;
+  const repostCount = getCount(moment?.reposts ?? moment?.repostCount);
+  const shareCount = getCount(moment?.shares ?? moment?.shareCount);
   const subline = escapeHtml(moment?.location || 'Daily note · Public');
 
   return `
@@ -238,9 +244,9 @@ function renderMomentCard(moment) {
         ${renderImageGrid(moment?.images)}
       </div>
 
-      <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 互动栏（保留原 data-action） -->
+      <!-- [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 互动栏（保留点赞/评论原 data-action，书签移入同一行最右侧） -->
       <div class="moments-card__actions">
-        <div class="moments-card__action-group">
+        <div class="moments-card__action-group" aria-label="动态互动">
           <button class="moments-action-btn" type="button" data-action="moment-like" data-moment-id="${id}" aria-label="点赞">
             ${ICONS.like}
             <span>${likeCount}</span>
@@ -249,8 +255,16 @@ function renderMomentCard(moment) {
             ${ICONS.comment}
             <span>${commentCount}</span>
           </button>
+          <button class="moments-action-btn moments-action-btn--static" type="button" aria-label="转发">
+            ${ICONS.repost}
+            ${repostCount ? `<span>${repostCount}</span>` : ''}
+          </button>
+          <button class="moments-action-btn moments-action-btn--static" type="button" aria-label="分享">
+            ${ICONS.feedShare}
+            ${shareCount ? `<span>${shareCount}</span>` : ''}
+          </button>
         </div>
-        <button class="moments-action-btn moments-action-btn--quiet" type="button" aria-label="收藏">
+        <button class="moments-action-btn moments-action-btn--bookmark" type="button" aria-label="收藏">
           ${ICONS.bookmark}
         </button>
       </div>
