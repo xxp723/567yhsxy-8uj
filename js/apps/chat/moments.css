@@ -296,6 +296,48 @@
   height: 13px;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈个别人可见名单显示] 动态右上角可见联系人标签
+   说明：
+   1. 仅服务 renderMomentVisibleContactsBadge 输出的可见联系人姓名显示。
+   2. 样式限定在 .moments-card__visibility-badge，不影响其它朋友圈功能。
+   3. 本区域不包含任何持久化存储逻辑。
+   ========================================================================== */
+.moments-card__visibility-badge {
+  margin-left: auto;
+  max-width: 132px;
+  min-width: 0;
+  border: 1px solid rgba(125, 90, 68, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.78);
+  color: var(--moments-accent);
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  font-family: var(--moments-font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(44, 32, 22, 0.05);
+}
+
+.moments-card__visibility-badge svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  stroke-width: 2.8;
+}
+
+.moments-card__visibility-badge span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .moments-card__body {
   padding-top: 14px;
 }

@@ -438,6 +438,23 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
           .filter(id => validVisibleContactIds.has(id))
       ));
 
+      /* ========================================================================
+         [区域标注·已完成·本次朋友圈个别人可见名单与分享卡片元数据] 发布时联系人姓名快照
+         说明：
+         1. 仅在现有 DB.js / IndexedDB 发布写入链路中附带姓名快照。
+         2. 不新增 localStorage/sessionStorage，不写双份兜底。
+         3. 不使用长文本过滤逻辑，仅匹配本次已选择的通讯录联系人名称。
+         ======================================================================== */
+      const visibleContactIdSet = new Set(visibleContactIds.map(id => String(id || '').trim()).filter(Boolean));
+      const visibleContactNames = (Array.isArray(state.contacts) ? state.contacts : [])
+        .filter(contact => {
+          const contactId = String(contact?.id || '').trim();
+          const roleId = String(contact?.roleId || '').trim();
+          return visibleContactIdSet.has(contactId) || visibleContactIdSet.has(roleId);
+        })
+        .map(contact => String(contact?.name || contact?.nickname || contact?.contact || '').trim())
+        .filter(Boolean);
+
       if (!text && !draftImages.length) {
         renderModalNotice(container, '请先输入文字或添加图片');
         break;
@@ -465,6 +482,7 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         location: String(draft.location || '').trim(),
         visibilityMode: draft.visibilityMode,
         visibleContactIds,
+        visibleContactNames,
         shareChatId: shareTarget ? String(shareTarget.id || '').trim() : '',
         shareChatName: shareTarget ? (String(shareTarget.remark || shareTarget.name || '').trim() || '未命名聊天') : ''
       };
@@ -480,6 +498,12 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         const shareMessage = {
           id: createUid('moment_share'),
           role: 'user',
+          type: 'moment_share',
+          momentShareMomentId: nextMoment.id,
+          momentShareText: text,
+          momentShareImageCount: draftImages.length,
+          momentShareLocation: String(draft.location || '').trim(),
+          momentShareAuthorName: authorName,
           content: buildMomentsComposeShareMessage({
             ...draft,
             text,

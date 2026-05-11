@@ -43,6 +43,46 @@ import { renderChatMessageSearchPanelHtml } from './chat-message-search.js';
 const CHAT_MESSAGE_INITIAL_VISIBLE_COUNT = 100;
 const CHAT_MESSAGE_LOAD_MORE_STEP = 100;
 
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈分享卡片气泡] 朋友圈分享卡片渲染工具
+   说明：
+   1. 仅根据消息对象生成聊天气泡 HTML，不包含任何持久化存储读写。
+   2. 不使用 localStorage/sessionStorage，不写双份兜底。
+   3. 文字截断由 CSS 控制，不做长文本过滤。
+   ========================================================================== */
+const MOMENT_SHARE_ICON = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M10 8h28a2 2 0 0 1 2 2v28a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M16 18h16M16 26h10M34 31l4 4l4-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+function getMomentSharePreviewText(msg = {}) {
+  const explicitText = String(msg?.momentShareText || '').trim();
+  if (explicitText) return explicitText;
+
+  const content = String(msg?.content || '').trim();
+  return content.replace(/^我分享了一条朋友圈动态：?/, '').trim() || '朋友圈动态';
+}
+
+function renderMomentShareBubble(msg = {}) {
+  const previewText = getMomentSharePreviewText(msg);
+  const imageCount = Math.max(0, Math.floor(Number(msg?.momentShareImageCount || 0)) || 0);
+  const location = String(msg?.momentShareLocation || '').trim();
+  const authorName = String(msg?.momentShareAuthorName || '').trim();
+  const meta = [
+    authorName || '朋友圈动态',
+    imageCount ? `图片 x ${imageCount}` : '',
+    location ? `@${location}` : ''
+  ].filter(Boolean).join(' · ');
+
+  return `
+    <div class="msg-moment-share-bubble" title="${escapeHtml(previewText)}" aria-label="朋友圈分享：${escapeHtml(previewText)}">
+      <div class="msg-moment-share-bubble__icon">${MOMENT_SHARE_ICON}</div>
+      <div class="msg-moment-share-bubble__content">
+        <span class="msg-moment-share-bubble__label">朋友圈分享</span>
+        <strong class="msg-moment-share-bubble__text">${escapeHtml(previewText)}</strong>
+        ${meta ? `<span class="msg-moment-share-bubble__meta">${escapeHtml(meta)}</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
 function formatMsgTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -259,6 +299,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const isZoomableImage = Boolean(hasImageUrl && !isExpiredImageMessage);
   const isTransferMessage = String(msg?.type || '') === 'transfer';
   const isGiftBubbleMessage = isGiftMessage(msg);
+  const isMomentShareMessage = String(msg?.type || '') === 'moment_share';
   const isHtmlCardMessage = String(msg?.type || '') === 'card' && String(msg?.cardHtml || msg?.content || '').trim();
   const htmlCardSrcdoc = isHtmlCardMessage
     ? sanitizeHtmlCardDocumentForSrcdoc(String(msg?.cardHtml || msg?.content || ''))
@@ -315,6 +356,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
     }
 
     if (isGiftBubbleMessage) return renderGiftBubble(msg);
+    if (isMomentShareMessage) return renderMomentShareBubble(msg);
 
     if (isHtmlCardMessage) {
       return `
@@ -424,7 +466,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
             </button>
           </div>
         ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isVoiceBubbleMessage ? 'msg-bubble--voice' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isVoiceBubbleMessage ? 'msg-bubble--voice' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isMomentShareMessage ? 'msg-bubble--moment-share' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
           ${quoteHtml}
           ${bubbleInnerHtml}
           ${renderTranslationBubbleHtml(msg, options.translationSettings, isUser)}

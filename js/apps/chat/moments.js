@@ -191,6 +191,51 @@ function renderImageGrid(images) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·本次朋友圈个别人可见名单显示] 动态右上角可见联系人渲染工具
+   说明：
+   1. 仅根据动态里的 visibleContactIds 与当前通讯录 contacts 做运行时匹配。
+   2. visibleContactNames 仅作为已发布动态的姓名快照兜底展示，不新增任何存储通道。
+   3. 本区域不包含任何持久化存储读写，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function getMomentVisibleContactNames(moment, contacts = []) {
+  if (String(moment?.visibilityMode || 'public') !== 'contacts') return [];
+
+  const visibleSet = new Set(
+    (Array.isArray(moment?.visibleContactIds) ? moment.visibleContactIds : [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  );
+
+  const matchedNames = (Array.isArray(contacts) ? contacts : [])
+    .filter(contact => {
+      const contactId = String(contact?.id || '').trim();
+      const roleId = String(contact?.roleId || '').trim();
+      return visibleSet.has(contactId) || visibleSet.has(roleId);
+    })
+    .map(contact => String(contact?.name || contact?.nickname || contact?.contact || '').trim())
+    .filter(Boolean);
+
+  const storedNames = Array.isArray(moment?.visibleContactNames)
+    ? moment.visibleContactNames.map(name => String(name || '').trim()).filter(Boolean)
+    : [];
+
+  return Array.from(new Set([...matchedNames, ...storedNames]));
+}
+
+function renderMomentVisibleContactsBadge(moment, contacts = []) {
+  const names = getMomentVisibleContactNames(moment, contacts);
+  if (!names.length) return '';
+
+  const label = `可见：${names.join('、')}`;
+  return `
+    <div class="moments-card__visibility-badge" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
+      ${ICONS.visible}
+      <span>${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次朋友圈点赞评论互动] 点赞、评论与回复渲染工具
    说明：
    1. 本区域只生成 DOM 字符串，不包含任何持久化存储读写。
@@ -326,6 +371,7 @@ function renderMomentCard(moment, options = {}) {
   const repostCount = getCount(moment?.reposts ?? moment?.repostCount);
   const shareCount = getCount(moment?.shares ?? moment?.shareCount);
   const subline = escapeHtml(moment?.location || 'Daily note · Public');
+  const visibilityNamesHtml = renderMomentVisibleContactsBadge(moment, options?.contacts);
   const expandedIds = Array.isArray(options?.expandedCommentIds) ? options.expandedCommentIds.map(item => String(item)) : [];
   const isCommentExpanded = expandedIds.includes(rawId);
   const replyTarget = options?.replyTarget && String(options.replyTarget.momentId || '') === rawId
@@ -347,6 +393,7 @@ function renderMomentCard(moment, options = {}) {
             <span>${subline}</span>
           </div>
         </div>
+        ${visibilityNamesHtml}
       </header>
 
       <div class="moments-card__body">
