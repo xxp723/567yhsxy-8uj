@@ -190,19 +190,121 @@ function renderImageGrid(images) {
   `;
 }
 
-function renderComments(comments) {
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈点赞评论互动] 点赞、评论与回复渲染工具
+   说明：
+   1. 本区域只生成 DOM 字符串，不包含任何持久化存储读写。
+   2. 点赞/评论/回复数据由 index.js 通过 DB.js/IndexedDB 统一保存。
+   3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   ========================================================================== */
+function getViewerId(options = {}) {
+  return String(options?.viewerId || options?.profile?.id || options?.profile?.maskId || options?.profile?.name || 'self').trim() || 'self';
+}
+
+function isLikedByViewer(likes, viewerId) {
+  const safeViewerId = String(viewerId || '').trim();
+  if (!safeViewerId) return false;
+
+  if (Array.isArray(likes)) {
+    return likes.some(item => {
+      if (typeof item === 'string' || typeof item === 'number') return String(item) === safeViewerId;
+      return String(item?.id || item?.viewerId || item?.authorId || '') === safeViewerId;
+    });
+  }
+
+  return false;
+}
+
+function getCommentTotal(comments) {
   const list = Array.isArray(comments) ? comments : [];
-  if (list.length === 0) return '';
+  return list.reduce((total, comment) => {
+    const replies = Array.isArray(comment?.replies) ? comment.replies.length : 0;
+    return total + 1 + replies;
+  }, 0);
+}
+
+function renderCommentReplies(replies) {
+  const list = Array.isArray(replies) ? replies : [];
+  if (!list.length) return '';
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 评论区域 -->
-    <div class="moments-comments">
-      ${list.map(c => `
-        <div class="moments-comment">
-          <span class="moments-comment__author">${escapeHtml(c.authorName || '匿名')}：</span>
-          <span class="moments-comment__text">${escapeHtml(c.content || '')}</span>
+    <div class="moments-comment__replies">
+      ${list.map(reply => `
+        <div class="moments-comment-reply">
+          <span class="moments-comment__author">${escapeHtml(reply?.authorName || '匿名')}：</span>
+          <span class="moments-comment__text">${escapeHtml(reply?.content || '')}</span>
         </div>
       `).join('')}
+    </div>
+  `;
+}
+
+function renderComments(comments, options = {}) {
+  const list = Array.isArray(comments) ? comments : [];
+  const momentId = escapeHtml(options?.momentId ?? '');
+  const isExpanded = !!options?.isExpanded;
+  if (!isExpanded && list.length === 0) return '';
+
+  const replyTarget = options?.replyTarget || null;
+  const replyTargetCommentId = String(replyTarget?.commentId || '');
+  const replyTargetName = String(replyTarget?.authorName || '').trim();
+  const placeholder = replyTargetCommentId
+    ? `回复 ${replyTargetName || '这条评论'}…`
+    : '写下你的评论…';
+
+  return `
+    <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 评论列表、评论输入框与回复入口 -->
+    <div class="moments-comments ${isExpanded ? 'moments-comments--expanded' : ''}">
+      ${list.length ? list.map(c => {
+        const commentId = escapeHtml(c?.id ?? '');
+        const isReplying = replyTargetCommentId && String(c?.id || '') === replyTargetCommentId;
+        return `
+          <div class="moments-comment ${isReplying ? 'moments-comment--replying' : ''}">
+            <div class="moments-comment__main">
+              <span class="moments-comment__author">${escapeHtml(c?.authorName || '匿名')}：</span>
+              <span class="moments-comment__text">${escapeHtml(c?.content || '')}</span>
+              <button
+                class="moments-comment__reply-btn"
+                type="button"
+                data-action="moment-reply-comment"
+                data-moment-id="${momentId}"
+                data-comment-id="${commentId}"
+                data-comment-author="${escapeHtml(c?.authorName || '匿名')}"
+                aria-label="回复 ${escapeHtml(c?.authorName || '这条评论')}">
+                回复
+              </button>
+            </div>
+            ${renderCommentReplies(c?.replies)}
+          </div>
+        `;
+      }).join('') : '<p class="moments-comments__empty">还没有评论，来说点什么吧。</p>'}
+
+      ${isExpanded ? `
+        <div class="moments-comment-composer" data-moment-id="${momentId}">
+          ${replyTargetCommentId ? `
+            <div class="moments-comment-composer__replying">
+              <span>正在回复 ${escapeHtml(replyTargetName || '这条评论')}</span>
+              <button class="moments-comment-composer__cancel" type="button" data-action="cancel-moment-reply" data-moment-id="${momentId}" aria-label="取消回复">取消</button>
+            </div>
+          ` : ''}
+          <div class="moments-comment-composer__row">
+            <textarea
+              class="moments-comment-composer__input"
+              data-role="moment-comment-input"
+              data-moment-id="${momentId}"
+              rows="1"
+              placeholder="${escapeHtml(placeholder)}"></textarea>
+            <button
+              class="moments-comment-composer__send"
+              type="button"
+              data-action="submit-moment-comment"
+              data-moment-id="${momentId}"
+              aria-label="发送评论">
+              ${ICONS.send}
+            </button>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -211,19 +313,27 @@ function renderComments(comments) {
    [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 单条动态卡片渲染
    说明：保留 moment-like / moment-comment data-action，兼容现有事件委托。
    ========================================================================== */
-function renderMomentCard(moment) {
+function renderMomentCard(moment, options = {}) {
   const id = escapeHtml(moment?.id ?? '');
+  const rawId = String(moment?.id ?? '');
   const authorName = moment?.authorName || '未命名';
   const content = escapeHtml(moment?.content || '');
   const comments = Array.isArray(moment?.comments) ? moment.comments : [];
+  const viewerId = getViewerId(options);
+  const isLiked = isLikedByViewer(moment?.likes, viewerId);
   const likeCount = getCount(moment?.likes);
-  const commentCount = comments.length;
+  const commentCount = getCommentTotal(comments);
   const repostCount = getCount(moment?.reposts ?? moment?.repostCount);
   const shareCount = getCount(moment?.shares ?? moment?.shareCount);
   const subline = escapeHtml(moment?.location || 'Daily note · Public');
+  const expandedIds = Array.isArray(options?.expandedCommentIds) ? options.expandedCommentIds.map(item => String(item)) : [];
+  const isCommentExpanded = expandedIds.includes(rawId);
+  const replyTarget = options?.replyTarget && String(options.replyTarget.momentId || '') === rawId
+    ? options.replyTarget
+    : null;
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈动态卡片 -->
+    <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 朋友圈动态卡片点赞/评论/回复互动 -->
     <article class="moments-card" data-moment-id="${id}">
       <header class="moments-card__header">
         ${renderAvatar(authorName, moment?.authorAvatar)}
@@ -244,14 +354,14 @@ function renderMomentCard(moment) {
         ${renderImageGrid(moment?.images)}
       </div>
 
-      <!-- [区域标注·已完成·本次朋友圈动态 Ins 风格互动栏] 互动栏（保留点赞/评论原 data-action，书签移入同一行最右侧） -->
+      <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 互动栏（点赞红色态、评论展开态保留原 data-action） -->
       <div class="moments-card__actions">
         <div class="moments-card__action-group" aria-label="动态互动">
-          <button class="moments-action-btn" type="button" data-action="moment-like" data-moment-id="${id}" aria-label="点赞">
+          <button class="moments-action-btn ${isLiked ? 'moments-action-btn--liked' : ''}" type="button" data-action="moment-like" data-moment-id="${id}" aria-label="${isLiked ? '取消点赞' : '点赞'}" aria-pressed="${isLiked ? 'true' : 'false'}">
             ${ICONS.like}
             <span>${likeCount}</span>
           </button>
-          <button class="moments-action-btn" type="button" data-action="moment-comment" data-moment-id="${id}" aria-label="评论">
+          <button class="moments-action-btn ${isCommentExpanded ? 'moments-action-btn--active' : ''}" type="button" data-action="moment-comment" data-moment-id="${id}" aria-label="评论" aria-expanded="${isCommentExpanded ? 'true' : 'false'}">
             ${ICONS.comment}
             <span>${commentCount}</span>
           </button>
@@ -269,7 +379,11 @@ function renderMomentCard(moment) {
         </button>
       </div>
 
-      ${renderComments(comments)}
+      ${renderComments(comments, {
+        momentId: rawId,
+        isExpanded: isCommentExpanded,
+        replyTarget
+      })}
     </article>
   `;
 }
@@ -429,6 +543,236 @@ export function buildMomentsComposeShareMessage(draft) {
   return summaryParts.length
     ? `我分享了一条朋友圈动态：${summaryParts.join(' ')}`
     : '我分享了一条朋友圈动态';
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈点赞评论互动模块化] 互动状态、事件处理与局部刷新
+   说明：
+   1. 本区域集中维护朋友圈点赞、评论展开、发表评论与回复评论的主要逻辑。
+   2. 本模块不直接 import DB.js，不直接调用 dbPut；持久化由 index.js 传入 persistMoments 回调接线。
+   3. 不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本字段过滤。
+   ========================================================================== */
+export function createMomentsInteractionState() {
+  return {
+    momentsExpandedCommentIds: [],
+    momentsReplyTarget: null
+  };
+}
+
+export function resetMomentsInteractionState(state) {
+  if (!state) return;
+  state.momentsExpandedCommentIds = [];
+  state.momentsReplyTarget = null;
+}
+
+export function getMomentsViewerId(state) {
+  return String(state?.activeMaskId || state?.profile?.id || state?.profile?.maskId || state?.profile?.name || 'self').trim() || 'self';
+}
+
+export function getMomentsViewerName(state) {
+  return String(state?.profile?.nickname || state?.profile?.name || '当前面具身份').trim() || '当前面具身份';
+}
+
+export function getMomentsRenderOptions(state) {
+  return {
+    profile: state?.profile || {},
+    contacts: Array.isArray(state?.contacts) ? state.contacts : [],
+    viewerId: getMomentsViewerId(state),
+    expandedCommentIds: Array.isArray(state?.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds : [],
+    replyTarget: state?.momentsReplyTarget || null
+  };
+}
+
+function getMomentById(state, momentId) {
+  const safeMomentId = String(momentId || '').trim();
+  const list = Array.isArray(state?.moments) ? state.moments : [];
+  const index = list.findIndex(moment => String(moment?.id || '') === safeMomentId);
+  return { index, moment: index >= 0 ? list[index] : null };
+}
+
+function normalizeMomentLikes(likes) {
+  if (Array.isArray(likes)) return likes.slice();
+  const count = Math.max(0, Math.floor(Number(likes || 0)) || 0);
+  return Array.from({ length: count }, (_, index) => ({
+    id: `legacy_like_${index + 1}`,
+    name: '已点赞'
+  }));
+}
+
+export function refreshMomentsPanel(container, state, options = {}) {
+  const panelEl = container?.querySelector?.('[data-panel="moments"]');
+  if (!panelEl) return;
+
+  const momentsPage = panelEl.querySelector('.moments-page');
+  const scrollTop = Number(momentsPage?.scrollTop || 0);
+  panelEl.innerHTML = renderMoments(state?.moments, getMomentsRenderOptions(state));
+
+  const nextMomentsPage = panelEl.querySelector('.moments-page');
+  if (nextMomentsPage) nextMomentsPage.scrollTop = scrollTop;
+
+  if (options?.focusMomentId) {
+    window.setTimeout(() => {
+      const input = Array.from(panelEl.querySelectorAll('[data-role="moment-comment-input"]'))
+        .find(item => String(item.dataset.momentId || '') === String(options.focusMomentId || ''));
+      if (input) input.focus();
+    }, 0);
+  }
+}
+
+async function toggleMomentLike({ target, state, container, persistMoments }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  const { moment } = getMomentById(state, momentId);
+  if (!moment) return;
+
+  const viewerId = getMomentsViewerId(state);
+  const viewerName = getMomentsViewerName(state);
+  const likes = normalizeMomentLikes(moment.likes);
+  const existed = likes.some(item => {
+    if (typeof item === 'string' || typeof item === 'number') return String(item) === viewerId;
+    return String(item?.id || item?.viewerId || item?.authorId || '') === viewerId;
+  });
+
+  moment.likes = existed
+    ? likes.filter(item => {
+        if (typeof item === 'string' || typeof item === 'number') return String(item) !== viewerId;
+        return String(item?.id || item?.viewerId || item?.authorId || '') !== viewerId;
+      })
+    : [
+        ...likes,
+        {
+          id: viewerId,
+          name: viewerName,
+          likedAt: Date.now()
+        }
+      ];
+
+  await persistMoments?.();
+  refreshMomentsPanel(container, state);
+}
+
+function toggleMomentComments({ target, state, container }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  if (!momentId) return;
+
+  const expandedSet = new Set((Array.isArray(state.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds : []).map(String));
+  if (expandedSet.has(momentId)) {
+    expandedSet.delete(momentId);
+    if (String(state.momentsReplyTarget?.momentId || '') === momentId) state.momentsReplyTarget = null;
+  } else {
+    expandedSet.add(momentId);
+  }
+
+  state.momentsExpandedCommentIds = Array.from(expandedSet);
+  refreshMomentsPanel(container, state, { focusMomentId: expandedSet.has(momentId) ? momentId : '' });
+}
+
+function setMomentReplyTarget({ target, state, container }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  const commentId = String(target?.dataset?.commentId || '').trim();
+  if (!momentId || !commentId) return;
+
+  state.momentsExpandedCommentIds = Array.from(new Set([
+    ...(Array.isArray(state.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds.map(String) : []),
+    momentId
+  ]));
+  state.momentsReplyTarget = {
+    momentId,
+    commentId,
+    authorName: String(target.dataset.commentAuthor || '匿名').trim() || '匿名'
+  };
+  refreshMomentsPanel(container, state, { focusMomentId: momentId });
+}
+
+function cancelMomentReply({ target, state, container }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  state.momentsReplyTarget = null;
+  refreshMomentsPanel(container, state, { focusMomentId: momentId });
+}
+
+async function submitMomentComment({ target, state, container, createUid, showNotice, persistMoments }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  const { moment } = getMomentById(state, momentId);
+  if (!moment) return;
+
+  const card = target.closest('.moments-card');
+  const input = card?.querySelector('[data-role="moment-comment-input"]');
+  const content = String(input?.value || '').trim();
+  if (!content) {
+    showNotice?.('请输入评论内容');
+    return;
+  }
+
+  const now = Date.now();
+  const viewerId = getMomentsViewerId(state);
+  const viewerName = getMomentsViewerName(state);
+  const comments = Array.isArray(moment.comments) ? moment.comments.slice() : [];
+  const replyTarget = state.momentsReplyTarget && String(state.momentsReplyTarget.momentId || '') === momentId
+    ? state.momentsReplyTarget
+    : null;
+
+  if (replyTarget?.commentId) {
+    const replyCommentId = String(replyTarget.commentId);
+    moment.comments = comments.map(comment => {
+      if (String(comment?.id || '') !== replyCommentId) return comment;
+      return {
+        ...comment,
+        replies: [
+          ...(Array.isArray(comment?.replies) ? comment.replies : []),
+          {
+            id: createUid?.('moment_reply') || `moment_reply_${now}`,
+            authorId: viewerId,
+            authorName: viewerName,
+            content,
+            createdAt: now
+          }
+        ]
+      };
+    });
+  } else {
+    moment.comments = [
+      ...comments,
+      {
+        id: createUid?.('moment_comment') || `moment_comment_${now}`,
+        authorId: viewerId,
+        authorName: viewerName,
+        content,
+        createdAt: now,
+        replies: []
+      }
+    ];
+  }
+
+  state.momentsExpandedCommentIds = Array.from(new Set([
+    ...(Array.isArray(state.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds.map(String) : []),
+    momentId
+  ]));
+  state.momentsReplyTarget = null;
+
+  await persistMoments?.();
+  refreshMomentsPanel(container, state, { focusMomentId: momentId });
+}
+
+export async function handleMomentsInteractionAction(options = {}) {
+  const action = String(options.action || options.target?.dataset?.action || '');
+  switch (action) {
+    case 'moment-like':
+      await toggleMomentLike(options);
+      return true;
+    case 'moment-comment':
+      toggleMomentComments(options);
+      return true;
+    case 'moment-reply-comment':
+      setMomentReplyTarget(options);
+      return true;
+    case 'cancel-moment-reply':
+      cancelMomentReply(options);
+      return true;
+    case 'submit-moment-comment':
+      await submitMomentComment(options);
+      return true;
+    default:
+      return false;
+  }
 }
 
 /* ==========================================================================
@@ -773,7 +1117,7 @@ export function renderMoments(moments, options = {}) {
 
       <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈动态列表 -->
       <div class="moments-feed">
-        ${list.map(renderMomentCard).join('')}
+        ${list.map(moment => renderMomentCard(moment, options)).join('')}
       </div>
     </div>
   `;

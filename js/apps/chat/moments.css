@@ -419,8 +419,24 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 评论区
+   [区域标注·已完成·本次朋友圈点赞评论互动] 点赞红色态、评论展开与回复输入区
+   说明：
+   1. 仅服务朋友圈动态下方点赞、评论、回复交互，不影响发帖页或其它聊天页面。
+   2. 点赞按钮使用 currentColor 驱动 IconPark SVG 图标变红。
+   3. 本区域不包含任何持久化存储逻辑。
    ========================================================================== */
+.moments-action-btn--liked {
+  color: #E5484D;
+}
+
+.moments-action-btn--liked:active {
+  color: #C93A3F;
+}
+
+.moments-action-btn--active {
+  color: var(--moments-accent);
+}
+
 .moments-comments {
   margin-top: 13px;
   padding: 12px 0 0 0;
@@ -430,11 +446,40 @@
   gap: 8px;
 }
 
+.moments-comments--expanded {
+  gap: 10px;
+}
+
+.moments-comments__empty {
+  margin: 0;
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .moments-comment {
   color: var(--moments-text);
   font-family: var(--moments-font-sans);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.moments-comment__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.moments-comment--replying .moments-comment__main {
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(229, 72, 77, 0.08);
+}
+
+.moments-comment__body {
+  min-width: 0;
+  flex: 1;
 }
 
 .moments-comment__author {
@@ -444,6 +489,132 @@
 .moments-comment__text {
   color: rgba(74, 52, 42, 0.72);
   word-break: break-word;
+}
+
+.moments-comment__reply-btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--moments-muted);
+  padding: 2px 6px;
+  font-family: var(--moments-font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-comment__reply-btn:active {
+  color: var(--moments-accent);
+  background: rgba(125, 90, 68, 0.08);
+  transform: scale(0.96);
+}
+
+.moments-comment__replies {
+  margin: 6px 0 0 14px;
+  padding-left: 10px;
+  border-left: 2px solid var(--moments-line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.moments-comment-reply {
+  color: var(--moments-text);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.moments-comment-composer {
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid var(--moments-line);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.62);
+  box-shadow: 0 10px 22px rgba(44, 32, 22, 0.05);
+}
+
+.moments-comment-composer__replying {
+  margin: 0 0 8px;
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.moments-comment-composer__cancel {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--moments-accent);
+  padding: 0 4px;
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.moments-comment-composer__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.moments-comment-composer__input {
+  min-width: 0;
+  flex: 1;
+  min-height: 38px;
+  max-height: 120px;
+  border: 1px solid var(--moments-line-soft);
+  border-radius: 14px;
+  outline: none;
+  resize: vertical;
+  background: rgba(255, 252, 247, 0.78);
+  color: var(--moments-text);
+  padding: 9px 11px;
+  font-family: var(--moments-font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.moments-comment-composer__input::placeholder {
+  color: var(--moments-faint);
+}
+
+.moments-comment-composer__input:focus {
+  border-color: rgba(125, 90, 68, 0.32);
+  box-shadow: 0 0 0 3px rgba(125, 90, 68, 0.08);
+}
+
+.moments-comment-composer__send {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--moments-accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(74, 52, 42, 0.14);
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.moments-comment-composer__send:active {
+  transform: scale(0.94);
+  background: var(--moments-text);
+}
+
+.moments-comment-composer__send svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.8;
 }
 
 /* ==========================================================================
@@ -917,6 +1088,20 @@
   .moments-action-btn svg {
     width: 20px;
     height: 20px;
+  }
+
+  .moments-comment-composer__row {
+    gap: 6px;
+  }
+
+  .moments-comment-composer__input {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  .moments-comment-composer__send {
+    width: 36px;
+    height: 36px;
   }
 
   .moments-compose-top-bar,

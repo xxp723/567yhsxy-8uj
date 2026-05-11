@@ -170,7 +170,11 @@ import {
   openMomentsComposeImageUrlModal,
   openMomentsComposeLocationModal,
   openMomentsComposeShareModal,
-  openMomentsComposeVisibilityModal
+  openMomentsComposeVisibilityModal,
+  createMomentsInteractionState,
+  resetMomentsInteractionState,
+  getMomentsRenderOptions,
+  handleMomentsInteractionAction
 } from './moments.js';
 /* ==========================================================================
    [区域标注·已完成·语言翻译] 导入语言翻译独立模块
@@ -586,6 +590,15 @@ export async function mount(container, context) {
       visibilityMode: 'public',
       visibleContactIds: []
     },
+    /* ========================================================================
+       [区域标注·已完成·本次朋友圈点赞评论互动模块化接线] 朋友圈互动运行时 UI 状态
+       说明：
+       1. index.js 仅挂载评论展开、回复目标等运行时状态。
+       2. 点赞、评论展开、发表评论与回复评论的主要逻辑已移至 moments.js。
+       3. 数据本体统一通过接线回调写入 DATA_KEY_MOMENTS(activeMaskId) 的 IndexedDB 记录。
+       4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       ======================================================================== */
+    ...createMomentsInteractionState(),
     profile: {},                    // 用户资料（由面具数据生成）
     currentChatId: null,            // 当前打开的聊天会话 ID（null 表示未打开）
     currentMessages: [],            // 当前聊天消息列表
@@ -957,9 +970,9 @@ function buildAppShell(state) {
       <div class="chat-panel ${state.activePanel === 'contacts' ? 'is-active' : ''}" data-panel="contacts">
         ${renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId)}
       </div>
-      <!-- [区域标注] 朋友圈板块 -->
+      <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 朋友圈板块：传入点赞/评论/回复运行时渲染参数 -->
       <div class="chat-panel ${state.activePanel === 'moments' ? 'is-active' : ''}" data-panel="moments">
-        ${renderMoments(state.moments, { profile: state.profile, contacts: state.contacts })}
+        ${renderMoments(state.moments, getMomentsRenderOptions(state))}
       </div>
       <!-- [区域标注] 用户主页板块 -->
       <div class="chat-panel ${state.activePanel === 'profile' ? 'is-active' : ''}" data-panel="profile">
@@ -1031,7 +1044,7 @@ function refreshPanel(container, state, panelKey) {
       panelEl.innerHTML = renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId);
       break;
     case 'moments':
-      panelEl.innerHTML = renderMoments(state.moments, { profile: state.profile, contacts: state.contacts });
+      panelEl.innerHTML = renderMoments(state.moments, getMomentsRenderOptions(state));
       break;
     case 'profile':
       panelEl.innerHTML = renderProfile(state.profile);
@@ -1531,6 +1544,29 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       openMomentsComposePage(container, state);
       break;
 
+    /* ========================================================================
+       [区域标注·已完成·本次朋友圈点赞评论互动模块化接线] 朋友圈点赞/评论/回复事件接线
+       说明：
+       1. index.js 只负责事件委托、应用内提示与 DB.js / IndexedDB 持久化回调接线。
+       2. 点赞、评论展开、发表评论、回复评论的主要逻辑已移至 moments.js。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ======================================================================== */
+    case 'moment-like':
+    case 'moment-comment':
+    case 'moment-reply-comment':
+    case 'cancel-moment-reply':
+    case 'submit-moment-comment':
+      await handleMomentsInteractionAction({
+        action,
+        target,
+        state,
+        container,
+        createUid,
+        showNotice: message => renderModalNotice(container, message),
+        persistMoments: () => dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), Array.isArray(state.moments) ? state.moments : [])
+      });
+      break;
+
     /* [区域标注·已完成·本次朋友圈独立发帖页接线] 发帖页返回：关闭独立发帖页并保留当前草稿 */
     case 'moments-compose-back':
       closeMomentsComposePage(container, state, PANEL_KEYS);
@@ -1588,6 +1624,7 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       };
 
       state.moments = [nextMoment, ...(Array.isArray(state.moments) ? state.moments : [])];
+      resetMomentsInteractionState(state);
 
       const tasks = [
         dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments)
@@ -4447,6 +4484,7 @@ async function loadMaskData(state, db, maskId) {
   state.moments = moments || [];
   state.momentsComposeOpen = false;
   state.momentsComposeDraft = createMomentsComposeDraft();
+  resetMomentsInteractionState(state);
   state.currentChatId = null;
   state.currentMessages = [];
   state.chatMessageVisibleCount = CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
