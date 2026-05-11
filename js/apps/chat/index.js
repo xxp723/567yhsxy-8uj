@@ -1526,10 +1526,19 @@ async function handleClick(e, state, container, db, eventBus, windowManager, app
       const draft = ensureMomentsComposeDraft(state);
       const text = String(draft.text || '').trim();
       const draftImages = Array.isArray(draft.images) ? draft.images.filter(item => item?.src).slice(0, MOMENTS_COMPOSE_MAX_IMAGES) : [];
+      /* [区域标注·已完成·朋友圈个别人可见发布修复] 提交时同时识别联系人 id / roleId，避免已选联系人被过滤为空导致纸飞机无法发表。 */
+      const validVisibleContactIds = new Set(
+        (Array.isArray(state.contacts) ? state.contacts : [])
+          .flatMap(contact => [
+            String(contact?.id || '').trim(),
+            String(contact?.roleId || '').trim()
+          ])
+          .filter(Boolean)
+      );
       const visibleContactIds = Array.from(new Set(
         (Array.isArray(draft.visibleContactIds) ? draft.visibleContactIds : [])
           .map(id => String(id || '').trim())
-          .filter(id => state.contacts.some(contact => String(contact?.id || '').trim() === id))
+          .filter(id => validVisibleContactIds.has(id))
       ));
 
       if (!text && !draftImages.length) {
