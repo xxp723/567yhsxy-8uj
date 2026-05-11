@@ -136,6 +136,38 @@ import {
   showFavoriteSavedModal as showFavoriteSavedModalModule,
   showForwardMessagesModal as showForwardMessagesModalModule
 } from './chat-message-modals.js';
+import {
+  getMessageDisplayTextForQuote as getMessageDisplayTextForQuoteModule,
+  createQuotePayloadFromMessage as createQuotePayloadFromMessageModule,
+  renderQuotePreview as renderQuotePreviewModule,
+  syncPendingQuoteComposer as syncPendingQuoteComposerModule
+} from './chat-message-quote.js';
+import {
+  getChatSearchMessageText as getChatSearchMessageTextModule,
+  getChatSearchMatches as getChatSearchMatchesModule,
+  renderChatSearchResultBubble as renderChatSearchResultBubbleModule,
+  renderChatMessageSearchResultsHtml as renderChatMessageSearchResultsHtmlModule,
+  renderChatMessageSearchPanelHtml as renderChatMessageSearchPanelHtmlModule,
+  syncChatMessageSearchPanel as syncChatMessageSearchPanelModule,
+  scrollToChatSearchResult as scrollToChatSearchResultModule
+} from './chat-message-search.js';
+import {
+  updateMultiSelectActionBar as updateMultiSelectActionBarModule,
+  resetMessageSelectionState as resetMessageSelectionStateModule,
+  getSelectedMessages as getSelectedMessagesModule
+} from './chat-message-selection.js';
+import {
+  getVisibleChatConsoleLogs as getVisibleChatConsoleLogsModule,
+  renderChatConsoleDockHtml as renderChatConsoleDockHtmlModule,
+  getAsideSegmentsFromMessage as getAsideSegmentsFromMessageModule,
+  renderMessageBubble as renderMessageBubbleModule,
+  renderChatMessage as renderChatMessageModule,
+  renderCurrentChatMessage as renderCurrentChatMessageModule,
+  appendCurrentMessageBubble as appendCurrentMessageBubbleModule,
+  refreshMessageBubbleRows as refreshMessageBubbleRowsModule,
+  refreshCurrentMessageListOnly as refreshCurrentMessageListOnlyModule,
+  refreshCurrentSessionLastMessage as refreshCurrentSessionLastMessageModule
+} from './chat-message-render.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -358,136 +390,42 @@ function getVisibleChatMessagesForRender(messages = [], options = {}) {
    3. 下次如需修改引用预览文案或长度，优先修改本区域。
    ======================================================================== */
 function getMessageDisplayTextForQuote(message = {}) {
-  const type = String(message?.type || '');
-  if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '表情包').trim()}`;
-  if (isTextImageMessage(message)) return `[文字图] ${String(message?.textImageText || message?.content || '文字图').trim()}`;
-  if (isVoiceMessage(message)) return getVoiceMessageDisplayText(message);
-  if (type === 'image') return `[图片] ${String(message?.imageName || message?.content || '图片').trim()}`;
-  if (type === 'transfer') return `[转账] ${String(message?.transferDisplayAmount || message?.content || '¥0.00').trim()}`;
-  if (type === 'gift') return getGiftMessageDisplayText(message);
-  if (type === 'card') return `[HTML卡片] ${String(message?.cardTitle || message?.content || '互动卡片').trim()}`;
-  if (type === 'transfer_system' || type === 'ai_withdraw_system' || type === 'user_withdraw_system' || type === 'html_card_interaction_system') return String(message?.content || '系统提示').trim();
-  return String(message?.content || '').trim();
+  return getMessageDisplayTextForQuoteModule(message);
 }
 
 export function createQuotePayloadFromMessage(message = {}, chatSession = {}, userProfile = {}) {
-  if (!message?.id) return null;
-  const isUser = message.role === 'user';
-  const text = getMessageDisplayTextForQuote(message).replace(/\s+/g, ' ').trim();
-  return {
-    id: String(message.id),
-    role: String(message.role || ''),
-    senderName: isUser
-      ? String(userProfile?.nickname || '我')
-      : String(chatSession?.name || '对方'),
-    text: text.length > 86 ? `${text.slice(0, 86)}…` : text,
-    type: String(message.type || 'text'),
-    timestamp: Number(message.timestamp || 0) || 0
-  };
+  return createQuotePayloadFromMessageModule(message, chatSession, userProfile);
 }
 
 function renderQuotePreview(quote = {}, variant = 'bubble') {
-  const text = String(quote?.text || '').trim();
-  if (!text) return '';
-  const senderName = String(quote?.senderName || (quote?.role === 'user' ? '我' : '对方')).trim();
-  const className = variant === 'composer' ? 'msg-quote-preview msg-quote-preview--composer' : 'msg-quote-preview';
-  return `
-    <div class="${className}">
-      <span class="msg-quote-preview__bar"></span>
-      <div class="msg-quote-preview__body">
-        <span class="msg-quote-preview__sender">${escapeHtml(senderName)}</span>
-        <span class="msg-quote-preview__text">${escapeHtml(text)}</span>
-      </div>
-    </div>
-  `;
+  return renderQuotePreviewModule(quote, variant);
 }
 
 /* ========================================================================
-   [区域标注·已完成·聊天记录搜索文案与回滚定位修复] 搜索匹配与面板渲染工具
+   [区域标注·已完成·本次拆分] 聊天记录搜索子模块 facade
    说明：
-   1. 只搜索当前运行时 currentMessages，你与对方的消息都纳入范围。
-   2. 不写入 IndexedDB，不使用 localStorage/sessionStorage，不做双份存储兜底。
-   3. 搜索框不限制输入字数；输入时只局部刷新结果框，不替换正在输入的 input DOM。
-   4. 已修复移动端输入法因 input 被 outerHTML 重建而每输入一个字就失焦/收起的问题。
-   5. 搜索浮层由 CSS 覆盖在顶栏下方，不挤压消息列表，避免页面整体上移与触摸穿透。
-   6. 本次已将空状态说明文字改为“输入关键字后，你与对方的相关消息都会显示在这里。”。
+   1. 搜索文案提取、匹配、结果列表与顶栏下浮搜索面板实现，已拆分到 chat-message-search.js。
+   2. 本文件仅保留薄接线层，继续维持原函数名，避免影响 renderChatMessage 与外部调用方。
+   3. 搜索仍只使用当前运行时消息数组，不写入 IndexedDB，不使用 localStorage/sessionStorage。
    ======================================================================== */
 function getChatSearchMessageText(message = {}) {
-  const baseText = getMessageDisplayTextForQuote(message);
-  const quoteText = String(message?.quote?.text || '').trim();
-  return [baseText, quoteText].filter(Boolean).join(' ');
+  return getChatSearchMessageTextModule(message);
 }
 
 function getChatSearchMatches(messages = [], keyword = '') {
-  const query = String(keyword || '').trim().toLowerCase();
-  if (!query) return [];
-  return (Array.isArray(messages) ? messages : [])
-    .map((message, index) => ({
-      message,
-      index,
-      text: getChatSearchMessageText(message)
-    }))
-    .filter(item => String(item.text || '').toLowerCase().includes(query));
+  return getChatSearchMatchesModule(messages, keyword);
 }
 
 function renderChatSearchResultBubble(item = {}, session = {}, userProfile = {}) {
-  const message = item.message || {};
-  const isUser = message.role === 'user';
-  const senderName = isUser
-    ? String(userProfile?.nickname || '我')
-    : String(session?.remark || session?.name || '对方');
-  const text = getChatSearchMessageText(message) || '（空消息）';
-
-  return `
-    <button class="msg-search-result ${isUser ? 'msg-search-result--user' : 'msg-search-result--other'}"
-            data-action="jump-msg-search-result"
-            data-message-id="${escapeHtml(message.id || '')}"
-            type="button">
-      <span class="msg-search-result__meta">${escapeHtml(senderName)} · 第 ${Number(item.index || 0) + 1} 条</span>
-      <span class="msg-search-result__bubble">${escapeHtml(text)}</span>
-    </button>
-  `;
+  return renderChatSearchResultBubbleModule(item, session, userProfile);
 }
 
 function renderChatMessageSearchResultsHtml(session = {}, messages = [], options = {}) {
-  const keyword = String(options.chatSearchKeyword || '');
-  const matches = getChatSearchMatches(messages, keyword);
-  const userProfile = options.userProfile || {};
-
-  return keyword
-    ? (matches.length
-        ? matches.map(item => renderChatSearchResultBubble(item, session, userProfile)).join('')
-        : `<div class="msg-search-panel__empty">没有命中“${escapeHtml(keyword)}”</div>`)
-    : `<div class="msg-search-panel__empty">输入关键字后，你与对方的相关消息都会显示在这里。</div>`;
+  return renderChatMessageSearchResultsHtmlModule(session, messages, options);
 }
 
 function renderChatMessageSearchPanelHtml(session = {}, messages = [], options = {}) {
-  const searchOpen = Boolean(options.chatSearchOpen);
-  const keyword = String(options.chatSearchKeyword || '');
-
-  return `
-    <!-- ======================================================================
-         [区域标注·已完成·聊天记录搜索文案与回滚定位修复] 顶栏下浮搜索框与命中结果
-         说明：
-         1. 点击顶栏放大镜后从顶栏下边框向下浮现；搜索仅使用当前运行时消息数组。
-         2. 输入时只替换 data-role="msg-search-results" 内容，不替换 input DOM，避免输入法被关闭。
-         3. 空状态文案已按本次需求更新为“你与对方”的说明。
-         4. 本区域不涉及持久化存储，不使用 localStorage/sessionStorage。
-         ====================================================================== -->
-    <div class="msg-search-panel ${searchOpen ? 'is-open' : ''}" data-role="msg-search-panel">
-      <div class="msg-search-panel__box">
-        <span class="msg-search-panel__icon">${MSG_ICONS.search}</span>
-        <input class="msg-search-panel__input"
-               data-role="msg-search-input"
-               type="text"
-               value="${escapeHtml(keyword)}"
-               placeholder="搜索聊天记录">
-      </div>
-      <div class="msg-search-panel__results" data-role="msg-search-results">
-        ${renderChatMessageSearchResultsHtml(session, messages, options)}
-      </div>
-    </div>
-  `;
+  return renderChatMessageSearchPanelHtmlModule(session, messages, options);
 }
 
 /* ==========================================================================
@@ -611,769 +549,22 @@ export function syncStickerInputSuggestions(container, state, keyword = '') {
 }
 
 /* ==========================================================================
-   [区域标注·本次需求5] 单条消息气泡渲染
+   [区域标注·已完成·本次 chat-message.js 瘦身与渲染模块接线]
    说明：
-   1. 导出给 index.js 增量追加消息，避免 AI 每输出一个气泡都整页重绘造成闪屏。
-   2. 同时为每条消息补充 data-message-id，供单击功能栏、删除、多选使用。
-/* ========================================================================== */
-/* ========================================================================
-   [区域标注·已完成·旁白固定/穿插位置修复] 旁白字段规范化与气泡拼接
-   说明：
-   1. 兼容旧字段 asideText，也支持本次新增的 asideSegments 多段旁白。
-   2. 固定模式由“绑定到本轮第一条 AI 消息”保证显示在用户消息下方、AI 全部回复上方。
-   3. 穿插模式按多段旁白分别绑定到不同 AI 消息，可在回复开头、中间、结尾出现多段旁白。
-   4. 本区域只处理运行时渲染，不读写持久化存储；保存仍统一走 DB.js / IndexedDB。
-   ======================================================================== */
+   1. 单条消息气泡渲染、整页聊天 HTML、旁白拼接与控制台抽屉渲染已统一委托给 chat-message-render.js。
+   2. 本文件只保留同名 facade，继续兼容 index.js 与其它既有调用方。
+   3. AI 发送流程、协议解析、DB.js / IndexedDB 持久化调度仍保留在本文件。
+   ========================================================================== */
 function getAsideSegmentsFromMessage(message = {}) {
-  const rawSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
-  const normalizedSegments = rawSegments
-    .map((segment, index) => {
-      const text = typeof segment === 'string' ? segment : String(segment?.text || '').trim();
-      if (!text) return null;
-      return {
-        id: String(segment?.id || `${message?.id || 'aside'}_${index + 1}`),
-        text,
-        placement: String(segment?.placement || 'before') === 'after' ? 'after' : 'before'
-      };
-    })
-    .filter(Boolean);
-
-  if (normalizedSegments.length) return normalizedSegments;
-
-  const legacyText = String(message?.asideText || '').trim();
-  return legacyText
-    ? [{
-        id: String(message?.id || 'aside'),
-        text: legacyText,
-        placement: 'before'
-      }]
-    : [];
-}
-
-function hasRenderableAsideContent(message = {}) {
-  return getAsideSegmentsFromMessage(message).length > 0;
-}
-
-/* ========================================================================
-   [区域标注·已完成·本次旁白功能栏编辑指向修复] 旁白复用普通消息功能栏 HTML
-   说明：
-   1. 旁白仍复用所属 assistant 消息现有 toolbar 样式、IconPark 图标与按钮布局，保持与普通气泡一致。
-   2. 本区已按真实旁白段 id 精确控制工具栏开合：点击普通消息只显示普通气泡功能栏，点击旁白只显示该段旁白功能栏。
-   3. 旁白工具栏里的“编辑”由 index.js 根据 .msg-aside-bubble 拦截为旁白专用编辑，不再误编辑 owner 消息正文。
-   4. 不新增独立旁白消息对象，不改持久化结构，不使用 localStorage/sessionStorage。
-   ======================================================================== */
-function renderAsideToolbarHtml(message = {}, chatSession, options = {}) {
-  const holder = document.createElement('div');
-  holder.innerHTML = renderMessageBubble(message, chatSession, options).trim();
-  return holder.querySelector('[data-role="msg-bubble-toolbar"]')?.outerHTML || '';
-}
-
-function renderMessageAsideHtml(message = {}, placement = 'before', chatSession = {}, options = {}) {
-  const targetPlacement = placement === 'after' ? 'after' : 'before';
-  const messageId = String(message?.id || '').trim();
-  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
-
-  return getAsideSegmentsFromMessage(message)
-    .filter(segment => segment.placement === targetPlacement)
-    .map((segment, index) => {
-      const asideSegmentId = String(segment.id || `${message?.id || 'aside'}_${index + 1}`);
-      const isToolbarOpen = !Boolean(options.multiSelectMode)
-        && String(options.selectedMessageId || '') === messageId
-        && selectedAsideSegmentId === asideSegmentId;
-      const toolbarHtml = isToolbarOpen ? renderAsideToolbarHtml(message, chatSession, options) : '';
-
-      return renderAsideBubbleHtml(
-        segment.text,
-        `${asideSegmentId}_${targetPlacement}_${index + 1}`,
-        {
-          ownerMessageId: messageId,
-          asideSegmentId,
-          isToolbarOpen,
-          toolbarHtml
-        }
-      );
-    })
-    .join('');
-}
-
-function renderMessageWithAsideHtml(message, chatSession, options = {}) {
-  const beforeAsideHtml = renderMessageAsideHtml(message, 'before', chatSession, options);
-  const bubbleHtml = renderMessageBubble(message, chatSession, options);
-  const afterAsideHtml = renderMessageAsideHtml(message, 'after', chatSession, options);
-  return `${beforeAsideHtml}${bubbleHtml}${afterAsideHtml}`;
+  return getAsideSegmentsFromMessageModule(message);
 }
 
 export function renderMessageBubble(msg, chatSession, options = {}) {
-  const session = chatSession || {};
-  const name = session.name || '聊天';
-  const userProfile = options.userProfile || {};
-  const userAvatar = userProfile.avatar || '';
-  const userName = userProfile.nickname || '我';
-  const selectedMessageId = String(options.selectedMessageId || '');
-  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
-  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
-  const multiSelectMode = Boolean(options.multiSelectMode);
-  /* ===== 闲谈：删除消息二次确认 START ===== */
-  const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
-  /* ===== 闲谈：删除消息二次确认 END ===== */
-  /* ========================================================================
-     [区域标注·已完成·消息回溯] 气泡回溯确认态
-     说明：点击“回溯”后先显示“确认回溯”，再次确认才删除当前气泡之后的所有消息。
-     ======================================================================== */
-  const rewindConfirmMessageId = String(options.rewindConfirmMessageId || '');
-
-  const messageId = String(msg?.id || '');
-  const isUser = msg?.role === 'user';
-  const isAssistant = msg?.role === 'assistant' || msg?.role === 'other';
-  const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId && !selectedAsideSegmentId;
-  const isSelected = selectedMessageIds.includes(messageId);
-  /* ===== 闲谈：删除消息二次确认 START ===== */
-  const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
-  /* ===== 闲谈：删除消息二次确认 END ===== */
-  /* ========================================================================
-     [区域标注·已完成·消息回溯] 当前气泡是否处于回溯二次确认
-     说明：仅运行时状态，不做任何额外持久化；确认后由 index.js 写入 IndexedDB。
-     ======================================================================== */
-  const isRewindConfirming = isToolbarOpen && rewindConfirmMessageId === messageId;
-  const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
-  /* ========================================================================
-     [区域标注·已完成·AI识图图片消息渲染 + AI图片点击放大]
-     说明：
-     1. type:image 的消息来自咖啡功能区“图片”板块或 AI 生图结果。
-     2. imageUrl 会随当前聊天记录写入 DB.js / IndexedDB，并在 prompt.js 中作为视觉输入发送给 AI。
-     3. 所有图片消息（AI 生成/发送图片）统一支持单击居中放大，交由 index.js 的消息页媒体预览层处理。
-     4. 不使用 localStorage/sessionStorage，也不保留双份存储兜底；不使用原生弹窗或原生选择器。
-     ======================================================================== */
-  const isTextImageBubbleMessage = isTextImageMessage(msg);
-  /* ========================================================================
-     [区域标注·已完成·语音消息气泡渲染]
-     说明：
-     1. type=voice_message 的消息来自咖啡功能区“语音”板块。
-     2. 默认显示社交软件语音气泡样式；双击后展开语音转文字内容。
-     3. 消息字段随 currentMessages 写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const isVoiceBubbleMessage = isVoiceMessage(msg);
-  /* ========================================================================
-     [区域标注·已完成·本窗口图片清理过期态]
-     说明：
-     1. 清理本窗口图片后，消息保留 type:image 与图片描述，但 imageUrl 已删除。
-     2. 过期图片在聊天界面显示“已过期”，不再提供点击放大入口。
-     3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const hasImageUrl = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
-  const isExpiredImageMessage = String(msg?.type || '') === 'image' && Boolean(msg?.imageExpired);
-  const isImageMessage = Boolean(hasImageUrl || isExpiredImageMessage);
-  const isZoomableImage = Boolean(hasImageUrl && !isExpiredImageMessage);
-  /* ========================================================================
-     [区域标注·已完成·本次转账显示优化] 转账消息类型与状态表现
-     说明：
-     1. type:transfer 的消息来自聊天消息页咖啡功能区“转账”板块或 AI 转账协议。
-     2. 转账气泡不再显示“待处理/已接收/已退回”文字，改用颜色状态和 IconPark 对钩表现已接收。
-     3. 持久化仍只走 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const isTransferMessage = String(msg?.type || '') === 'transfer';
-  /* ========================================================================
-   [区域标注·已完成·礼物消息卡片渲染]
-     说明：
-     1. type=gift 的消息来自咖啡功能区“礼物”板块，或来自 AI 的 [礼物] 主动送礼协议。
-     2. 卡片 UI 由 chat-gift.js 独立维护；本区只负责聊天页渲染衔接。
-     ======================================================================== */
-  const isGiftBubbleMessage = isGiftMessage(msg);
-  /* ========================================================================
-     [区域标注·已完成·HTML卡片单张卡片显示修复] AI 互动 HTML 卡片消息
-     说明：
-     1. 本区域已去掉外层“HTML卡片/可点击互动”标题栏，只显示 iframe 内真正的 HTML 卡片。
-     2. iframe 使用 sandbox + srcdoc 展示，保留卡片内原生 HTML/CSS 互动，同时不污染聊天页样式。
-     3. iframe 同时写入 frameborder/scrolling/内联 border:0，防止 CSS 加载前出现浏览器默认大边框。
-     4. 卡片原始 HTML 与渲染后的 srcdoc 都只保存在当前消息对象中；消息持久化仍统一走 DB.js / IndexedDB。
-     ======================================================================== */
-  const isHtmlCardMessage = String(msg?.type || '') === 'card' && String(msg?.cardHtml || msg?.content || '').trim();
-  const htmlCardSrcdoc = isHtmlCardMessage
-    ? sanitizeHtmlCardDocumentForSrcdoc(String(msg?.cardHtml || msg?.content || ''))
-    : '';
-  /* ========================================================================
-     [区域标注·已完成·AI本轮撤回系统提示渲染]
-     说明：
-     1. transfer_system 继续用于转账系统小字。
-     2. ai_withdraw_system 专用于 AI 本轮撤回后生成的微信/QQ式中间小字。
-     3. 撤回原文随该消息对象写入当前聊天记录（DB.js / IndexedDB），用户可点开看，AI 上文只读取“撤回了什么”摘要。
-     ======================================================================== */
-  const isAiWithdrawSystemMessage = String(msg?.type || '') === 'ai_withdraw_system';
-  /* ========================================================================
-     [区域标注·已完成·用户消息撤回] 用户撤回系统提示小字渲染
-     说明：
-     1. user_withdraw_system 是用户撤回消息后插入的中间系统小字。
-     2. 是否让 AI 看见撤回原文由消息对象 withdrawnVisibleToAi 控制，并随 currentMessages 写入 DB.js / IndexedDB。
-     3. 本渲染区只显示“你撤回了一条消息”，不展示撤回原文，避免界面泄露用户选择。
-     ======================================================================== */
-  const isUserWithdrawSystemMessage = String(msg?.type || '') === 'user_withdraw_system';
-  /* ========================================================================
-     [区域标注·已完成·HTML卡片交互系统提示渲染]
-     说明：
-     1. 用户点击 AI HTML 卡片内按钮/选项后，由 index.js 插入本类型系统小字。
-     2. 系统小字随 currentMessages 写入 DB.js / IndexedDB；下一轮请求 AI 时会作为用户回应上下文发送。
-     3. 本区域只负责复用中间系统提示样式，不使用 localStorage/sessionStorage，不做双份存储兜底。
-     ======================================================================== */
-  const isHtmlCardInteractionSystemMessage = String(msg?.type || '') === 'html_card_interaction_system';
-  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage || isHtmlCardInteractionSystemMessage;
-  const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
-  const isTransferAccepted = transferStatus === 'accepted';
-  /* ========================================================================
-     [区域标注·已完成·引用回复] 消息气泡内引用预览
-     说明：引用预览是消息对象 quote 字段的展示层，quote 字段随 currentMessages 写入 DB.js / IndexedDB。
-     ======================================================================== */
-  const quoteHtml = renderQuotePreview(msg?.quote);
-  const bubbleInnerHtml = isStickerMessage
-    ? `
-        <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
-          <img class="msg-sticker-bubble__image" src="${escapeHtml(msg?.stickerUrl || '')}" alt="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
-        </div>
-      `
-    : (isTextImageBubbleMessage
-        ? renderTextImageBubble(msg)
-        : (isVoiceBubbleMessage
-            ? renderVoiceBubble(msg)
-            : (isImageMessage
-        ? (isExpiredImageMessage
-          ? `
-          <!-- ==================================================================
-               [区域标注·已完成·本窗口图片清理过期态]
-               说明：清理后只显示“已过期”占位；图片描述仍保留在消息字段中供 AI 历史文字上下文读取。
-               ================================================================== -->
-          <div class="msg-image-bubble msg-image-bubble--expired" title="已过期">
-            <span class="msg-image-bubble__expired-text">已过期</span>
-          </div>
-        `
-          : `
-          <!-- ==================================================================
-               [区域标注·已完成·图片单击居中放大入口]
-               说明：AI生成图片/发送图片统一挂载 data-action，由 index.js 打开消息页中间预览层，仅放大，不改聊天背景。
-               ================================================================== -->
-          <div class="msg-image-bubble ${isZoomableImage ? 'msg-image-bubble--zoomable' : ''}"
-               ${isZoomableImage ? `data-role="msg-media-zoom-trigger" data-action="msg-media-open-zoom" data-media-kind="image" data-media-src="${escapeHtml(msg?.imageUrl || '')}" data-media-alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" data-message-id="${escapeHtml(messageId)}"` : ''}
-               title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
-            <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" decoding="async">
-          </div>
-        `)
-        : (isTransferMessage
-            ? `
-              <div class="msg-transfer-bubble msg-transfer-bubble--${escapeHtml(transferStatus)}" title="转账">
-                <div class="msg-transfer-bubble__icon">${MSG_ICONS.wallet}</div>
-                <div class="msg-transfer-bubble__content">
-                  <span class="msg-transfer-bubble__label">转账</span>
-                  <strong class="msg-transfer-bubble__amount">${escapeHtml(msg?.transferDisplayAmount || msg?.content || '')}</strong>
-                  ${String(msg?.transferNote || '').trim()
-                    ? `<span class="msg-transfer-bubble__note">${escapeHtml(msg.transferNote)}</span>`
-                    : `<span class="msg-transfer-bubble__note msg-transfer-bubble__note--empty">无备注</span>`}
-                </div>
-                ${isTransferAccepted ? `<span class="msg-transfer-bubble__check" aria-label="已接收">${MSG_ICONS.check}</span>` : ''}
-              </div>
-            `
-            : (isGiftBubbleMessage
-                ? renderGiftBubble(msg)
-                : (isHtmlCardMessage
-                ? `
-                  <div class="msg-html-card-bubble"
-                       data-role="msg-media-zoom-trigger"
-                       data-action="msg-media-open-zoom"
-                       data-media-kind="html-card"
-                       data-media-srcdoc="${escapeHtml(htmlCardSrcdoc)}"
-                       data-media-alt="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"
-                       data-message-id="${escapeHtml(messageId)}">
-                    <!-- ======================================================
-                         [区域标注·已完成·HTML卡片单张卡片显示修复]
-                         说明：不再渲染额外标题栏/徽标/提示，只保留真正的 HTML 卡片 iframe。
-                         ====================================================== -->
-                    <iframe
-                      class="msg-html-card-bubble__frame"
-                      data-message-id="${escapeHtml(messageId)}"
-                      sandbox="allow-scripts allow-forms allow-popups-to-escape-sandbox"
-                      loading="lazy"
-                      referrerpolicy="no-referrer"
-                      frameborder="0"
-                      scrolling="no"
-                      style="border:0;outline:0;background:transparent;"
-                      srcdoc="${escapeHtml(htmlCardSrcdoc)}"
-                      title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
-                  </div>
-                `
-                    : escapeHtml(msg?.content || '')))))));
-
-  if (isTransferSystemMessage) {
-    return `
-      <!-- ======================================================================
-           [区域标注·已完成·系统提示小字删除] 可单击聊天中间系统提示
-           说明：单击系统提示文字显示应用内删除选项；确认后由 index.js 写入 DB.js / IndexedDB。
-           ====================================================================== -->
-      <div class="msg-transfer-system-row ${isToolbarOpen ? 'is-action-open' : ''}"
-           data-message-id="${escapeHtml(messageId)}"
-           data-action="msg-system-tip-select">
-        <span class="msg-transfer-system-row__text">${escapeHtml(msg?.content || '')}</span>
-        ${isToolbarOpen ? `
-          <div class="msg-system-tip-actions" data-role="msg-bubble-toolbar">
-            ${isAiWithdrawSystemMessage ? `
-              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-view-withdrawn" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.systemTip}<span>查看</span>
-              </button>
-              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.fixFormat}<span>修正</span>
-              </button>
-            ` : ''}
-            <button class="msg-system-tip-actions__btn ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-system-tip-delete" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
-            </button>
-            ${isDeleteConfirming ? `
-              <button class="msg-system-tip-actions__btn msg-system-tip-actions__btn--confirm" data-action="msg-system-tip-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.check}<span>确认删除</span>
-              </button>
-            ` : ''}
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  return `
-    <!-- [区域标注·已完成·本次转账需求] 可单击转账消息：${escapeHtml(messageId)} -->
-    <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'} ${multiSelectMode ? 'is-multi-selecting' : ''} ${isSelected ? 'is-selected' : ''}"
-         data-message-id="${escapeHtml(messageId)}"
-         data-action="${multiSelectMode ? 'msg-multi-toggle' : (isTransferMessage ? 'msg-transfer-open-actions' : 'msg-bubble-select')}">
-      ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
-      <div class="msg-bubble-content">
-        ${isToolbarOpen ? `
-          <!-- ==================================================================
-               [区域标注·已完成·气泡两排功能区] 单击气泡后显示 IconPark 图标功能区
-               说明：五列网格，图标在上文字在下；复制按钮位于第二排。点击聊天消息页任意非功能区区域关闭。
-               ================================================================== -->
-          <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
-            ${isAssistant ? `
-              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--fix-format" data-action="msg-bubble-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.fixFormat}<span>修正</span>
-              </button>
-            ` : ''}
-            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-edit" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.edit}<span>编辑</span>
-            </button>
-            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-favorite" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.favorite}<span>收藏</span>
-            </button>
-            ${isUser ? `
-              <!-- ==================================================================
-                   [区域标注·已完成·用户消息撤回] 用户方消息气泡撤回入口
-                   说明：只给用户消息显示撤回按钮；点击后由 index.js 打开应用内弹窗，不使用原生 confirm/prompt。
-                   ================================================================== -->
-              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--withdraw" data-action="msg-bubble-withdraw" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.withdraw}<span>撤回</span>
-              </button>
-            ` : ''}
-            <!-- ===== 闲谈：删除消息二次确认 START ===== -->
-            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
-            </button>
-            ${isDeleteConfirming ? `
-              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-delete" data-action="msg-bubble-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.check}<span>确认删除</span>
-              </button>
-            ` : ''}
-            <!-- ===== 闲谈：删除消息二次确认 END ===== -->
-            <!-- ==================================================================
-                 [区域标注·已完成·消息回溯] 气泡功能栏回溯入口
-                 说明：点击后只进入确认态；确认后删除当前气泡之后的所有消息（包含系统小字），并保存到 DB.js / IndexedDB。
-                 ================================================================== -->
-            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--rewind ${isRewindConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.rewind}<span>${isRewindConfirming ? '取消' : '回溯'}</span>
-            </button>
-            ${isRewindConfirming ? `
-              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-rewind" data-action="msg-bubble-confirm-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
-                ${MSG_ICONS.check}<span>确认回溯</span>
-              </button>
-            ` : ''}
-            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.multiSelect}<span>多选</span>
-            </button>
-            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--copy" data-action="msg-bubble-copy" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.copy}<span>复制</span>
-            </button>
-            <!-- ==================================================================
-                 [区域标注·已完成·引用回复] 第二行引用按钮
-                 说明：点击后把当前消息设为待引用对象，下一条用户消息会携带 quote 字段写入 IndexedDB。
-                 ================================================================== -->
-            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--quote" data-action="msg-bubble-quote" data-message-id="${escapeHtml(messageId)}" type="button">
-              ${MSG_ICONS.quote}<span>引用</span>
-            </button>
-          </div>
-        ` : ''}
-        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isVoiceBubbleMessage ? 'msg-bubble--voice' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
-          ${quoteHtml}
-          ${bubbleInnerHtml}
-          <!-- ===== [区域标注·已完成·语言翻译] 翻译气泡插入点 START ===== -->
-          ${renderTranslationBubbleHtml(msg, options.translationSettings, isUser)}
-          <!-- ===== [区域标注·已完成·语言翻译] 翻译气泡插入点 END ===== -->
-        </div>
-        <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
-      </div>
-      ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
-      ${multiSelectMode ? `
-        <!-- [区域标注·本次需求5] 多选勾选圆点 -->
-        <button class="msg-bubble-select-dot ${isSelected ? 'is-selected' : ''}" data-action="msg-multi-toggle" data-message-id="${escapeHtml(messageId)}" type="button" aria-label="选择消息">
-          ${isSelected ? MSG_ICONS.check : ''}
-        </button>
-      ` : ''}
-    </div>
-  `;
+  return renderMessageBubbleModule(msg, chatSession, options);
 }
 
-function renderLoadMoreChatMessagesHtml(hiddenMessageCount = 0, nextLoadCount = CHAT_MESSAGE_LOAD_MORE_STEP) {
-  const hiddenCount = Math.max(0, Number(hiddenMessageCount || 0) || 0);
-  if (!hiddenCount) return '';
-
-  return `
-    <!-- ======================================================================
-         [区域标注·已完成·本次聊天记录分段加载] 消息列表顶部加载更多按钮
-         说明：点击后只扩大当前界面可见聊天记录数量；完整 currentMessages 不被裁剪，
-               因此不会影响 AI 历史上下文组装，也不涉及任何持久化存储读写。
-         ====================================================================== -->
-    <div class="msg-load-more-row" data-role="msg-load-more-row">
-      <button class="msg-load-more-btn" data-action="load-more-chat-messages" type="button">加载更多消息</button>
-      <span class="msg-load-more-row__meta">还有 ${hiddenCount} 条更早消息，每次加载 ${Math.max(1, Number(nextLoadCount || 0) || CHAT_MESSAGE_LOAD_MORE_STEP)} 条</span>
-    </div>
-  `;
-}
-
-function renderChatMessageListHtml(session = {}, messages = [], options = {}) {
-  const {
-    allMessages,
-    visibleMessages: msgs,
-    hiddenMessageCount,
-    nextLoadCount
-  } = getVisibleChatMessagesForRender(messages, options);
-
-  if (allMessages.length === 0) {
-    return `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
-  }
-
-  const asideDisplayMode = String(options.asideDisplayMode || 'top');
-  const parts = [];
-
-  for (let index = 0; index < msgs.length; index += 1) {
-    const msg = msgs[index];
-
-    if (asideDisplayMode === 'top' && msg?.role === 'assistant') {
-      const run = [];
-      let cursor = index;
-      while (cursor < msgs.length && msgs[cursor]?.role === 'assistant') {
-        run.push(msgs[cursor]);
-        cursor += 1;
-      }
-
-      const runAsideHtml = run
-        .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => ({
-          ownerMessageId: String(item?.id || '').trim(),
-          segment
-        })))
-        .filter(item => item.segment?.text)
-        .map((item, asideIndex) => {
-          const ownerMessageId = String(item.ownerMessageId || '').trim();
-          const asideSegmentId = String(item.segment?.id || `${run[0]?.id || 'aside_run'}_${asideIndex + 1}`);
-          const isToolbarOpen = !Boolean(options.multiSelectMode)
-            && String(options.selectedMessageId || '') === ownerMessageId
-            && String(options.selectedAsideSegmentId || '').trim() === asideSegmentId;
-          return renderAsideBubbleHtml(
-            item.segment.text,
-            `${asideSegmentId}_top_${asideIndex + 1}`,
-            {
-              ownerMessageId,
-              asideSegmentId,
-              isToolbarOpen,
-              toolbarHtml: isToolbarOpen
-                ? renderAsideToolbarHtml(run.find(message => String(message?.id || '') === ownerMessageId) || {}, session, options)
-                : ''
-            }
-          );
-        })
-        .join('');
-
-      if (runAsideHtml) parts.push(runAsideHtml);
-      run.forEach(item => parts.push(renderMessageBubble(item, session, options)));
-      index = cursor - 1;
-      continue;
-    }
-
-    parts.push(renderMessageWithAsideHtml(msg, session, options));
-  }
-
-  return `${renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount)}${parts.join('')}`;
-}
-
-/* ==========================================================================
-   [区域标注] 渲染聊天消息页面 HTML
-   参数：chatSession — 聊天会话对象
-         messages — 消息数组 [{id, role, content, timestamp}]
-         options.chatSettings — 当前聊天设置
-         options.isSending — API 调用中状态
-/* ========================================================================== */
 export function renderChatMessage(chatSession, messages, options = {}) {
-  const session = chatSession || {};
-  /* ========================================================================
-     [区域标注·已完成·当前会话备注显示名]
-     说明：
-     1. 聊天界面显示名优先使用当前会话备注，其次使用原联系人名。
-     2. 备注仅用于本地 UI 显示，不用于 AI 提示词上下文。
-     ======================================================================== */
-  const name = String(session.remark ?? '').length ? String(session.remark) : (session.name || '聊天');
-  const allMsgs = Array.isArray(messages) ? messages : [];
-  const { visibleMessages: msgs } = getVisibleChatMessagesForRender(allMsgs, options);
-  const chatSettings = options.chatSettings || {};
-  const isSending = Boolean(options.isSending);
-
-  /* ==========================================================================
-     [区域标注·本次需求3] 聊天页表情包面板 / AI 挂载设置
-  /* ========================================================================== */
-  const stickerData = normalizeStickerPanelData(options.stickerData);
-  const stickerPanelGroupId = String(options.stickerPanelGroupId || 'all');
-  const stickerPanelOpen = Boolean(options.stickerPanelOpen);
-  const coffeeDockOpen = Boolean(options.coffeeDockOpen);
-  const stickerGroups = getStickerPanelGroups(stickerData);
-  const visibleStickerItems = getVisibleStickerPanelItems(stickerData, stickerPanelGroupId);
-  const mountedStickerGroupIds = Array.isArray(chatSettings.mountedStickerGroupIds)
-    ? chatSettings.mountedStickerGroupIds.map(String)
-    : [];
-
-  /* ========================================================================
-     [区域标注·本次需求5] 消息选择状态
-     说明：由 index.js 管理，只影响消息工具栏/多选栏显示。
-     ======================================================================== */
-  /* ===== 闲谈：删除消息二次确认 START ===== */
-  const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
-  /* ===== 闲谈：删除消息二次确认 END ===== */
-  /* ========================================================================
-     [区域标注·已完成·消息回溯] 聊天消息页回溯确认态
-     说明：传给单条气泡渲染；确认按钮由当前选中气泡的功能栏显示。
-     ======================================================================== */
-  const rewindConfirmMessageId = String(options.rewindConfirmMessageId || '');
-  const multiSelectMode = Boolean(options.multiSelectMode);
-  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
-  const selectedCount = selectedMessageIds.length;
-  /* ========================================================================
-     [区域标注·已完成·引用回复] 输入栏待引用状态
-     说明：仅运行时保存待引用对象；真正发送后 quote 字段随消息对象写入 DB.js / IndexedDB。
-     ======================================================================== */
-  const pendingQuote = options.pendingQuote || null;
-  const pendingQuoteHtml = renderQuotePreview(pendingQuote, 'composer');
-
-  /* ========================================================================
-     [区域标注·已完成·本次控制台日志开关] 聊天页日志抽屉状态
-     说明：日志队列由 index.js 维护；这里仅负责渲染，不涉及持久化实现。
-     ======================================================================== */
-  const chatConsoleEnabled = Boolean(options.chatConsoleEnabled);
-  const chatConsoleExpanded = Boolean(options.chatConsoleExpanded);
-  const chatConsoleWarnErrorOnly = Boolean(options.chatConsoleWarnErrorOnly);
-  const chatConsoleLogs = Array.isArray(options.chatConsoleLogs) ? options.chatConsoleLogs : [];
-  const visibleConsoleLogs = getVisibleChatConsoleLogs(chatConsoleLogs, chatConsoleWarnErrorOnly);
-
-  /* ==========================================================================
-     [区域标注] 聊天顶部栏
-  /* ========================================================================== */
-  const topBarHtml = `
-    <div class="msg-top-bar">
-      <button class="msg-top-bar__back" data-action="msg-back" type="button">${MSG_ICONS.back}</button>
-      <div class="msg-top-bar__user">
-        <div class="msg-top-bar__avatar">
-          ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : escapeHtml((name || '?').charAt(0).toUpperCase())}
-        </div>
-        <div class="msg-top-bar__info">
-          <span class="msg-top-bar__name">${escapeHtml(name)}</span>
-          <span class="msg-top-bar__status">${isSending ? '正在回复...' : '在线'}</span>
-        </div>
-      </div>
-      <!-- ====================================================================
-           [区域标注·已完成·旁白模式] 旁白模式开启时顶栏显示爱心退出按钮
-           说明：点击爱心按钮弹出退出旁白模式确认弹窗，由 index.js 处理退出逻辑。
-           ==================================================================== -->
-      ${isAsideModeActive(options) ? renderAsideExitButtonHtml() : ''}
-      <button class="msg-top-bar__search ${options.chatSearchOpen ? 'is-active' : ''}" data-action="toggle-msg-search" type="button" aria-label="搜索聊天记录">${MSG_ICONS.search}</button>
-      <button class="msg-top-bar__more" data-action="msg-more" type="button">${MSG_ICONS.more}</button>
-    </div>
-  `;
-
-  const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
-
-  /* ==========================================================================
-     [区域标注·已完成·本次聊天记录分段加载] 消息列表区域（含旁白气泡渲染）
-     说明：
-     1. 默认只渲染最新 100 条消息；更早消息通过顶部居中“加载更多消息”逐批显示。
-     2. 该限制只影响用户查看聊天记录，不裁剪 state.currentMessages，AI 历史上下文仍走原有完整数据。
-     3. 旁白固定/穿插位置规则继续复用 renderChatMessageListHtml 内部逻辑。
-     4. 本区域不读写 localStorage/sessionStorage，不做双份存储兜底。
-     ========================================================================== */
-  const messagesHtml = renderChatMessageListHtml(session, allMsgs, options);
-
-  /* ==========================================================================
-     [区域标注·已完成·咖啡功能区两行布局与旁白入口]
-     说明：
-     1. 咖啡功能区分成两行：第一行（图片/文字图/语音/转账），第二行（礼物/旁白）。
-     2. "礼物"入口 HTML 来自独立 chat-gift.js，后续只改礼物板块可优先定位该文件。
-     3. "旁白"入口暂时只添加 UI 按钮，功能逻辑待后续实现。
-     4. 图片、转账、礼物消息都只写入 DB.js / IndexedDB，不使用浏览器同步键值存储。
-  /* ========================================================================== */
-  const featureDockHtml = `
-    <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
-      <!-- ====================================================================
-           [区域标注·已完成·咖啡功能区第一行] 图片 / 文字图 / 语音 / 转账
-           ==================================================================== -->
-      <div class="msg-feature-dock__row">
-        <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
-          ${MSG_ICONS.image}<span>图片</span>
-        </button>
-        ${renderTextImageFeatureButton()}
-        ${renderVoiceFeatureButton()}
-        <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
-          ${MSG_ICONS.wallet}<span>转账</span>
-        </button>
-      </div>
-      <!-- ====================================================================
-           [区域标注·已完成·咖啡功能区第二行] 礼物 / 旁白
-           ==================================================================== -->
-      <div class="msg-feature-dock__row">
-        ${renderGiftFeatureButton()}
-        <button class="msg-feature-dock__item msg-feature-dock__item--aside" type="button" data-action="open-msg-aside-modal" data-feature="aside">
-          ${MSG_ICONS.aside}<span>旁白</span>
-        </button>
-      </div>
-    </div>
-  `;
-
-  /* ==========================================================================
-     [区域标注·本次需求3] 输入栏表情包升起面板
-     说明：圆形表情包按钮触发；顶部显示分组，可切换；一行四个排列发送到聊天界面。
-  /* ========================================================================== */
-  const stickerPanelHtml = `
-    <div class="msg-sticker-panel ${stickerPanelOpen ? 'is-open' : ''}" data-role="msg-sticker-panel">
-      <div class="msg-sticker-panel__groups">
-        ${stickerGroups.map(group => `
-          <button class="msg-sticker-panel__group-btn ${stickerPanelGroupId === group.id ? 'is-active' : ''}"
-                  data-action="switch-msg-sticker-group"
-                  data-sticker-group-id="${escapeHtml(group.id)}"
-                  type="button">
-            ${escapeHtml(group.name)}
-          </button>
-        `).join('')}
-      </div>
-      <div class="msg-sticker-panel__grid">
-        ${visibleStickerItems.length
-          ? visibleStickerItems.map(item => `
-              <button class="msg-sticker-panel__item"
-                      data-action="send-msg-sticker"
-                      data-sticker-id="${escapeHtml(item.id)}"
-                      type="button"
-                      title="${escapeHtml(item.name)}">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
-                <span>${escapeHtml(item.name)}</span>
-              </button>
-            `).join('')
-          : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`}
-      </div>
-    </div>
-  `;
-
-  /* ==========================================================================
-     [区域标注·本次需求5] 多选底部操作栏
-     说明：多选模式下用户可删除选中消息或转发给聊天列表中的其他联系人。
-  /* ========================================================================== */
-  const multiSelectBarHtml = multiSelectMode ? `
-    <div class="msg-multi-action-bar" data-role="msg-multi-action-bar">
-      <button class="msg-multi-action-bar__btn" data-action="msg-multi-cancel" type="button">${MSG_ICONS.close}<span>取消</span></button>
-      <span class="msg-multi-action-bar__count">已选 ${selectedCount} 条</span>
-      <!-- [区域标注·已完成·收藏多选底栏] 聊天消息多选后可收藏单条或多条为消息组 -->
-      <button class="msg-multi-action-bar__btn" data-action="msg-multi-favorite-selected" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.favorite}<span>收藏</span></button>
-      <button class="msg-multi-action-bar__btn msg-multi-action-bar__btn--danger" data-action="msg-multi-delete-selected" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.delete}<span>删除</span></button>
-      <button class="msg-multi-action-bar__btn" data-action="msg-multi-forward" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.forward}<span>转发</span></button>
-    </div>
-  ` : '';
-
-  /* ========================================================================
-     [区域标注·本次需求1] 多选模式聊天会话显式状态类
-     说明：
-     1. 进入多选后直接停止渲染底部输入栏，不再依赖 CSS :has() 才隐藏输入栏。
-     2. 通过显式类名控制底部留白与层级，修复首次进入多选时底栏不显示的问题。
-     ======================================================================== */
-  const conversationClassName = multiSelectMode ? 'msg-conversation is-multi-select-mode' : 'msg-conversation';
-  const listAreaClassName = multiSelectMode ? 'msg-list-area is-multi-select-mode' : 'msg-list-area';
-
-  /* ==========================================================================
-     [区域标注] 悬浮底部输入栏
-     说明：四周圆角矩形；左侧咖啡按钮；输入框回车发送；右侧魔法棒与纸飞机。
-  /* ========================================================================== */
-  const inputBarHtml = `
-    <div class="msg-input-shell ${pendingQuoteHtml ? 'has-pending-quote' : ''}">
-      ${featureDockHtml}
-      ${stickerPanelHtml}
-      ${pendingQuoteHtml ? `
-        <div class="msg-pending-quote" data-role="msg-pending-quote">
-          ${pendingQuoteHtml}
-          <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
-        </div>
-      ` : ''}
-
-      <!-- ====================================================================
-           [区域标注·已完成·本次控制台持久显示与防闪屏修复] 聊天页底栏上方日志抽屉
-           说明：开关仅控制显示；日志始终后台记录。抽屉开关/筛选/清空由局部 DOM 同步，避免整页重绘闪屏。
-           ==================================================================== -->
-      ${renderChatConsoleDockHtml({
-        chatConsoleEnabled,
-        chatConsoleExpanded,
-        chatConsoleWarnErrorOnly,
-        visibleConsoleLogs
-      })}
-
-      <!-- ====================================================================
-           [区域标注·已完成·本次输入框表情包联想按命中显示与防闪屏修复] 输入时联想结果挂载点
-           说明：初始渲染保持为空；输入事件由 syncStickerInputSuggestions 按命中结果局部插入/更新/移除，不重绘聊天页，不反复重建已有窗口，避免闪屏。
-           ==================================================================== -->
-
-      <div class="msg-input-bar">
-        <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
-        <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
-        <!-- ==================================================================
-             [区域标注·已完成·聊天输入框一至三行自适应]
-             说明：输入控件改为 textarea；初始一行，内容增多时最高三行，超出后输入框内部滚动。
-             ================================================================== -->
-        <textarea class="msg-input-bar__input" rows="1" placeholder="输入消息..." data-role="msg-input" ${isSending ? 'disabled' : ''}></textarea>
-        <button class="msg-input-bar__icon-btn" data-action="msg-magic" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.magicWand}</button>
-        <button class="msg-input-bar__icon-btn msg-input-bar__send-btn" data-action="msg-send" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.send}</button>
-      </div>
-    </div>
-  `;
-
-  /* ==========================================================================
-     [区域标注·已完成·本次拆分] 独立聊天设置页面
-     说明：
-     1. settings 页面 HTML 已拆至 chat-message-settings.js。
-     2. 本文件只负责传入当前会话、设置、表情包与控制台开关状态，保持原 data-action/data-role 接线不变。
-     3. 设置保存逻辑仍由 index.js 写入 DB.js / IndexedDB；本区域不新增 localStorage/sessionStorage。
-     ========================================================================== */
-  const settingsPageHtml = renderChatMessageSettingsPage({
-    session,
-    name,
-    chatSettings,
-    options,
-    stickerGroups,
-    mountedStickerGroupIds,
-    chatConsoleEnabled
-  });
-
-  return `
-    <div class="msg-page">
-      <div class="${conversationClassName}" data-role="msg-conversation">
-        ${topBarHtml}
-        ${searchPanelHtml}
-        <div class="${listAreaClassName}" data-role="msg-list">${messagesHtml}</div>
-        ${multiSelectBarHtml}
-        ${multiSelectMode ? '' : inputBarHtml}
-      </div>
-      ${settingsPageHtml}
-    </div>
-  `;
+  return renderChatMessageModule(chatSession, messages, options);
 }
 
 /* ========================================================================== */
@@ -3052,97 +2243,7 @@ export async function sendStickerMessage(container, state, db, stickerId, settin
 
 /* ========================================================================== */
 export function renderCurrentChatMessage(container, state, options = {}) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!msgWrap || !session) return;
-
-  /* ===== 闲谈：多选模式滚动锁定 START ===== */
-  const listBefore = msgWrap.querySelector('[data-role="msg-list"]');
-  const shouldKeepScroll = Boolean(options.keepScroll);
-  const shouldPreservePrependPosition = Boolean(options.preservePrependPosition);
-  const previousScrollTop = listBefore ? listBefore.scrollTop : 0;
-  const previousScrollHeight = listBefore ? listBefore.scrollHeight : 0;
-  /* ===== 闲谈：多选模式滚动锁定 END ===== */
-
-  msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
-    chatSettings: state.chatPromptSettings,
-    isSending: state.isAiSending,
-    /* ===== 闲谈应用：语言翻译设置传递到 renderChatMessage START ===== */
-    translationSettings: state.translationSettings,
-    /* ===== 闲谈应用：语言翻译设置传递到 renderChatMessage END ===== */
-    /* ===== 闲谈应用：用户主页头像连接到消息页 START ===== */
-    userProfile: state.profile,
-    /* ===== 闲谈应用：用户主页头像连接到消息页 END ===== */
-
-    /* [区域标注·本次需求3] 聊天消息页表情包面板数据 */
-    stickerData: state.stickerData,
-    stickerPanelGroupId: state.stickerPanelGroupId,
-    stickerPanelOpen: state.stickerPanelOpen,
-    coffeeDockOpen: state.coffeeDockOpen,
-
-    /* [区域标注·本次需求5] 消息气泡功能栏与多选状态 */
-    selectedMessageId: state.selectedMessageId,
-    selectedAsideSegmentId: state.selectedAsideSegmentId,
-    multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds,
-    /* ===== 闲谈：删除消息二次确认 START ===== */
-    deleteConfirmMessageId: state.deleteConfirmMessageId,
-    /* [区域标注·已完成·消息回溯] 渲染气泡回溯二次确认态 */
-    rewindConfirmMessageId: state.rewindConfirmMessageId,
-    /* [区域标注·已完成·引用回复] 渲染输入栏待引用预览 */
-    pendingQuote: state.pendingQuote,
-    /* ======================================================================
-       [区域标注·已完成·本次控制台日志开关] 聊天页日志抽屉渲染参数透传
-       说明：由 index.js 维护状态；这里只负责把状态传给 renderChatMessage。
-       ====================================================================== */
-    chatConsoleEnabled: state.chatConsoleEnabled,
-    chatConsoleExpanded: state.chatConsoleExpanded,
-    chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
-    chatConsoleLogs: state.chatConsoleLogs,
-    /* ======================================================================
-       [区域标注·已完成·聊天记录搜索] 搜索面板渲染参数
-       说明：仅运行时 UI 状态，不写入任何持久化存储。
-       ====================================================================== */
-    chatSearchOpen: state.chatMessageSearchOpen,
-    chatSearchKeyword: state.chatMessageSearchKeyword,
-    /* ======================================================================
-       [区域标注·已完成·本次聊天记录分段加载] 当前界面可见消息数量
-       说明：只传给渲染层决定显示多少条；完整 currentMessages 不裁剪，不影响 AI 上下文。
-       ====================================================================== */
-    chatMessageVisibleCount: state.chatMessageVisibleCount,
-    /* ======================================================================
-       [区域标注·已完成·旁白模式] 旁白模式状态透传
-       说明：传给 renderChatMessage → topBarHtml，控制爱心退出按钮显示。
-       ====================================================================== */
-    asideModeActive: state.asideModeActive,
-    /* ======================================================================
-       [区域标注·已完成·旁白固定/穿插位置修复] 旁白显示模式透传
-       说明：完整渲染时必须知道 top/interleave，避免固定模式把旁白错误汇总到全会话第一条 AI 消息。
-       ====================================================================== */
-    asideDisplayMode: state.asideSettings?.displayMode || 'top'
-    /* ===== 闲谈：删除消息二次确认 END ===== */
-  });
-
-  setTimeout(() => {
-    const listArea = msgWrap.querySelector('[data-role="msg-list"]');
-    if (!listArea) return;
-    /* ======================================================================
-       [区域标注·已完成·本次聊天记录分段加载] 加载旧消息后保持原阅读锚点
-       说明：点击“加载更多消息”会在列表顶部插入更早消息，此处用前后 scrollHeight 差值修正滚动位置，
-             避免页面跳到底部或丢失用户当前阅读位置。
-       ====================================================================== */
-    if (shouldPreservePrependPosition) {
-      listArea.scrollTop = previousScrollTop + Math.max(0, listArea.scrollHeight - previousScrollHeight);
-      return;
-    }
-    /* ===== 闲谈：多选模式滚动锁定 START ===== */
-    if (shouldKeepScroll) {
-      listArea.scrollTop = previousScrollTop;
-      return;
-    }
-    /* ===== 闲谈：多选模式滚动锁定 END ===== */
-    listArea.scrollTop = listArea.scrollHeight;
-  }, 30);
+  return renderCurrentChatMessageModule(container, state, options);
 }
 
 /* ========================================================================== */
@@ -3177,268 +2278,45 @@ function syncCurrentAsideBubble(container, asideText = '', messageId = '') {
   return true;
 }
 
-function syncRenderedChatMessageLoadMoreControl(listArea, state) {
-  if (!listArea) return;
-  const existingRow = listArea.querySelector('[data-role="msg-load-more-row"]');
-  const { hiddenMessageCount, nextLoadCount } = getVisibleChatMessagesForRender(state.currentMessages, {
-    chatMessageVisibleCount: state.chatMessageVisibleCount
-  });
-
-  if (!hiddenMessageCount) {
-    existingRow?.remove();
-    return;
-  }
-
-  const nextHtml = renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount);
-  if (existingRow) {
-    existingRow.outerHTML = nextHtml;
-    return;
-  }
-
-  listArea.insertAdjacentHTML('afterbegin', nextHtml);
-}
-
-function trimRenderedChatMessageRowsToVisibleLimit(listArea, state) {
-  if (!listArea) return;
-  const visibleCount = normalizeChatMessageVisibleCount(state.chatMessageVisibleCount);
-  const messageRows = Array.from(listArea.children).filter(element => element.hasAttribute('data-message-id'));
-
-  while (messageRows.length > visibleCount) {
-    const row = messageRows.shift();
-    if (!row) break;
-
-    let previous = row.previousElementSibling;
-    while (previous && previous.classList.contains('msg-aside-bubble')) {
-      const toRemove = previous;
-      previous = previous.previousElementSibling;
-      toRemove.remove();
-    }
-
-    row.remove();
-  }
-}
-
 export function appendCurrentMessageBubble(container, state, message) {
-  if (!message || !state.currentChatId) return;
-
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!msgWrap || !listArea || !session) {
-    renderCurrentChatMessage(container, state);
-    return;
-  }
-
-  const emptyEl = listArea.querySelector('.msg-empty');
-  if (emptyEl) emptyEl.remove();
-
-  listArea.insertAdjacentHTML('beforeend', renderMessageWithAsideHtml(message, session, {
-    userProfile: state.profile,
-    selectedMessageId: state.selectedMessageId,
-    selectedAsideSegmentId: state.selectedAsideSegmentId,
-    multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds,
-    asideDisplayMode: state.asideSettings?.displayMode || 'top',
-    /* ===== [区域标注·已完成·语言翻译] 增量追加气泡也传递翻译设置 ===== */
-    translationSettings: state.translationSettings,
-    /* ===== 闲谈：删除消息二次确认 START ===== */
-    deleteConfirmMessageId: state.deleteConfirmMessageId,
-    rewindConfirmMessageId: state.rewindConfirmMessageId,
-    pendingQuote: state.pendingQuote
-    /* ===== 闲谈：删除消息二次确认 END ===== */
-  }));
-  /* ======================================================================
-     [区域标注·已完成·本次聊天记录分段加载] 增量追加时维持可见上限
-     说明：用户/AI 新消息仍局部追加以防闪屏；若当前默认只显示 100 条，则同步移除最早的已渲染旧行，
-           并补上“加载更多消息”入口，避免长会话在当前页面越堆越多。
-     ====================================================================== */
-  trimRenderedChatMessageRowsToVisibleLimit(listArea, state);
-  syncRenderedChatMessageLoadMoreControl(listArea, state);
-  listArea.scrollTop = listArea.scrollHeight;
-}
-
-/* ==========================================================================
-   [HTML卡片功能栏防闪屏修复] HTML 卡片工具栏局部同步
-   说明：
-   1. HTML 卡片气泡内包含 iframe srcdoc；如果打开/关闭功能栏时 outerHTML 替换整条消息行，
-      iframe 会被销毁并重新加载，造成用户看到的卡片闪屏。
-   2. 本区域只在 HTML 卡片“功能栏开合/确认态变化”时同步工具栏 DOM 与行状态 class，
-      保留原有 .msg-html-card-bubble__frame 节点不动，避免 srcdoc 重载。
-   3. 非 HTML 卡片、系统提示、多选模式仍走原有局部替换逻辑；本修复不涉及任何持久化存储。
-   ========================================================================== */
-function syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state) {
-  if (!row || !message || state.multiSelectMode) return false;
-  if (String(message?.type || '') !== 'card' || !String(message?.cardHtml || message?.content || '').trim()) return false;
-
-  const holder = document.createElement('div');
-  holder.innerHTML = renderMessageBubble(message, session, {
-    userProfile: state.profile,
-    selectedMessageId: state.selectedMessageId,
-    selectedAsideSegmentId: state.selectedAsideSegmentId,
-    multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds,
-    deleteConfirmMessageId: state.deleteConfirmMessageId,
-    rewindConfirmMessageId: state.rewindConfirmMessageId
-  }).trim();
-
-  const nextRow = holder.firstElementChild;
-  const content = row.querySelector('.msg-bubble-content');
-  const bubble = content?.querySelector('.msg-bubble');
-  if (!nextRow || !content || !bubble) return false;
-
-  row.className = nextRow.className;
-  if (nextRow.dataset.action) row.dataset.action = nextRow.dataset.action;
-
-  const existingToolbar = Array.from(content.children).find(child => child.matches?.('[data-role="msg-bubble-toolbar"]'));
-  const nextToolbar = nextRow.querySelector('[data-role="msg-bubble-toolbar"]');
-
-  if (!nextToolbar) {
-    existingToolbar?.remove();
-    return true;
-  }
-
-  if (existingToolbar) {
-    existingToolbar.outerHTML = nextToolbar.outerHTML;
-    return true;
-  }
-
-  bubble.insertAdjacentHTML('beforebegin', nextToolbar.outerHTML);
-  return true;
+  return appendCurrentMessageBubbleModule(container, state, message);
 }
 
 /* ========================================================================== */
 export function refreshMessageBubbleRows(container, state, messageIds = []) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!listArea || !session) return false;
-
-  const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
-  const shouldRefreshWholeListForAside = uniqueIds.some(messageId => {
-    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
-    return hasRenderableAsideContent(message);
-  });
-
-  /* ======================================================================
-     [区域标注·已完成·本次旁白功能栏接入] 旁白选择态整列表刷新
-     说明：
-     1. 旁白会复用所属消息的 data-message-id；若仍按单个 row querySelector 局部替换，top 模式下可能先命中旁白节点。
-     2. 当目标消息带有旁白时，直接刷新当前消息列表区域，让旁白与所属普通消息的功能栏同步开合，避免误替换节点与闪屏。
-     3. 只重绘消息列表，不重建整页壳子；不涉及任何持久化存储。
-     ====================================================================== */
-  if (shouldRefreshWholeListForAside) {
-    refreshCurrentMessageListOnly(container, state);
-    return true;
-  }
-
-  uniqueIds.forEach(messageId => {
-    /* ======================================================================
-       [区域标注·已完成·系统提示小字删除] 局部刷新支持系统提示行
-       说明：普通气泡和中间系统提示都通过 data-message-id 局部替换，不重绘整页。
-       ====================================================================== */
-    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"], .msg-transfer-system-row[data-message-id="${CSS.escape(messageId)}"]`);
-    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
-    if (!row || !message) return;
-
-    if (syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state)) return;
-
-    row.outerHTML = renderMessageBubble(message, session, {
-      userProfile: state.profile,
-      selectedMessageId: state.selectedMessageId,
-      selectedAsideSegmentId: state.selectedAsideSegmentId,
-      multiSelectMode: state.multiSelectMode,
-      selectedMessageIds: state.selectedMessageIds,
-      deleteConfirmMessageId: state.deleteConfirmMessageId,
-      rewindConfirmMessageId: state.rewindConfirmMessageId
-    });
-  });
-
-  return true;
+  return refreshMessageBubbleRowsModule(container, state, messageIds);
 }
 
 
 export function refreshCurrentMessageListOnly(container, state) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!listArea || !session) {
-    renderCurrentChatMessage(container, state, { keepScroll: true });
-    return;
-  }
-
-  const previousScrollTop = listArea.scrollTop;
-  listArea.innerHTML = renderChatMessageListHtml(session, state.currentMessages, {
-    userProfile: state.profile,
-    selectedMessageId: state.selectedMessageId,
-    selectedAsideSegmentId: state.selectedAsideSegmentId,
-    multiSelectMode: state.multiSelectMode,
-    selectedMessageIds: state.selectedMessageIds,
-    asideDisplayMode: state.asideSettings?.displayMode || 'top',
-    deleteConfirmMessageId: state.deleteConfirmMessageId,
-    rewindConfirmMessageId: state.rewindConfirmMessageId,
-    chatMessageVisibleCount: state.chatMessageVisibleCount
-  });
-  listArea.scrollTop = previousScrollTop;
+  return refreshCurrentMessageListOnlyModule(container, state);
 }
 
 
+/* ==========================================================================
+   [区域标注·已完成·本次拆分] 聊天消息页多选状态子模块 facade
+   说明：
+   1. 多选底栏计数、重置选中态、获取已选消息逻辑已拆分到 chat-message-selection.js。
+   2. 本文件仅保留同名导出接线层，继续兼容 chat-event-handlers.js / chat-navigation.js / chat-state.js 等既有调用方。
+   3. 只处理运行时状态，不新增任何持久化存储。
+   ========================================================================== */
 export function updateMultiSelectActionBar(container, state) {
-  const bar = container.querySelector('[data-role="msg-multi-action-bar"]');
-  if (!bar) return;
-  const count = (state.selectedMessageIds || []).length;
-  const countEl = bar.querySelector('.msg-multi-action-bar__count');
-  if (countEl) countEl.textContent = `已选 ${count} 条`;
-  bar.querySelectorAll('[data-action="msg-multi-favorite-selected"], [data-action="msg-multi-delete-selected"], [data-action="msg-multi-forward"]').forEach(btn => {
-    btn.toggleAttribute('disabled', count <= 0);
-  });
+  return updateMultiSelectActionBarModule(container, state);
 }
 
 /* ========================================================================== */
 export function resetMessageSelectionState(state) {
-  state.selectedMessageId = '';
-  /* ========================================================================
-     [区域标注·已完成·本次旁白功能栏编辑指向修复] 重置旁白段选中态
-     说明：清空当前选中的旁白段 id，避免关闭/切换选择后旁白工具栏残留。
-     ======================================================================== */
-  state.selectedAsideSegmentId = '';
-  state.multiSelectMode = false;
-  state.selectedMessageIds = [];
-  /* ===== 闲谈：删除消息二次确认 START ===== */
-  state.deleteConfirmMessageId = '';
-  /* ===== 闲谈：删除消息二次确认 END ===== */
-  /* ========================================================================
-     [区域标注·已完成·消息回溯] 重置气泡回溯确认态
-     说明：仅清空运行时确认态，不涉及持久化；真正回溯由 index.js 写入 IndexedDB。
-     ======================================================================== */
-  state.rewindConfirmMessageId = '';
+  return resetMessageSelectionStateModule(state);
 }
 
 
 export function getSelectedMessages(state) {
-  const selectedSet = new Set((state.selectedMessageIds || []).map(String));
-  return (state.currentMessages || []).filter(message => selectedSet.has(String(message.id)));
+  return getSelectedMessagesModule(state);
 }
 
 
 export function refreshCurrentSessionLastMessage(state) {
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!session) return;
-
-  const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
-  session.lastMessage = latest?.type === 'sticker'
-        ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
-        : (isTextImageMessage(latest)
-        ? `[文字图] ${latest?.textImageText || '文字图'}`
-        : (isVoiceMessage(latest)
-        ? getVoiceMessageDisplayText(latest)
-        : (latest?.type === 'image'
-        ? `[图片] ${latest?.imageName || '图片'}`
-        : (latest?.type === 'transfer'
-            ? `[转账] ${latest?.transferDisplayAmount || latest?.content || '¥0.00'}`
-            : (latest?.type === 'gift'
-                ? getGiftMessageDisplayText(latest)
-                : (latest?.content || ''))))));
-  session.lastTime = latest?.timestamp || Date.now();
+  return refreshCurrentSessionLastMessageModule(state);
 }
 
 /* ========================================================================== */
@@ -4010,26 +2888,7 @@ export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
    3. 仅使用运行时 state.pendingQuote；持久化仍只随消息对象 quote 字段写入 DB.js / IndexedDB。
    ========================================================================== */
 export function syncPendingQuoteComposer(container, state) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const shell = msgWrap?.querySelector('.msg-input-shell');
-  if (!shell) return false;
-
-  shell.querySelector('[data-role="msg-pending-quote"]')?.remove();
-
-  const pendingQuoteHtml = renderQuotePreview(state.pendingQuote, 'composer');
-  shell.classList.toggle('has-pending-quote', Boolean(pendingQuoteHtml));
-  if (!pendingQuoteHtml) return true;
-
-  const inputBar = shell.querySelector('.msg-input-bar');
-  if (!inputBar) return false;
-
-  inputBar.insertAdjacentHTML('beforebegin', `
-    <div class="msg-pending-quote" data-role="msg-pending-quote">
-      ${pendingQuoteHtml}
-      <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
-    </div>
-  `);
-  return true;
+  return syncPendingQuoteComposerModule(container, state);
 }
 
 
@@ -4054,150 +2913,19 @@ export function updateCurrentChatSendingUi(container, state) {
    3. 展开/关闭、筛选、清空日志时仅替换抽屉区域，避免聊天页整页重绘闪屏。
    ========================================================================== */
 function getVisibleChatConsoleLogs(chatConsoleLogs = [], warnErrorOnly = false) {
-  const logs = Array.isArray(chatConsoleLogs) ? chatConsoleLogs : [];
-  return warnErrorOnly
-    ? logs.filter(item => String(item?.level || '').toLowerCase() === 'warn' || String(item?.level || '').toLowerCase() === 'error')
-    : logs;
+  return getVisibleChatConsoleLogsModule(chatConsoleLogs, warnErrorOnly);
 }
 
-function renderChatConsoleDockHtml({
-  chatConsoleEnabled = false,
-  chatConsoleExpanded = false,
-  chatConsoleWarnErrorOnly = false,
-  visibleConsoleLogs = []
-} = {}) {
-  if (!chatConsoleEnabled) return '';
-
-  /* ======================================================================
-     [区域标注·已完成·本次控制台默认最新日志显示] 日志只调整显示顺序
-     说明：
-     1. 控制台展开后默认从最新时间的一条开始显示，避免每次都先看到最早日志。
-     2. 这里只反转/排序渲染用数组，不改 state.chatConsoleLogs 原始队列，
-        不影响 IndexedDB 持久化顺序、复制日志或后台记录逻辑。
-     3. 不使用 localStorage/sessionStorage，不新增双份存储兜底。
-     ====================================================================== */
-  const displayConsoleLogs = (Array.isArray(visibleConsoleLogs) ? visibleConsoleLogs : [])
-    .map((item, index) => ({ item, index }))
-    .sort((a, b) => (
-      (Number(b.item?.ts || 0) - Number(a.item?.ts || 0))
-      || (b.index - a.index)
-    ))
-    .map(entry => entry.item);
-
-  return `
-    <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
-      <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
-        <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
-        <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
-      </button>
-      <div class="msg-console-dock__panel">
-        <div class="msg-console-dock__toolbar">
-          <button class="msg-console-dock__btn ${chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-warn-error" type="button">${MSG_ICONS.warning}<span>仅 warn/error</span></button>
-          <button class="msg-console-dock__btn ${!chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-all" type="button"><span>查看全部</span></button>
-          <button class="msg-console-dock__btn" data-action="clear-chat-console-logs" type="button">${MSG_ICONS.broom}<span>清空日志</span></button>
-          <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
-        </div>
-        <div class="msg-console-dock__list" data-role="msg-console-list">
-          ${displayConsoleLogs.length
-            ? displayConsoleLogs.map(item => `
-                <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
-                  <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
-                  <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>
-                  <span class="msg-console-log__text">${escapeHtml(String(item?.text || ''))}</span>
-                </div>
-              `).join('')
-            : `<div class="msg-console-dock__empty">目前没有日志资料。</div>`}
-        </div>
-      </div>
-    </div>
-  `;
+function renderChatConsoleDockHtml(options = {}) {
+  return renderChatConsoleDockHtmlModule(options);
 }
 
 export function syncChatMessageSearchPanel(container, state) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const conversation = msgWrap?.querySelector('[data-role="msg-conversation"]');
-  const session = state.sessions.find(s => s.id === state.currentChatId);
-  if (!conversation || !session) return false;
-
-  const searchOptions = {
-    userProfile: state.profile,
-    chatSearchOpen: state.chatMessageSearchOpen,
-    chatSearchKeyword: state.chatMessageSearchKeyword
-  };
-
-  let panel = conversation.querySelector('[data-role="msg-search-panel"]');
-  if (!panel) {
-    conversation.querySelector('.msg-top-bar')?.insertAdjacentHTML(
-      'afterend',
-      renderChatMessageSearchPanelHtml(session, state.currentMessages, searchOptions)
-    );
-    panel = conversation.querySelector('[data-role="msg-search-panel"]');
-  }
-
-  if (!panel) return false;
-
-  /* ======================================================================
-     [区域标注·已完成·聊天记录搜索输入法与浮层修复] 搜索面板局部同步
-     说明：
-     1. 输入过程中禁止 outerHTML 替换整个搜索面板，尤其不能替换正在输入的 input。
-     2. 这里只同步开合 class、必要的 input value 与结果列表 innerHTML，移动端输入法可连续输入/删除。
-     3. 搜索状态仅为运行时 UI 状态，不读写 IndexedDB/localStorage/sessionStorage。
-     ====================================================================== */
-  panel.classList.toggle('is-open', Boolean(state.chatMessageSearchOpen));
-
-  const searchBtn = conversation.querySelector('[data-action="toggle-msg-search"]');
-  if (searchBtn) searchBtn.classList.toggle('is-active', Boolean(state.chatMessageSearchOpen));
-
-  const input = panel.querySelector('[data-role="msg-search-input"]');
-  const keyword = String(state.chatMessageSearchKeyword || '');
-  if (input && input.value !== keyword) input.value = keyword;
-
-  const results = panel.querySelector('[data-role="msg-search-results"]');
-  if (results) {
-    results.innerHTML = renderChatMessageSearchResultsHtml(session, state.currentMessages, searchOptions);
-  }
-
-  if (state.chatMessageSearchOpen && input && document.activeElement !== input) {
-    window.setTimeout(() => {
-      if (!state.chatMessageSearchOpen || document.activeElement === input) return;
-      input.focus({ preventScroll: true });
-      const len = String(input.value || '').length;
-      input.setSelectionRange(len, len);
-    }, 30);
-  }
-
-  return true;
+  return syncChatMessageSearchPanelModule(container, state);
 }
 
 export function scrollToChatSearchResult(container, messageId = '') {
-  const safeMessageId = String(messageId || '').trim();
-  if (!safeMessageId) return false;
-
-  const listArea = container.querySelector('[data-role="msg-list"]');
-  const row = listArea?.querySelector(`[data-message-id="${CSS.escape(safeMessageId)}"]`);
-  if (!listArea || !row) return false;
-
-  /* ======================================================================
-     [区域标注·已完成·聊天记录搜索回滚定位修复]
-     说明：
-     1. 禁止使用 row.scrollIntoView()，它会连带滚动外层页面/桌面层，造成聊天顶栏被顶上去。
-     2. 只计算目标气泡相对 data-role="msg-list" 的位置，并滚动消息列表容器自身。
-     3. 不触碰桌面编辑模式、不触发“添加应用与组件”窗口，不涉及任何持久化存储。
-     ====================================================================== */
-  const listRect = listArea.getBoundingClientRect();
-  const rowRect = row.getBoundingClientRect();
-  const nextScrollTop = listArea.scrollTop
-    + (rowRect.top - listRect.top)
-    - ((listArea.clientHeight - rowRect.height) / 2);
-
-  listArea.scrollTo({
-    top: Math.max(0, Math.min(nextScrollTop, listArea.scrollHeight - listArea.clientHeight)),
-    behavior: 'smooth'
-  });
-  row.classList.remove('is-search-target');
-  window.setTimeout(() => row.classList.add('is-search-target'), 20);
-  window.setTimeout(() => row.classList.remove('is-search-target'), 1700);
-  return true;
+  return scrollToChatSearchResultModule(container, messageId);
 }
 
 /* ========================================================================== */

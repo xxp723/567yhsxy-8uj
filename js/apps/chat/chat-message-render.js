@@ -1,0 +1,934 @@
+// @ts-nocheck
+/**
+ * 文件名: js/apps/chat/chat-message-render.js
+ * 用途: 闲谈应用 — 聊天消息页渲染子模块
+ * 架构层: 应用层（闲谈子模块）
+ *
+ * 说明：
+ * 1. 本文件承接 chat-message.js 中与“消息气泡渲染 / 聊天页 HTML / 局部刷新”直接相关的逻辑。
+ * 2. 仅处理运行时 state 与 DOM，不新增任何持久化存储；真正持久化仍由外层通过 DB.js / IndexedDB 完成。
+ * 3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗。
+ */
+
+import { escapeHtml } from './chat-utils.js';
+import { MSG_ICONS } from './chat-message-icons.js';
+import { renderChatMessageSettingsPage } from './chat-message-settings.js';
+import { sanitizeHtmlCardDocumentForSrcdoc } from './chat-html-card.js';
+import {
+  getGiftMessageDisplayText,
+  isGiftMessage,
+  renderGiftBubble,
+  renderGiftFeatureButton
+} from './chat-gift.js';
+import {
+  isTextImageMessage,
+  renderTextImageBubble,
+  renderTextImageFeatureButton
+} from './chat-text-image.js';
+import {
+  getVoiceMessageDisplayText,
+  isVoiceMessage,
+  renderVoiceBubble,
+  renderVoiceFeatureButton
+} from './chat-voice.js';
+import {
+  renderAsideBubbleHtml,
+  renderAsideExitButtonHtml,
+  isAsideModeActive
+} from './chat-aside.js';
+import { renderTranslationBubbleHtml } from './chat-translation.js';
+import { renderQuotePreview } from './chat-message-quote.js';
+import { renderChatMessageSearchPanelHtml } from './chat-message-search.js';
+
+const CHAT_MESSAGE_INITIAL_VISIBLE_COUNT = 100;
+const CHAT_MESSAGE_LOAD_MORE_STEP = 100;
+
+function formatMsgTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function normalizeChatMessageVisibleCount(value) {
+  const count = Math.floor(Number(value));
+  return Number.isFinite(count) && count > 0 ? count : CHAT_MESSAGE_INITIAL_VISIBLE_COUNT;
+}
+
+function getVisibleChatMessagesForRender(messages = [], options = {}) {
+  const allMessages = Array.isArray(messages) ? messages : [];
+  const visibleCount = normalizeChatMessageVisibleCount(options.chatMessageVisibleCount);
+  const visibleMessages = allMessages.length > visibleCount
+    ? allMessages.slice(-visibleCount)
+    : allMessages.slice();
+  const hiddenMessageCount = Math.max(0, allMessages.length - visibleMessages.length);
+
+  return {
+    allMessages,
+    visibleMessages,
+    hiddenMessageCount,
+    nextLoadCount: Math.min(CHAT_MESSAGE_LOAD_MORE_STEP, hiddenMessageCount)
+  };
+}
+
+export function normalizeStickerPanelData(rawData) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const groups = Array.isArray(source.groups)
+    ? source.groups
+        .map(group => ({
+          id: String(group?.id || '').trim(),
+          name: String(group?.name || '').trim()
+        }))
+        .filter(group => group.id && group.name)
+    : [];
+  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
+  const rawItems = Array.isArray(source.items)
+    ? source.items
+    : (Array.isArray(source.stickers) ? source.stickers : []);
+  const items = rawItems
+    .map(item => ({
+      id: String(item?.id || '').trim(),
+      groupId: validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all',
+      name: String(item?.name || '').trim(),
+      url: String(item?.url || '').trim()
+    }))
+    .filter(item => item.id && item.name && item.url);
+
+  return { groups, items };
+}
+
+function getStickerPanelGroups(rawData) {
+  const data = normalizeStickerPanelData(rawData);
+  return [{ id: 'all', name: 'All' }, ...data.groups];
+}
+
+function getVisibleStickerPanelItems(rawData, groupId = 'all') {
+  const data = normalizeStickerPanelData(rawData);
+  if (groupId === 'all') return data.items;
+  return data.items.filter(item => item.groupId === groupId);
+}
+
+export function getVisibleChatConsoleLogs(chatConsoleLogs = [], warnErrorOnly = false) {
+  const logs = Array.isArray(chatConsoleLogs) ? chatConsoleLogs : [];
+  return warnErrorOnly
+    ? logs.filter(item => String(item?.level || '').toLowerCase() === 'warn' || String(item?.level || '').toLowerCase() === 'error')
+    : logs;
+}
+
+export function renderChatConsoleDockHtml({
+  chatConsoleEnabled = false,
+  chatConsoleExpanded = false,
+  chatConsoleWarnErrorOnly = false,
+  visibleConsoleLogs = []
+} = {}) {
+  if (!chatConsoleEnabled) return '';
+
+  const displayConsoleLogs = (Array.isArray(visibleConsoleLogs) ? visibleConsoleLogs : [])
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (
+      (Number(b.item?.ts || 0) - Number(a.item?.ts || 0))
+      || (b.index - a.index)
+    ))
+    .map(entry => entry.item);
+
+  return `
+    <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
+      <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
+        <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
+        <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
+      </button>
+      <div class="msg-console-dock__panel">
+        <div class="msg-console-dock__toolbar">
+          <button class="msg-console-dock__btn ${chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-warn-error" type="button">${MSG_ICONS.warning}<span>仅 warn/error</span></button>
+          <button class="msg-console-dock__btn ${!chatConsoleWarnErrorOnly ? 'is-active' : ''}" data-action="set-chat-console-filter-all" type="button"><span>查看全部</span></button>
+          <button class="msg-console-dock__btn" data-action="clear-chat-console-logs" type="button">${MSG_ICONS.broom}<span>清空日志</span></button>
+          <button class="msg-console-dock__btn" data-action="copy-chat-console-logs" type="button">${MSG_ICONS.copy}<span>复制</span></button>
+        </div>
+        <div class="msg-console-dock__list" data-role="msg-console-list">
+          ${displayConsoleLogs.length
+            ? displayConsoleLogs.map(item => `
+                <div class="msg-console-log msg-console-log--${escapeHtml(String(item?.level || 'info').toLowerCase())}">
+                  <span class="msg-console-log__time">${escapeHtml(String(item?.time || '--:--:--'))}</span>
+                  <span class="msg-console-log__level">${escapeHtml(String(item?.level || 'info').toUpperCase())}</span>
+                  <span class="msg-console-log__text">${escapeHtml(String(item?.text || ''))}</span>
+                </div>
+              `).join('')
+            : `<div class="msg-console-dock__empty">目前没有日志资料。</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function getAsideSegmentsFromMessage(message = {}) {
+  const rawSegments = Array.isArray(message?.asideSegments) ? message.asideSegments : [];
+  const normalizedSegments = rawSegments
+    .map((segment, index) => {
+      const text = typeof segment === 'string' ? segment : String(segment?.text || '').trim();
+      if (!text) return null;
+      return {
+        id: String(segment?.id || `${message?.id || 'aside'}_${index + 1}`),
+        text,
+        placement: String(segment?.placement || 'before') === 'after' ? 'after' : 'before'
+      };
+    })
+    .filter(Boolean);
+
+  if (normalizedSegments.length) return normalizedSegments;
+
+  const legacyText = String(message?.asideText || '').trim();
+  return legacyText
+    ? [{
+        id: String(message?.id || 'aside'),
+        text: legacyText,
+        placement: 'before'
+      }]
+    : [];
+}
+
+function hasRenderableAsideContent(message = {}) {
+  return getAsideSegmentsFromMessage(message).length > 0;
+}
+
+function renderAsideToolbarHtml(message = {}, chatSession, options = {}) {
+  const holder = document.createElement('div');
+  holder.innerHTML = renderMessageBubble(message, chatSession, options).trim();
+  return holder.querySelector('[data-role="msg-bubble-toolbar"]')?.outerHTML || '';
+}
+
+function renderMessageAsideHtml(message = {}, placement = 'before', chatSession = {}, options = {}) {
+  const targetPlacement = placement === 'after' ? 'after' : 'before';
+  const messageId = String(message?.id || '').trim();
+  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
+
+  return getAsideSegmentsFromMessage(message)
+    .filter(segment => segment.placement === targetPlacement)
+    .map((segment, index) => {
+      const asideSegmentId = String(segment.id || `${message?.id || 'aside'}_${index + 1}`);
+      const isToolbarOpen = !Boolean(options.multiSelectMode)
+        && String(options.selectedMessageId || '') === messageId
+        && selectedAsideSegmentId === asideSegmentId;
+      const toolbarHtml = isToolbarOpen ? renderAsideToolbarHtml(message, chatSession, options) : '';
+
+      return renderAsideBubbleHtml(
+        segment.text,
+        `${asideSegmentId}_${targetPlacement}_${index + 1}`,
+        {
+          ownerMessageId: messageId,
+          asideSegmentId,
+          isToolbarOpen,
+          toolbarHtml
+        }
+      );
+    })
+    .join('');
+}
+
+function renderMessageWithAsideHtml(message, chatSession, options = {}) {
+  const beforeAsideHtml = renderMessageAsideHtml(message, 'before', chatSession, options);
+  const bubbleHtml = renderMessageBubble(message, chatSession, options);
+  const afterAsideHtml = renderMessageAsideHtml(message, 'after', chatSession, options);
+  return `${beforeAsideHtml}${bubbleHtml}${afterAsideHtml}`;
+}
+
+export function renderMessageBubble(msg, chatSession, options = {}) {
+  const session = chatSession || {};
+  const name = session.name || '聊天';
+  const userProfile = options.userProfile || {};
+  const userAvatar = userProfile.avatar || '';
+  const userName = userProfile.nickname || '我';
+  const selectedMessageId = String(options.selectedMessageId || '');
+  const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
+  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
+  const multiSelectMode = Boolean(options.multiSelectMode);
+  const deleteConfirmMessageId = String(options.deleteConfirmMessageId || '');
+  const rewindConfirmMessageId = String(options.rewindConfirmMessageId || '');
+
+  const messageId = String(msg?.id || '');
+  const isUser = msg?.role === 'user';
+  const isAssistant = msg?.role === 'assistant' || msg?.role === 'other';
+  const isToolbarOpen = !multiSelectMode && selectedMessageId && selectedMessageId === messageId && !selectedAsideSegmentId;
+  const isSelected = selectedMessageIds.includes(messageId);
+  const isDeleteConfirming = isToolbarOpen && deleteConfirmMessageId === messageId;
+  const isRewindConfirming = isToolbarOpen && rewindConfirmMessageId === messageId;
+  const isStickerMessage = String(msg?.type || '') === 'sticker' && String(msg?.stickerUrl || '').trim();
+  const isTextImageBubbleMessage = isTextImageMessage(msg);
+  const isVoiceBubbleMessage = isVoiceMessage(msg);
+  const hasImageUrl = String(msg?.type || '') === 'image' && String(msg?.imageUrl || '').trim();
+  const isExpiredImageMessage = String(msg?.type || '') === 'image' && Boolean(msg?.imageExpired);
+  const isImageMessage = Boolean(hasImageUrl || isExpiredImageMessage);
+  const isZoomableImage = Boolean(hasImageUrl && !isExpiredImageMessage);
+  const isTransferMessage = String(msg?.type || '') === 'transfer';
+  const isGiftBubbleMessage = isGiftMessage(msg);
+  const isHtmlCardMessage = String(msg?.type || '') === 'card' && String(msg?.cardHtml || msg?.content || '').trim();
+  const htmlCardSrcdoc = isHtmlCardMessage
+    ? sanitizeHtmlCardDocumentForSrcdoc(String(msg?.cardHtml || msg?.content || ''))
+    : '';
+  const isAiWithdrawSystemMessage = String(msg?.type || '') === 'ai_withdraw_system';
+  const isUserWithdrawSystemMessage = String(msg?.type || '') === 'user_withdraw_system';
+  const isHtmlCardInteractionSystemMessage = String(msg?.type || '') === 'html_card_interaction_system';
+  const isTransferSystemMessage = String(msg?.type || '') === 'transfer_system' || isAiWithdrawSystemMessage || isUserWithdrawSystemMessage || isHtmlCardInteractionSystemMessage;
+  const transferStatus = String(msg?.transferStatus || '').trim() || 'pending';
+  const isTransferAccepted = transferStatus === 'accepted';
+  const quoteHtml = renderQuotePreview(msg?.quote);
+  const bubbleInnerHtml = (() => {
+    if (isStickerMessage) {
+      return `
+        <div class="msg-sticker-bubble" title="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
+          <img class="msg-sticker-bubble__image" src="${escapeHtml(msg?.stickerUrl || '')}" alt="${escapeHtml(msg?.stickerName || msg?.content || '表情包')}">
+        </div>
+      `;
+    }
+
+    if (isTextImageBubbleMessage) return renderTextImageBubble(msg);
+    if (isVoiceBubbleMessage) return renderVoiceBubble(msg);
+
+    if (isImageMessage) {
+      return isExpiredImageMessage
+        ? `
+          <div class="msg-image-bubble msg-image-bubble--expired" title="已过期">
+            <span class="msg-image-bubble__expired-text">已过期</span>
+          </div>
+        `
+        : `
+          <div class="msg-image-bubble ${isZoomableImage ? 'msg-image-bubble--zoomable' : ''}"
+               ${isZoomableImage ? `data-role="msg-media-zoom-trigger" data-action="msg-media-open-zoom" data-media-kind="image" data-media-src="${escapeHtml(msg?.imageUrl || '')}" data-media-alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" data-message-id="${escapeHtml(messageId)}"` : ''}
+               title="${escapeHtml(msg?.imageName || msg?.content || '图片')}">
+            <img class="msg-image-bubble__image" src="${escapeHtml(msg?.imageUrl || '')}" alt="${escapeHtml(msg?.imageName || msg?.content || '图片')}" decoding="async">
+          </div>
+        `;
+    }
+
+    if (isTransferMessage) {
+      return `
+        <div class="msg-transfer-bubble msg-transfer-bubble--${escapeHtml(transferStatus)}" title="转账">
+          <div class="msg-transfer-bubble__icon">${MSG_ICONS.wallet}</div>
+          <div class="msg-transfer-bubble__content">
+            <span class="msg-transfer-bubble__label">转账</span>
+            <strong class="msg-transfer-bubble__amount">${escapeHtml(msg?.transferDisplayAmount || msg?.content || '')}</strong>
+            ${String(msg?.transferNote || '').trim()
+              ? `<span class="msg-transfer-bubble__note">${escapeHtml(msg.transferNote)}</span>`
+              : `<span class="msg-transfer-bubble__note msg-transfer-bubble__note--empty">无备注</span>`}
+          </div>
+          ${isTransferAccepted ? `<span class="msg-transfer-bubble__check" aria-label="已接收">${MSG_ICONS.check}</span>` : ''}
+        </div>
+      `;
+    }
+
+    if (isGiftBubbleMessage) return renderGiftBubble(msg);
+
+    if (isHtmlCardMessage) {
+      return `
+        <div class="msg-html-card-bubble"
+             data-role="msg-media-zoom-trigger"
+             data-action="msg-media-open-zoom"
+             data-media-kind="html-card"
+             data-media-srcdoc="${escapeHtml(htmlCardSrcdoc)}"
+             data-media-alt="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"
+             data-message-id="${escapeHtml(messageId)}">
+          <iframe
+            class="msg-html-card-bubble__frame"
+            data-message-id="${escapeHtml(messageId)}"
+            sandbox="allow-scripts allow-forms allow-popups-to-escape-sandbox"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            frameborder="0"
+            scrolling="no"
+            style="border:0;outline:0;background:transparent;"
+            srcdoc="${escapeHtml(htmlCardSrcdoc)}"
+            title="${escapeHtml(msg?.cardTitle || msg?.content || 'HTML卡片')}"></iframe>
+        </div>
+      `;
+    }
+
+    return escapeHtml(msg?.content || '');
+  })();
+
+  if (isTransferSystemMessage) {
+    return `
+      <div class="msg-transfer-system-row ${isToolbarOpen ? 'is-action-open' : ''}"
+           data-message-id="${escapeHtml(messageId)}"
+           data-action="msg-system-tip-select">
+        <span class="msg-transfer-system-row__text">${escapeHtml(msg?.content || '')}</span>
+        ${isToolbarOpen ? `
+          <div class="msg-system-tip-actions" data-role="msg-bubble-toolbar">
+            ${isAiWithdrawSystemMessage ? `
+              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-view-withdrawn" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.systemTip}<span>查看</span>
+              </button>
+              <button class="msg-system-tip-actions__btn" data-action="msg-system-tip-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.fixFormat}<span>修正</span>
+              </button>
+            ` : ''}
+            <button class="msg-system-tip-actions__btn ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-system-tip-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
+            </button>
+            ${isDeleteConfirming ? `
+              <button class="msg-system-tip-actions__btn msg-system-tip-actions__btn--confirm" data-action="msg-system-tip-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认删除</span>
+              </button>
+            ` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'} ${multiSelectMode ? 'is-multi-selecting' : ''} ${isSelected ? 'is-selected' : ''}"
+         data-message-id="${escapeHtml(messageId)}"
+         data-action="${multiSelectMode ? 'msg-multi-toggle' : (isTransferMessage ? 'msg-transfer-open-actions' : 'msg-bubble-select')}">
+      ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
+      <div class="msg-bubble-content">
+        ${isToolbarOpen ? `
+          <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
+            ${isAssistant ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--fix-format" data-action="msg-bubble-fix-format" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.fixFormat}<span>修正</span>
+              </button>
+            ` : ''}
+            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-edit" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.edit}<span>编辑</span>
+            </button>
+            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-favorite" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.favorite}<span>收藏</span>
+            </button>
+            ${isUser ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--withdraw" data-action="msg-bubble-withdraw" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.withdraw}<span>撤回</span>
+              </button>
+            ` : ''}
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--danger ${isDeleteConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.delete}<span>${isDeleteConfirming ? '取消' : '删除'}</span>
+            </button>
+            ${isDeleteConfirming ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-delete" data-action="msg-bubble-confirm-delete" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认删除</span>
+              </button>
+            ` : ''}
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--rewind ${isRewindConfirming ? 'is-confirming' : ''}" data-action="msg-bubble-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.rewind}<span>${isRewindConfirming ? '取消' : '回溯'}</span>
+            </button>
+            ${isRewindConfirming ? `
+              <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--confirm-rewind" data-action="msg-bubble-confirm-rewind" data-message-id="${escapeHtml(messageId)}" type="button">
+                ${MSG_ICONS.check}<span>确认回溯</span>
+              </button>
+            ` : ''}
+            <button class="msg-bubble-toolbar__btn" data-action="msg-bubble-multi" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.multiSelect}<span>多选</span>
+            </button>
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--copy" data-action="msg-bubble-copy" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.copy}<span>复制</span>
+            </button>
+            <button class="msg-bubble-toolbar__btn msg-bubble-toolbar__btn--quote" data-action="msg-bubble-quote" data-message-id="${escapeHtml(messageId)}" type="button">
+              ${MSG_ICONS.quote}<span>引用</span>
+            </button>
+          </div>
+        ` : ''}
+        <div class="msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--other'} ${isAssistant && msg?.pending ? 'is-pending' : ''} ${isStickerMessage ? 'msg-bubble--sticker' : ''} ${isTextImageBubbleMessage ? 'msg-bubble--text-image' : ''} ${isVoiceBubbleMessage ? 'msg-bubble--voice' : ''} ${isImageMessage ? 'msg-bubble--image' : ''} ${isTransferMessage ? 'msg-bubble--transfer' : ''} ${isGiftBubbleMessage ? 'msg-bubble--gift' : ''} ${isHtmlCardMessage ? 'msg-bubble--html-card' : ''} ${quoteHtml ? 'msg-bubble--with-quote' : ''}">
+          ${quoteHtml}
+          ${bubbleInnerHtml}
+          ${renderTranslationBubbleHtml(msg, options.translationSettings, isUser)}
+        </div>
+        <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
+      </div>
+      ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
+      ${multiSelectMode ? `
+        <button class="msg-bubble-select-dot ${isSelected ? 'is-selected' : ''}" data-action="msg-multi-toggle" data-message-id="${escapeHtml(messageId)}" type="button" aria-label="选择消息">
+          ${isSelected ? MSG_ICONS.check : ''}
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderLoadMoreChatMessagesHtml(hiddenMessageCount = 0, nextLoadCount = CHAT_MESSAGE_LOAD_MORE_STEP) {
+  const hiddenCount = Math.max(0, Number(hiddenMessageCount || 0) || 0);
+  if (!hiddenCount) return '';
+
+  return `
+    <div class="msg-load-more-row" data-role="msg-load-more-row">
+      <button class="msg-load-more-btn" data-action="load-more-chat-messages" type="button">加载更多消息</button>
+      <span class="msg-load-more-row__meta">还有 ${hiddenCount} 条更早消息，每次加载 ${Math.max(1, Number(nextLoadCount || 0) || CHAT_MESSAGE_LOAD_MORE_STEP)} 条</span>
+    </div>
+  `;
+}
+
+function renderChatMessageListHtml(session = {}, messages = [], options = {}) {
+  const {
+    allMessages,
+    visibleMessages: msgs,
+    hiddenMessageCount,
+    nextLoadCount
+  } = getVisibleChatMessagesForRender(messages, options);
+
+  if (allMessages.length === 0) {
+    return `<div class="msg-empty">${MSG_ICONS.emptyChat}<p>还没有消息<br>发送一条消息开始聊天吧</p></div>`;
+  }
+
+  const asideDisplayMode = String(options.asideDisplayMode || 'top');
+  const parts = [];
+
+  for (let index = 0; index < msgs.length; index += 1) {
+    const msg = msgs[index];
+
+    if (asideDisplayMode === 'top' && msg?.role === 'assistant') {
+      const run = [];
+      let cursor = index;
+      while (cursor < msgs.length && msgs[cursor]?.role === 'assistant') {
+        run.push(msgs[cursor]);
+        cursor += 1;
+      }
+
+      const runAsideHtml = run
+        .flatMap(item => getAsideSegmentsFromMessage(item).map(segment => ({
+          ownerMessageId: String(item?.id || '').trim(),
+          segment
+        })))
+        .filter(item => item.segment?.text)
+        .map((item, asideIndex) => {
+          const ownerMessageId = String(item.ownerMessageId || '').trim();
+          const asideSegmentId = String(item.segment?.id || `${run[0]?.id || 'aside_run'}_${asideIndex + 1}`);
+          const isToolbarOpen = !Boolean(options.multiSelectMode)
+            && String(options.selectedMessageId || '') === ownerMessageId
+            && String(options.selectedAsideSegmentId || '').trim() === asideSegmentId;
+          return renderAsideBubbleHtml(
+            item.segment.text,
+            `${asideSegmentId}_top_${asideIndex + 1}`,
+            {
+              ownerMessageId,
+              asideSegmentId,
+              isToolbarOpen,
+              toolbarHtml: isToolbarOpen
+                ? renderAsideToolbarHtml(run.find(message => String(message?.id || '') === ownerMessageId) || {}, session, options)
+                : ''
+            }
+          );
+        })
+        .join('');
+
+      if (runAsideHtml) parts.push(runAsideHtml);
+      run.forEach(item => parts.push(renderMessageBubble(item, session, options)));
+      index = cursor - 1;
+      continue;
+    }
+
+    parts.push(renderMessageWithAsideHtml(msg, session, options));
+  }
+
+  return `${renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount)}${parts.join('')}`;
+}
+
+export function renderChatMessage(chatSession, messages, options = {}) {
+  const session = chatSession || {};
+  const name = String(session.remark ?? '').length ? String(session.remark) : (session.name || '聊天');
+  const allMsgs = Array.isArray(messages) ? messages : [];
+  const { visibleMessages: msgs } = getVisibleChatMessagesForRender(allMsgs, options);
+  const chatSettings = options.chatSettings || {};
+  const isSending = Boolean(options.isSending);
+
+  const stickerData = normalizeStickerPanelData(options.stickerData);
+  const stickerPanelGroupId = String(options.stickerPanelGroupId || 'all');
+  const stickerPanelOpen = Boolean(options.stickerPanelOpen);
+  const coffeeDockOpen = Boolean(options.coffeeDockOpen);
+  const stickerGroups = getStickerPanelGroups(stickerData);
+  const visibleStickerItems = getVisibleStickerPanelItems(stickerData, stickerPanelGroupId);
+  const mountedStickerGroupIds = Array.isArray(chatSettings.mountedStickerGroupIds)
+    ? chatSettings.mountedStickerGroupIds.map(String)
+    : [];
+
+  const multiSelectMode = Boolean(options.multiSelectMode);
+  const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
+  const selectedCount = selectedMessageIds.length;
+  const pendingQuote = options.pendingQuote || null;
+  const pendingQuoteHtml = renderQuotePreview(pendingQuote, 'composer');
+
+  const chatConsoleEnabled = Boolean(options.chatConsoleEnabled);
+  const chatConsoleExpanded = Boolean(options.chatConsoleExpanded);
+  const chatConsoleWarnErrorOnly = Boolean(options.chatConsoleWarnErrorOnly);
+  const chatConsoleLogs = Array.isArray(options.chatConsoleLogs) ? options.chatConsoleLogs : [];
+  const visibleConsoleLogs = getVisibleChatConsoleLogs(chatConsoleLogs, chatConsoleWarnErrorOnly);
+
+  const topBarHtml = `
+    <div class="msg-top-bar">
+      <button class="msg-top-bar__back" data-action="msg-back" type="button">${MSG_ICONS.back}</button>
+      <div class="msg-top-bar__user">
+        <div class="msg-top-bar__avatar">
+          ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : escapeHtml((name || '?').charAt(0).toUpperCase())}
+        </div>
+        <div class="msg-top-bar__info">
+          <span class="msg-top-bar__name">${escapeHtml(name)}</span>
+          <span class="msg-top-bar__status">${isSending ? '正在回复...' : '在线'}</span>
+        </div>
+      </div>
+      ${isAsideModeActive(options) ? renderAsideExitButtonHtml() : ''}
+      <button class="msg-top-bar__search ${options.chatSearchOpen ? 'is-active' : ''}" data-action="toggle-msg-search" type="button" aria-label="搜索聊天记录">${MSG_ICONS.search}</button>
+      <button class="msg-top-bar__more" data-action="msg-more" type="button">${MSG_ICONS.more}</button>
+    </div>
+  `;
+
+  const searchPanelHtml = renderChatMessageSearchPanelHtml(session, msgs, options);
+  const messagesHtml = renderChatMessageListHtml(session, allMsgs, options);
+
+  const featureDockHtml = `
+    <div class="msg-feature-dock ${coffeeDockOpen ? 'is-open' : ''}" data-role="msg-feature-dock">
+      <div class="msg-feature-dock__row">
+        <button class="msg-feature-dock__item" type="button" data-action="open-msg-image-modal" data-feature="image">
+          ${MSG_ICONS.image}<span>图片</span>
+        </button>
+        ${renderTextImageFeatureButton()}
+        ${renderVoiceFeatureButton()}
+        <button class="msg-feature-dock__item" type="button" data-action="open-msg-transfer-modal" data-feature="transfer">
+          ${MSG_ICONS.wallet}<span>转账</span>
+        </button>
+      </div>
+      <div class="msg-feature-dock__row">
+        ${renderGiftFeatureButton()}
+        <button class="msg-feature-dock__item msg-feature-dock__item--aside" type="button" data-action="open-msg-aside-modal" data-feature="aside">
+          ${MSG_ICONS.aside}<span>旁白</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  const stickerPanelHtml = `
+    <div class="msg-sticker-panel ${stickerPanelOpen ? 'is-open' : ''}" data-role="msg-sticker-panel">
+      <div class="msg-sticker-panel__groups">
+        ${stickerGroups.map(group => `
+          <button class="msg-sticker-panel__group-btn ${stickerPanelGroupId === group.id ? 'is-active' : ''}"
+                  data-action="switch-msg-sticker-group"
+                  data-sticker-group-id="${escapeHtml(group.id)}"
+                  type="button">
+            ${escapeHtml(group.name)}
+          </button>
+        `).join('')}
+      </div>
+      <div class="msg-sticker-panel__grid">
+        ${visibleStickerItems.length
+          ? visibleStickerItems.map(item => `
+              <button class="msg-sticker-panel__item"
+                      data-action="send-msg-sticker"
+                      data-sticker-id="${escapeHtml(item.id)}"
+                      type="button"
+                      title="${escapeHtml(item.name)}">
+                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
+                <span>${escapeHtml(item.name)}</span>
+              </button>
+            `).join('')
+          : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`}
+      </div>
+    </div>
+  `;
+
+  const multiSelectBarHtml = multiSelectMode ? `
+    <div class="msg-multi-action-bar" data-role="msg-multi-action-bar">
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-cancel" type="button">${MSG_ICONS.close}<span>取消</span></button>
+      <span class="msg-multi-action-bar__count">已选 ${selectedCount} 条</span>
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-favorite-selected" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.favorite}<span>收藏</span></button>
+      <button class="msg-multi-action-bar__btn msg-multi-action-bar__btn--danger" data-action="msg-multi-delete-selected" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.delete}<span>删除</span></button>
+      <button class="msg-multi-action-bar__btn" data-action="msg-multi-forward" type="button" ${selectedCount ? '' : 'disabled'}>${MSG_ICONS.forward}<span>转发</span></button>
+    </div>
+  ` : '';
+
+  const conversationClassName = multiSelectMode ? 'msg-conversation is-multi-select-mode' : 'msg-conversation';
+  const listAreaClassName = multiSelectMode ? 'msg-list-area is-multi-select-mode' : 'msg-list-area';
+
+  const inputBarHtml = `
+    <div class="msg-input-shell ${pendingQuoteHtml ? 'has-pending-quote' : ''}">
+      ${featureDockHtml}
+      ${stickerPanelHtml}
+      ${pendingQuoteHtml ? `
+        <div class="msg-pending-quote" data-role="msg-pending-quote">
+          ${pendingQuoteHtml}
+          <button class="msg-pending-quote__cancel" data-action="cancel-msg-quote" type="button" aria-label="取消引用">${MSG_ICONS.close}</button>
+        </div>
+      ` : ''}
+
+      ${renderChatConsoleDockHtml({
+        chatConsoleEnabled,
+        chatConsoleExpanded,
+        chatConsoleWarnErrorOnly,
+        visibleConsoleLogs
+      })}
+
+      <div class="msg-input-bar">
+        <button class="msg-input-bar__icon-btn" data-action="msg-coffee" type="button">${MSG_ICONS.coffee}</button>
+        <button class="msg-input-bar__icon-btn ${stickerPanelOpen ? 'is-active' : ''}" data-action="msg-sticker" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.sticker}</button>
+        <textarea class="msg-input-bar__input" rows="1" placeholder="输入消息..." data-role="msg-input" ${isSending ? 'disabled' : ''}></textarea>
+        <button class="msg-input-bar__icon-btn" data-action="msg-magic" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.magicWand}</button>
+        <button class="msg-input-bar__icon-btn msg-input-bar__send-btn" data-action="msg-send" type="button" ${isSending ? 'disabled' : ''}>${MSG_ICONS.send}</button>
+      </div>
+    </div>
+  `;
+
+  const settingsPageHtml = renderChatMessageSettingsPage({
+    session,
+    name,
+    chatSettings,
+    options,
+    stickerGroups,
+    mountedStickerGroupIds,
+    chatConsoleEnabled
+  });
+
+  return `
+    <div class="msg-page">
+      <div class="${conversationClassName}" data-role="msg-conversation">
+        ${topBarHtml}
+        ${searchPanelHtml}
+        <div class="${listAreaClassName}" data-role="msg-list">${messagesHtml}</div>
+        ${multiSelectBarHtml}
+        ${multiSelectMode ? '' : inputBarHtml}
+      </div>
+      ${settingsPageHtml}
+    </div>
+  `;
+}
+
+function syncRenderedChatMessageLoadMoreControl(listArea, state) {
+  if (!listArea) return;
+  const existingRow = listArea.querySelector('[data-role="msg-load-more-row"]');
+  const { hiddenMessageCount, nextLoadCount } = getVisibleChatMessagesForRender(state.currentMessages, {
+    chatMessageVisibleCount: state.chatMessageVisibleCount
+  });
+
+  if (!hiddenMessageCount) {
+    existingRow?.remove();
+    return;
+  }
+
+  const nextHtml = renderLoadMoreChatMessagesHtml(hiddenMessageCount, nextLoadCount);
+  if (existingRow) {
+    existingRow.outerHTML = nextHtml;
+    return;
+  }
+
+  listArea.insertAdjacentHTML('afterbegin', nextHtml);
+}
+
+function trimRenderedChatMessageRowsToVisibleLimit(listArea, state) {
+  if (!listArea) return;
+  const visibleCount = normalizeChatMessageVisibleCount(state.chatMessageVisibleCount);
+  const messageRows = Array.from(listArea.children).filter(element => element.hasAttribute('data-message-id'));
+
+  while (messageRows.length > visibleCount) {
+    const row = messageRows.shift();
+    if (!row) break;
+
+    let previous = row.previousElementSibling;
+    while (previous && previous.classList.contains('msg-aside-bubble')) {
+      const toRemove = previous;
+      previous = previous.previousElementSibling;
+      toRemove.remove();
+    }
+
+    row.remove();
+  }
+}
+
+function syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state) {
+  if (!row || !message || state.multiSelectMode) return false;
+  if (String(message?.type || '') !== 'card' || !String(message?.cardHtml || message?.content || '').trim()) return false;
+
+  const holder = document.createElement('div');
+  holder.innerHTML = renderMessageBubble(message, session, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId
+  }).trim();
+
+  const nextRow = holder.firstElementChild;
+  const content = row.querySelector('.msg-bubble-content');
+  const bubble = content?.querySelector('.msg-bubble');
+  if (!nextRow || !content || !bubble) return false;
+
+  row.className = nextRow.className;
+  if (nextRow.dataset.action) row.dataset.action = nextRow.dataset.action;
+
+  const existingToolbar = Array.from(content.children).find(child => child.matches?.('[data-role="msg-bubble-toolbar"]'));
+  const nextToolbar = nextRow.querySelector('[data-role="msg-bubble-toolbar"]');
+
+  if (!nextToolbar) {
+    existingToolbar?.remove();
+    return true;
+  }
+
+  if (existingToolbar) {
+    existingToolbar.outerHTML = nextToolbar.outerHTML;
+    return true;
+  }
+
+  bubble.insertAdjacentHTML('beforebegin', nextToolbar.outerHTML);
+  return true;
+}
+
+export function renderCurrentChatMessage(container, state, options = {}) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !session) return;
+
+  const listBefore = msgWrap.querySelector('[data-role="msg-list"]');
+  const shouldKeepScroll = Boolean(options.keepScroll);
+  const shouldPreservePrependPosition = Boolean(options.preservePrependPosition);
+  const previousScrollTop = listBefore ? listBefore.scrollTop : 0;
+  const previousScrollHeight = listBefore ? listBefore.scrollHeight : 0;
+
+  msgWrap.innerHTML = renderChatMessage(session, state.currentMessages, {
+    chatSettings: state.chatPromptSettings,
+    isSending: state.isAiSending,
+    translationSettings: state.translationSettings,
+    userProfile: state.profile,
+    stickerData: state.stickerData,
+    stickerPanelGroupId: state.stickerPanelGroupId,
+    stickerPanelOpen: state.stickerPanelOpen,
+    coffeeDockOpen: state.coffeeDockOpen,
+    selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
+    pendingQuote: state.pendingQuote,
+    chatConsoleEnabled: state.chatConsoleEnabled,
+    chatConsoleExpanded: state.chatConsoleExpanded,
+    chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
+    chatConsoleLogs: state.chatConsoleLogs,
+    chatSearchOpen: state.chatMessageSearchOpen,
+    chatSearchKeyword: state.chatMessageSearchKeyword,
+    chatMessageVisibleCount: state.chatMessageVisibleCount,
+    asideModeActive: state.asideModeActive,
+    asideDisplayMode: state.asideSettings?.displayMode || 'top'
+  });
+
+  setTimeout(() => {
+    const listArea = msgWrap.querySelector('[data-role="msg-list"]');
+    if (!listArea) return;
+    if (shouldPreservePrependPosition) {
+      listArea.scrollTop = previousScrollTop + Math.max(0, listArea.scrollHeight - previousScrollHeight);
+      return;
+    }
+    if (shouldKeepScroll) {
+      listArea.scrollTop = previousScrollTop;
+      return;
+    }
+    listArea.scrollTop = listArea.scrollHeight;
+  }, 30);
+}
+
+export function appendCurrentMessageBubble(container, state, message) {
+  if (!message || !state.currentChatId) return;
+
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!msgWrap || !listArea || !session) {
+    renderCurrentChatMessage(container, state);
+    return;
+  }
+
+  const emptyEl = listArea.querySelector('.msg-empty');
+  if (emptyEl) emptyEl.remove();
+
+  listArea.insertAdjacentHTML('beforeend', renderMessageWithAsideHtml(message, session, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    asideDisplayMode: state.asideSettings?.displayMode || 'top',
+    translationSettings: state.translationSettings,
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
+    pendingQuote: state.pendingQuote
+  }));
+
+  trimRenderedChatMessageRowsToVisibleLimit(listArea, state);
+  syncRenderedChatMessageLoadMoreControl(listArea, state);
+  listArea.scrollTop = listArea.scrollHeight;
+}
+
+export function refreshMessageBubbleRows(container, state, messageIds = []) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) return false;
+
+  const uniqueIds = Array.from(new Set((messageIds || []).map(id => String(id || '')).filter(Boolean)));
+  const shouldRefreshWholeListForAside = uniqueIds.some(messageId => {
+    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+    return hasRenderableAsideContent(message);
+  });
+
+  if (shouldRefreshWholeListForAside) {
+    refreshCurrentMessageListOnly(container, state);
+    return true;
+  }
+
+  uniqueIds.forEach(messageId => {
+    const row = listArea.querySelector(`.msg-bubble-row[data-message-id="${CSS.escape(messageId)}"], .msg-transfer-system-row[data-message-id="${CSS.escape(messageId)}"]`);
+    const message = (state.currentMessages || []).find(item => String(item.id) === messageId);
+    if (!row || !message) return;
+
+    if (syncHtmlCardBubbleToolbarWithoutFrameReload(row, message, session, state)) return;
+
+    row.outerHTML = renderMessageBubble(message, session, {
+      userProfile: state.profile,
+      selectedMessageId: state.selectedMessageId,
+      selectedAsideSegmentId: state.selectedAsideSegmentId,
+      multiSelectMode: state.multiSelectMode,
+      selectedMessageIds: state.selectedMessageIds,
+      deleteConfirmMessageId: state.deleteConfirmMessageId,
+      rewindConfirmMessageId: state.rewindConfirmMessageId
+    });
+  });
+
+  return true;
+}
+
+export function refreshCurrentMessageListOnly(container, state) {
+  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
+  const listArea = msgWrap?.querySelector('[data-role="msg-list"]');
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!listArea || !session) {
+    renderCurrentChatMessage(container, state, { keepScroll: true });
+    return;
+  }
+
+  const previousScrollTop = listArea.scrollTop;
+  listArea.innerHTML = renderChatMessageListHtml(session, state.currentMessages, {
+    userProfile: state.profile,
+    selectedMessageId: state.selectedMessageId,
+    selectedAsideSegmentId: state.selectedAsideSegmentId,
+    multiSelectMode: state.multiSelectMode,
+    selectedMessageIds: state.selectedMessageIds,
+    asideDisplayMode: state.asideSettings?.displayMode || 'top',
+    deleteConfirmMessageId: state.deleteConfirmMessageId,
+    rewindConfirmMessageId: state.rewindConfirmMessageId,
+    chatMessageVisibleCount: state.chatMessageVisibleCount
+  });
+  listArea.scrollTop = previousScrollTop;
+}
+
+export function refreshCurrentSessionLastMessage(state) {
+  const session = state.sessions.find(s => s.id === state.currentChatId);
+  if (!session) return;
+
+  const latest = [...(state.currentMessages || [])].reverse().find(item => String(item?.content || '').trim());
+  session.lastMessage = latest?.type === 'sticker'
+    ? `[表情包] ${latest?.stickerName || '未命名表情包'}`
+    : (isTextImageMessage(latest)
+        ? `[文字图] ${latest?.textImageText || '文字图'}`
+        : (isVoiceMessage(latest)
+            ? getVoiceMessageDisplayText(latest)
+            : (latest?.type === 'image'
+                ? `[图片] ${latest?.imageName || '图片'}`
+                : (latest?.type === 'transfer'
+                    ? `[转账] ${latest?.transferDisplayAmount || latest?.content || '¥0.00'}`
+                    : (latest?.type === 'gift'
+                        ? getGiftMessageDisplayText(latest)
+                        : (latest?.content || ''))))));
+  session.lastTime = latest?.timestamp || Date.now();
+}
