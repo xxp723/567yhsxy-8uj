@@ -119,7 +119,13 @@
   transform: scale(0.98);
 }
 
-/* === [本次修改] Chat/Contacts 顶部 + 按钮右对齐：按钮固定在最右侧，不挤压标题 === */
+/* ==========================================================================
+   [区域标注·已完成·Chat/Contacts 顶部 + 按钮点击热区修复]
+   说明：
+   1. 按钮固定在标题栏最右侧，不挤压标题。
+   2. 父级 .chat-top-bar__title-wrap 为避免遮挡其它热区设置了 pointer-events: none；
+      本按钮必须显式恢复 pointer-events: auto，确保 Chat/Contacts 右上角 "+" 可点击。
+   ========================================================================== */
 .chat-top-bar__add {
   position: absolute;
   right: 16px;
@@ -137,6 +143,8 @@
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
   flex-shrink: 0;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .chat-top-bar__add:active {
