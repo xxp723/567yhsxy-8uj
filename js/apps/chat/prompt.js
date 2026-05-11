@@ -381,10 +381,10 @@ function formatCompactMessageContentForPrompt(message = {}, fallbackContent = ''
 
   if (type === 'sticker') return `[表情包] ${normalizePlainText(message?.stickerName || content || '表情包')}`;
   /* ======================================================================
-     [区域标注·已完成·本次修复：用户文字图按可见图片样式理解]
+     [区域标注·已完成·文字图内容进入短期记忆/对话历史]
      说明：
      1. 用户发送的文字图是聊天界面里可见的图片样式消息，不是 AI 输出用的 [文字图] 协议。
-     2. 这里避免把用户消息写成 “[文字图] ...”，防止模型误以为用户只发了协议标签或纯文字。
+     2. 短期记忆、对话历史与本轮可引用消息会把 textImageText 明确写成“图中文字”，让 AI 能读到文字图内容。
      3. 不添加 imageUrl，不触发真实视觉识别 token；仅调整 prompt 文本表达。
      ====================================================================== */
   if (type === 'image' && (String(message?.imageSource || '') === 'text-image' || normalizePlainText(message?.textImageText))) {
@@ -392,8 +392,16 @@ function formatCompactMessageContentForPrompt(message = {}, fallbackContent = ''
     return `用户发来一张可见的文字图样式图片；图中文字：${textImageText}。请按已经看到这张图片的版式和文字内容来回应，禁止说看不到实物或这只是文字图。`;
   }
   if (type === 'image') return `[图片] ${normalizePlainText(message?.imageName || content || '图片')}`;
-  if (type === 'card') return content || '[HTML卡片] 互动卡片';
-  if (type === 'transfer') return `[转账] ${content}`;
+  if (type === 'card') {
+    return content.startsWith('[HTML卡片历史摘要]')
+      ? content
+      : formatHtmlCardHistorySummaryForPrompt({ ...message, content: content || message?.content });
+  }
+  if (type === 'transfer') {
+    const amount = normalizePlainText(message?.transferDisplayAmount || message?.transferAmount || message?.amount || content || '¥0.00');
+    const note = normalizePlainText(message?.transferNote || message?.note || message?.remark || '');
+    return `[转账] ${amount}${note ? `（备注：${note}）` : ''}`;
+  }
   if (type === 'gift') return `[礼物] ${content}`;
   /* ======================================================================
      [区域标注·已完成·AI语音消息历史上下文摘要]
@@ -1547,11 +1555,7 @@ function collectConversationRounds(history = []) {
   normalizedHistory.forEach(item => {
     const role = item.role;
     const timestamp = getMessageTimestamp(item);
-    const content = normalizePlainText(
-      String(item?.type || '') === 'card'
-        ? formatHtmlCardHistorySummaryForPrompt(item)
-        : String(item?.content || '')
-    );
+    const content = normalizePlainText(formatCompactMessageContentForPrompt(item, String(item?.content || '')));
 
     if (role === 'user') {
       currentRound = {
@@ -1613,12 +1617,13 @@ function buildConversationRoundTimeline(history = [], maxRounds = 12, now = getC
 }
 
 /* ==========================================================================
-   [HTML卡片历史上下文摘要化]
+   [HTML卡片历史上下文摘要化·已完成·真实标题进入短期记忆/对话历史]
    说明：
    1. 历史消息里遇到 type:card 的 AI HTML 卡片时，只发送剥离 HTML 后的文字摘要给 AI。
-   2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文放入历史上下文，避免浪费 token。
-   3. 本区域只做本轮 API 请求前的提示词文本转换；不读写持久化存储，不使用 localStorage/sessionStorage。
-   4. 不做按字段名、文本长度或媒体特征排除档案内容的过滤，也不保留双份存储兜底逻辑。
+   2. HTML 卡片标题优先使用收藏独立页面封面第二行同等规则提取，避免发送“xx的卡片”这类无意义标题。
+   3. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文放入历史上下文，避免浪费 token。
+   4. 本区域只做本轮 API 请求前的提示词文本转换；不读写持久化存储，不使用 localStorage/sessionStorage。
+   5. 不做按字段名、文本长度或媒体特征排除档案内容的过滤，也不保留双份存储兜底逻辑。
    ========================================================================== */
 function decodeHtmlEntitiesForPrompt(text = '') {
   const value = String(text || '');
@@ -1665,14 +1670,69 @@ function extractPlainTextFromHtmlCardForPrompt(html = '') {
     .trim();
 }
 
+function normalizeHtmlCardPromptTitleText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractHtmlCardTitleFromHtmlForPrompt(cardHtml) {
+  const html = String(cardHtml || '').trim();
+  if (!html || typeof DOMParser !== 'function') return '';
+
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const explicitTitleEl = doc.querySelector('[data-card-title]');
+    const headingEl = doc.querySelector('h1, h2, h3, [role="heading"], .card-title, .title');
+    const metaTitle = doc.querySelector('meta[property="og:title"], meta[name="title"]')?.getAttribute('content');
+    const ariaTitleEl = doc.querySelector('[aria-label]');
+
+    const candidates = [
+      explicitTitleEl?.getAttribute('data-card-title'),
+      explicitTitleEl?.textContent,
+      headingEl?.textContent,
+      doc.querySelector('title')?.textContent,
+      metaTitle,
+      ariaTitleEl?.getAttribute('aria-label'),
+      ariaTitleEl?.textContent
+    ];
+
+    for (const candidate of candidates) {
+      const title = normalizeHtmlCardPromptTitleText(candidate);
+      if (title) return title;
+    }
+  } catch (_) {
+    return '';
+  }
+
+  return '';
+}
+
+function isGenericHtmlCardCoverFirstLineForPrompt(title = '', roleNameText = '') {
+  const value = normalizeHtmlCardPromptTitleText(title);
+  if (!value) return false;
+  if (roleNameText && value === normalizeHtmlCardPromptTitleText(`${roleNameText}的卡片`)) return true;
+  return /^.{1,24}的卡片$/.test(value);
+}
+
+function getHtmlCardHistoryTitleForPrompt(message = {}) {
+  const roleNameText = normalizeHtmlCardPromptTitleText(message?.cardRoleName || message?.roleName || message?.senderName || '');
+  const htmlTitle = extractHtmlCardTitleFromHtmlForPrompt(message?.cardHtml);
+
+  if (htmlTitle && !isGenericHtmlCardCoverFirstLineForPrompt(htmlTitle, roleNameText)) return htmlTitle;
+
+  const storedTitle = normalizeHtmlCardPromptTitleText(message?.cardTitle || message?.name || message?.content);
+  if (storedTitle && !isGenericHtmlCardCoverFirstLineForPrompt(storedTitle, roleNameText)) return storedTitle;
+
+  return 'HTML 卡片';
+}
+
 function formatHtmlCardHistorySummaryForPrompt(message = {}) {
-  const title = normalizePlainText(message?.cardTitle || message?.content || 'HTML卡片');
+  const title = getHtmlCardHistoryTitleForPrompt(message);
   const htmlText = extractPlainTextFromHtmlCardForPrompt(message?.cardHtml || '');
   const fallbackText = normalizePlainText(message?.content || '');
   const summaryText = htmlText || fallbackText || title || '互动卡片';
 
   return [
-    `[HTML卡片历史摘要] ${title || '互动卡片'}`,
+    `[HTML卡片历史摘要] ${title || 'HTML 卡片'}`,
     summaryText
   ].filter(Boolean).join('\n');
 }
@@ -1784,11 +1844,12 @@ export function getChatHistory({ history = [], includeTimestamps = false, includ
   return normalizedHistory
     .map((item, index) => {
       /* ====================================================================
-         [HTML卡片历史上下文摘要化]
+         [HTML卡片历史上下文摘要化·已完成·真实标题进入短期记忆/对话历史]
          说明：
          1. HTML 卡片在历史上下文里只保留剥离 HTML 后的文字摘要。
-         2. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文发送给 AI，避免浪费 token。
-         3. 时间感知开启时仍保留消息发送时间标注，但摘要正文保持纯文本。
+         2. 标题按收藏独立页面封面第二行同等规则提取，不再优先发送“xx的卡片”。
+         3. 不把 cardHtml / HTML 标签 / CSS / srcdoc 原文发送给 AI，避免浪费 token。
+         4. 时间感知开启时仍保留消息发送时间标注，但摘要正文保持纯文本。
          ==================================================================== */
       const readableContent = String(item?.type || '') === 'card'
         ? formatHtmlCardHistorySummaryForPrompt(item)
