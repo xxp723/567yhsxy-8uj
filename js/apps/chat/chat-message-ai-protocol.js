@@ -225,15 +225,23 @@ export function stripAiRuntimeProtocolOrderFields(message = {}) {
 }
 
 /* ========================================================================
-   [区域标注·已完成·本次闲谈回复拆泡与短句标点口语化]
+   [区域标注·已完成·本次省略号规范、引号内拆泡保护与短句标点口语化]
    说明：
-   1. 普通文字回复拆泡只按已有换行、显式气泡分隔符、句号/问号/叹号/省略号等自然终止符处理。
-   2. 不再把逗号、顿号、分号当作拆泡依据，避免一句话前半句和后半句被拆进两个气泡。
-   3. 仅对极短语气词末尾单个句号做轻量口语化修正，如“呵。”→“呵”；不改长句、不重写正常标点。
-   4. 本区只影响前端运行时 AI 可见文本清洗与拆泡，不改 DB.js / IndexedDB 持久化结构。
+   1. 普通文字回复拆泡只按已有换行、显式气泡分隔符、句号/问号/叹号/省略号等自然终止符处理；普通聊天内容里的冒号不是拆泡依据。
+   2. AI 可见文本中的 ... / ...... / 。。。 会统一规范为中文省略号 “……”，避免聊天气泡出现英文三个点。
+   3. 成对双引号/单引号/中式引号内的文本会尽量保留在同一个气泡里；拆泡后若掉出单独的引号或纯标点+引号碎片，会并回相邻气泡。
+   4. 仅对极短语气词末尾单个句号做轻量口语化修正，如“呵。”→“呵”；不改长句、不重写正常标点。
+   5. 本区只影响前端运行时 AI 可见文本清洗与拆泡，不改 DB.js / IndexedDB 持久化结构。
    ======================================================================== */
+function normalizeAiEllipsisText(text = '') {
+  return String(text || '')
+    .replace(/\.{3,}/g, '……')
+    .replace(/。{3,}/g, '……')
+    .replace(/…{3,}/g, '……');
+}
+
 export function cleanAiVisibleBubbleText(text) {
-  return stripAiProtocolClosingTags(String(text || ''))
+  return normalizeAiEllipsisText(stripAiProtocolClosingTags(String(text || '')))
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
@@ -258,13 +266,83 @@ function mergeAiPunctuationOnlyBubbleFragments(parts = []) {
     const value = String(part || '').trim();
     if (!value) return;
 
-    if (merged.length && /^[.。…]+$/.test(value)) {
+    if (merged.length && /^[.。…"“”"'‘’「」『』]+$/.test(value)) {
       merged[merged.length - 1] = `${merged[merged.length - 1]}${value}`;
       return;
     }
 
     merged.push(value);
   });
+  return merged;
+}
+
+function getAiQuoteBalanceState(text = '') {
+  const quotePairs = {
+    '“': '”',
+    '‘': '’',
+    '「': '」',
+    '『': '』'
+  };
+  const symmetricQuotes = new Set(['"', "'"]);
+  const stack = [];
+
+  for (const char of String(text || '')) {
+    if (quotePairs[char]) {
+      stack.push(quotePairs[char]);
+      continue;
+    }
+
+    if (symmetricQuotes.has(char)) {
+      if (stack[stack.length - 1] === char) {
+        stack.pop();
+      } else {
+        stack.push(char);
+      }
+      continue;
+    }
+
+    if (stack[stack.length - 1] === char) {
+      stack.pop();
+    }
+  }
+
+  return stack;
+}
+
+function mergeAiQuotedBubbleFragments(parts = []) {
+  const merged = [];
+  let pendingText = '';
+  let pendingQuoteState = [];
+
+  const flushPending = () => {
+    const value = String(pendingText || '').trim();
+    if (!value) {
+      pendingText = '';
+      pendingQuoteState = [];
+      return;
+    }
+    merged.push(value);
+    pendingText = '';
+    pendingQuoteState = [];
+  };
+
+  (Array.isArray(parts) ? parts : []).forEach(part => {
+    const value = String(part || '').trim();
+    if (!value) return;
+
+    if (!pendingText) {
+      pendingText = value;
+      pendingQuoteState = getAiQuoteBalanceState(value);
+      if (!pendingQuoteState.length) flushPending();
+      return;
+    }
+
+    pendingText = `${pendingText}${value}`;
+    pendingQuoteState = getAiQuoteBalanceState(pendingText);
+    if (!pendingQuoteState.length) flushPending();
+  });
+
+  flushPending();
   return merged;
 }
 
@@ -280,7 +358,7 @@ function softenShortToneParticleEnding(text = '') {
 }
 
 export function splitStrictSentenceBubbles(text) {
-  const normalized = stripAiProtocolClosingTags(String(text || ''))
+  const normalized = normalizeAiEllipsisText(stripAiProtocolClosingTags(String(text || '')))
     .replace(/\*\*`?\s*\[回复\]\s*[^：:\n`]+?\s*[：:]\s*/g, '')
     .replace(/`?\*\*/g, '')
     .replace(/\r\n/g, '\n')
@@ -288,13 +366,15 @@ export function splitStrictSentenceBubbles(text) {
 
   if (!normalized) return [];
 
-  return mergeAiPunctuationOnlyBubbleFragments(
-    normalized
-      .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
-      .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
-      .split(/\n+/)
-      .map(item => softenShortToneParticleEnding(item))
-      .filter(Boolean)
+  return mergeAiQuotedBubbleFragments(
+    mergeAiPunctuationOnlyBubbleFragments(
+      normalized
+        .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
+        .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
+        .split(/\n+/)
+        .map(item => softenShortToneParticleEnding(item))
+        .filter(Boolean)
+    )
   );
 }
 
