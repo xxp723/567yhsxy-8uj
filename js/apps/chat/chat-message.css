@@ -2659,10 +2659,10 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·头像与备注：双头像/展示开关/当前会话备注/来源选择弹窗样式]
+   [区域标注·已完成·头像来源选择弹窗主题色与纯标题样式]
    说明：
    1. 仅服务聊天设置页“头像与备注”板块及其直接子结构：双头像、向角色展示头像开关、当前会话备注、头像来源选择弹窗。
-   2. 本次已移除旧的单头像说明式操作区，改为角色头像 / 用户头像同排并列 + 应用内来源选择弹窗。
+   2. 本次已将头像来源选择弹窗中的“本地上传”主按钮改为主题暖棕色，并将“本地上传 / URL 图床”按钮改为仅保留标题文字。
    3. 样式层不涉及任何持久化存储；角色头像保存走 session.avatar，用户头像保存走 session.userAvatar，聊天设置开关与备注仍由既有 IndexedDB 链路处理。
    4. 本区域只修改用户指定部分，并保留头像裁剪弹窗样式，不影响其它设置卡片或无关页面。
    ========================================================================== */
@@ -2856,12 +2856,11 @@
   background: rgba(255, 252, 247, 0.88);
   color: #4A342A;
   padding: 16px 14px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  justify-content: center;
   align-items: center;
   font-family: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(74, 52, 42, 0.06);
   transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
@@ -2873,13 +2872,13 @@
 }
 
 .msg-avatar-source-option--primary {
-  background: linear-gradient(135deg, rgba(76, 150, 255, 0.98), rgba(31, 125, 245, 0.94));
-  border-color: rgba(31, 125, 245, 0.24);
+  background: linear-gradient(135deg, rgba(74, 52, 42, 0.98), rgba(104, 74, 58, 0.94));
+  border-color: rgba(74, 52, 42, 0.22);
   color: #ffffff;
 }
 
 .msg-avatar-source-option--primary:active {
-  background: linear-gradient(135deg, rgba(60, 139, 252, 0.98), rgba(26, 116, 232, 0.94));
+  background: linear-gradient(135deg, rgba(62, 43, 34, 0.98), rgba(92, 65, 51, 0.94));
 }
 
 .msg-avatar-source-option__icon {
@@ -2907,24 +2906,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
 }
 
 .msg-avatar-source-option__content strong {
   font-size: 15px;
   line-height: 1.25;
   font-weight: 800;
-}
-
-.msg-avatar-source-option__content em {
-  font-style: normal;
-  font-size: 12px;
-  line-height: 1.45;
-  color: rgba(74, 52, 42, 0.56);
-}
-
-.msg-avatar-source-option--primary .msg-avatar-source-option__content em {
-  color: rgba(255, 255, 255, 0.82);
 }
 
 .msg-avatar-crop-modal-body {

@@ -206,11 +206,12 @@ export function renderVoiceBubble(message = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·语音输入应用内弹窗]
+   [区域标注·已完成·语音输入应用内弹窗保存按钮去图标]
    说明：
    1. 弹窗沿用闲谈应用 chat-modal 样式，不使用浏览器原生 alert/confirm/prompt。
    2. 用户输入文字后保存为模拟语音消息，并发送到当前聊天界面。
-   3. 弹窗本身不做持久化；保存流程由 index.js 创建消息并写入 DB.js / IndexedDB。
+   3. 本次已将“保存”主按钮改为纯文字，不再显示图标，只保留“保存”两个字。
+   4. 弹窗本身不做持久化；保存流程由 index.js 创建消息并写入 DB.js / IndexedDB。
    ========================================================================== */
 export function showVoiceMessageModal(container) {
   const mask = container.querySelector('[data-role="modal-mask"]');
@@ -218,7 +219,7 @@ export function showVoiceMessageModal(container) {
   if (!mask || !panel) return;
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·语音板块弹窗] 输入文字并保存为模拟语音消息 -->
+    <!-- [区域标注·已完成·语音板块弹窗保存按钮去图标] 输入文字并保存为模拟语音消息 -->
     <div class="chat-modal-header">
       <span>语音</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
@@ -232,7 +233,7 @@ export function showVoiceMessageModal(container) {
     </div>
     <div class="chat-modal-footer">
       <button class="chat-modal-btn chat-modal-btn--secondary" data-action="close-modal" type="button">取消</button>
-      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-msg-voice" type="button">${VOICE_ICONS.voice}<span>保存</span></button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-msg-voice" type="button">保存</button>
     </div>
   `;
 
