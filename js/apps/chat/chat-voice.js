@@ -162,11 +162,11 @@ export function renderVoiceFeatureButton() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音气泡自适应宽度与语音转文字文案]
+   [区域标注·已完成·本次语音转文字标题去图标与气泡贴合收窄]
    说明：
    1. 用户模拟语音与 AI 主动语音共用本气泡：播放键 + 波长条 + 0:xx 秒数，默认不直接露出文字。
-   2. 双击展开后提示文案已改为“语音转文字”，转文字内容框改为左上起步展示，避免居中留白。
-   3. 语音气泡宽度会按转文字内容长度输出 CSS 变量，供样式层在上限内自适应，不再让单字内容也保持过长气泡。
+   2. 双击展开后的“语音转文字”已去除前置图标，标题字号缩小一圈，转文字正文从顶部直接起步，避免视觉上像从第二行开始。
+   3. 语音气泡宽度会按转文字内容长度输出 CSS 变量，短文本时整个气泡也会同步变短，不再只剩内部文字框单独变窄。
    4. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成，不使用 localStorage/sessionStorage。
    ========================================================================== */
 function formatVoiceBubbleDuration(seconds = 1) {
@@ -180,7 +180,7 @@ export function renderVoiceBubble(message = {}) {
   const expanded = Boolean(message?.voiceExpanded);
   const waveBars = [18, 24, 30, 22, 34, 40, 28, 36, 44, 30, 38, 24];
   const transcriptLength = Math.max(1, text.length || 1);
-  const bubbleWidth = Math.max(118, Math.min(252, 112 + transcriptLength * 11));
+  const bubbleWidth = Math.max(98, Math.min(252, 88 + transcriptLength * 11));
 
   return `
     <div class="msg-voice-bubble ${expanded ? 'is-expanded' : ''}"
@@ -197,10 +197,7 @@ export function renderVoiceBubble(message = {}) {
         <span class="msg-voice-bubble__download" aria-hidden="true">${VOICE_ICONS.download}</span>
       </div>
       ${expanded ? `
-        <div class="msg-voice-bubble__toggle-hint">
-          <span class="msg-voice-bubble__sparkle" aria-hidden="true">${VOICE_ICONS.sparkle}</span>
-          <span>语音转文字</span>
-        </div>
+        <div class="msg-voice-bubble__toggle-hint">语音转文字</div>
         <div class="msg-voice-bubble__transcript">
           <span class="msg-voice-bubble__text">${escapeHtml(text)}</span>
         </div>

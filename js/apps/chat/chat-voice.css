@@ -23,12 +23,13 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音气泡自适应宽度与转文字左上起步]
+   [区域标注·已完成·本次语音转文字标题去图标与正文贴顶收紧]
    说明：
-   1. 语音消息气泡宽度会配合渲染层输出的 CSS 变量，在上限内按转文字内容长度自适应，不再让单字内容也保持过长气泡。
+   1. 语音消息气泡宽度会配合渲染层输出的 CSS 变量，在上限内按转文字内容长度自适应，短文本时整个气泡也会同步变短。
    2. 已去除语音气泡独立粗边框与右侧下载箭头，仅保留播放键、波形条与 0:xx 秒数。
-   3. 双击展开后的“语音转文字”内容框改为左上起步展示，减少居中留白，并继续继承正常消息字体与行高。
-   4. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
+   3. 双击展开后的“语音转文字”标题已去图标并缩小字号；转文字正文区域取消多余上下留白，从顶部直接开始显示。
+   4. 转文字浅色背景改为跟随整段展开内容宽度，不再只形成一个偏窄的小块。
+   5. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
   min-width: 0;
@@ -57,7 +58,7 @@
 
 .msg-voice-bubble__main {
   display: grid;
-  grid-template-columns: 18px minmax(64px, 1fr) auto;
+  grid-template-columns: 18px minmax(38px, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 22px;
@@ -123,14 +124,13 @@
 }
 
 .msg-voice-bubble__toggle-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 15px;
+  display: block;
+  margin-top: 10px;
   font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  color: rgba(118, 91, 99, .74);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: rgba(118, 91, 99, .68);
 }
 
 .msg-voice-bubble__sparkle {
@@ -139,12 +139,12 @@
 }
 
 .msg-voice-bubble__transcript {
-  width: fit-content;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  margin-top: 8px;
-  padding: 7px 10px;
+  margin-top: 6px;
+  padding: 0;
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
@@ -154,13 +154,16 @@
   border-radius: 13px;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow: hidden;
 }
 
 .msg-voice-bubble__text {
   display: block;
   margin: 0;
+  padding: 0 10px;
   font-family: inherit;
   font-size: inherit;
+  line-height: 1.45;
   font-weight: 500;
   text-align: left;
 }
