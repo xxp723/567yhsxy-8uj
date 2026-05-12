@@ -274,7 +274,14 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
   const session = chatSession || {};
   const name = session.name || '聊天';
   const userProfile = options.userProfile || {};
-  const userAvatar = userProfile.avatar || '';
+  /* ========================================================================
+     [区域标注·已完成·更换会话头像：当前会话用户头像显示]
+     说明：
+     1. 当前聊天页右侧用户气泡头像优先使用 session.userAvatar。
+     2. 若当前会话未单独设置用户头像，则回退到全局 userProfile.avatar。
+     3. 这里只影响当前聊天页显示，不回写全局资料头像。
+     ======================================================================== */
+  const userAvatar = session.userAvatar || userProfile.avatar || '';
   const userName = userProfile.nickname || '我';
   const selectedMessageId = String(options.selectedMessageId || '');
   const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();

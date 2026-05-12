@@ -2659,13 +2659,26 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·当前会话头像设置样式]
+   [区域标注·已完成·更换会话头像：角色/用户头像与展示开关样式]
    说明：
-   1. 仅服务聊天设置页顶部“当前会话联系人头像”板块和头像裁剪弹窗。
-   2. 视觉沿用闲谈应用暖色卡片 / 应用内弹窗风格，不使用原生浏览器弹窗。
-   3. 头像 URL / 裁剪弹窗底部按钮已改为小号紧凑面积，并移除按钮图标只保留文字。
-   4. 样式层不涉及任何持久化存储；保存逻辑只写当前 session.avatar 到 DB.js / IndexedDB。
+   1. 仅服务聊天设置页“更换会话头像”板块与其直接子结构：外部标题、内部双头像卡片、下方展示开关。
+   2. 已移除旧的单头像说明式布局，改为“角色头像 / 用户头像”并列结构，不添加说明性文字。
+   3. 样式层不涉及任何持久化存储；角色头像保存走 session.avatar，用户头像保存走 session.userAvatar，聊天设置开关走 IndexedDB。
+   4. 保留本区下方头像裁剪弹窗样式，不修改无关区域。
    ========================================================================== */
+.msg-settings-avatar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-settings-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A342A;
+  padding-left: 2px;
+}
+
 .msg-settings-avatar-card {
   display: flex;
   flex-direction: column;
@@ -2673,10 +2686,26 @@
   background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(242, 233, 223, 0.78));
 }
 
-.msg-settings-avatar-main {
+.msg-settings-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.msg-settings-avatar-item {
+  min-width: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
+}
+
+.msg-settings-avatar-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4A342A;
+  text-align: center;
 }
 
 .msg-settings-avatar-preview {
@@ -2702,15 +2731,11 @@
   object-fit: cover;
 }
 
-.msg-settings-avatar-info {
-  min-width: 0;
-  flex: 1;
-}
-
 .msg-settings-avatar-actions {
+  width: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .msg-settings-avatar-action {
@@ -2738,6 +2763,20 @@
 .msg-settings-avatar-action svg {
   width: 17px;
   height: 17px;
+}
+
+.msg-settings-avatar-switch-row {
+  padding-top: 2px;
+}
+
+.msg-settings-avatar-switch-row .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+@media (max-width: 380px) {
+  .msg-settings-avatar-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .msg-avatar-crop-modal-body {

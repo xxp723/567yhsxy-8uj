@@ -92,6 +92,7 @@ export async function handleChange(e, state, container, db) {
       return;
     }
 
+    const avatarTarget = String(target.dataset.avatarTarget || 'character');
     const reader = new FileReader();
     reader.onload = () => {
       const imageUrl = String(reader.result || '');
@@ -102,7 +103,8 @@ export async function handleChange(e, state, container, db) {
       showChatAvatarCropModal(container, {
         imageUrl,
         source: 'local',
-        fileName: file.name || '本地头像'
+        fileName: file.name || '本地头像',
+        avatarTarget
       });
     };
     reader.onerror = () => renderModalNotice(container, '图片读取失败，请重新选择');

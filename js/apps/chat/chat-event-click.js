@@ -171,7 +171,8 @@ import {
   openSubPage,
   closeSubPage,
   rerenderCurrentSubPage,
-  saveCurrentChatSessionAvatar
+  saveCurrentChatSessionAvatar,
+  saveCurrentChatSessionUserAvatar
 } from './chat-navigation.js';
 import {
   CHAT_MESSAGE_INITIAL_VISIBLE_COUNT,
@@ -1275,17 +1276,20 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       const input = container.querySelector('[data-role="msg-avatar-file-input"]');
       if (input) {
         input.value = '';
+        input.dataset.avatarTarget = String(target.dataset.avatarTarget || 'character');
         input.click();
       }
       break;
     }
 
     case 'open-chat-avatar-url-modal':
-      showChatAvatarUrlModal(container);
+      showChatAvatarUrlModal(container, String(target.dataset.avatarTarget || 'character'));
       break;
 
     case 'confirm-chat-avatar-url': {
       const input = container.querySelector('[data-role="chat-avatar-url-input"]');
+      const modal = container.querySelector('[data-role="chat-avatar-url-modal"]');
+      const avatarTarget = String(modal?.dataset.avatarTarget || 'character');
       const imageUrl = String(input?.value || '').trim();
       if (!/^https?:\/\/\S+/i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
         renderModalNotice(container, '请输入有效的图片 URL');
@@ -1294,7 +1298,8 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       showChatAvatarCropModal(container, {
         imageUrl,
         source: 'url',
-        fileName: '链接头像'
+        fileName: '链接头像',
+        avatarTarget
       });
       break;
     }
@@ -1306,12 +1311,16 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         const mode = action === 'save-chat-avatar-original'
           ? 'original'
           : (action === 'save-chat-avatar-compressed' ? 'compressed' : 'cropped');
+        const cropModal = container.querySelector('[data-role="chat-avatar-crop-modal"]');
+        const avatarTarget = String(cropModal?.dataset.avatarTarget || 'character');
         const avatarUrl = await buildChatAvatarFromCropModal(container, mode);
         if (!avatarUrl) {
           renderModalNotice(container, '头像生成失败，请重新选择图片');
           break;
         }
-        const saved = await saveCurrentChatSessionAvatar(container, state, db, avatarUrl);
+        const saved = avatarTarget === 'user'
+          ? await saveCurrentChatSessionUserAvatar(container, state, db, avatarUrl)
+          : await saveCurrentChatSessionAvatar(container, state, db, avatarUrl);
         if (!saved) {
           renderModalNotice(container, '当前会话不存在，无法保存头像');
           break;
@@ -1959,6 +1968,12 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       state.chatPromptSettings.externalContextEnabled = !state.chatPromptSettings.externalContextEnabled;
       await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.externalContextEnabled);
+      break;
+
+    case 'toggle-show-user-avatar-to-role':
+      state.chatPromptSettings.showUserAvatarToRole = !state.chatPromptSettings.showUserAvatarToRole;
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
+      target.classList.toggle('is-on', state.chatPromptSettings.showUserAvatarToRole);
       break;
 
     case 'toggle-time-awareness':

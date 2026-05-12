@@ -35,31 +35,67 @@ export function renderChatMessageSettingsPage({
       </div>
       <div class="msg-settings-body">
         <!-- ==================================================================
-             [区域标注·已完成·当前会话头像设置]
+             [区域标注·已完成·更换会话头像：角色/用户头像与展示开关]
              说明：
-             1. 仅修改当前聊天会话 session.avatar，用于聊天列表与当前聊天界面联系人头像。
-             2. 不写入联系人 contact.avatar，不影响通讯录头像或角色原始头像。
-             3. 保存逻辑由 index.js 写入 DB.js / IndexedDB；禁止 localStorage/sessionStorage。
+             1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar，与聊天设置 showUserAvatarToRole。
+             2. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
+             3. 不使用 localStorage/sessionStorage；不在此区域添加说明性文字。
              ================================================================== -->
-        <section class="msg-settings-card msg-settings-avatar-card">
-          <div class="msg-settings-avatar-main">
-            <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview">
-              ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
-            </div>
-            <div class="msg-settings-avatar-info">
-              <div class="msg-settings-card__title">当前会话联系人头像</div>
-              <div class="msg-settings-card__desc">只应用到聊天列表和当前聊天界面，不会改动通讯录或联系人原始头像。</div>
-            </div>
-          </div>
-          <div class="msg-settings-avatar-actions">
+        <section class="msg-settings-avatar-section">
+          <div class="msg-settings-section-title">更换会话头像</div>
+          <section class="msg-settings-card msg-settings-avatar-card">
             <input data-role="msg-avatar-file-input" type="file" accept="image/*" hidden>
-            <button class="msg-settings-avatar-action" data-action="open-chat-avatar-local-picker" type="button">
-              ${MSG_ICONS.upload}<span>本地上传</span>
-            </button>
-            <button class="msg-settings-avatar-action" data-action="open-chat-avatar-url-modal" type="button">
-              ${MSG_ICONS.link}<span>URL链接</span>
-            </button>
-          </div>
+            <div class="msg-settings-avatar-grid">
+              <div class="msg-settings-avatar-item">
+                <div class="msg-settings-avatar-label">角色头像</div>
+                <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview-character">
+                  ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
+                </div>
+                <div class="msg-settings-avatar-actions">
+                  <button
+                    class="msg-settings-avatar-action"
+                    data-action="open-chat-avatar-local-picker"
+                    data-avatar-target="character"
+                    type="button">
+                    ${MSG_ICONS.upload}<span>本地上传</span>
+                  </button>
+                  <button
+                    class="msg-settings-avatar-action"
+                    data-action="open-chat-avatar-url-modal"
+                    data-avatar-target="character"
+                    type="button">
+                    ${MSG_ICONS.link}<span>URL链接</span>
+                  </button>
+                </div>
+              </div>
+              <div class="msg-settings-avatar-item">
+                <div class="msg-settings-avatar-label">用户头像</div>
+                <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview-user">
+                  ${(session.userAvatar || options.userProfile?.avatar) ? `<img src="${escapeHtml(session.userAvatar || options.userProfile?.avatar || '')}" alt="${escapeHtml(options.userProfile?.nickname || '我')}">` : `<span>${escapeHtml(((options.userProfile?.nickname || '我') || '我').charAt(0).toUpperCase())}</span>`}
+                </div>
+                <div class="msg-settings-avatar-actions">
+                  <button
+                    class="msg-settings-avatar-action"
+                    data-action="open-chat-avatar-local-picker"
+                    data-avatar-target="user"
+                    type="button">
+                    ${MSG_ICONS.upload}<span>本地上传</span>
+                  </button>
+                  <button
+                    class="msg-settings-avatar-action"
+                    data-action="open-chat-avatar-url-modal"
+                    data-avatar-target="user"
+                    type="button">
+                    ${MSG_ICONS.link}<span>URL链接</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="msg-settings-row msg-settings-avatar-switch-row">
+              <div class="msg-settings-card__title">向角色展示头像</div>
+              <button class="msg-ios-switch ${chatSettings.showUserAvatarToRole ? 'is-on' : ''}" data-action="toggle-show-user-avatar-to-role" type="button" aria-label="向角色展示头像"></button>
+            </div>
+          </section>
         </section>
 
         <!-- ==================================================================

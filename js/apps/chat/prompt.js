@@ -976,6 +976,15 @@ export function getDefaultChatPromptSettings() {
     /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
     htmlCardEnabled: false,
     /* ===== 闲谈应用：HTML卡片开关设置 END ===== */
+
+    /* ======================================================================
+       [区域标注·已完成·更换会话头像：向角色展示用户头像开关默认值]
+       说明：
+       1. 该开关仅作用于“当前面具 + 当前聊天对象”的独立聊天设置。
+       2. 开启后，仅在最新一轮用户消息中向角色展示当前会话 userAvatar，并注入简短评论提示。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ====================================================================== */
+    showUserAvatarToRole: false
   };
 }
 
@@ -1020,6 +1029,14 @@ export function normalizeChatPromptSettings(rawSettings) {
     /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
     htmlCardEnabled: Boolean(source.htmlCardEnabled),
     /* ===== 闲谈应用：HTML卡片开关设置 END ===== */
+
+    /* ======================================================================
+       [区域标注·已完成·更换会话头像：向角色展示用户头像开关规范化]
+       说明：
+       1. 该字段只读取当前聊天设置中的 showUserAvatarToRole。
+       2. 不回退到全局资料头像；是否展示完全由当前会话 userAvatar 与当前开关共同决定。
+       ====================================================================== */
+    showUserAvatarToRole: Boolean(source.showUserAvatarToRole)
   };
 }
 
@@ -2103,7 +2120,17 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
     const currentRoundVisualMessages = Array.isArray(currentUserRoundMessages)
       ? currentUserRoundMessages.filter(item => item?.role === 'user' && getMessageVisualUrl(item))
       : [];
-    if (currentRoundVisualMessages.length) {
+    /* ========================================================================
+       [区域标注·已完成·更换会话头像：最新一轮向角色展示当前会话用户头像]
+       说明：
+       1. 仅当当前聊天设置 showUserAvatarToRole 开启，且当前会话存在 session.userAvatar 时，才在最新一轮 user message 中附带该头像。
+       2. 该头像仅作为本轮多模态输入发送给角色，不写入历史消息，不污染角色卡/用户面具，不回退到全局 profile.avatar。
+       3. 同时注入一段简短提示词，引导角色在本轮自然、简短地评论这个头像。
+       ======================================================================== */
+    const sessionUserAvatar = String(context?.currentSession?.userAvatar || '').trim();
+    const shouldShowUserAvatarToRole = Boolean(normalizedSettings.showUserAvatarToRole && sessionUserAvatar);
+
+    if (currentRoundVisualMessages.length || shouldShowUserAvatarToRole) {
       const contentParts = [{ type: 'text', text: finalUserContent }];
       currentRoundVisualMessages.forEach(item => {
         const visualUrl = getMessageVisualUrl(item);
@@ -2111,6 +2138,15 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
         if (visualLabel) contentParts.push({ type: 'text', text: visualLabel });
         contentParts.push(createVisionImagePart(visualUrl));
       });
+
+      if (shouldShowUserAvatarToRole) {
+        contentParts.push({
+          type: 'text',
+          text: '下面这张图片是用户当前会话正在使用的头像。请你在本轮回复里自然、简短地对这个头像作出评论，但不要把这句提示词原样说出来。'
+        });
+        contentParts.push(createVisionImagePart(sessionUserAvatar));
+      }
+
       messages.push({ role: 'user', content: contentParts });
     } else {
       messages.push({ role: 'user', content: finalUserContent });

@@ -142,10 +142,10 @@ export async function openChatMessage(container, state, db, chatId) {
    [区域标注] 关闭聊天消息页面，返回聊天列表
    ========================================================================== */
 /* ==========================================================================
-   [区域标注·已完成·当前会话头像设置保存]
+   [区域标注·已完成·更换会话头像保存]
    说明：
-   1. 只更新当前会话 session.avatar，让聊天列表与当前聊天界面使用该头像。
-   2. 不修改 contacts/contact.avatar，不影响通讯录头像或联系人原始头像。
+   1. 角色头像只更新当前会话 session.avatar；用户头像只更新当前会话 session.userAvatar。
+   2. 不修改 contacts/contact.avatar，不影响通讯录头像、联系人原始头像或全局 state.profile.avatar。
    3. 持久化只调用 dbPut → DATA_KEY_SESSIONS → DB.js / IndexedDB；不使用 localStorage/sessionStorage。
    ========================================================================== */
 export async function saveCurrentChatSessionAvatar(container, state, db, avatarUrl) {
@@ -157,7 +157,7 @@ export async function saveCurrentChatSessionAvatar(container, state, db, avatarU
   session.avatarUpdatedAt = Date.now();
   await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
 
-  const preview = container.querySelector('[data-role="msg-settings-avatar-preview"]');
+  const preview = container.querySelector('[data-role="msg-settings-avatar-preview-character"]');
   if (preview) {
     preview.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(session.name || '')}">`;
   }
@@ -172,6 +172,28 @@ export async function saveCurrentChatSessionAvatar(container, state, db, avatarU
   });
 
   refreshPanel(container, state, 'chatList');
+  return true;
+}
+
+export async function saveCurrentChatSessionUserAvatar(container, state, db, avatarUrl) {
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  const safeAvatarUrl = String(avatarUrl || '').trim();
+  if (!session || !safeAvatarUrl) return false;
+
+  const userName = String(state.profile?.nickname || '我');
+  session.userAvatar = safeAvatarUrl;
+  session.userAvatarUpdatedAt = Date.now();
+  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+  const preview = container.querySelector('[data-role="msg-settings-avatar-preview-user"]');
+  if (preview) {
+    preview.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(userName)}">`;
+  }
+
+  container.querySelectorAll('.msg-bubble__avatar--user').forEach(avatarEl => {
+    avatarEl.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(userName)}">`;
+  });
+
   return true;
 }
 
@@ -330,4 +352,3 @@ export function refreshFavoriteSearchResultsOnly(container, state) {
   const nextGrid = draft.querySelector('.favorite-grid');
   if (nextGrid) currentGrid.innerHTML = nextGrid.innerHTML;
 }
-

@@ -215,13 +215,13 @@ export function showTransferActionModal(container, options = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·当前会话头像设置弹窗]
+   [区域标注·已完成·更换会话头像弹窗：角色/用户头像]
    说明：
-   1. 头像 URL 输入、裁剪预览、原图头像/自动压缩均使用应用内弹窗，不使用原生浏览器弹窗。
-   2. 弹窗只产生待保存头像数据；真正保存由 index.js 更新当前 session.avatar 并写入 DB.js / IndexedDB。
+   1. 角色头像与用户头像的 URL 输入、裁剪预览、原图头像/自动压缩均使用应用内弹窗，不使用原生浏览器弹窗。
+   2. 弹窗只产生待保存头像数据；真正保存由调用方更新当前 session.avatar / session.userAvatar 并写入 DB.js / IndexedDB。
    3. URL 原图模式直接保存 URL；裁剪/压缩模式通过 canvas 输出 data:image/jpeg。
    ========================================================================== */
-export function showChatAvatarUrlModal(container) {
+export function showChatAvatarUrlModal(container, avatarTarget = 'character') {
   const mask = container.querySelector('[data-role="modal-mask"]');
   const panel = container.querySelector('[data-role="modal-panel"]');
   if (!mask || !panel) return;
@@ -232,7 +232,7 @@ export function showChatAvatarUrlModal(container) {
       <span>头像 URL</span>
       <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
     </div>
-    <div class="chat-modal-body">
+    <div class="chat-modal-body" data-role="chat-avatar-url-modal" data-avatar-target="${escapeHtml(String(avatarTarget || 'character'))}">
       <div class="chat-modal-hint">粘贴图片链接后进入裁剪预览。保存后仅更新当前聊天会话头像。</div>
       <input class="chat-modal-search" data-role="chat-avatar-url-input" type="url" placeholder="https://example.com/avatar.png">
       <div class="chat-modal-notice" data-role="modal-notice"></div>
@@ -247,7 +247,7 @@ export function showChatAvatarUrlModal(container) {
   setTimeout(() => panel.querySelector('[data-role="chat-avatar-url-input"]')?.focus(), 30);
 }
 
-export function showChatAvatarCropModal(container, { imageUrl = '', source = 'local', fileName = '' } = {}) {
+export function showChatAvatarCropModal(container, { imageUrl = '', source = 'local', fileName = '', avatarTarget = 'character' } = {}) {
   const mask = container.querySelector('[data-role="modal-mask"]');
   const panel = container.querySelector('[data-role="modal-panel"]');
   const safeImageUrl = String(imageUrl || '').trim();
@@ -261,6 +261,7 @@ export function showChatAvatarCropModal(container, { imageUrl = '', source = 'lo
     </div>
     <div class="chat-modal-body msg-avatar-crop-modal-body"
          data-role="chat-avatar-crop-modal"
+         data-avatar-target="${escapeHtml(String(avatarTarget || 'character'))}"
          data-avatar-source="${escapeHtml(source)}"
          data-avatar-file-name="${escapeHtml(fileName)}"
          data-avatar-original-url="${escapeHtml(safeImageUrl)}">
