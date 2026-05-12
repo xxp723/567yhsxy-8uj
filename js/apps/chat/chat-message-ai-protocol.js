@@ -224,9 +224,14 @@ export function stripAiRuntimeProtocolOrderFields(message = {}) {
   return cleanMessage;
 }
 
-/* ======================================================================== */
-/* 可见文本清理与拆泡 */
-/* ======================================================================== */
+/* ========================================================================
+   [区域标注·已完成·本次闲谈回复拆泡与短句标点口语化]
+   说明：
+   1. 普通文字回复拆泡只按已有换行、显式气泡分隔符、句号/问号/叹号/省略号等自然终止符处理。
+   2. 不再把逗号、顿号、分号当作拆泡依据，避免一句话前半句和后半句被拆进两个气泡。
+   3. 仅对极短语气词末尾单个句号做轻量口语化修正，如“呵。”→“呵”；不改长句、不重写正常标点。
+   4. 本区只影响前端运行时 AI 可见文本清洗与拆泡，不改 DB.js / IndexedDB 持久化结构。
+   ======================================================================== */
 export function cleanAiVisibleBubbleText(text) {
   return stripAiProtocolClosingTags(String(text || ''))
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
@@ -263,6 +268,17 @@ function mergeAiPunctuationOnlyBubbleFragments(parts = []) {
   return merged;
 }
 
+function softenShortToneParticleEnding(text = '') {
+  const value = String(text || '').trim();
+  if (!value) return '';
+
+  const normalizedValue = value.replace(/[“”"'‘’「」『』（）()【】\[\]\s]/g, '');
+  const shortToneParticleRegex = /^(?:呵|哈|哈哈|嘿|哼|嗯|啊|呀|哦|唔|诶|欸|嗷|喔|行|好|行啊|好啊|好呀|是啊|对啊|对呀|嗯嗯|好哦|好喔|好耶|收到|知道了|明白了|可以|可以呀|可以啊|在|在呢|来了|来了呀|拜|拜拜|晚安|早安|安安|QAQ|qaq|QAQ|www|hhh|哈哈哈|嘿嘿|呜|呜呜|唉|诶嘿|欸嘿|呵呵|哈喽|好耶|欧克)$/i;
+  if (!shortToneParticleRegex.test(normalizedValue)) return value;
+
+  return value.replace(/([。\.])$/u, '').trim();
+}
+
 export function splitStrictSentenceBubbles(text) {
   const normalized = stripAiProtocolClosingTags(String(text || ''))
     .replace(/\*\*`?\s*\[回复\]\s*[^：:\n`]+?\s*[：:]\s*/g, '')
@@ -277,7 +293,7 @@ export function splitStrictSentenceBubbles(text) {
       .replace(/([。！？!?]+)(?:\s+|(?=\S))/g, '$1\n')
       .replace(/([…]{2,}|[.。]{3,}|、、、)(?:\s+|(?=\S))/g, '$1\n')
       .split(/\n+/)
-      .map(item => item.trim())
+      .map(item => softenShortToneParticleEnding(item))
       .filter(Boolean)
   );
 }
@@ -315,17 +331,11 @@ export function sanitizeAiVisibleReply(text) {
 }
 
 export function splitSingleBubbleForCount(text) {
-  const value = cleanAiVisibleBubbleText(text);
+  const value = softenShortToneParticleEnding(cleanAiVisibleBubbleText(text));
   if (!value) return [];
 
   const sentenceParts = splitStrictSentenceBubbles(value);
   if (sentenceParts.length > 1) return sentenceParts;
-
-  const commaParts = value
-    .split(/(?<=[，,、；;])\s*/)
-    .map(item => item.trim())
-    .filter(Boolean);
-  if (commaParts.length > 1) return commaParts;
 
   const spaceParts = value
     .split(/\s+/)
@@ -358,16 +368,9 @@ export function splitAiReplyIntoBubbles(text, chatSettings = {}) {
         .filter(Boolean);
 
   parts = parts
-    .map(part => cleanAiVisibleBubbleText(part))
+    .map(part => softenShortToneParticleEnding(cleanAiVisibleBubbleText(part)))
     .filter(Boolean)
     .flatMap(part => splitStrictSentenceBubbles(part));
-
-  if (parts.length <= 1 && raw.length > 28) {
-    parts = raw
-      .split(/(?<=[，,、；;])\s*/)
-      .map(item => cleanAiVisibleBubbleText(item))
-      .filter(Boolean);
-  }
 
   while (parts.length < min) {
     let bestIndex = -1;
