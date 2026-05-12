@@ -10,9 +10,7 @@ import {
   TAB_ICONS,
   DATA_KEY_SESSIONS,
   DATA_KEY_MESSAGES_PREFIX,
-  ARCHIVE_DB_RECORD_ID,
   dbPut,
-  dbGetArchiveData,
   escapeHtml,
   normalizeStickerData,
   normalizeWalletData,
@@ -168,6 +166,23 @@ import {
   refreshCurrentMessageListOnly as refreshCurrentMessageListOnlyModule,
   refreshCurrentSessionLastMessage as refreshCurrentSessionLastMessageModule
 } from './chat-message-render.js';
+import {
+  DATA_KEY_CHAT_CONSOLE,
+  appendChatConsoleRuntimeLog,
+  persistChatConsoleRuntimeLogs
+} from './chat-message-console.js';
+import { refreshArchiveContextForAiRequest } from './chat-message-archive-context.js';
+import {
+  normalizeStickerPanelData,
+  getStickerPanelGroups,
+  getVisibleStickerPanelItems,
+  getStickerInputSuggestionItems,
+  renderStickerInputSuggestItemsHtml,
+  renderStickerInputSuggestDockHtml,
+  syncStickerInputSuggestions as syncStickerInputSuggestionsModule,
+  renderMsgStickerPanelGrid as renderMsgStickerPanelGridModule,
+  syncMountedStickerGroupButtons as syncMountedStickerGroupButtonsModule
+} from './chat-message-stickers.js';
 
 /* ==========================================================================
    [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
@@ -227,108 +242,6 @@ if (!window.__miniphone_card_message_bridge_listener__) {
   });
 }
 
-/* ========================================================================
-   [区域标注·已完成·本次控制台持久显示与后台记录修复] 聊天控制台日志存储键与工具
-   说明：
-   1. 与 index.js 保持同一 IndexedDB 键规则，严格只走 DB.js（dbPut）。
-   2. 日志队列最多 500 条，超出自动删除旧日志。
-   3. 控制台开关只控制聊天页日志抽屉是否显示；当前会话日志始终在后台记录，方便用户随时打开查看。
-   ======================================================================== */
-const DATA_KEY_CHAT_CONSOLE = (maskId, chatId) => `chat_console::${maskId || 'default'}::${chatId || 'none'}`;
-
-function appendChatConsoleRuntimeLog(state, level, text) {
-  if (!state?.currentChatId) return false;
-  const payload = String(text || '').trim();
-  if (!payload) return false;
-  const ts = Date.now();
-  const entry = {
-    id: `log_${ts}_${Math.random().toString(16).slice(2)}`,
-    ts,
-    time: new Date(ts).toLocaleTimeString('zh-CN', { hour12: false }),
-    level: String(level || 'info').toLowerCase(),
-    text: payload
-  };
-  state.chatConsoleLogs = [...(Array.isArray(state.chatConsoleLogs) ? state.chatConsoleLogs : []), entry].slice(-500);
-  return true;
-}
-
-async function persistChatConsoleRuntimeLogs(state, db) {
-  if (!state?.currentChatId) return;
-  await dbPut(
-    db,
-    DATA_KEY_CHAT_CONSOLE(state.activeMaskId, state.currentChatId),
-    Array.isArray(state.chatConsoleLogs) ? state.chatConsoleLogs.slice(-500) : []
-  );
-}
-
-/* ========================================================================
-   [区域标注·已完成·本次角色卡/用户面具上下文修复] AI 请求前刷新档案上下文
-   说明：
-   1. 每次真正调用 AI 前，都通过 dbGetArchiveData → DB.js / IndexedDB 读取最新档案数据。
-   2. 同步刷新角色卡、用户面具、配角、关系网络运行时缓存，避免闲谈应用启动后的旧缓存/空缓存传给 prompt.js。
-   3. 同时写入聊天控制台排查日志：角色卡/用户面具是否命中、设定长度、双方关系条数。
-   4. 读取失败时仅沿用当前运行时 state，保证聊天流程不中断。
-   ======================================================================== */
-async function refreshArchiveContextForAiRequest(state, db, session = {}) {
-  let latestArchive = null;
-
-  try {
-    latestArchive = await dbGetArchiveData(db, ARCHIVE_DB_RECORD_ID);
-  } catch (error) {
-    appendChatConsoleRuntimeLog(state, 'warn', `档案上下文读取失败，沿用当前缓存：${error?.message || '未知错误'}`);
-  }
-
-  const archiveData = latestArchive && typeof latestArchive === 'object' ? latestArchive : {};
-  const latestMasks = Array.isArray(archiveData.masks) ? archiveData.masks : state.archiveMasks;
-  const latestCharacters = Array.isArray(archiveData.characters) ? archiveData.characters : state.archiveCharacters;
-  const latestSupportingRoles = Array.isArray(archiveData.supportingRoles) ? archiveData.supportingRoles : state.archiveSupportingRoles;
-  const latestRelations = Array.isArray(archiveData.relations) ? archiveData.relations : state.archiveRelations;
-
-  state.archiveMasks = Array.isArray(latestMasks) ? latestMasks : [];
-  state.archiveCharacters = Array.isArray(latestCharacters) ? latestCharacters : [];
-  state.archiveSupportingRoles = Array.isArray(latestSupportingRoles) ? latestSupportingRoles : [];
-  state.archiveRelations = Array.isArray(latestRelations) ? latestRelations : [];
-
-  const activeMaskId = String(state.activeMaskId || archiveData.activeMaskId || '').trim();
-  const currentContact = (state.contacts || []).find(contact => String(contact.id) === String(session.id)) || null;
-  const roleIdCandidates = [
-    currentContact?.roleId,
-    session?.roleId,
-    currentContact?.id,
-    session?.id
-  ].map(value => String(value || '').trim()).filter(Boolean);
-
-  const matchedCharacter = state.archiveCharacters.find(character => roleIdCandidates.includes(String(character?.id || '').trim())) || null;
-  const matchedMask = state.archiveMasks.find(mask => String(mask?.id || '').trim() === activeMaskId) || null;
-
-  const countDirectRelations = (ownerType, ownerId) => {
-    const safeOwnerId = String(ownerId || '').trim();
-    if (!safeOwnerId) return 0;
-    return state.archiveRelations.filter(relation => (
-      (String(relation?.ownerType || '') === ownerType && String(relation?.ownerId || '') === safeOwnerId)
-      || (String(relation?.targetType || '') === ownerType && String(relation?.targetId || '') === safeOwnerId)
-    )).length;
-  };
-
-  const characterSettingLength = String(matchedCharacter?.personalitySetting || '').trim().length;
-  const maskSettingLength = String(matchedMask?.personalitySetting || '').trim().length;
-  const characterRelationCount = countDirectRelations('character', matchedCharacter?.id);
-  const maskRelationCount = countDirectRelations('mask', matchedMask?.id);
-
-  appendChatConsoleRuntimeLog(
-    state,
-    'info',
-    `档案上下文刷新：角色卡=${matchedCharacter ? '已匹配' : '未匹配'}，人物设定长度=${characterSettingLength}，角色关系=${characterRelationCount}；用户面具=${matchedMask ? '已匹配' : '未匹配'}，用户设定长度=${maskSettingLength}，面具关系=${maskRelationCount}`
-  );
-
-  return {
-    activeMaskId,
-    masks: state.archiveMasks,
-    characters: state.archiveCharacters,
-    supportingRoles: state.archiveSupportingRoles,
-    relations: state.archiveRelations
-  };
-}
 
 /* ==========================================================================
    [区域标注·已完成·本次拆分] IconPark 图标 SVG 定义
@@ -429,123 +342,14 @@ function renderChatMessageSearchPanelHtml(session = {}, messages = [], options =
 }
 
 /* ==========================================================================
-   [区域标注·本次需求3] 聊天页表情包面板数据工具
-   说明：All 为固定默认分组；输入栏表情包面板与聊天设置“表情包挂载”共用。
-/* ========================================================================== */
-function normalizeStickerPanelData(rawData) {
-  const source = rawData && typeof rawData === 'object' ? rawData : {};
-  const groups = Array.isArray(source.groups)
-    ? source.groups
-        .map(group => ({
-          id: String(group?.id || '').trim(),
-          name: String(group?.name || '').trim()
-        }))
-        .filter(group => group.id && group.name)
-    : [];
-  const validGroupIds = new Set(['all', ...groups.map(group => group.id)]);
-  const rawItems = Array.isArray(source.items)
-    ? source.items
-    : (Array.isArray(source.stickers) ? source.stickers : []);
-  const items = rawItems
-    .map(item => ({
-      id: String(item?.id || '').trim(),
-      groupId: validGroupIds.has(String(item?.groupId || 'all')) ? String(item?.groupId || 'all') : 'all',
-      name: String(item?.name || '').trim(),
-      url: String(item?.url || '').trim()
-    }))
-    .filter(item => item.id && item.name && item.url);
-
-  return { groups, items };
-}
-
-function getStickerPanelGroups(rawData) {
-  const data = normalizeStickerPanelData(rawData);
-  return [{ id: 'all', name: 'All' }, ...data.groups];
-}
-
-function getVisibleStickerPanelItems(rawData, groupId = 'all') {
-  const data = normalizeStickerPanelData(rawData);
-  if (groupId === 'all') return data.items;
-  return data.items.filter(item => item.groupId === groupId);
-}
-
-/* ========================================================================
-   [区域标注·已完成·本次输入框表情包联想按命中显示与防闪屏修复] 输入关键词关联表情包工具
+   [区域标注·已完成·本次拆分] 聊天页表情包面板与输入联想子模块 facade
    说明：
-   1. 用户在聊天输入框打字时，只按表情包名称包含关系联想：输入“哭”匹配名称含“哭”的表情包，输入“哭哭”只匹配名称含“哭哭”的表情包。
-   2. 只有存在命中的表情包时才显示联想窗口；无输入或无命中时直接隐藏，不显示空状态。
-   3. 联想窗口只展示表情包列表，不再显示“关联表情包”标题和右侧关联词文字。
-   4. 输入变化时优先局部更新已有 scroller 内容，不反复删除并重建整个窗口，避免输入时闪屏。
-   5. 联想结果直接来自当前运行时 state.stickerData / IndexedDB 已加载数据，不读取 localStorage/sessionStorage，不做双份存储兜底。
-   6. 本区域只做展示与局部 DOM 同步，不按文本长度过滤字段。
-   ======================================================================== */
-function getStickerInputSuggestionItems(rawData, keyword = '') {
-  const query = String(keyword || '').trim().toLowerCase();
-  if (!query) return [];
-  const data = normalizeStickerPanelData(rawData);
-  return data.items
-    .filter(item => String(item.name || '').toLowerCase().includes(query))
-    .slice(0, 12);
-}
-
-function renderStickerInputSuggestItemsHtml(items = []) {
-  return (Array.isArray(items) ? items : []).map(item => `
-    <button class="msg-sticker-suggest__item"
-            data-action="send-msg-sticker"
-            data-sticker-id="${escapeHtml(item.id)}"
-            type="button"
-            title="${escapeHtml(item.name)}">
-      <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
-      <span>${escapeHtml(item.name)}</span>
-    </button>
-  `).join('');
-}
-
-function renderStickerInputSuggestDockHtml(keyword = '', rawData = {}) {
-  const query = String(keyword || '').trim();
-  const items = getStickerInputSuggestionItems(rawData, query);
-  if (!query || !items.length) return '';
-
-  return `
-    <div class="msg-sticker-suggest" data-role="msg-sticker-suggest" data-suggest-keyword="${escapeHtml(query)}">
-      <div class="msg-sticker-suggest__scroller">
-        ${renderStickerInputSuggestItemsHtml(items)}
-      </div>
-    </div>
-  `;
-}
-
+   1. 表情包面板分组、联想结果与局部刷新逻辑已拆分到 chat-message-stickers.js。
+   2. 本文件保留同名函数接线，避免影响既有调用方。
+   3. 只使用当前运行时 state.stickerData / IndexedDB 已加载数据，不使用 localStorage/sessionStorage。
+   ========================================================================== */
 export function syncStickerInputSuggestions(container, state, keyword = '') {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const shell = msgWrap?.querySelector('.msg-input-shell');
-  if (!shell) return false;
-
-  const query = String(keyword || '').trim();
-  const items = getStickerInputSuggestionItems(state.stickerData, query);
-  const existingSuggest = shell.querySelector('[data-role="msg-sticker-suggest"]');
-
-  if (!query || !items.length) {
-    existingSuggest?.remove();
-    return true;
-  }
-
-  const nextItemsHtml = renderStickerInputSuggestItemsHtml(items);
-  if (existingSuggest) {
-    existingSuggest.dataset.suggestKeyword = query;
-    const scroller = existingSuggest.querySelector('.msg-sticker-suggest__scroller');
-    if (scroller) {
-      scroller.innerHTML = nextItemsHtml;
-      return true;
-    }
-    existingSuggest.outerHTML = renderStickerInputSuggestDockHtml(query, state.stickerData);
-    return true;
-  }
-
-  const inputBar = shell.querySelector('.msg-input-bar');
-  if (!inputBar) return false;
-
-  inputBar.insertAdjacentHTML('beforebegin', renderStickerInputSuggestDockHtml(query, state.stickerData));
-  return true;
+  return syncStickerInputSuggestionsModule(container, state, keyword);
 }
 
 /* ==========================================================================
@@ -3138,51 +2942,12 @@ export function syncMessageDockOpenState(container, state) {
 
 
 export function renderMsgStickerPanelGrid(container, state) {
-  const msgWrap = container.querySelector('[data-role="msg-page-wrap"]');
-  const panel = msgWrap?.querySelector('[data-role="msg-sticker-panel"]');
-  const grid = panel?.querySelector('.msg-sticker-panel__grid');
-  if (!grid) {
-    renderCurrentChatMessage(container, state, { keepScroll: true });
-    return;
-  }
-
-  const data = normalizeStickerData(state.stickerData);
-  const groupId = String(state.stickerPanelGroupId || 'all');
-  const visibleItems = groupId === 'all'
-    ? data.items
-    : data.items.filter(item => String(item.groupId || 'all') === groupId);
-
-  panel.querySelectorAll('.msg-sticker-panel__group-btn').forEach(btn => {
-    btn.classList.toggle('is-active', String(btn.dataset.stickerGroupId || 'all') === groupId);
-  });
-
-  grid.innerHTML = visibleItems.length
-    ? visibleItems.map(item => `
-        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 START ===== -->
-        <button class="msg-sticker-panel__item"
-                data-action="send-msg-sticker"
-                data-sticker-id="${escapeHtml(item.id)}"
-                type="button"
-                title="${escapeHtml(item.name)}">
-          <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}">
-          <span>${escapeHtml(item.name)}</span>
-        </button>
-        <!-- ===== 闲谈聊天底栏防闪屏：局部刷新表情包项 END ===== -->
-      `).join('')
-    : `<div class="msg-sticker-panel__empty">当前分组暂无表情包</div>`;
+  return renderMsgStickerPanelGridModule(container, state, renderCurrentChatMessage);
 }
 
 /* ========================================================================== */
 export function syncMountedStickerGroupButtons(container, state) {
-  const selectedSet = new Set(
-    Array.isArray(state.chatPromptSettings?.mountedStickerGroupIds)
-      ? state.chatPromptSettings.mountedStickerGroupIds.map(String)
-      : []
-  );
-
-  container.querySelectorAll('[data-action="toggle-mounted-sticker-group"]').forEach(btn => {
-    btn.classList.toggle('is-active', selectedSet.has(String(btn.dataset.stickerGroupId || '')));
-  });
+  return syncMountedStickerGroupButtonsModule(container, state);
 }
 
 /* ========================================================================== */
