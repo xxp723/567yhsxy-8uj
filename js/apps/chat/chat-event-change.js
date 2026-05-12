@@ -20,11 +20,21 @@ import {
   renderModalNotice,
   closeModal
 } from './chat-utils.js';
+/* ==========================================================================
+   [区域标注·已完成·本次闲谈启动失败修复] 修正 refreshCurrentSessionLastMessage 导入来源
+   说明：
+   1. refreshCurrentSessionLastMessage 与 resetMessageSelectionState 实际由 chat-message.js facade 导出，不由 chat-state.js 导出。
+   2. 之前错误地从 chat-state.js 导入，导致闲谈入口动态 import 在 ESM 实例化阶段失败。
+   3. 本区域只修复启动失败所需的导入来源，不改动其它业务逻辑与持久化链路。
+   4. 持久化仍仅使用 DB.js / IndexedDB，不引入 localStorage/sessionStorage。
+   ========================================================================== */
 import {
   persistCurrentMessages,
   renderCurrentChatMessage,
   sendImageMessage,
-  showChatAvatarCropModal
+  showChatAvatarCropModal,
+  refreshCurrentSessionLastMessage,
+  resetMessageSelectionState
 } from './chat-message.js';
 import {
   normalizeMomentsComposeDraft,
@@ -41,9 +51,7 @@ import {
   showChatExportImportNoticeModal
 } from './chat-export-import.js';
 import {
-  CHAT_MESSAGE_INITIAL_VISIBLE_COUNT,
-  resetMessageSelectionState,
-  refreshCurrentSessionLastMessage
+  CHAT_MESSAGE_INITIAL_VISIBLE_COUNT
 } from './chat-state.js';
 
 /* ==========================================================================
