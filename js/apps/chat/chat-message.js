@@ -7,19 +7,14 @@
  */
 
 import {
-  TAB_ICONS,
   DATA_KEY_SESSIONS,
   DATA_KEY_MESSAGES_PREFIX,
   dbPut,
-  escapeHtml,
   normalizeStickerData,
   normalizeWalletData,
   persistWalletData
 } from './chat-utils.js';
 import { chat } from './prompt.js';
-import { getVisibleChatSessions } from './chat-list.js';
-import { MSG_ICONS } from './chat-message-icons.js';
-import { renderChatMessageSettingsPage } from './chat-message-settings.js';
 /* ==========================================================================
    [区域标注·已完成·全局API报错弹窗接入] 导入应用内 API 报错弹窗
    说明：
@@ -28,10 +23,38 @@ import { renderChatMessageSettingsPage } from './chat-message-settings.js';
    3. 弹窗只操作运行时 DOM，不写入聊天记录，不涉及持久化存储。
    ========================================================================== */
 import { showApiErrorModal } from '../../core/ui/components/ApiErrorModal.js';
+import { ensureChatHtmlCardMessageBridge } from './chat-message-card-bridge.js';
 import {
-  extractHtmlCardProtocolBlocks,
-  sanitizeHtmlCardDocumentForSrcdoc
-} from './chat-html-card.js';
+  buildPromptPayloadForLatestUserRound as buildPromptPayloadForLatestUserRoundModule
+} from './chat-message-prompt-payload.js';
+import {
+  bindAsideSegmentsToAiMessages as bindAsideSegmentsToAiMessagesModule,
+  resolveStickerProtocolTarget as resolveStickerProtocolTargetModule,
+  normalizeStickerLooseMatchText as normalizeStickerLooseMatchTextModule,
+  findLooseStickerTargetFromText as findLooseStickerTargetFromTextModule,
+  createStickerMessagePatchFromTarget as createStickerMessagePatchFromTargetModule,
+  repairAiMessageFormatIfPossible as repairAiMessageFormatIfPossibleModule,
+  repairAiTextMessageFormatIfPossible as repairAiTextMessageFormatIfPossibleModule,
+  repairAiQuoteMessageFormatIfPossible as repairAiQuoteMessageFormatIfPossibleModule,
+  repairAiVoiceMessageFormatIfPossible as repairAiVoiceMessageFormatIfPossibleModule,
+  repairAiAsideMessageFormatIfPossible as repairAiAsideMessageFormatIfPossibleModule,
+  repairAiSystemTipFormatIfPossible as repairAiSystemTipFormatIfPossibleModule,
+  cleanAiProtocolBlockContent as cleanAiProtocolBlockContentModule,
+  sortAiMessagesByRuntimeProtocolOrder as sortAiMessagesByRuntimeProtocolOrderModule,
+  stripAiRuntimeProtocolOrderFields as stripAiRuntimeProtocolOrderFieldsModule,
+  filterCurrentUserRoundEchoFromAiMessages as filterCurrentUserRoundEchoFromAiMessagesModule,
+  parseAiTransferProtocolPayload as parseAiTransferProtocolPayloadModule,
+  resolveAiQuotePayloadById as resolveAiQuotePayloadByIdModule,
+  extractAiProtocolBlocks as extractAiProtocolBlocksModule,
+  buildAiReplyMessages as buildAiReplyMessagesModule,
+  splitAiReplyIntoBubbles as splitAiReplyIntoBubblesModule,
+  sanitizeAiVisibleReply as sanitizeAiVisibleReplyModule,
+  extractProtocolReplyContents as extractProtocolReplyContentsModule,
+  getReplyBubbleCountRange as getReplyBubbleCountRangeModule,
+  cleanAiVisibleBubbleText as cleanAiVisibleBubbleTextModule,
+  splitSingleBubbleForCount as splitSingleBubbleForCountModule,
+  enforceAiReplyMessageCount as enforceAiReplyMessageCountModule
+} from './chat-message-ai-protocol.js';
 /* ==========================================================================
    [区域标注·已完成·礼物板块集成] 导入独立礼物模块
    说明：
@@ -40,11 +63,7 @@ import {
    3. 持久化仍由 DB.js / IndexedDB 完成，禁止 localStorage/sessionStorage。
    ========================================================================== */
 import {
-  createAiGiftMessageFromProtocol,
-  getGiftMessageDisplayText,
-  isGiftMessage,
-  renderGiftBubble,
-  renderGiftFeatureButton
+  getGiftMessageDisplayText
 } from './chat-gift.js';
 /* ==========================================================================
    [区域标注·已完成·文字图板块集成] 导入独立文字图模块
@@ -55,26 +74,8 @@ import {
    4. 持久化仍统一通过 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
    ========================================================================== */
 import {
-  createAiTextImageMessageFromProtocol,
-  isTextImageMessage,
-  renderTextImageBubble,
-  renderTextImageFeatureButton
+  isTextImageMessage
 } from './chat-text-image.js';
-/* ==========================================================================
-   [区域标注·已完成·语音板块集成] 导入独立语音模块
-   说明：
-   1. 咖啡功能区“语音”入口、模拟语音气泡与 AI 可见语音上下文由 chat-voice.js 独立维护。
-   2. 本文件只负责消息页入口挂载、消息摘要与气泡渲染衔接。
-   3. 语音消息随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-   ========================================================================== */
-import {
-  createAiVoiceMessageFromProtocol,
-  getVoiceMessageDisplayText,
-  isVoiceMessage,
-  parseAiVoiceProtocolPayload,
-  renderVoiceBubble,
-  renderVoiceFeatureButton
-} from './chat-voice.js';
 /* ==========================================================================
    [区域标注·已完成·心声面板集成] 导入心声模块提取函数
    说明：
@@ -91,23 +92,13 @@ import {
    说明：
    1. extractAsideFromRawText — 从 AI 原始回复中提取 [旁白]...[/旁白] 标记内容。
    2. renderAsideBubbleHtml — 生成旁白气泡居中加粗 HTML。
-   3. renderAsideExitButtonHtml — 顶栏爱心退出按钮 HTML。
-   4. isAsideModeActive — 检测当前 state 是否处于旁白模式。
+   3. isAsideModeActive — 检测当前 state 是否处于旁白模式。
    ========================================================================== */
 import {
   extractAsideFromRawText,
   renderAsideBubbleHtml,
-  renderAsideExitButtonHtml,
   isAsideModeActive
 } from './chat-aside.js';
-/* ==========================================================================
-   [区域标注·已完成·语言翻译] 导入语言翻译模块
-   ========================================================================== */
-import {
-  renderTranslationBubbleHtml,
-  normalizeTranslationSettings
-} from './chat-translation.js';
-
 /* ==========================================================================
    [区域标注·已完成·本次拆分] 聊天消息页弹窗子模块接线
    说明：
@@ -167,95 +158,37 @@ import {
   refreshCurrentSessionLastMessage as refreshCurrentSessionLastMessageModule
 } from './chat-message-render.js';
 import {
-  DATA_KEY_CHAT_CONSOLE,
   appendChatConsoleRuntimeLog,
   persistChatConsoleRuntimeLogs
 } from './chat-message-console.js';
 import { refreshArchiveContextForAiRequest } from './chat-message-archive-context.js';
 import {
-  normalizeStickerPanelData,
-  getStickerPanelGroups,
-  getVisibleStickerPanelItems,
-  getStickerInputSuggestionItems,
-  renderStickerInputSuggestItemsHtml,
-  renderStickerInputSuggestDockHtml,
   syncStickerInputSuggestions as syncStickerInputSuggestionsModule,
   renderMsgStickerPanelGrid as renderMsgStickerPanelGridModule,
   syncMountedStickerGroupButtons as syncMountedStickerGroupButtonsModule
 } from './chat-message-stickers.js';
 
 /* ==========================================================================
-   [区域标注·已完成·收藏页HTML卡片iframe高度自适应] postMessage 监听器
+   [区域标注·已完成·本次拆分] 聊天消息页 HTML 卡片 iframe 全局桥接接线
    说明：
-   1. iframe 内部的高度上报脚本（chat-html-card.js 注入）通过 postMessage 报告 body 实际高度。
-   2. 已把收藏页 .favorite-html-card__iframe 纳入同一高度桥接，展开后按真实 HTML 内容高度自适应，不再依赖固定比例占位。
-   3. iframe 内部的交互桥接脚本通过 __miniphone_card_interaction__ 上报按钮/选择等互动。
-   4. 高度消息只调整对应 iframe 高度；交互消息转为冒泡 CustomEvent，交给 index.js 写入 DB.js / IndexedDB。
-   5. 全局只注册一次，避免重复绑定；使用 event.source 精确匹配 iframe.contentWindow。
+   1. 原 chat-message.js 内联的 postMessage 监听器已下沉到 chat-message-card-bridge.js。
+   2. 本文件只保留一次性初始化调用，继续保持原有高度自适应、双击收藏与交互事件桥接行为。
+   3. 不改动任何持久化路径；相关交互仍由上层统一写入 DB.js / IndexedDB。
    ========================================================================== */
-if (!window.__miniphone_card_message_bridge_listener__) {
-  window.__miniphone_card_message_bridge_listener__ = true;
-  window.addEventListener('message', (event) => {
-    const data = event.data;
-    if (!data || !String(data.type || '').startsWith('__miniphone_card_')) return;
-
-    const iframes = document.querySelectorAll('.msg-html-card-bubble__frame, .favorite-html-card__iframe');
-    for (const iframe of iframes) {
-      if (iframe.contentWindow !== event.source) continue;
-
-      if (data.type === '__miniphone_card_height__' && data.height) {
-        iframe.style.height = Math.ceil(data.height) + 'px';
-        break;
-      }
-
-      /* ======================================================================
-         [区域标注·已完成·HTML卡片iframe双击收藏桥接]
-         说明：iframe 内部 dblclick 不能原生冒泡到聊天页，这里转成父页面可捕获的 dblclick，
-               复用 index.js 的 HTML 卡片收藏逻辑，持久化仍只走 DB.js / IndexedDB。
-         ====================================================================== */
-      if (data.type === '__miniphone_card_dblclick__') {
-        iframe.dispatchEvent(new MouseEvent('dblclick', {
-          bubbles: true,
-          cancelable: true,
-          view: window
-        }));
-        break;
-      }
-
-      if (data.type === '__miniphone_card_interaction__') {
-        iframe.dispatchEvent(new CustomEvent('miniphone-html-card-interaction', {
-          bubbles: true,
-          detail: {
-            messageId: String(iframe.dataset.messageId || ''),
-            text: String(data.text || '').trim(),
-            value: String(data.value || '').trim(),
-            checked: Boolean(data.checked),
-            tagName: String(data.tagName || '').trim(),
-            role: String(data.role || '').trim(),
-            eventType: String(data.eventType || 'click').trim(),
-            timestamp: Number(data.timestamp || Date.now()) || Date.now()
-          }
-        }));
-        break;
-      }
-    }
-  });
-}
+ensureChatHtmlCardMessageBridge();
 
 
 /* ==========================================================================
    [区域标注·已完成·本次拆分] IconPark 图标 SVG 定义
    说明：
-   1. 聊天消息页面用到的所有按键图标已拆至 chat-message-icons.js。
-   2. 本文件只通过 import { MSG_ICONS } 引用，不再维护内联 SVG 常量。
+   1. 聊天消息页面用到的按键图标 SVG 常量已拆至 chat-message-icons.js。
+   2. 本文件不再维护内联 SVG 常量，图标渲染职责已下沉到对应子模块。
    3. 图标模块仅导出静态 SVG，不涉及持久化存储。
    ========================================================================== */
 
 /* ==========================================================================
    [区域标注] 工具函数
 /* ========================================================================== */
-/* escapeHtml 已从 chat-utils.js 导入，不再本地重复定义 */
-
 function formatMsgTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -515,70 +448,14 @@ async function applyAiPendingTransferDecisions(state, db, rawText) {
 }
 
 /* ========================================================================
-   [区域标注·已完成·旁白固定/穿插位置修复] 当前轮旁白段落绑定到 AI 消息
+   [区域标注·已完成·本次拆分] 当前轮旁白段落绑定 facade
    说明：
-   1. 这是本次旁白位置修正的核心：在 AI 消息入列前就把旁白段落绑定到正确消息对象。
-   2. 固定模式 top：所有旁白段落绑定到本轮第一条 assistant 消息的 before 位置，
-      因此显示为“用户消息下方、本轮 AI/角色所有回复最上方”。
-   3. 穿插模式 interleave：根据 AI 原始文本中多段 [旁白] 与 [回复]/[表情]/[语音] 等协议头的先后顺序，
-      把旁白绑定到下一条可见 AI 消息前；若旁白位于本轮末尾，则绑定到最后一条 AI 消息后。
-   4. 只修改当前运行时消息对象字段 asideText/asideSegments，消息落库仍随 currentMessages 统一写入 DB.js / IndexedDB。
+   1. 旁白固定/穿插位置绑定逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件只保留薄接线层，继续维持 sendMessage() 现有调用方式不变。
+   3. 不改动任何 DB.js / IndexedDB 持久化路径。
    ======================================================================== */
 function bindAsideSegmentsToAiMessages(aiMessages = [], asideSegments = [], displayMode = 'top', rawTextWithAside = '') {
-  const messages = Array.isArray(aiMessages) ? aiMessages.map(message => ({ ...message })) : [];
-  const segments = (Array.isArray(asideSegments) ? asideSegments : [])
-    .map((segment, index) => ({
-      id: String(segment?.id || `aside_segment_${index + 1}`),
-      text: String(segment?.text || '').trim(),
-      startIndex: Number(segment?.startIndex || 0) || 0,
-      endIndex: Number(segment?.endIndex || segment?.startIndex || 0) || 0
-    }))
-    .filter(segment => segment.text);
-
-  if (!messages.length || !segments.length) return messages;
-
-  const attachSegment = (messageIndex, segment, placement = 'before') => {
-    const index = Math.max(0, Math.min(messages.length - 1, Number(messageIndex || 0) || 0));
-    const target = messages[index];
-    const normalizedPlacement = placement === 'after' ? 'after' : 'before';
-    const nextSegment = {
-      id: `${segment.id}_${normalizedPlacement}`,
-      text: segment.text,
-      placement: normalizedPlacement
-    };
-    target.asideSegments = [...(Array.isArray(target.asideSegments) ? target.asideSegments : []), nextSegment];
-    target.asideText = getAsideSegmentsFromMessage(target).map(item => item.text).join('\n');
-  };
-
-  const firstAssistantIndex = messages.findIndex(message => message?.role === 'assistant');
-  const safeFirstIndex = firstAssistantIndex >= 0 ? firstAssistantIndex : 0;
-
-  if (String(displayMode || 'top') !== 'interleave') {
-    segments.forEach(segment => attachSegment(safeFirstIndex, segment, 'before'));
-    return messages;
-  }
-
-  const source = String(rawTextWithAside || '');
-  const protocolMarkerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音|文字图)\s*】)\s*/g;
-  const protocolMarkers = [...source.matchAll(protocolMarkerRegex)]
-    .map(match => Number(match.index || 0))
-    .sort((a, b) => a - b);
-
-  if (!protocolMarkers.length) {
-    segments.forEach((segment, index) => attachSegment(Math.min(index, messages.length - 1), segment, 'before'));
-    return messages;
-  }
-
-  segments.forEach(segment => {
-    const markersBefore = protocolMarkers.filter(position => position < segment.startIndex).length;
-    if (markersBefore >= messages.length) {
-      attachSegment(messages.length - 1, segment, 'after');
-      return;
-    }
-    attachSegment(markersBefore, segment, 'before');
-  });
-
-  return messages;
+  return bindAsideSegmentsToAiMessagesModule(aiMessages, asideSegments, displayMode, rawTextWithAside);
 }
 
 /* ========================================================================== */
@@ -979,17 +856,17 @@ export function getMountedStickerItems(state) {
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·本次拆分] 表情协议匹配与消息修复 facade
+   说明：
+   1. 表情协议目标归一化、宽松匹配与 AI 表情消息修复逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件继续保留原导出名，避免影响既有调用方与格式修复入口。
+   3. 不改动任何 DB.js / IndexedDB 持久化路径。
+   ======================================================================== */
 export function getStickerProtocolCandidates(token) {
   const raw = String(token || '').trim();
   if (!raw) return [];
 
-  /* ========================================================================
-     [区域标注·本次需求2] AI 表情包协议目标强力归一化
-     说明：
-     1. 兼容模型把“资源ID：xxx / 表情名：xxx / xxx”混写进 [表情] 内容。
-     2. 只在已挂载表情包中匹配；不编造、不兜底到其它存储。
-     3. 目标是防止 AI 表情包因轻微掉格式而在聊天界面显示成纯文本协议。
-     ======================================================================== */
   const cleaned = raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/[`*_]+/g, '')
@@ -1016,360 +893,62 @@ export function getStickerProtocolCandidates(token) {
   ));
 }
 
-
 export function resolveStickerProtocolTarget(token, state) {
-  const candidates = getStickerProtocolCandidates(token);
-  if (!candidates.length) return null;
-
-  const candidateItems = getMountedStickerItems(state);
-  for (const normalizedToken of candidates) {
-    const byId = candidateItems.find(item => String(item.id) === normalizedToken);
-    if (byId) return byId;
-
-    const byName = candidateItems.find(item => String(item.name) === normalizedToken);
-    if (byName) return byName;
-  }
-
-  return null;
+  return resolveStickerProtocolTargetModule(token, state);
 }
 
 /* ========================================================================== */
 export function normalizeStickerLooseMatchText(value) {
-  return String(value || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/[`*_#"“”"'《》（）()\[\]【】{}]/g, '')
-    .replace(/(?:资源\s*ID|资源Id|表情名|名称|表情包|表情|贴纸|sticker|发送|发个|发一张|来个|给你|我发|刚才|点错了|没发出去|这回|看清楚|看看|吧|啊|呀|呢|了)/gi, '')
-    .replace(/[：:；;，,。.!！？?\s-]+/g, '')
-    .toLowerCase()
-    .trim();
+  return normalizeStickerLooseMatchTextModule(value);
 }
 
 
 export function findLooseStickerTargetFromText(text, state) {
-  const raw = String(text || '').trim();
-  if (!raw) return null;
-
-  const exact = resolveStickerProtocolTarget(raw, state);
-  if (exact) return exact;
-
-  const mountedItems = getMountedStickerItems(state);
-  if (!mountedItems.length) return null;
-
-  const hasStickerIntent = /表情|表情包|贴纸|sticker_|资源\s*ID|资源Id|动图|发.*图|发.*包/i.test(raw);
-  const rawLower = raw.toLowerCase();
-
-  const byId = mountedItems.find(item => {
-    const id = String(item.id || '').trim();
-    return id && rawLower.includes(id.toLowerCase());
-  });
-  if (byId) return byId;
-
-  const rawLoose = normalizeStickerLooseMatchText(raw);
-  if (!rawLoose) return null;
-
-  const byName = mountedItems.find(item => {
-    const name = String(item.name || '').trim();
-    const nameLoose = normalizeStickerLooseMatchText(name);
-    return name && (
-      raw.includes(name) ||
-      (hasStickerIntent && nameLoose.length >= 2 && (rawLoose.includes(nameLoose) || nameLoose.includes(rawLoose)))
-    );
-  });
-
-  return byName || null;
+  return findLooseStickerTargetFromTextModule(text, state);
 }
 
 
 export function createStickerMessagePatchFromTarget(message, sticker) {
-  if (!message || !sticker) return null;
-  return {
-    ...message,
-    role: 'assistant',
-    type: 'sticker',
-    content: `[表情包] ${sticker.name}`,
-    stickerId: sticker.id,
-    stickerName: sticker.name,
-    stickerUrl: sticker.url
-  };
+  return createStickerMessagePatchFromTargetModule(message, sticker);
 }
 
 
 export function repairAiMessageFormatIfPossible(message, state) {
-  if (!message || message.role !== 'assistant') return null;
-  if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) return null;
-
-  const sticker = findLooseStickerTargetFromText(message.content, state);
-  return sticker ? createStickerMessagePatchFromTarget(message, sticker) : null;
+  return repairAiMessageFormatIfPossibleModule(message, state);
 }
 
 
 /* ==========================================================================
-   [区域标注·已完成·本次旁白掉格式修正] 文本/引用/语音/旁白掉格式修复工具
+   [区域标注·已完成·本次拆分] AI 文本/引用/语音/旁白/系统提示修复 facade
    说明：
-   1. “修正 → 文本”用于修复普通文字气泡掉格式：裸露 [回复] 协议头、Markdown 加粗/反引号、格式检查前缀或“修正后内容”等说明文字。
-   2. “修正 → 语音”用于把含 [语音] / 【语音】残片的 AI 文字气泡修正为 type=voice_message 语音气泡。
-   3. “修正 → 旁白”用于把露出“旁白”字样或 [旁白] 残片的 AI 文字气泡修正为旁白气泡。
-   4. 仅修复当前 AI 消息对象，不读取或写入 localStorage/sessionStorage。
-   5. 真正持久化仍由 index.js 调用 persistCurrentMessages 写入 DB.js / IndexedDB。
-   6. 下次如需扩展其它修正类别，优先在本区域增加独立修复函数。
+   1. 各类 AI 掉格式修复逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件保留原导出名，继续兼容修正弹窗、消息修补流程与既有调用方。
+   3. 只做运行时接线，不改动 DB.js / IndexedDB 持久化路径。
    ========================================================================== */
 export function repairAiTextMessageFormatIfPossible(message) {
-  if (!message || message.role !== 'assistant') return null;
-  if (['sticker', 'image', 'transfer', 'gift'].includes(String(message.type || ''))) return null;
-
-  const before = String(message.content || '');
-  const protocolBlocks = extractAiProtocolBlocks(before).filter(block => block.type === '回复');
-  const protocolText = protocolBlocks
-    .map(block => cleanAiVisibleBubbleText(block.content))
-    .filter(Boolean)
-    .join('\n');
-
-  const after = cleanAiVisibleBubbleText(protocolText || before)
-    .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*回复\s*\]\s*[^：:\n`*]+?\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:回复|文字|文本)\s*[：:]\s*/i, '')
-    .replace(/(?:`|\*\*)+/g, '')
-    .trim();
-
-  if (!after || after === before.trim()) return null;
-  return {
-    ...message,
-    type: '',
-    content: after,
-    quote: message.quote || null
-  };
-}
-
-
-/* ========================================================================
-   [区域标注·已完成·本次引用掉格式修复] AI 引用文字转引用气泡工具
-   说明：
-   1. 修正按钮“引用”已支持 `{引用ID:xxx}` 标准协议，也支持截图中的“› 引用了某人：‘原文’”这类纯文字掉格式。
-   2. 能匹配到当前聊天记录原消息时使用真实 quote payload；匹配不到时用文字里的被引用人/原文生成可渲染引用预览。
-   3. 只修改当前 AI 消息对象的 content/quote 字段；保存仍由 index.js 写入 DB.js / IndexedDB。
-   4. 不使用 localStorage/sessionStorage，不写双份存储兜底，不按长文本字段过滤。
-   ======================================================================== */
-function normalizeAiQuoteLookupText(value = '') {
-  return cleanAiVisibleBubbleText(value)
-    .replace(/^[›>]\s*/, '')
-    .replace(/^引用(?:了|自)?\s*[^：:「“"'\n]{0,40}\s*[：:]\s*/i, '')
-    .replace(/[「」“”"'‘’]/g, '')
-    .replace(/\s+/g, '')
-    .trim();
-}
-
-function splitLooseAiQuoteBody(body = '') {
-  const value = String(body || '').trim();
-  if (!value) return { quoteText: '', replyText: '' };
-
-  const firstChar = value.charAt(0);
-  const quotePairs = {
-    '“': '”',
-    '‘': '’',
-    '"': '"',
-    "'": "'",
-    '「': '」'
-  };
-
-  if (quotePairs[firstChar]) {
-    const closeChar = quotePairs[firstChar];
-    const closeIndex = value.indexOf(closeChar, 1);
-    if (closeIndex > 0) {
-      return {
-        quoteText: value.slice(1, closeIndex).trim(),
-        replyText: cleanAiVisibleBubbleText(value.slice(closeIndex + 1).replace(/^[\s：:，,。；;\-—]+/, ''))
-      };
-    }
-
-    return {
-      quoteText: value.slice(1).replace(/[”’"'}」]+$/g, '').trim(),
-      replyText: ''
-    };
-  }
-
-  const lines = value.split(/\n+/).map(item => item.trim()).filter(Boolean);
-  if (lines.length > 1) {
-    return {
-      quoteText: lines[0].replace(/[”’"'}」]+$/g, '').trim(),
-      replyText: cleanAiVisibleBubbleText(lines.slice(1).join('\n'))
-    };
-  }
-
-  return {
-    quoteText: value.replace(/[”’"'}」]+$/g, '').trim(),
-    replyText: ''
-  };
-}
-
-function parseLooseAiQuoteText(raw = '', fallbackSenderName = '') {
-  const text = cleanAiProtocolBlockContent(raw)
-    .replace(/^[›>]\s*/, '')
-    .trim();
-  if (!/引用/.test(text)) return null;
-
-  const withoutProtocol = text.replace(/^(?:\[\s*引用\s*\]\s*)/i, '').trim();
-  const quoteIdMatch = withoutProtocol.match(/\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
-  if (quoteIdMatch) {
-    return {
-      quoteId: String(quoteIdMatch[1] || '').trim(),
-      senderName: String(fallbackSenderName || '').trim(),
-      quoteText: '',
-      replyText: cleanAiVisibleBubbleText(quoteIdMatch[2])
-    };
-  }
-
-  const colonMatch = withoutProtocol.match(/^(?:引用(?:了|自)?\s*)?([^：:「“"'\n]{0,40})\s*[：:]\s*([\s\S]*)$/i);
-  if (!colonMatch) return null;
-
-  const senderName = String(colonMatch[1] || fallbackSenderName || '')
-    .replace(/^引用(?:了|自)?\s*/i, '')
-    .trim();
-  const { quoteText, replyText } = splitLooseAiQuoteBody(colonMatch[2]);
-  if (!quoteText && !replyText) return null;
-
-  return {
-    quoteId: '',
-    senderName,
-    quoteText,
-    replyText
-  };
-}
-
-function resolveAiQuotePayloadByLooseText(state, quoteText = '', senderName = '', sourceMessageId = '') {
-  const targetText = String(quoteText || '').trim();
-  if (!targetText) return null;
-
-  const session = state.sessions?.find?.(item => String(item.id) === String(state.currentChatId)) || {};
-  const normalizedTarget = normalizeAiQuoteLookupText(targetText);
-  const messages = Array.isArray(state.currentMessages) ? state.currentMessages : [];
-
-  for (const message of [...messages].reverse()) {
-    if (sourceMessageId && String(message?.id || '') === String(sourceMessageId)) continue;
-
-    const payload = createQuotePayloadFromMessage(message, session, state.profile || {});
-    const payloadText = String(payload?.text || '').trim();
-    const normalizedPayloadText = normalizeAiQuoteLookupText(payloadText);
-    const payloadSender = String(payload?.senderName || '').trim();
-    const safeSender = String(senderName || '').trim();
-
-    const textMatched = normalizedTarget
-      && normalizedPayloadText
-      && (normalizedPayloadText.includes(normalizedTarget) || normalizedTarget.includes(normalizedPayloadText));
-    const senderMatched = !safeSender || !payloadSender || payloadSender.includes(safeSender) || safeSender.includes(payloadSender);
-
-    if (textMatched && senderMatched) return payload;
-  }
-
-  const syntheticText = targetText.replace(/\s+/g, ' ').trim();
-  return syntheticText
-    ? {
-        id: '',
-        role: 'assistant',
-        senderName: String(senderName || session?.name || '对方').trim() || '对方',
-        text: syntheticText.length > 86 ? `${syntheticText.slice(0, 86)}…` : syntheticText,
-        type: 'text',
-        timestamp: 0
-      }
-    : null;
+  return repairAiTextMessageFormatIfPossibleModule(message);
 }
 
 export function repairAiQuoteMessageFormatIfPossible(message, state) {
-  if (!message || message.role !== 'assistant') return null;
-  if (['sticker', 'image', 'transfer', 'gift'].includes(String(message.type || ''))) return null;
-
-  const raw = String(message.content || '').trim();
-  const quoteMatch = raw.match(/(?:\[\s*引用\s*\]\s*[^：:\n`*]+?\s*[：:]\s*)?\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
-  const looseQuote = quoteMatch ? null : parseLooseAiQuoteText(raw);
-  if (!quoteMatch && !looseQuote) return null;
-
-  const quotePayload = quoteMatch
-    ? resolveAiQuotePayloadById(state, quoteMatch[1])
-    : resolveAiQuotePayloadByLooseText(state, looseQuote.quoteText, looseQuote.senderName, message.id);
-  const replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : looseQuote.replyText);
-  if (!quotePayload) return null;
-
-  return {
-    ...message,
-    type: '',
-    content: replyText,
-    quote: quotePayload
-  };
+  return repairAiQuoteMessageFormatIfPossibleModule(message, state);
 }
 
 export function repairAiVoiceMessageFormatIfPossible(message) {
-  if (!message || message.role !== 'assistant') return null;
-  if (isVoiceMessage(message)) return null;
-  if (['sticker', 'image', 'transfer', 'gift', 'card'].includes(String(message.type || ''))) return null;
-
-  const raw = String(message.content || message.voiceText || '').trim();
-  if (!/(?:\[\s*语音\s*\]|【\s*语音\s*】)/i.test(raw)) return null;
-
-  const voiceBlocks = extractAiProtocolBlocks(raw).filter(block => block.type === '语音');
-  const payload = voiceBlocks
-    .map(block => parseAiVoiceProtocolPayload(block.content))
-    .find(Boolean)
-    || parseAiVoiceProtocolPayload(raw);
-
-  if (!payload) return null;
-
-  return {
-    ...message,
-    role: 'assistant',
-    type: 'voice_message',
-    voiceExpanded: false,
-    ...payload
-  };
+  return repairAiVoiceMessageFormatIfPossibleModule(message);
 }
 
 export function repairAiAsideMessageFormatIfPossible(message) {
-  if (!message || message.role !== 'assistant') return null;
-  if (['sticker', 'image', 'transfer', 'gift', 'card'].includes(String(message.type || ''))) return null;
-
-  const raw = String(message.content || '').trim();
-  if (!/旁白/i.test(raw)) return null;
-
-  const { asideText, asideSegments, cleanedText } = extractAsideFromRawText(raw);
-  const normalizedSegments = (Array.isArray(asideSegments) ? asideSegments : [])
-    .map((segment, index) => ({
-      id: String(segment?.id || `${message.id || 'aside_repair'}_${index + 1}`),
-      text: String(segment?.text || '').trim(),
-      placement: 'before'
-    }))
-    .filter(segment => segment.text);
-
-  if (!asideText || !normalizedSegments.length) return null;
-
-  return {
-    ...message,
-    role: 'assistant',
-    type: '',
-    content: cleanAiVisibleBubbleText(cleanedText || ''),
-    asideText,
-    asideSegments: normalizedSegments
-  };
+  return repairAiAsideMessageFormatIfPossibleModule(message);
 }
 
 /* ========================================================================
-   [区域标注·已完成·AI本轮撤回系统提示修正]
+   [区域标注·已完成·本次拆分] AI 本轮撤回系统提示修复 facade
    说明：
-   1. “修正 → 系统提示”专门修复 AI 撤回系统小字的显示格式。
-   2. 只修改当前消息对象；持久化由 index.js 写入 DB.js / IndexedDB。
-   3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   1. ai_withdraw_system 小字修复逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件继续保留原导出名，避免影响既有修正入口。
    ======================================================================== */
 export function repairAiSystemTipFormatIfPossible(message) {
-  if (!message || String(message.type || '') !== 'ai_withdraw_system') return null;
-  const withdrawnText = String(message.withdrawnContent || message.aiVisibleWithdrawnSummary || '').trim();
-  if (!withdrawnText) return null;
-  const roleName = String(message.withdrawnRoleName || '').trim() || '对方';
-  return {
-    ...message,
-    role: 'user',
-    type: 'ai_withdraw_system',
-    content: `${roleName} 撤回了一条消息`,
-    withdrawnContent: withdrawnText,
-    aiVisibleWithdrawnSummary: withdrawnText,
-    withdrawnRoleName: roleName
-  };
+  return repairAiSystemTipFormatIfPossibleModule(message);
 }
 
 
@@ -1386,19 +965,14 @@ function stripAiProtocolClosingTags(value = '') {
   return String(value || '').replace(AI_PROTOCOL_CLOSING_TAG_REGEX, ' ');
 }
 
+/* ========================================================================
+   [区域标注·已完成·本次拆分] AI 协议正文清洗 facade
+   说明：
+   1. 协议闭合标签、think 段与 Markdown 包裹清理逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件继续保留原导出名，避免影响转账待确认解析、消息修复等既有调用点。
+   ======================================================================== */
 export function cleanAiProtocolBlockContent(content) {
-  return stripAiProtocolClosingTags(String(content || ''))
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/^\s*(?:`|\*\*)+/g, '')
-    .replace(/(?:`|\*\*)+\s*$/g, '')
-    /* ======================================================================
-       [区域标注·已完成·普通气泡引号保留与省略号残片合并] 协议正文引号保护
-       说明：
-       1. 不再清理正文首尾的 “ ” / " / '，避免 “预备”一下？ 被显示成 预备”一下？。
-       2. 这里只继续清理 Markdown/协议包裹残片；可见聊天正文标点必须原样保留。
-       3. 本区域只影响前端运行时解析，不读写 localStorage/sessionStorage，不改持久化结构。
-       ====================================================================== */
-    .trim();
+  return cleanAiProtocolBlockContentModule(content);
 }
 
 /* ========================================================================
@@ -1414,24 +988,11 @@ function getAiRuntimeProtocolOrder(message = {}, fallbackIndex = 0) {
 }
 
 function sortAiMessagesByRuntimeProtocolOrder(messages = []) {
-  return (Array.isArray(messages) ? messages : [])
-    .map((message, index) => ({
-      message,
-      index,
-      order: getAiRuntimeProtocolOrder(message, index)
-    }))
-    .sort((a, b) => (a.order - b.order) || (a.index - b.index))
-    .map(item => item.message);
+  return sortAiMessagesByRuntimeProtocolOrderModule(messages);
 }
 
 function stripAiRuntimeProtocolOrderFields(message = {}) {
-  const {
-    __protocolOrder,
-    __protocolEndIndex,
-    __protocolIndex,
-    ...cleanMessage
-  } = message || {};
-  return cleanMessage;
+  return stripAiRuntimeProtocolOrderFieldsModule(message);
 }
 
 /* ==========================================================================
@@ -1516,40 +1077,7 @@ function stripLeadingCurrentUserEchoFromAiText(aiText = '', currentUserTexts = [
 }
 
 function filterCurrentUserRoundEchoFromAiMessages(aiMessages = [], currentUserRoundMessages = []) {
-  const messages = Array.isArray(aiMessages) ? aiMessages : [];
-  const currentUserTexts = getCurrentUserRoundComparableTexts(currentUserRoundMessages);
-  if (!currentUserTexts.length) return messages;
-
-  return messages.reduce((list, message) => {
-    if (!message || String(message?.role || '') !== 'assistant') {
-      list.push(message);
-      return list;
-    }
-
-    if (String(message?.type || '').trim()) {
-      list.push(message);
-      return list;
-    }
-
-    const originalText = String(message?.content || '').trim();
-    if (!originalText) {
-      list.push(message);
-      return list;
-    }
-
-    const normalizedOriginalText = normalizeCurrentUserEchoCompareText(originalText);
-    if (currentUserTexts.some(item => item.normalized === normalizedOriginalText)) {
-      return list;
-    }
-
-    const strippedText = stripLeadingCurrentUserEchoFromAiText(originalText, currentUserTexts);
-    if (!strippedText) {
-      return list;
-    }
-
-    list.push(strippedText === originalText ? message : { ...message, content: strippedText });
-    return list;
-  }, []);
+  return filterCurrentUserRoundEchoFromAiMessagesModule(aiMessages, currentUserRoundMessages);
 }
 
 /* ==========================================================================
@@ -1560,39 +1088,12 @@ function filterCurrentUserRoundEchoFromAiMessages(aiMessages = [], currentUserRo
    3. 不新增任何本地同步存储，也不改用户手动转账入口逻辑。
    ========================================================================== */
 export function parseAiTransferProtocolPayload(content) {
-  const normalized = cleanAiProtocolBlockContent(content);
-  if (!normalized) return null;
-
-  const bodyMatch = normalized.match(/\{\s*([\s\S]*?)\s*\}/);
-  const body = bodyMatch ? String(bodyMatch[1] || '').trim() : normalized;
-  if (!body) return null;
-
-  const amountMatch = body.match(/金额\s*[：:]\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
-  if (!amountMatch) return null;
-
-  const amount = Number(amountMatch[1]);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-
-  const noteMatch = body.match(/备注\s*[：:]\s*([^}]*)/i);
-  const transferNote = String(noteMatch?.[1] || '').trim();
-
-  return {
-    transferAmount: Number(amount.toFixed(2)),
-    transferBaseCny: Number(amount.toFixed(2)),
-    transferCurrency: 'CNY',
-    transferDisplayAmount: `¥${amount.toFixed(2)}`,
-    transferNote,
-    content: `¥${amount.toFixed(2)}`
-  };
+  return parseAiTransferProtocolPayloadModule(content);
 }
 
 
 export function resolveAiQuotePayloadById(state, quoteId = '') {
-  const targetId = String(quoteId || '').trim();
-  if (!targetId) return null;
-  const session = state.sessions?.find?.(item => String(item.id) === String(state.currentChatId)) || {};
-  const message = (state.currentMessages || []).find(item => String(item.id) === targetId);
-  return message ? createQuotePayloadFromMessage(message, session, state.profile || {}) : null;
+  return resolveAiQuotePayloadByIdModule(state, quoteId);
 }
 
 
@@ -1628,392 +1129,19 @@ function parseProtocolRoleAndContent(raw = '', type = '') {
 }
 
 export function extractAiProtocolBlocks(rawText) {
-  const visibleText = stripAiProtocolClosingTags(String(rawText || ''))
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<\/?think>/gi, '')
-    .trim();
-  if (!visibleText) return [];
-
-  /* ========================================================================
-     [区域标注·已完成·本次语音掉格式强容错解析] 宽松协议头识别
-     说明：
-     1. 协议头仅要求出现 [类型]，不再强依赖“角色名：”紧跟在后。
-     2. [语音] / [文字图] 同时支持方括号与全角书名号写法：`[ 语音 ]` / `[ 文字图 ]` / `【语音】` / `【文字图】`。
-     3. 内容中的角色名由 parseProtocolRoleAndContent 二次解析，避免模型轻微掉格式时整段失效。
-     4. 卡片仍由 extractHtmlCardProtocolBlocks 负责正文提取；本循环遇到 type=卡片仅做边界截断。
-     ======================================================================== */
-  const markerRegex = /(?:\*\*)?\s*`?\s*(?:\[\s*(回复|表情|转账|礼物|引用|撤回|语音|文字图|图片|卡片)\s*\]|【\s*(语音|文字图)\s*】)\s*/g;
-  const matches = [...visibleText.matchAll(markerRegex)];
-  if (!matches.length) return [];
-
-  return matches
-    .map((match, index) => {
-      const nextMatch = matches[index + 1];
-      const contentStart = Number(match.index || 0) + String(match[0] || '').length;
-      const contentEnd = nextMatch ? Number(nextMatch.index || visibleText.length) : visibleText.length;
-      const type = String(match[1] || match[2] || '').trim();
-      const parsed = parseProtocolRoleAndContent(visibleText.slice(contentStart, contentEnd), type);
-      return {
-        type,
-        roleName: parsed.roleName,
-        content: parsed.content,
-        /* ====================================================================
-           [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] 普通协议块运行时顺序
-           说明：保留每个协议头在 AI 原文里的位置，供本轮把图片/HTML卡片插回正确聊天节奏。
-           ==================================================================== */
-        __protocolOrder: Number(match.index || 0) || 0,
-        __protocolEndIndex: contentEnd,
-        __protocolIndex: index
-      };
-    })
-    .filter(item => item.type && item.content);
+  return extractAiProtocolBlocksModule(rawText);
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·本次拆分] AI 回复协议解析与消息构建 facade
+   说明：
+   1. AI 协议块解析、撤回/礼物/转账/语音/文字图/HTML 卡片组装逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件只保留原导出名与接线，继续兼容 sendMessage() 现有调用，不改业务逻辑。
+   3. 本轮排序字段仍仅用于运行时，持久化路径不变，继续统一走 DB.js / IndexedDB。
+   ======================================================================== */
 export function buildAiReplyMessages(rawText, state, options = {}) {
-  /* ========================================================================
-     [区域标注·已完成·AI文字图/生图互斥前端渲染入口]
-     说明：
-     1. textImageProtocolEnabled=true 时才接收 [文字图] 并转成文字图气泡。
-     2. 生图 API 开启后 textImageProtocolEnabled=false，前端直接丢弃 [文字图]，只接收 generatedImages 产生的 [图片] 消息。
-     3. 文字图消息仍随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const textImageProtocolEnabled = Boolean(options.textImageProtocolEnabled);
-
-  /* ========================================================================
-     [区域标注·已完成·HTML卡片开关关闭时阻断卡片协议落库]
-     说明：
-     1. 只有当前聊天设置 htmlCardEnabled=true 时，才允许把 AI 的 [卡片] 协议解析为 type:card 消息。
-     2. 开关关闭时即使模型误输出 [卡片]，这里也不会继续落库、渲染或注入 HTML 卡片。
-     3. 这样可与 prompt.js 的提示词修复形成双保险：既不再向模型暴露卡片协议，也不再接收关闭状态下误输出的卡片结果。
-     ======================================================================== */
-  const htmlCardFeatureEnabled = Boolean(state?.chatPromptSettings?.htmlCardEnabled);
-  const protocolBlocks = extractAiProtocolBlocks(rawText);
-  const detectedHtmlCardBlocks = extractHtmlCardProtocolBlocks(rawText);
-  const htmlCardBlocks = htmlCardFeatureEnabled ? detectedHtmlCardBlocks : [];
-  if (!protocolBlocks.length && !htmlCardBlocks.length) {
-    /* ======================================================================
-       [区域标注·已完成·本次语音掉格式强容错解析] 无标准协议块时的语音兜底解析
-       说明：
-       1. 只要 AI 原文中出现 [语音] / 【语音】，前端优先尝试转为语音消息气泡。
-       2. 解析成功后不再把原始 [语音] 文本渲染为普通气泡，严防截图中这类掉格式问题。
-       3. 仅转换当前运行时消息对象；落库仍随 currentMessages 写入 DB.js / IndexedDB。
-       ====================================================================== */
-    if (/(?:\[\s*语音\s*\]|【\s*语音\s*】)/i.test(String(rawText || ''))) {
-      const voicePayload = parseAiVoiceProtocolPayload(rawText);
-      if (voicePayload) {
-        return enforceAiReplyMessageCount([{
-          role: 'assistant',
-          type: 'voice_message',
-          voiceExpanded: false,
-          ...voicePayload
-        }], state.chatPromptSettings);
-      }
-    }
-
-    /* ======================================================================
-       [区域标注·已完成·本次文字图掉格式解析增强] 无标准协议块时的文字图兜底解析
-       说明：
-       1. 当模型仍输出 `[文字图]` / `【文字图】`，但整体格式不足以进入标准协议块识别时，前端仍尝试转成文字图气泡。
-       2. 仅在 textImageProtocolEnabled=true 时启用；生图 API 开启后依旧丢弃文字图协议，避免双份视觉通道。
-       3. 文字图内容清洗复用 chat-text-image.js 的 createAiTextImageMessageFromProtocol / normalizeTextImageText，不改持久化结构。
-       ====================================================================== */
-    if (textImageProtocolEnabled && /(?:\[\s*文字图\s*\]|【\s*文字图\s*】)/i.test(String(rawText || ''))) {
-      const textImageMessage = createAiTextImageMessageFromProtocol(rawText);
-      if (textImageMessage) {
-        return enforceAiReplyMessageCount([textImageMessage], state.chatPromptSettings);
-      }
-    }
-
-    const repairedSticker = findLooseStickerTargetFromText(rawText, state);
-    if (repairedSticker) {
-      return enforceAiReplyMessageCount([{
-        role: 'assistant',
-        type: 'sticker',
-        content: `[表情包] ${repairedSticker.name}`,
-        stickerId: repairedSticker.id,
-        stickerName: repairedSticker.name,
-        stickerUrl: repairedSticker.url
-      }], state.chatPromptSettings);
-    }
-
-    return enforceAiReplyMessageCount(
-      splitAiReplyIntoBubbles(rawText, state.chatPromptSettings).map(content => ({
-        role: 'assistant',
-        content
-      })),
-      state.chatPromptSettings
-    );
-  }
-
-  const builtMessages = [];
-  const skippedProtocolIndexes = new Set();
-  let hasImageGenerationProtocol = false;
-  let hasHtmlCardProtocol = false;
-  protocolBlocks.forEach((block, blockIndex) => {
-    if (skippedProtocolIndexes.has(Number(block?.__protocolIndex ?? blockIndex))) return;
-    if (block.type === '撤回') {
-      /* ======================================================================
-         [区域标注·已完成·AI本轮撤回协议解析]
-         说明：
-         1. AI 只能撤回本轮已经生成的 assistant 消息；系统提示不会被后续撤回误删。
-         2. prompt.js 已强约束 AI 多条撤回必须输出多条 [撤回]；这里仍兼容旧模型的 {目标:全部}/{条数:N}。
-         3. 无论旧模型写单条批量撤回还是多条独立撤回，最终都逐条追加 ai_withdraw_system 系统小字，禁止合并成“撤回了N条消息”。
-         ====================================================================== */
-      const body = cleanAiProtocolBlockContent(block.content);
-      const countMatch = body.match(/条数\s*[：:]\s*(\d+)/i);
-      const targetAll = /目标\s*[：:]\s*(全部|所有|all)/i.test(body);
-      const countFromBody = Math.max(1, Math.floor(Number(countMatch?.[1] || 1)) || 1);
-      const requestedWithdrawCount = targetAll
-        ? builtMessages.filter(message => message?.role === 'assistant').length
-        : countFromBody;
-      const roleName = String(block.roleName || '').trim() || '对方';
-
-      for (let i = 0; i < requestedWithdrawCount; i += 1) {
-        const withdrawIndex = builtMessages
-          .map((message, index) => ({ message, index }))
-          .reverse()
-          .find(item => item.message?.role === 'assistant')?.index;
-
-        if (withdrawIndex === undefined) break;
-
-        const [removedMessage] = builtMessages.splice(withdrawIndex, 1);
-        const withdrawnText = String(
-          removedMessage.type === 'sticker'
-            ? `[表情包] ${removedMessage.stickerName || removedMessage.content || ''}`
-            : (removedMessage.type === 'transfer'
-                ? `[转账] ${removedMessage.transferDisplayAmount || removedMessage.content || ''}`
-                : (removedMessage.type === 'gift'
-                    ? getGiftMessageDisplayText(removedMessage)
-                    : (removedMessage.content || '')))
-        ).trim();
-        if (!withdrawnText) continue;
-
-          builtMessages.push({
-            role: 'user',
-            type: 'ai_withdraw_system',
-            content: `${roleName} 撤回了一条消息`,
-            withdrawnContent: withdrawnText,
-            aiVisibleWithdrawnSummary: withdrawnText,
-            withdrawnRoleName: roleName,
-            __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-            __protocolEndIndex: block.__protocolEndIndex
-          });
-      }
-      return;
-    }
-
-    if (block.type === '表情') {
-      const sticker = resolveStickerProtocolTarget(block.content, state) || findLooseStickerTargetFromText(block.content, state);
-      if (sticker) {
-        builtMessages.push({
-          role: 'assistant',
-          type: 'sticker',
-          content: `[表情包] ${sticker.name}`,
-          stickerId: sticker.id,
-          stickerName: sticker.name,
-          stickerUrl: sticker.url,
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-      }
-      /* [区域标注·本次修改2] 表情协议无有效匹配时直接丢弃原始协议，避免 sticker_id 或残缺协议以纯文本气泡露出 */
-      return;
-    }
-
-    if (block.type === '语音') {
-      /* ======================================================================
-         [区域标注·已完成·AI语音消息协议渲染]
-         说明：
-         1. AI 输出 [语音] 时转为 type=voice_message 结构化消息，复用 chat-voice.js 的语音气泡。
-         2. 协议格式为 `[语音] 角色名：{时长:xx}语音转写文本`；解析失败直接丢弃，避免原始协议露出。
-         3. 语音消息随 currentMessages 统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
-         ====================================================================== */
-      const voiceMessage = createAiVoiceMessageFromProtocol(block);
-      if (voiceMessage) {
-        builtMessages.push({
-          ...voiceMessage,
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-      }
-      return;
-    }
-
-    if (block.type === '文字图') {
-      /* ======================================================================
-         [区域标注·已完成·AI文字图协议渲染]
-         说明：
-         1. 仅在生图 API 未开启/配置不完整时接收 [文字图]。
-         2. 生图 API 已开启时禁发文字图；若模型误输出，本区直接丢弃，避免双份视觉通道。
-         3. 文字图复用 chat-text-image.js 的消息结构，不写 imageUrl，不触发视觉识别 token。
-         ====================================================================== */
-      if (textImageProtocolEnabled) {
-        const textImageMessage = createAiTextImageMessageFromProtocol(block.content);
-        if (textImageMessage) {
-          builtMessages.push({
-            ...textImageMessage,
-            __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-            __protocolEndIndex: block.__protocolEndIndex
-          });
-        }
-      }
-      return;
-    }
-
-    if (block.type === '图片') {
-      /* ======================================================================
-         [区域标注·已完成·AI生图] 丢弃原始 [图片] 协议文本
-         说明：
-         1. 真正图片消息来自 prompt.js 返回的 generatedImages，并在 sendMessage 中转成 type:image。
-         2. 这里不把 [图片] 协议内容显示为普通文本，避免聊天界面露出协议或生图提示词。
-         3. 如果本轮只有 [图片] 协议，函数返回空数组，让 generatedImages 独立成为本轮消息。
-         ====================================================================== */
-      hasImageGenerationProtocol = true;
-      return;
-    }
-
-    if (block.type === '转账') {
-      const transferPayload = parseAiTransferProtocolPayload(block.content);
-      if (transferPayload) {
-        builtMessages.push({
-          role: 'assistant',
-          type: 'transfer',
-          /* [区域标注·已完成·本次转账需求] AI 发起转账默认待用户处理 */
-          transferDirection: 'incoming',
-          transferStatus: 'pending',
-          transferCounterpartyName: String(block.roleName || '').trim(),
-          ...transferPayload,
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-      }
-      /* [区域标注·已完成·角色主动转账协议容错] 转账协议格式不合法时直接丢弃，避免残缺协议原样露出 */
-      return;
-    }
-
-    if (block.type === '礼物') {
-      /* ======================================================================
-         [区域标注·已完成·AI主动送礼物协议解析]
-         说明：
-         1. AI 输出 [礼物] 时转为 type:gift 结构化消息，复用现有礼物卡片渲染。
-         2. 礼物标题与小字备注由 chat-gift.js 解析；消息持久化仍只走 DB.js / IndexedDB。
-         3. 协议格式不合法时直接丢弃，避免残缺 [礼物] 协议露出为普通文本。
-         ====================================================================== */
-      const giftMessage = createAiGiftMessageFromProtocol(block);
-      if (giftMessage) {
-        builtMessages.push({
-          ...giftMessage,
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-      }
-      return;
-    }
-
-    if (block.type === '引用') {
-      /* ======================================================================
-         [区域标注·已完成·本次引用回复合并修复] AI [引用] + [回复] 协议合并解析
-         说明：
-         1. 当 AI 先输出 [引用]，再紧跟 [回复] 时，前端会直接合并成同一条带 quote 的引用回复气泡。
-         2. 若 [引用] 自身已带正文，则优先使用 [引用] 内正文；否则自动吞并下一条 [回复] 的正文，避免拆成两个气泡。
-         3. 仍兼容 `{引用ID:xxx}` 标准协议与“引用了某人：原文”宽松掉格式文本。
-         ====================================================================== */
-      const quoteMatch = String(block.content || '').match(/^\s*\{\s*引用\s*ID\s*[：:]\s*([^}；;，,\s]+)\s*\}\s*([\s\S]*)$/i);
-      const looseQuote = quoteMatch ? null : parseLooseAiQuoteText(block.content, block.roleName);
-      const quotePayload = quoteMatch
-        ? resolveAiQuotePayloadById(state, quoteMatch[1])
-        : (looseQuote ? resolveAiQuotePayloadByLooseText(state, looseQuote.quoteText, looseQuote.senderName) : null);
-
-      let replyText = cleanAiVisibleBubbleText(quoteMatch ? quoteMatch[2] : (looseQuote ? looseQuote.replyText : block.content));
-
-      if (!replyText) {
-        const nextBlock = protocolBlocks[blockIndex + 1];
-        if (nextBlock?.type === '回复') {
-          const nextReplyText = cleanAiVisibleBubbleText(nextBlock.content);
-          if (nextReplyText) {
-            replyText = nextReplyText;
-            skippedProtocolIndexes.add(Number(nextBlock?.__protocolIndex ?? (blockIndex + 1)));
-          }
-        }
-      }
-
-      const replyParts = splitStrictSentenceBubbles(replyText);
-
-      if (quotePayload && !replyParts.length) {
-        builtMessages.push({
-          role: 'assistant',
-          content: '',
-          quote: quotePayload,
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length),
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-        return;
-      }
-
-      replyParts.forEach((content, replyIndex) => {
-        builtMessages.push({
-          role: 'assistant',
-          content,
-          ...(quotePayload ? { quote: quotePayload } : {}),
-          __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length) + replyIndex / 1000,
-          __protocolEndIndex: block.__protocolEndIndex
-        });
-      });
-      return;
-    }
-
-    /* ========================================================================
-       [区域标注·已完成·HTML卡片开关关闭时阻断卡片协议落库]
-       说明：
-       1. [卡片] 协议不走普通文本消息入列。
-       2. 只有 htmlCardEnabled=true 时，才会在下方 htmlCardBlocks 分支转成 type:card。
-       3. 开关关闭时即使模型误输出 [卡片]，这里也会直接跳过，避免 HTML 卡片继续渲染。
-       ======================================================================== */
-    if (block.type === '卡片') return;
-
-    splitStrictSentenceBubbles(cleanAiVisibleBubbleText(block.content)).forEach((content, replyIndex) => {
-      builtMessages.push({
-        role: 'assistant',
-        content,
-        __protocolOrder: getAiRuntimeProtocolOrder(block, builtMessages.length) + replyIndex / 1000,
-        __protocolEndIndex: block.__protocolEndIndex
-      });
-    });
-  });
-
-  if (htmlCardBlocks.length) {
-    hasHtmlCardProtocol = true;
-    htmlCardBlocks.forEach((block, index) => {
-      const safeHtml = String(block?.html || '').trim();
-      if (!safeHtml) return;
-      builtMessages.push({
-        role: 'assistant',
-        type: 'card',
-        content: `[HTML卡片] ${String(block?.roleName || '').trim() || '互动卡片'}`,
-        cardRoleName: String(block?.roleName || '').trim(),
-        cardTitle: `${String(block?.roleName || '').trim() || '互动'}的卡片`,
-        cardHtml: safeHtml,
-        cardOrder: index,
-        /* ====================================================================
-           [区域标注·已完成·AI图片与HTML卡片按协议原文顺序显示] HTML 卡片运行时顺序
-           说明：protocolOrder 来自 chat-html-card.js 对 [卡片] 协议原文位置的解析；
-                 仅用于本轮排序，写入 IndexedDB 前会统一剥离。
-           ==================================================================== */
-        __protocolOrder: Number(block?.protocolOrder ?? block?.startIndex ?? index) || 0,
-        __protocolEndIndex: Number(block?.endIndex ?? block?.startIndex ?? index) || 0
-      });
-    });
-  }
-
-  if (!builtMessages.length && (hasImageGenerationProtocol || hasHtmlCardProtocol || detectedHtmlCardBlocks.length)) return [];
-
-  return enforceAiReplyMessageCount(
-    builtMessages.length
-      ? sortAiMessagesByRuntimeProtocolOrder(builtMessages)
-      : [{ role: 'assistant', content: '（AI 没有返回内容）' }],
-    state.chatPromptSettings
-  );
+  return buildAiReplyMessagesModule(rawText, state, options);
 }
 
 
@@ -2298,322 +1426,31 @@ export async function retryLatestAiReply(container, state, db, settingsManager) 
 
 
 /* ===== 闲谈：用户最新一轮消息触发AI START ===== */
+/* ========================================================================
+   [区域标注·已完成·本次拆分] Prompt payload 组装 facade
+   说明：
+   1. 最新用户轮识别、短期记忆按轮截取、撤回系统提示并入与时间感知上下文计算，已下沉到 chat-message-prompt-payload.js。
+   2. 本文件只保留原导出名，继续兼容 sendMessage() 与外部既有调用方。
+   3. 不改动任何请求结构与 DB.js / IndexedDB 持久化路径。
+   ======================================================================== */
 export function buildPromptPayloadForLatestUserRound(messages = [], shortTermMemoryRounds = 8) {
-  const normalized = Array.isArray(messages)
-    ? messages.filter(item => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
-    : [];
-
-  let latestUserStart = -1;
-  for (let i = normalized.length - 1; i >= 0; i -= 1) {
-    if (normalized[i].role !== 'user') continue;
-    latestUserStart = i;
-    while (latestUserStart > 0 && normalized[latestUserStart - 1]?.role === 'user') {
-      latestUserStart -= 1;
-    }
-    break;
-  }
-
-  /* 用户最新一轮消息 = 消息末尾往前连续的 user 消息组，而不是最后一条 user 消息 */
-  let currentRoundMessages = latestUserStart >= 0 ? normalized.slice(latestUserStart).filter(item => item.role === 'user') : [];
-  /* ========================================================================
-     [区域标注·已完成·用户消息撤回] 最近撤回事件并入下一轮 AI 请求
-     说明：
-     1. 用户可能撤回较早位置的气泡，但撤回行为发生在当前时刻；下一轮 AI 仍必须收到这条撤回提示。
-     2. withdrawnAt / timestamp 晚于最近 AI 消息的 user_withdraw_system 会并入 currentRoundMessages。
-     3. 这里只组装请求上下文，不新增存储；消息对象仍随 currentMessages 写入 DB.js / IndexedDB。
-     ======================================================================== */
-  const latestAssistantTimestamp = normalized
-    .filter(item => item.role === 'assistant')
-    .reduce((max, item) => Math.max(max, Number(item?.timestamp || 0) || 0), 0);
-  const currentRoundIdSet = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
-  const recentWithdrawMessages = normalized
-    .filter(item => (
-      String(item?.type || '') === 'user_withdraw_system'
-      && !currentRoundIdSet.has(String(item?.id || ''))
-      && (Number(item?.withdrawnAt || item?.timestamp || 0) || 0) > latestAssistantTimestamp
-    ));
-  if (recentWithdrawMessages.length) {
-    currentRoundMessages = [...currentRoundMessages, ...recentWithdrawMessages]
-      .sort((a, b) => (Number(a?.timestamp || a?.withdrawnAt || 0) || 0) - (Number(b?.timestamp || b?.withdrawnAt || 0) || 0));
-  }
-  const latestUserMessage = [...currentRoundMessages].reverse().find(item => Number(item?.timestamp || 0) > 0)
-    || [...normalized].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0)
-    || null;
-  const latestAnyMessage = [...normalized].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
-  /* ========================================================================
-     [AI撤回时间感知增强] 撤回系统小字发送给 AI 的文本规则
-     说明：
-     1. user_withdraw_system 必须把系统提示小字自身的发送时间传给 AI，避免 AI 把早上的撤回提示误认成当前刚发生。
-     2. withdrawnVisibleToAi=false：只提示对方在指定时间撤回且你看不见原文，引导 AI 结合本轮 API 实际请求时间判断“刚才/之前”。
-     3. withdrawnVisibleToAi=true：提示对方在指定时间撤回且你看得见原文，并附撤回原文；禁止默认使用“刚才/刚刚”。
-     4. 该字段随 currentMessages 写入 DB.js / IndexedDB；本区只做请求上下文组装，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const formatWithdrawSystemTipTimeForAi = (timestamp) => {
-    const value = Number(timestamp || 0) || 0;
-    if (!value) return '未知时间';
-    const date = new Date(value);
-    const pad = number => String(number).padStart(2, '0');
-    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  };
-
-  const getAiVisibleContentForMessage = (item = {}, options = {}) => {
-    if (String(item?.type || '') === 'user_withdraw_system') {
-      const systemTipTime = formatWithdrawSystemTipTimeForAi(item.withdrawnAt || item.timestamp);
-      const timeAwareInstruction = `【系统提示小字发送时间：${systemTipTime}】当前对话对象在上述时间撤回了一条消息。请务必把这个时间当作撤回系统提示小字发生的时间，并结合“本轮 API 实际请求时间”判断间隔；如果已经过去较久，不要说“刚才/刚刚撤回”，应改用“之前撤回的消息”等符合时间差的表达。`;
-      const base = `${timeAwareInstruction}\n你看不见撤回原文。可用一句自然互动回应，例如“您之前撤回的消息我看到了，撤回了什么呀？”`;
-      if (!item.withdrawnVisibleToAi) return base;
-      const withdrawnText = String(item.withdrawnContent || '').trim();
-      return withdrawnText ? `${timeAwareInstruction}\n你看得见撤回原文。若间隔较久，可用一句自然互动回应，例如“您之前撤回的消息我看到了”。\n撤回的消息内容：${withdrawnText}` : base;
-    }
-    if (String(item?.type || '') === 'gift') {
-      /* ======================================================================
-         [区域标注·已完成·礼物消息AI上下文摘要化]
-         说明：
-         1. 礼物代付请求在“当前轮用户消息”中保留完整请求文案，确保 AI 能理解是否代付。
-         2. 礼物消息进入历史上下文后仅发送短摘要，避免重复携带长文造成 token 浪费。
-         3. 仅处理 type=gift，不影响其它消息类型。
-         ====================================================================== */
-      const isHistorySummary = Boolean(options.historySummary);
-      const giftRequestType = String(item?.giftRequestType || '').trim();
-      if (isHistorySummary) {
-        const title = String(item?.giftTitle || '礼物').trim();
-        const priceLabel = String(item?.giftDisplayPrice || '').trim();
-        const prefix = giftRequestType === 'pay_request' ? '[礼物代付请求]' : '[礼物]';
-        return `${prefix} ${title}${priceLabel ? ` · ${priceLabel}` : ''}`;
-      }
-      return String(item?.giftAiPromptText || item?.content || '').trim();
-    }
-    return String(item.content || '').trim();
-  };
-
-  const userInput = currentRoundMessages.map((item, index) => {
-    const content = getAiVisibleContentForMessage(item, { historySummary: false });
-    return currentRoundMessages.length > 1 ? `第${index + 1}条：${content}` : content;
-  }).join('\n');
-
-  const roundLimit = Math.max(0, Math.floor(Number(shortTermMemoryRounds)) || 0);
-  const currentRoundMessageIds = new Set(currentRoundMessages.map(item => String(item?.id || '')).filter(Boolean));
-  const previous = (latestUserStart >= 0 ? normalized.slice(0, latestUserStart) : normalized)
-    .filter(item => !currentRoundMessageIds.has(String(item?.id || '')));
-
-  /* ========================================================================
-     [区域标注·已完成·需求1·控制台轮次统计元数据]
-     说明：
-     1. conversationRoundIndex 按“连续 user 消息组 = 1 轮”统计当前会话总用户轮次，用于控制台显示真正聊到第几轮。
-     2. currentRoundMessageCount 仅表示本轮用户连续发送的消息条数，以及被并入本轮的撤回系统提示条数。
-     3. 本区域只返回运行时日志元数据，不新增持久化存储，不改变 history/currentUserRoundMessages 的 AI 请求内容。
-     ======================================================================== */
-  const countUserConversationRounds = (items = []) => {
-    let count = 0;
-    let previousRole = '';
-    (Array.isArray(items) ? items : []).forEach(item => {
-      if (item?.role === 'user' && previousRole !== 'user') count += 1;
-      previousRole = String(item?.role || '');
-    });
-    return count;
-  };
-  const conversationRoundIndex = countUserConversationRounds(normalized);
-  const currentRoundMessageCount = currentRoundMessages.length;
-
-  /* ========================================================================
-     [区域标注·已完成·本次时间断层强化] 时间感知运行时上下文
-     说明：
-     1. 即使短期记忆轮数为 0，也继续把必要时间戳随本次 API 请求传给 prompt.js，不额外持久化。
-     2. currentUserRound* 表示用户本轮实际回复时间；previousLatest* 表示排除本轮用户消息后的上一段聊天时间。
-     3. previousLatestAssistantTimestamp 专门用于判断“上一轮 AI 凌晨回复 → 用户早上才回”的真实跨度，避免 AI 继续停留在凌晨语境劝睡。
-     4. 本区只做运行时计算，不使用 localStorage/sessionStorage，不写双份存储兜底。
-     ======================================================================== */
-  const previousLatestAnyMessage = [...previous].reverse().find(item => Number(item?.timestamp || 0) > 0) || null;
-  const previousLatestUserMessage = [...previous].reverse().find(item => item.role === 'user' && Number(item?.timestamp || 0) > 0) || null;
-  const previousLatestAssistantMessage = [...previous].reverse().find(item => item.role === 'assistant' && Number(item?.timestamp || 0) > 0) || null;
-  const currentRoundTimestamps = currentRoundMessages
-    .map(item => Number(item?.timestamp || 0) || 0)
-    .filter(Boolean);
-  const conversationTimeContext = {
-    latestUserTimestamp: Number(latestUserMessage?.timestamp || 0) || 0,
-    latestAnyTimestamp: Number(latestAnyMessage?.timestamp || 0) || 0,
-    currentUserRoundFirstTimestamp: currentRoundTimestamps.length ? Math.min(...currentRoundTimestamps) : 0,
-    currentUserRoundLastTimestamp: currentRoundTimestamps.length ? Math.max(...currentRoundTimestamps) : 0,
-    previousLatestAnyTimestamp: Number(previousLatestAnyMessage?.timestamp || 0) || 0,
-    previousLatestUserTimestamp: Number(previousLatestUserMessage?.timestamp || 0) || 0,
-    previousLatestAssistantTimestamp: Number(previousLatestAssistantMessage?.timestamp || 0) || 0
-  };
-  const currentUserRoundMessages = currentRoundMessages.map(item => ({
-    /* ======================================================================
-       [区域标注·已完成·AI引用回复] 当前轮用户消息可引用 ID
-       说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用用户最新一轮消息；不新增存储。
-       ====================================================================== */
-    id: item.id || '',
-    role: item.role,
-      content: getAiVisibleContentForMessage(item, { historySummary: false }),
-    quote: item.quote || null,
-    type: item.type || '',
-    stickerUrl: item.stickerUrl || '',
-    stickerName: item.stickerName || '',
-    imageUrl: item.imageUrl || '',
-    imageName: item.imageName || '',
-    timestamp: Number(item.timestamp || 0) || 0
-  }));
-
-  if (roundLimit <= 0) {
-    return {
-      userInput,
-      history: [],
-      currentUserRoundMessages,
-      conversationTimeContext,
-      /* [区域标注·已完成·需求1·短期记忆为0时日志元数据] 仅供控制台展示，不影响 AI 请求历史内容。 */
-      conversationRoundIndex,
-      currentRoundMessageCount,
-      historyRoundCount: 0,
-      historyMessageCount: 0
-    };
-  }
-
-  const toHistoryPromptItem = (item = {}) => ({
-    /* ======================================================================
-       [区域标注·已完成·AI引用回复] 历史消息可引用 ID
-       说明：把消息 id 传给 prompt.js，AI 可用 [引用] 协议引用短期记忆范围内的消息；不新增存储。
-       ====================================================================== */
-    id: item.id || '',
-    role: item.role,
-    content: getAiVisibleContentForMessage(item, { historySummary: true }),
-    quote: item.quote || null,
-    type: item.type || '',
-    stickerUrl: item.stickerUrl || '',
-    stickerName: item.stickerName || '',
-    imageUrl: item.imageUrl || '',
-    imageName: item.imageName || '',
-    /* [区域标注·已修改] 历史消息保留发送时间，供时间感知把“昨天/明天/后天”等相对时间锚定到原消息时间。 */
-    timestamp: Number(item.timestamp || 0) || 0
-  });
-
-  /* ========================================================================
-     [区域标注·已完成·本次短期记忆按轮截取修复] 历史消息按真实对话轮分组
-     说明：
-     1. 一轮 = 连续用户消息组 + 随后 AI 返回消息组；用户连续发多条不拆轮，AI 多气泡回复也不拆轮。
-     2. 短期记忆设置 shortTermMemoryRounds 表示“历史轮数”，不是“历史消息条数”。
-     3. 这里先按轮选择最近 N 轮，再展开为 prompt.js/API 需要的扁平 messages 数组。
-     4. 本区只处理运行时请求上下文，不新增持久化存储，不使用 localStorage/sessionStorage。
-     ======================================================================== */
-  const rounds = [];
-  let current = [];
-  let currentHasAssistantMessages = false;
-
-  previous.forEach(item => {
-    if (item.role === 'user' && current.length && currentHasAssistantMessages) {
-      rounds.push(current);
-      current = [];
-      currentHasAssistantMessages = false;
-    }
-
-    current.push(toHistoryPromptItem(item));
-
-    if (item.role === 'assistant') {
-      currentHasAssistantMessages = true;
-    }
-  });
-  if (current.length) rounds.push(current);
-
-  /* ========================================================================
-     [区域标注·已完成·本次短期记忆按轮截取修复] 短期记忆日志统计
-     说明：
-     1. selectedHistoryRounds 是本次短期记忆实际携带的历史轮次数组，historyRoundCount 按“轮”统计。
-     2. historyMessageCount 按最终展开后的 history 消息条数统计，仅用于排查 token 与气泡拆分数量。
-     3. 发送给 AI 时仍是扁平 messages 数组，但截取边界已按“最近 N 轮历史”计算，不再按 N 条消息卡掉早期轮次。
-     ======================================================================== */
-  const selectedHistoryRounds = rounds.slice(-roundLimit);
-  const selectedHistoryMessages = selectedHistoryRounds.flat();
-
-  return {
-    userInput,
-    history: selectedHistoryMessages,
-    currentUserRoundMessages,
-    conversationTimeContext,
-    conversationRoundIndex,
-    currentRoundMessageCount,
-    historyRoundCount: selectedHistoryRounds.length,
-    historyMessageCount: selectedHistoryMessages.length
-  };
+  return buildPromptPayloadForLatestUserRoundModule(messages, shortTermMemoryRounds);
 }
 
 
+/* ========================================================================
+   [区域标注·已完成·本次拆分] AI 回复拆泡与可见文本清洗 facade
+   说明：
+   1. 回复拆泡、可见文本清洗与最少/最多气泡数收口逻辑已下沉到 chat-message-ai-protocol.js。
+   2. 本文件继续保留原导出名，避免影响 prompt 协议接线与外部调用方。
+   ======================================================================== */
 export function splitAiReplyIntoBubbles(text, chatSettings = {}) {
-  const raw = sanitizeAiVisibleReply(text);
-  if (!raw) return ['（AI 没有返回内容）'];
-
-  const { min, max } = getReplyBubbleCountRange(chatSettings);
-
-  /* ==========================================================================
-     [区域标注·已完成·本次需求2] 通用消息协议拆分与自然断句
-     说明：
-     1. 只识别 prompt.js 的 **`[回复] 角色名：文字消息内容`** 通用协议。
-     2. 不强制给句末补标点；保留 AI 原有口语化短句（含无句号结尾）以避免“每句都带标点”。
-     3. 拆分优先使用协议块与自然断句，再叠加最少/最多气泡数收口，避免设置页规则只停留在 prompt 层。
-  /* ========================================================================== */
-  const protocolReplyMatches = extractProtocolReplyContents(raw);
-
-  let parts = protocolReplyMatches.length
-    ? protocolReplyMatches
-    : raw
-        .split(/\n{2,}|(?:\s*<bubble>\s*)|(?:\s*<\/bubble>\s*)|(?:\s*\|\|\|\s*)|(?:\s*---气泡---\s*)/i)
-        .map(item => item.trim())
-        .filter(Boolean);
-
-  parts = parts
-    .map(part => cleanAiVisibleBubbleText(part))
-    .filter(Boolean)
-    .flatMap(part => splitStrictSentenceBubbles(part));
-
-  if (parts.length <= 1 && raw.length > 28) {
-    parts = raw
-      .split(/(?<=[，,、；;])\s*/)
-      .map(item => cleanAiVisibleBubbleText(item))
-      .filter(Boolean);
-  }
-
-  while (parts.length < min) {
-    let bestIndex = -1;
-    let bestParts = [];
-    let bestLength = 0;
-
-    parts.forEach((item, index) => {
-      const candidateParts = splitSingleBubbleForCount(item);
-      if (candidateParts.length <= 1) return;
-      if (String(item || '').length > bestLength) {
-        bestIndex = index;
-        bestParts = candidateParts;
-        bestLength = String(item || '').length;
-      }
-    });
-
-    if (bestIndex < 0 || bestParts.length <= 1) break;
-    parts.splice(bestIndex, 1, ...bestParts);
-  }
-
-  const cleaned = parts.map(item => cleanAiVisibleBubbleText(item)).filter(Boolean);
-  return cleaned.length ? cleaned.slice(0, max) : ['（AI 没有返回内容）'];
+  return splitAiReplyIntoBubblesModule(text, chatSettings);
 }
 
 /* ========================================================================== */
 export function sanitizeAiVisibleReply(text) {
-  let value = cleanAiVisibleBubbleText(text);
-
-  /* ===== 闲谈：通用消息协议解析 START ===== */
-  const protocolReplyMatches = extractProtocolReplyContents(value);
-  if (protocolReplyMatches.length) {
-    value = protocolReplyMatches
-      .map(item => cleanAiVisibleBubbleText(item))
-      .filter(Boolean)
-      .join('\n');
-  }
-  /* ===== 闲谈：通用消息协议解析 END ===== */
-
-  return value
-    .split(/\n+/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .join('\n')
-    .trim();
+  return sanitizeAiVisibleReplyModule(text);
 }
 
 
@@ -2673,175 +1510,28 @@ export function splitStrictSentenceBubbles(text) {
 /* ===== 闲谈应用：AI回复拆分为多个气泡 START ===== */
 /* ===== 闲谈：通用消息协议解析 START ===== */
 export function extractProtocolReplyContents(text) {
-  /*
-   * ========================================================================
-   * [区域标注·本次需求2] 通用消息协议强力约束入口
-   * 说明：
-   * 1. 统一复用 extractAiProtocolBlocks，不再维护两套容易分叉的协议正则。
-   * 2. 只取 [回复] 内容，保证“回复文字消息”不再把协议头原样显示到聊天界面。
-   * 3. 这里只负责解析可见文本，不做任何持久化存储。
-   * ======================================================================== */
-  return extractAiProtocolBlocks(text)
-    .filter(block => block.type === '回复')
-    .map(block => String(block.content || '').trim())
-    .filter(Boolean);
+  return extractProtocolReplyContentsModule(text);
 }
 
 /* ===== 闲谈：通用消息协议解析 END ===== */
 
 export function getReplyBubbleCountRange(chatSettings = {}) {
-  const min = Math.max(1, Math.floor(Number(chatSettings.replyBubbleMin || 1)) || 1);
-  const max = Math.max(min, Math.floor(Number(chatSettings.replyBubbleMax || min)) || min);
-  return { min, max };
+  return getReplyBubbleCountRangeModule(chatSettings);
 }
 
 /* ========================================================================== */
 export function cleanAiVisibleBubbleText(text) {
-  return stripAiProtocolClosingTags(String(text || ''))
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<\/?think>/gi, '')
-    /* ======================================================================
-       [区域标注·已更新·本次消息掉格式修复] 清理裸露通用协议残片（覆盖漏角色名场景）
-       说明：
-       1. 兼容清理 `[回复] 内容` / `[表情] 内容` / `[引用]{引用ID:...}内容` 等漏写角色名的协议残片。
-       2. 兼容清理 `[回复] 角色名 内容`（漏冒号）等前缀噪音，避免协议头残留进聊天气泡。
-       3. 新增清理“{user_xxx...}正文”这类掉格式前缀，避免角色占位串直接显示在消息气泡。
-       ====================================================================== */
-    .replace(/^\s*(?:以下是)?(?:修正后内容|最终输出|回复格式|检查结果|修正结果|正确格式)\s*[：:]\s*/i, '')
-    .replace(/^\s*(?:\*\*)?\s*`?\s*\[\s*(?:回复|表情|引用|礼物|转账|撤回|语音|文字图|图片)\s*\]\s*(?:[^：:\n`*]{1,40}\s*[：:]\s*)?/i, '')
-    .replace(/^\s*\{(?:user|assistant|role|character|mask)_[^}\n]{3,120}\}\s*/i, '')
-    .replace(/(?:`|\*\*)+/g, '')
-    .replace(/\[\s*消息发送时间\s*[：:][\s\S]*?\]/gi, ' ')
-    .split(/\n+/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .filter(line => !/^(思考回复内容|思考内容|检查规则|审查规则|拟定句子|检查结果|最终输出|回复格式|本轮 API 实际请求时间|最近一条已记录的用户消息发送时间|最近一条聊天记录时间|从最近一条用户消息到本轮实际请求已经过去|距上次聊天记录已经过去)\s*[：:]/.test(line))
-    .map(line => line.replace(/^(?:第\s*\d+\s*条|气泡\s*\d+|[0-9]+[.)、])\s*/i, '').trim())
-    .filter(line => !/^\d{4}年\d{1,2}月\d{1,2}日(?:星期[一二三四五六日天])?\s+\d{1,2}:\d{2}(?::\d{2})?\]$/.test(line))
-    .filter(Boolean)
-    .join('\n')
-    /* ======================================================================
-       [区域标注·已完成·普通气泡引号保留与省略号残片合并] 可见正文引号保护
-       说明：
-       1. 不再删除气泡正文首尾引号，避免中文前引号、英文引号被前端清洗误删。
-       2. 协议头、闭合标签、Markdown 包裹符仍在上方清理；这里保留用户实际看到的正文标点。
-       3. 本区域不涉及任何持久化存储，不使用 localStorage/sessionStorage。
-       ====================================================================== */
-    .trim();
+  return cleanAiVisibleBubbleTextModule(text);
 }
 
 
 export function splitSingleBubbleForCount(text) {
-  const value = cleanAiVisibleBubbleText(text);
-  if (!value) return [];
-
-  const sentenceParts = splitStrictSentenceBubbles(value);
-  if (sentenceParts.length > 1) return sentenceParts;
-
-  const commaParts = value
-    .split(/(?<=[，,、；;])\s*/)
-    .map(item => item.trim())
-    .filter(Boolean);
-  if (commaParts.length > 1) return commaParts;
-
-  const spaceParts = value
-    .split(/\s+/)
-    .map(item => item.trim())
-    .filter(Boolean);
-  if (spaceParts.length > 1) return spaceParts;
-
-  if (value.length <= 1) return [value];
-
-  const splitAt = Math.max(1, Math.ceil(value.length / 2));
-  return [
-    value.slice(0, splitAt).trim(),
-    value.slice(splitAt).trim()
-  ].filter(Boolean);
+  return splitSingleBubbleForCountModule(text);
 }
 
 
 export function enforceAiReplyMessageCount(messages, chatSettings = {}) {
-  const { min, max } = getReplyBubbleCountRange(chatSettings);
-  let normalizedMessages = Array.isArray(messages)
-    ? messages
-        .map(message => {
-          if (!message) return null;
-          /* ==================================================================
-             [区域标注·已完成·AI本轮撤回逐条系统提示保留]
-             说明：ai_withdraw_system 是撤回后给用户/后续 AI 看的中间系统小字，不参与 AI 气泡数量裁剪，也不能因为 role:user 被过滤。
-             ================================================================== */
-          if (String(message.type || '') === 'ai_withdraw_system') return message;
-          if (message.role !== 'assistant') return null;
-          if (String(message.type || '') === 'sticker' && String(message.stickerUrl || '').trim()) {
-            return message;
-          }
-          if (isTextImageMessage(message)) {
-            return message;
-          }
-          if (isVoiceMessage(message)) {
-            return message;
-          }
-          if (String(message.type || '') === 'transfer') {
-            return message;
-          }
-          if (String(message.type || '') === 'gift') {
-            return message;
-          }
-          if (String(message.type || '') === 'card' && String(message.cardHtml || message.content || '').trim()) {
-            return message;
-          }
-          const content = cleanAiVisibleBubbleText(message.content);
-          if (!content && message.quote && String(message.quote.text || '').trim()) {
-            return { ...message, content: '' };
-          }
-          return content ? { ...message, content } : null;
-        })
-        .filter(Boolean)
-    : [];
-
-  while (normalizedMessages.length < min) {
-    let bestIndex = -1;
-    let bestParts = [];
-    let bestLength = 0;
-
-    normalizedMessages.forEach((message, index) => {
-      if (String(message.type || '') === 'sticker' || String(message.type || '') === 'ai_withdraw_system' || isTextImageMessage(message) || isVoiceMessage(message) || String(message.type || '') === 'card' || String(message.type || '') === 'transfer' || String(message.type || '') === 'gift') return;
-      const parts = splitSingleBubbleForCount(message.content);
-      if (parts.length <= 1) return;
-      const currentLength = String(message.content || '').length;
-      if (currentLength > bestLength) {
-        bestIndex = index;
-        bestParts = parts;
-        bestLength = currentLength;
-      }
-    });
-
-    if (bestIndex < 0 || bestParts.length <= 1) break;
-
-    const baseMessage = normalizedMessages[bestIndex];
-    normalizedMessages.splice(
-      bestIndex,
-      1,
-      ...bestParts.map(content => ({
-        ...baseMessage,
-        content
-      }))
-    );
-  }
-
-  const countableMessages = normalizedMessages.filter(message => String(message.type || '') !== 'ai_withdraw_system');
-  if (countableMessages.length > max) {
-    let keptCountable = 0;
-    normalizedMessages = normalizedMessages.filter(message => {
-      if (String(message.type || '') === 'ai_withdraw_system') return true;
-      keptCountable += 1;
-      return keptCountable <= max;
-    });
-  }
-
-  return normalizedMessages.length
-    ? normalizedMessages
-    : [{ role: 'assistant', content: '（AI 没有返回内容）' }];
+  return enforceAiReplyMessageCountModule(messages, chatSettings);
 }
 
 /* ========================================================================== */
