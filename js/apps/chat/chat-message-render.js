@@ -270,19 +270,66 @@ function renderMessageWithAsideHtml(message, chatSession, options = {}) {
   return `${beforeAsideHtml}${bubbleHtml}${afterAsideHtml}`;
 }
 
+/* ========================================================================
+   [区域标注·本次修改·头像与备注3点需求：当前会话消息头像联系人回退与隐藏开关]
+   说明：
+   1. 当前会话角色头像优先使用 session.avatar；删除后回退到联系人资料头像；资料头像不存在时才回退首字。
+   2. 当前会话用户头像优先使用 session.userAvatar；删除后继续回退到用户主页头像。
+   3. hideAvatars 仅隐藏当前会话窗口中的左右消息头像，不影响顶部栏、聊天列表、设置页预览或其它页面。
+   4. 本区域只读取运行时 state 传入数据，不做任何 localStorage/sessionStorage 持久化。
+   ======================================================================== */
+function getCurrentContactForSession(options = {}, session = {}) {
+  if (options.currentContact && typeof options.currentContact === 'object') {
+    return options.currentContact;
+  }
+
+  const contacts = Array.isArray(options.contacts) ? options.contacts : [];
+  const sessionId = String(session?.id || '').trim();
+  const sessionRoleId = String(session?.roleId || '').trim();
+
+  return contacts.find(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const contactRoleId = String(contact?.roleId || '').trim();
+    return (
+      (contactId && sessionId && contactId === sessionId)
+      || (contactRoleId && sessionRoleId && contactRoleId === sessionRoleId)
+      || (contactRoleId && sessionId && contactRoleId === sessionId)
+      || (contactId && sessionRoleId && contactId === sessionRoleId)
+    );
+  }) || null;
+}
+
+function getSessionAvatarMarkup(session = {}, options = {}) {
+  const sessionName = String(session?.name || '聊天').trim() || '聊天';
+  const currentContact = getCurrentContactForSession(options, session);
+  const sessionAvatar = String(session?.avatar || '').trim();
+  const contactAvatar = String(currentContact?.avatar || options.contactAvatar || '').trim();
+  const avatarSrc = sessionAvatar || contactAvatar;
+
+  return avatarSrc
+    ? `<img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(sessionName)}">`
+    : `<span>${escapeHtml((sessionName || '?').charAt(0).toUpperCase())}</span>`;
+}
+
+function getUserAvatarMarkup(session = {}, options = {}) {
+  const userProfile = options.userProfile || {};
+  const userName = String(userProfile.nickname || userProfile.name || '我').trim() || '我';
+  const userAvatar = String(session?.userAvatar || userProfile.avatar || '').trim();
+
+  return userAvatar
+    ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">`
+    : `<span>${escapeHtml((userName || '我').charAt(0).toUpperCase())}</span>`;
+}
+
 export function renderMessageBubble(msg, chatSession, options = {}) {
   const session = chatSession || {};
   const name = session.name || '聊天';
   const userProfile = options.userProfile || {};
-  /* ========================================================================
-     [区域标注·已完成·更换会话头像：当前会话用户头像显示]
-     说明：
-     1. 当前聊天页右侧用户气泡头像优先使用 session.userAvatar。
-     2. 若当前会话未单独设置用户头像，则回退到全局 userProfile.avatar。
-     3. 这里只影响当前聊天页显示，不回写全局资料头像。
-     ======================================================================== */
-  const userAvatar = session.userAvatar || userProfile.avatar || '';
-  const userName = userProfile.nickname || '我';
+  const chatSettings = options.chatSettings || {};
+  const hideAvatars = Boolean(chatSettings.hideAvatars);
+  const roleAvatarMarkup = getSessionAvatarMarkup(session, options);
+  const userAvatarMarkup = getUserAvatarMarkup(session, options);
+  const userName = userProfile.nickname || userProfile.name || '我';
   const selectedMessageId = String(options.selectedMessageId || '');
   const selectedAsideSegmentId = String(options.selectedAsideSegmentId || '').trim();
   const selectedMessageIds = Array.isArray(options.selectedMessageIds) ? options.selectedMessageIds.map(String) : [];
@@ -426,7 +473,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
     <div class="msg-bubble-row ${isUser ? 'msg-bubble-row--right' : 'msg-bubble-row--left'} ${multiSelectMode ? 'is-multi-selecting' : ''} ${isSelected ? 'is-selected' : ''}"
          data-message-id="${escapeHtml(messageId)}"
          data-action="${multiSelectMode ? 'msg-multi-toggle' : (isTransferMessage ? 'msg-transfer-open-actions' : 'msg-bubble-select')}">
-      ${!isUser ? `<div class="msg-bubble__avatar">${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="">` : escapeHtml((name || '?').charAt(0).toUpperCase())}</div>` : ''}
+      ${!isUser && !hideAvatars ? `<div class="msg-bubble__avatar">${roleAvatarMarkup}</div>` : ''}
       <div class="msg-bubble-content">
         ${isToolbarOpen ? `
           <div class="msg-bubble-toolbar" data-role="msg-bubble-toolbar">
@@ -480,7 +527,7 @@ export function renderMessageBubble(msg, chatSession, options = {}) {
         </div>
         <span class="msg-bubble__time">${formatMsgTime(msg?.timestamp)}</span>
       </div>
-      ${isUser ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatar ? `<img src="${escapeHtml(userAvatar)}" alt="${escapeHtml(userName)}">` : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`}</div>` : ''}
+      ${isUser && !hideAvatars ? `<div class="msg-bubble__avatar msg-bubble__avatar--user">${userAvatarMarkup}</div>` : ''}
       ${multiSelectMode ? `
         <button class="msg-bubble-select-dot ${isSelected ? 'is-selected' : ''}" data-action="msg-multi-toggle" data-message-id="${escapeHtml(messageId)}" type="button" aria-label="选择消息">
           ${isSelected ? MSG_ICONS.check : ''}
@@ -574,6 +621,13 @@ export function renderChatMessage(chatSession, messages, options = {}) {
   const { visibleMessages: msgs } = getVisibleChatMessagesForRender(allMsgs, options);
   const chatSettings = options.chatSettings || {};
   const isSending = Boolean(options.isSending);
+  const currentContact = getCurrentContactForSession(options, session);
+  const contactAvatar = String(currentContact?.avatar || '').trim();
+  const topBarAvatarMarkup = getSessionAvatarMarkup(session, {
+    ...options,
+    currentContact,
+    contactAvatar
+  });
 
   const stickerData = normalizeStickerPanelData(options.stickerData);
   const stickerPanelGroupId = String(options.stickerPanelGroupId || 'all');
@@ -602,7 +656,7 @@ export function renderChatMessage(chatSession, messages, options = {}) {
       <button class="msg-top-bar__back" data-action="msg-back" type="button">${MSG_ICONS.back}</button>
       <div class="msg-top-bar__user">
         <div class="msg-top-bar__avatar">
-          ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : escapeHtml((name || '?').charAt(0).toUpperCase())}
+          ${topBarAvatarMarkup}
         </div>
         <div class="msg-top-bar__info">
           <span class="msg-top-bar__name">${escapeHtml(name)}</span>
@@ -713,7 +767,11 @@ export function renderChatMessage(chatSession, messages, options = {}) {
     session,
     name,
     chatSettings,
-    options,
+    options: {
+      ...options,
+      currentContact,
+      contactAvatar
+    },
     stickerGroups,
     mountedStickerGroupIds,
     chatConsoleEnabled
@@ -830,6 +888,7 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     isSending: state.isAiSending,
     translationSettings: state.translationSettings,
     userProfile: state.profile,
+    contacts: state.contacts,
     stickerData: state.stickerData,
     stickerPanelGroupId: state.stickerPanelGroupId,
     stickerPanelOpen: state.stickerPanelOpen,
@@ -883,6 +942,8 @@ export function appendCurrentMessageBubble(container, state, message) {
 
   listArea.insertAdjacentHTML('beforeend', renderMessageWithAsideHtml(message, session, {
     userProfile: state.profile,
+    contacts: state.contacts,
+    chatSettings: state.chatPromptSettings,
     selectedMessageId: state.selectedMessageId,
     selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,
@@ -925,6 +986,8 @@ export function refreshMessageBubbleRows(container, state, messageIds = []) {
 
     row.outerHTML = renderMessageBubble(message, session, {
       userProfile: state.profile,
+      contacts: state.contacts,
+      chatSettings: state.chatPromptSettings,
       selectedMessageId: state.selectedMessageId,
       selectedAsideSegmentId: state.selectedAsideSegmentId,
       multiSelectMode: state.multiSelectMode,
@@ -949,6 +1012,8 @@ export function refreshCurrentMessageListOnly(container, state) {
   const previousScrollTop = listArea.scrollTop;
   listArea.innerHTML = renderChatMessageListHtml(session, state.currentMessages, {
     userProfile: state.profile,
+    contacts: state.contacts,
+    chatSettings: state.chatPromptSettings,
     selectedMessageId: state.selectedMessageId,
     selectedAsideSegmentId: state.selectedAsideSegmentId,
     multiSelectMode: state.multiSelectMode,

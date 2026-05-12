@@ -984,7 +984,16 @@ export function getDefaultChatPromptSettings() {
        2. 开启后，仅在最新一轮用户消息中向角色展示当前会话 userAvatar，并注入简短评论提示。
        3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
        ====================================================================== */
-    showUserAvatarToRole: false
+    showUserAvatarToRole: false,
+
+    /* ======================================================================
+       [区域标注·本次修改·头像与备注3点需求：隐藏当前会话消息头像开关默认值]
+       说明：
+       1. 该开关仅作用于“当前面具 + 当前聊天对象”的独立聊天设置。
+       2. 开启后，只隐藏当前会话窗口中的角色/用户消息头像，不影响档案、通讯录、顶部栏和其它联系人。
+       3. 持久化统一由调用方写入 DB.js / IndexedDB；本默认值区不使用 localStorage/sessionStorage。
+       ====================================================================== */
+    hideAvatars: false
   };
 }
 
@@ -1036,7 +1045,16 @@ export function normalizeChatPromptSettings(rawSettings) {
        1. 该字段只读取当前聊天设置中的 showUserAvatarToRole。
        2. 不回退到全局资料头像；是否展示完全由当前会话 userAvatar 与当前开关共同决定。
        ====================================================================== */
-    showUserAvatarToRole: Boolean(source.showUserAvatarToRole)
+    showUserAvatarToRole: Boolean(source.showUserAvatarToRole),
+
+    /* ======================================================================
+       [区域标注·本次修改·头像与备注3点需求：隐藏当前会话消息头像开关规范化]
+       说明：
+       1. 该字段只读取当前聊天设置中的 hideAvatars。
+       2. 该字段仅控制当前会话窗口消息头像显示，不参与头像资料写入。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ====================================================================== */
+    hideAvatars: Boolean(source.hideAvatars)
   };
 }
 

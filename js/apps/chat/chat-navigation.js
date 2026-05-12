@@ -153,6 +153,40 @@ function getSessionAvatarInitial(name = '') {
   return escapeHtml((String(name || '?').trim() || '?').charAt(0).toUpperCase());
 }
 
+/* ========================================================================
+   [区域标注·本次修改·头像与备注3点需求：当前会话角色头像删除后的资料头像回退]
+   说明：
+   1. 删除“当前会话单独设置”的角色头像后，只回退显示层，不改写通讯录联系人原始头像。
+   2. 回退优先使用当前会话关联联系人的资料头像；只有资料头像不存在时才回退为首字占位。
+   3. 本区域不使用 localStorage/sessionStorage，不写双份存储兜底；联系人数据只从现有 state.contacts 读取。
+   ======================================================================== */
+function getCurrentContactForSession(state, session) {
+  const contacts = Array.isArray(state?.contacts) ? state.contacts : [];
+  const sessionId = String(session?.id || '').trim();
+  const sessionRoleId = String(session?.roleId || '').trim();
+
+  return contacts.find(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const contactRoleId = String(contact?.roleId || '').trim();
+    return (
+      (contactId && sessionId && contactId === sessionId)
+      || (contactRoleId && sessionRoleId && contactRoleId === sessionRoleId)
+      || (contactRoleId && sessionId && contactRoleId === sessionId)
+      || (contactId && sessionRoleId && contactId === sessionRoleId)
+    );
+  }) || null;
+}
+
+function getSessionAvatarFallbackMarkup(state, session) {
+  const contact = getCurrentContactForSession(state, session);
+  const contactAvatar = String(contact?.avatar || '').trim();
+  const sessionName = String(session?.name || '聊天').trim() || '聊天';
+
+  return contactAvatar
+    ? `<img src="${escapeHtml(contactAvatar)}" alt="${escapeHtml(sessionName)}">`
+    : `<span>${getSessionAvatarInitial(sessionName)}</span>`;
+}
+
 function getUserAvatarFallbackMarkup(state) {
   const userName = String(state.profile?.nickname || '我');
   const profileAvatar = String(state.profile?.avatar || '').trim();
@@ -218,18 +252,20 @@ export async function deleteCurrentChatSessionAvatar(container, state, db) {
   session.avatarUpdatedAt = Date.now();
   await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
 
+  const fallbackAvatarMarkup = getSessionAvatarFallbackMarkup(state, session);
+
   const preview = container.querySelector('[data-role="msg-settings-avatar-preview-character"]');
   if (preview) {
-    preview.innerHTML = `<span>${getSessionAvatarInitial(session.name || '')}</span>`;
+    preview.innerHTML = fallbackAvatarMarkup;
   }
 
   const topAvatar = container.querySelector('.msg-top-bar__avatar');
   if (topAvatar) {
-    topAvatar.innerHTML = getSessionAvatarInitial(session.name || '');
+    topAvatar.innerHTML = fallbackAvatarMarkup;
   }
 
   container.querySelectorAll('.msg-bubble-row--left .msg-bubble__avatar').forEach(avatarEl => {
-    avatarEl.innerHTML = getSessionAvatarInitial(session.name || '');
+    avatarEl.innerHTML = fallbackAvatarMarkup;
   });
 
   refreshPanel(container, state, 'chatList');

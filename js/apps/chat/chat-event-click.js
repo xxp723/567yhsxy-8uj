@@ -2003,6 +2003,20 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       target.classList.toggle('is-on', state.chatPromptSettings.showUserAvatarToRole);
       break;
 
+    /* ========================================================================
+       [区域标注·本次修改·头像与备注3点需求：隐藏当前会话消息头像开关]
+       说明：
+       1. 仅写入当前面具 + 当前聊天对象的 chatPromptSettings.hideAvatars。
+       2. 持久化统一走 DB.js / IndexedDB，不使用 localStorage/sessionStorage，不写双份兜底。
+       3. 切换后只局部刷新当前消息列表，避免整页重建导致设置页闪屏。
+       ======================================================================== */
+    case 'toggle-chat-hide-avatars':
+      state.chatPromptSettings.hideAvatars = !state.chatPromptSettings.hideAvatars;
+      await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
+      target.classList.toggle('is-on', state.chatPromptSettings.hideAvatars);
+      refreshCurrentMessageListOnly(container, state);
+      break;
+
     case 'toggle-time-awareness':
       state.chatPromptSettings.timeAwarenessEnabled = !state.chatPromptSettings.timeAwarenessEnabled;
       await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);

@@ -27,6 +27,31 @@ export function renderChatMessageSettingsPage({
   mountedStickerGroupIds = [],
   chatConsoleEnabled = false
 } = {}) {
+  /* ========================================================================
+     [区域标注·本次修改·头像与备注3点需求：设置页双头像显示数据]
+     说明：
+     1. 角色名称固定显示当前联系人的本名 session.name，不使用备注优先的 name。
+     2. 用户名称固定显示用户主页显示名，优先 nickname，其次 name，最后回退“我”。
+     3. 角色头像删除当前会话覆盖后，设置页预览优先回退到联系人资料头像，而不是直接回退单字占位。
+     4. 用户头像删除当前会话覆盖后，继续回退到用户主页头像。
+     ======================================================================== */
+  const roleDisplayName = String(session.name || '聊天').trim() || '聊天';
+  const userDisplayName = String(options.userProfile?.nickname || options.userProfile?.name || '我').trim() || '我';
+  const currentContact = options.currentContact || {};
+  const contactAvatar = String(
+    currentContact.avatar
+    || options.contactAvatar
+    || ''
+  ).trim();
+  const characterAvatarSrc = String(session.avatar || contactAvatar || '').trim();
+  const userAvatarSrc = String(session.userAvatar || options.userProfile?.avatar || '').trim();
+  const characterAvatarMarkup = characterAvatarSrc
+    ? `<img src="${escapeHtml(characterAvatarSrc)}" alt="${escapeHtml(roleDisplayName)}">`
+    : `<span>${escapeHtml((roleDisplayName || '?').charAt(0).toUpperCase())}</span>`;
+  const userAvatarMarkup = userAvatarSrc
+    ? `<img src="${escapeHtml(userAvatarSrc)}" alt="${escapeHtml(userDisplayName)}">`
+    : `<span>${escapeHtml((userDisplayName || '我').charAt(0).toUpperCase())}</span>`;
+
   return `
     <div class="msg-settings-page" data-role="msg-settings-page" style="display:none;">
       <div class="msg-settings-header">
@@ -35,11 +60,13 @@ export function renderChatMessageSettingsPage({
       </div>
       <div class="msg-settings-body">
         <!-- ==================================================================
-             [区域标注·已完成·头像与备注：双头像/展示开关/当前会话备注]
+             [区域标注·本次修改·头像与备注3点需求：双头像/隐藏头像/当前会话备注]
              说明：
-             1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar / session.remark，与聊天设置 showUserAvatarToRole。
-             2. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
-             3. 不使用 localStorage/sessionStorage；头像点击后仅打开应用内来源选择弹窗。
+             1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar / session.remark，与聊天设置 showUserAvatarToRole / hideAvatars。
+             2. 删除当前会话角色头像后，显示层优先回退到通讯录/联系人资料头像；删除当前会话用户头像后，显示层回退到用户主页头像。
+             3. 角色名称固定显示当前联系人的本名 session.name，不显示备注；用户名称固定显示用户主页显示名。
+             4. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
+             5. 不使用 localStorage/sessionStorage；头像点击后仅打开应用内来源选择弹窗。
              ================================================================== -->
         <section class="msg-settings-avatar-section">
           <div class="msg-settings-section-title">头像与备注</div>
@@ -48,7 +75,6 @@ export function renderChatMessageSettingsPage({
             <div class="msg-settings-avatar-block">
               <div class="msg-settings-avatar-grid">
                 <div class="msg-settings-avatar-item">
-                  <div class="msg-settings-avatar-label">角色头像</div>
                   <button
                     class="msg-settings-avatar-preview msg-settings-avatar-preview-btn"
                     data-action="open-chat-avatar-source-modal"
@@ -56,11 +82,11 @@ export function renderChatMessageSettingsPage({
                     data-role="msg-settings-avatar-preview-character"
                     type="button"
                     aria-label="更换角色头像">
-                    ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
+                    ${characterAvatarMarkup}
                   </button>
+                  <div class="msg-settings-avatar-label">${escapeHtml(roleDisplayName)}</div>
                 </div>
                 <div class="msg-settings-avatar-item">
-                  <div class="msg-settings-avatar-label">用户头像</div>
                   <button
                     class="msg-settings-avatar-preview msg-settings-avatar-preview-btn"
                     data-action="open-chat-avatar-source-modal"
@@ -68,8 +94,9 @@ export function renderChatMessageSettingsPage({
                     data-role="msg-settings-avatar-preview-user"
                     type="button"
                     aria-label="更换用户头像">
-                    ${(session.userAvatar || options.userProfile?.avatar) ? `<img src="${escapeHtml(session.userAvatar || options.userProfile?.avatar || '')}" alt="${escapeHtml(options.userProfile?.nickname || '我')}">` : `<span>${escapeHtml(((options.userProfile?.nickname || '我') || '我').charAt(0).toUpperCase())}</span>`}
+                    ${userAvatarMarkup}
                   </button>
+                  <div class="msg-settings-avatar-label">${escapeHtml(userDisplayName)}</div>
                 </div>
               </div>
             </div>
@@ -77,6 +104,14 @@ export function renderChatMessageSettingsPage({
             <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-card__title">向角色展示头像</div>
               <button class="msg-ios-switch ${chatSettings.showUserAvatarToRole ? 'is-on' : ''}" data-action="toggle-show-user-avatar-to-role" type="button" aria-label="向角色展示头像"></button>
+            </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-row msg-settings-avatar-switch-row">
+              <div class="msg-settings-avatar-switch-copy">
+                <div class="msg-settings-card__title">隐藏头像</div>
+                <div class="msg-settings-card__desc">开启后仅隐藏当前会话窗口中的角色头像和用户头像，不影响其它页面。</div>
+              </div>
+              <button class="msg-ios-switch ${chatSettings.hideAvatars ? 'is-on' : ''}" data-action="toggle-chat-hide-avatars" type="button" aria-label="隐藏头像"></button>
             </div>
             <div class="msg-settings-avatar-divider"></div>
             <div class="msg-settings-remark-row">
