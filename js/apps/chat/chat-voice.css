@@ -23,24 +23,24 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·语音消息气泡与展开文字正常尺寸化]
+   [区域标注·已完成·本次语音气泡自适应宽度与转文字左上起步]
    说明：
-   1. 已将语音消息气泡改为接近普通文字气泡的紧凑尺寸，避免独立语音气泡过大。
+   1. 语音消息气泡宽度会配合渲染层输出的 CSS 变量，在上限内按转文字内容长度自适应，不再让单字内容也保持过长气泡。
    2. 已去除语音气泡独立粗边框与右侧下载箭头，仅保留播放键、波形条与 0:xx 秒数。
-   3. 已将双击展开后的转文字区域恢复为普通消息大小：自适应内容宽度、左对齐、继承正常气泡字体与行高。
+   3. 双击展开后的“语音转文字”内容框改为左上起步展示，减少居中留白，并继续继承正常消息字体与行高。
    4. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
   min-width: 0;
   width: fit-content;
-  max-width: min(220px, 72vw);
+  max-width: min(280px, 78vw);
   padding: 10px 14px;
   border: none;
   overflow: visible;
 }
 
 .msg-voice-bubble {
-  width: min(168px, 54vw);
+  width: min(var(--msg-voice-bubble-width, 168px), 100%);
   max-width: 100%;
   padding: 0;
   color: #765b63;
@@ -140,6 +140,7 @@
 
 .msg-voice-bubble__transcript {
   width: fit-content;
+  min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
   margin-top: 8px;
@@ -156,9 +157,12 @@
 }
 
 .msg-voice-bubble__text {
+  display: block;
+  margin: 0;
   font-family: inherit;
   font-size: inherit;
   font-weight: 500;
+  text-align: left;
 }
 
 .msg-bubble-row--right .msg-voice-bubble__transcript {

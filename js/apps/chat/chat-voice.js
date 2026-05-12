@@ -162,11 +162,12 @@ export function renderVoiceFeatureButton() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音展开气泡仿图样式]
+   [区域标注·已完成·本次语音气泡自适应宽度与语音转文字文案]
    说明：
    1. 用户模拟语音与 AI 主动语音共用本气泡：播放键 + 波长条 + 0:xx 秒数，默认不直接露出文字。
-   2. 双击展开后显示“隐藏文字”提示行，并将已清洗的转文字放入独立浅色小方框。
-   3. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成，不使用 localStorage/sessionStorage。
+   2. 双击展开后提示文案已改为“语音转文字”，转文字内容框改为左上起步展示，避免居中留白。
+   3. 语音气泡宽度会按转文字内容长度输出 CSS 变量，供样式层在上限内自适应，不再让单字内容也保持过长气泡。
+   4. 渲染只读取消息对象字段；持久化由 index.js 调用 DB.js / IndexedDB 完成，不使用 localStorage/sessionStorage。
    ========================================================================== */
 function formatVoiceBubbleDuration(seconds = 1) {
   const safeSeconds = Math.max(1, Math.min(60, Math.floor(Number(seconds) || 1)));
@@ -178,11 +179,14 @@ export function renderVoiceBubble(message = {}) {
   const duration = Math.max(1, Math.min(60, Number(message?.voiceDuration || Math.ceil(text.length / 3) || 1)));
   const expanded = Boolean(message?.voiceExpanded);
   const waveBars = [18, 24, 30, 22, 34, 40, 28, 36, 44, 30, 38, 24];
+  const transcriptLength = Math.max(1, text.length || 1);
+  const bubbleWidth = Math.max(118, Math.min(252, 112 + transcriptLength * 11));
 
   return `
     <div class="msg-voice-bubble ${expanded ? 'is-expanded' : ''}"
          data-action="toggle-msg-voice-transcript"
          data-message-id="${escapeHtml(message?.id || '')}"
+         style="--msg-voice-bubble-width:${bubbleWidth}px"
          title="双击展开/收起语音转文字">
       <div class="msg-voice-bubble__main">
         <span class="msg-voice-bubble__play" aria-hidden="true">${VOICE_ICONS.play}</span>
@@ -195,7 +199,7 @@ export function renderVoiceBubble(message = {}) {
       ${expanded ? `
         <div class="msg-voice-bubble__toggle-hint">
           <span class="msg-voice-bubble__sparkle" aria-hidden="true">${VOICE_ICONS.sparkle}</span>
-          <span>隐藏文字</span>
+          <span>语音转文字</span>
         </div>
         <div class="msg-voice-bubble__transcript">
           <span class="msg-voice-bubble__text">${escapeHtml(text)}</span>
