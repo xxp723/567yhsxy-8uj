@@ -35,85 +35,60 @@ export function renderChatMessageSettingsPage({
       </div>
       <div class="msg-settings-body">
         <!-- ==================================================================
-             [区域标注·已完成·更换会话头像：角色/用户头像与展示开关]
+             [区域标注·已完成·头像与备注：双头像/展示开关/当前会话备注]
              说明：
-             1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar，与聊天设置 showUserAvatarToRole。
+             1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar / session.remark，与聊天设置 showUserAvatarToRole。
              2. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
-             3. 不使用 localStorage/sessionStorage；不在此区域添加说明性文字。
+             3. 不使用 localStorage/sessionStorage；头像点击后仅打开应用内来源选择弹窗。
              ================================================================== -->
         <section class="msg-settings-avatar-section">
-          <div class="msg-settings-section-title">更换会话头像</div>
+          <div class="msg-settings-section-title">头像与备注</div>
           <section class="msg-settings-card msg-settings-avatar-card">
             <input data-role="msg-avatar-file-input" type="file" accept="image/*" hidden>
-            <div class="msg-settings-avatar-grid">
-              <div class="msg-settings-avatar-item">
-                <div class="msg-settings-avatar-label">角色头像</div>
-                <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview-character">
-                  ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
-                </div>
-                <div class="msg-settings-avatar-actions">
+            <div class="msg-settings-avatar-block">
+              <div class="msg-settings-avatar-grid">
+                <div class="msg-settings-avatar-item">
+                  <div class="msg-settings-avatar-label">角色头像</div>
                   <button
-                    class="msg-settings-avatar-action"
-                    data-action="open-chat-avatar-local-picker"
+                    class="msg-settings-avatar-preview msg-settings-avatar-preview-btn"
+                    data-action="open-chat-avatar-source-modal"
                     data-avatar-target="character"
-                    type="button">
-                    ${MSG_ICONS.upload}<span>本地上传</span>
-                  </button>
-                  <button
-                    class="msg-settings-avatar-action"
-                    data-action="open-chat-avatar-url-modal"
-                    data-avatar-target="character"
-                    type="button">
-                    ${MSG_ICONS.link}<span>URL链接</span>
+                    data-role="msg-settings-avatar-preview-character"
+                    type="button"
+                    aria-label="更换角色头像">
+                    ${session.avatar ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`}
                   </button>
                 </div>
-              </div>
-              <div class="msg-settings-avatar-item">
-                <div class="msg-settings-avatar-label">用户头像</div>
-                <div class="msg-settings-avatar-preview" data-role="msg-settings-avatar-preview-user">
-                  ${(session.userAvatar || options.userProfile?.avatar) ? `<img src="${escapeHtml(session.userAvatar || options.userProfile?.avatar || '')}" alt="${escapeHtml(options.userProfile?.nickname || '我')}">` : `<span>${escapeHtml(((options.userProfile?.nickname || '我') || '我').charAt(0).toUpperCase())}</span>`}
-                </div>
-                <div class="msg-settings-avatar-actions">
+                <div class="msg-settings-avatar-item">
+                  <div class="msg-settings-avatar-label">用户头像</div>
                   <button
-                    class="msg-settings-avatar-action"
-                    data-action="open-chat-avatar-local-picker"
+                    class="msg-settings-avatar-preview msg-settings-avatar-preview-btn"
+                    data-action="open-chat-avatar-source-modal"
                     data-avatar-target="user"
-                    type="button">
-                    ${MSG_ICONS.upload}<span>本地上传</span>
-                  </button>
-                  <button
-                    class="msg-settings-avatar-action"
-                    data-action="open-chat-avatar-url-modal"
-                    data-avatar-target="user"
-                    type="button">
-                    ${MSG_ICONS.link}<span>URL链接</span>
+                    data-role="msg-settings-avatar-preview-user"
+                    type="button"
+                    aria-label="更换用户头像">
+                    ${(session.userAvatar || options.userProfile?.avatar) ? `<img src="${escapeHtml(session.userAvatar || options.userProfile?.avatar || '')}" alt="${escapeHtml(options.userProfile?.nickname || '我')}">` : `<span>${escapeHtml(((options.userProfile?.nickname || '我') || '我').charAt(0).toUpperCase())}</span>`}
                   </button>
                 </div>
               </div>
             </div>
+            <div class="msg-settings-avatar-divider"></div>
             <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-card__title">向角色展示头像</div>
               <button class="msg-ios-switch ${chatSettings.showUserAvatarToRole ? 'is-on' : ''}" data-action="toggle-show-user-avatar-to-role" type="button" aria-label="向角色展示头像"></button>
             </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-remark-row">
+              <div class="msg-settings-card__title">备注</div>
+              <input
+                class="msg-settings-input msg-settings-input--inline"
+                data-role="msg-session-remark"
+                type="text"
+                placeholder="输入当前会话备注（仅本地显示）"
+                value="${escapeHtml(session.remark || '')}">
+            </div>
           </section>
-        </section>
-
-        <!-- ==================================================================
-             [区域标注·已完成·当前会话备注输入框]
-             说明：
-             1. 备注仅作用于当前会话显示名（聊天页/聊天列表），不改通讯录联系人原始名称。
-             2. 输入内容不做长度限制；持久化由 index.js 写入 sessions（DB.js / IndexedDB）。
-             3. 备注仅本地可见，不写入 AI 可见提示词上下文。
-             ================================================================== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">备注</div>
-          <input
-            class="msg-settings-input"
-            data-role="msg-session-remark"
-            type="text"
-            placeholder="输入当前会话备注（仅本地显示）"
-            value="${escapeHtml(session.remark || '')}">
-          <div class="msg-settings-card__desc">仅对当前会话生效，AI 不可见。</div>
         </section>
 
         <section class="msg-settings-card">

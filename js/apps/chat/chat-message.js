@@ -112,6 +112,7 @@ import {
   showMessageImageModal as showMessageImageModalModule,
   showMessageTransferModal as showMessageTransferModalModule,
   showTransferActionModal as showTransferActionModalModule,
+  showChatAvatarSourceModal as showChatAvatarSourceModalModule,
   showChatAvatarUrlModal as showChatAvatarUrlModalModule,
   showChatAvatarCropModal as showChatAvatarCropModalModule,
   updateChatAvatarCropPreview as updateChatAvatarCropPreviewModule,
@@ -1683,12 +1684,16 @@ export function showTransferActionModal(container, options = {}) {
    2. 弹窗只产生待保存头像数据；真正保存由 index.js 更新当前 session.avatar 并写入 DB.js / IndexedDB。
    3. URL 原图模式直接保存 URL；裁剪/压缩模式通过 canvas 输出 data:image/jpeg。
    ========================================================================== */
-export function showChatAvatarUrlModal(container) {
-  return showChatAvatarUrlModalModule(container);
+export function showChatAvatarSourceModal(container, avatarTarget = 'character') {
+  return showChatAvatarSourceModalModule(container, avatarTarget);
 }
 
-export function showChatAvatarCropModal(container, { imageUrl = '', source = 'local', fileName = '' } = {}) {
-  return showChatAvatarCropModalModule(container, { imageUrl, source, fileName });
+export function showChatAvatarUrlModal(container, avatarTarget = 'character') {
+  return showChatAvatarUrlModalModule(container, avatarTarget);
+}
+
+export function showChatAvatarCropModal(container, { imageUrl = '', source = 'local', fileName = '', avatarTarget = 'character' } = {}) {
+  return showChatAvatarCropModalModule(container, { imageUrl, source, fileName, avatarTarget });
 }
 
 export function updateChatAvatarCropPreview(container) {

@@ -79,6 +79,7 @@ import {
   showMessageImageModal,
   showMessageTransferModal,
   showTransferActionModal,
+  showChatAvatarSourceModal,
   showChatAvatarUrlModal,
   showChatAvatarCropModal,
   buildChatAvatarFromCropModal,
@@ -1271,6 +1272,10 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       if (settingsPage) settingsPage.style.display = 'flex';
       break;
     }
+
+    case 'open-chat-avatar-source-modal':
+      showChatAvatarSourceModal(container, String(target.dataset.avatarTarget || 'character'));
+      break;
 
     case 'open-chat-avatar-local-picker': {
       const input = container.querySelector('[data-role="msg-avatar-file-input"]');
