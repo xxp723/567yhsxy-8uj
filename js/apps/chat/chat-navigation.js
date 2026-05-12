@@ -142,12 +142,25 @@ export async function openChatMessage(container, state, db, chatId) {
    [区域标注] 关闭聊天消息页面，返回聊天列表
    ========================================================================== */
 /* ==========================================================================
-   [区域标注·已完成·更换会话头像保存]
+   [区域标注·已完成·更换/删除会话头像保存]
    说明：
    1. 角色头像只更新当前会话 session.avatar；用户头像只更新当前会话 session.userAvatar。
    2. 不修改 contacts/contact.avatar，不影响通讯录头像、联系人原始头像或全局 state.profile.avatar。
    3. 持久化只调用 dbPut → DATA_KEY_SESSIONS → DB.js / IndexedDB；不使用 localStorage/sessionStorage。
+   4. 本区域同时承接“上传头像”弹窗中的删除当前会话头像能力；删除后回退到当前界面的既有初始头像/资料头像展示。
    ========================================================================== */
+function getSessionAvatarInitial(name = '') {
+  return escapeHtml((String(name || '?').trim() || '?').charAt(0).toUpperCase());
+}
+
+function getUserAvatarFallbackMarkup(state) {
+  const userName = String(state.profile?.nickname || '我');
+  const profileAvatar = String(state.profile?.avatar || '').trim();
+  return profileAvatar
+    ? `<img src="${escapeHtml(profileAvatar)}" alt="${escapeHtml(userName)}">`
+    : `<span>${escapeHtml((userName || '我').charAt(0).toUpperCase())}</span>`;
+}
+
 export async function saveCurrentChatSessionAvatar(container, state, db, avatarUrl) {
   const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
   const safeAvatarUrl = String(avatarUrl || '').trim();
@@ -192,6 +205,52 @@ export async function saveCurrentChatSessionUserAvatar(container, state, db, ava
 
   container.querySelectorAll('.msg-bubble__avatar--user').forEach(avatarEl => {
     avatarEl.innerHTML = `<img src="${escapeHtml(safeAvatarUrl)}" alt="${escapeHtml(userName)}">`;
+  });
+
+  return true;
+}
+
+export async function deleteCurrentChatSessionAvatar(container, state, db) {
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  if (!session) return false;
+
+  session.avatar = '';
+  session.avatarUpdatedAt = Date.now();
+  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+  const preview = container.querySelector('[data-role="msg-settings-avatar-preview-character"]');
+  if (preview) {
+    preview.innerHTML = `<span>${getSessionAvatarInitial(session.name || '')}</span>`;
+  }
+
+  const topAvatar = container.querySelector('.msg-top-bar__avatar');
+  if (topAvatar) {
+    topAvatar.innerHTML = getSessionAvatarInitial(session.name || '');
+  }
+
+  container.querySelectorAll('.msg-bubble-row--left .msg-bubble__avatar').forEach(avatarEl => {
+    avatarEl.innerHTML = getSessionAvatarInitial(session.name || '');
+  });
+
+  refreshPanel(container, state, 'chatList');
+  return true;
+}
+
+export async function deleteCurrentChatSessionUserAvatar(container, state, db) {
+  const session = state.sessions.find(item => String(item.id) === String(state.currentChatId));
+  if (!session) return false;
+
+  session.userAvatar = '';
+  session.userAvatarUpdatedAt = Date.now();
+  await dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions);
+
+  const preview = container.querySelector('[data-role="msg-settings-avatar-preview-user"]');
+  if (preview) {
+    preview.innerHTML = getUserAvatarFallbackMarkup(state);
+  }
+
+  container.querySelectorAll('.msg-bubble__avatar--user').forEach(avatarEl => {
+    avatarEl.innerHTML = getUserAvatarFallbackMarkup(state);
   });
 
   return true;

@@ -173,7 +173,9 @@ import {
   closeSubPage,
   rerenderCurrentSubPage,
   saveCurrentChatSessionAvatar,
-  saveCurrentChatSessionUserAvatar
+  saveCurrentChatSessionUserAvatar,
+  deleteCurrentChatSessionAvatar,
+  deleteCurrentChatSessionUserAvatar
 } from './chat-navigation.js';
 import {
   CHAT_MESSAGE_INITIAL_VISIBLE_COUNT,
@@ -1290,6 +1292,26 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
     case 'open-chat-avatar-url-modal':
       showChatAvatarUrlModal(container, String(target.dataset.avatarTarget || 'character'));
       break;
+
+    /* ========================================================================
+       [区域标注·本次新增·上传头像弹窗删除当前会话头像]
+       说明：
+       1. 仅删除当前会话 session.avatar / session.userAvatar，并通过 chat-navigation.js 内既有 DB.js / IndexedDB 链路持久化。
+       2. 不修改通讯录联系人原始头像，不引入 localStorage/sessionStorage，不增加双份兜底。
+       3. 删除成功后关闭当前 chat-modal；删除失败时沿用现有应用内提示文案。
+       ======================================================================== */
+    case 'delete-current-chat-avatar': {
+      const avatarTarget = String(target.dataset.avatarTarget || 'character');
+      const deleted = avatarTarget === 'user'
+        ? await deleteCurrentChatSessionUserAvatar(container, state, db)
+        : await deleteCurrentChatSessionAvatar(container, state, db);
+      if (!deleted) {
+        renderModalNotice(container, '当前会话不存在，无法删除头像');
+        break;
+      }
+      closeModal(container);
+      break;
+    }
 
     case 'confirm-chat-avatar-url': {
       const input = container.querySelector('[data-role="chat-avatar-url-input"]');

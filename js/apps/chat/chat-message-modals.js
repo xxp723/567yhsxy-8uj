@@ -215,12 +215,13 @@ export function showTransferActionModal(container, options = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·头像来源选择弹窗去图标去说明文字]
+   [区域标注·已完成·头像来源选择弹窗去图标去说明文字与删除当前会话头像]
    说明：
    1. 点击聊天设置页中的角色头像或用户头像后，先打开应用内来源选择弹窗，不直接暴露原生输入控件。
    2. “本地上传 / URL 图床”按钮已按本次要求去除图标与说明文字，仅保留标题；“本地上传”主按钮改为主题色样式。
-   3. 真正保存仍由调用方写入当前 session.avatar / session.userAvatar 并持久化到 DB.js / IndexedDB。
-   4. 不使用 localStorage/sessionStorage，不改动其它头像或资料页逻辑。
+   3. 头部新增删除当前会话头像图标按钮，位置位于关闭按钮左侧；删除后由调用方回退到当前界面的既有初始头像/资料头像展示。
+   4. 真正保存或删除仍由调用方写入当前 session.avatar / session.userAvatar 并持久化到 DB.js / IndexedDB。
+   5. 不使用 localStorage/sessionStorage，不改动其它头像或资料页逻辑。
    ========================================================================== */
 export function showChatAvatarSourceModal(container, avatarTarget = 'character') {
   const mask = container.querySelector('[data-role="modal-mask"]');
@@ -231,10 +232,18 @@ export function showChatAvatarSourceModal(container, avatarTarget = 'character')
   const targetLabel = safeAvatarTarget === 'user' ? '用户头像' : '角色头像';
 
   panel.innerHTML = `
-    <!-- [区域标注·已完成·头像来源选择弹窗去图标去说明文字] 当前会话头像来源选择 -->
+    <!-- [区域标注·已完成·头像来源选择弹窗去图标去说明文字与删除当前会话头像] 当前会话头像来源选择 -->
     <div class="chat-modal-header">
       <span>上传头像</span>
-      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+      <div class="msg-avatar-source-header-actions">
+        <button
+          class="chat-modal-close msg-avatar-source-delete"
+          data-action="delete-current-chat-avatar"
+          data-avatar-target="${escapeHtml(safeAvatarTarget)}"
+          type="button"
+          aria-label="删除当前会话${escapeHtml(targetLabel)}">${MSG_ICONS.delete}</button>
+        <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+      </div>
     </div>
     <div class="chat-modal-body msg-avatar-source-modal" data-role="chat-avatar-source-modal" data-avatar-target="${escapeHtml(safeAvatarTarget)}">
       <div class="chat-modal-hint">为当前会话的${escapeHtml(targetLabel)}选择上传方式。</div>

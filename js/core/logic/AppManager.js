@@ -142,7 +142,12 @@ export class AppManager {
   async preloadChatCriticalStyles() {
     await Promise.all([
       this.preloadStylesheet('./js/apps/chat/chat.css', 'chat-app-css'),
-      this.preloadStylesheet('./js/apps/chat/moments.css', 'chat-moments-css')
+      this.preloadStylesheet('./js/apps/chat/moments.css', 'chat-moments-css'),
+      /* ======================================================================
+         [区域标注·本次拆分·聊天设置页独立样式预加载]
+         说明：聊天设置页与当前会话头像相关弹窗样式已拆分到独立 CSS，窗口显示前一并预加载以降低首次进入闪屏。
+         ====================================================================== */
+      this.preloadStylesheet('./js/apps/chat/chat-message-settings.css', 'chat-msg-settings-css')
     ]);
   }
 
@@ -197,6 +202,11 @@ export class AppManager {
          ====================================================================== */
       this.preloadStylesheet('./js/apps/chat/moments.css', 'chat-moments-css'),
       this.preloadStylesheet('./js/apps/chat/chat-message.css', 'chat-msg-css'),
+      /* ======================================================================
+         [区域标注·本次拆分·聊天设置页独立样式预加载]
+         说明：关键应用预热阶段同步预加载聊天设置页独立 CSS，避免首次进入设置页或头像弹窗时无样式闪屏。
+         ====================================================================== */
+      this.preloadStylesheet('./js/apps/chat/chat-message-settings.css', 'chat-msg-settings-css'),
       this.preloadStylesheet('./js/apps/archive/archive.css', 'archive-app-css'),
       this.preloadStylesheet('./js/apps/worldbook/worldbook.css', 'worldbook-app-css')
     ];

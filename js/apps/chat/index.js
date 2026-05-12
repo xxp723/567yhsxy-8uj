@@ -85,6 +85,14 @@ export async function mount(container, context) {
     /* [区域标注·本次需求5] 等待聊天消息页 CSS 加载完成，避免首次进入消息页时未样式化 */
     loadCSS('./js/apps/chat/chat-message.css', 'chat-msg-css'),
     /* ======================================================================
+       [区域标注·本次拆分·聊天设置页独立样式接线] 预加载聊天设置页独立 CSS
+       说明：
+       1. 聊天设置页与当前会话头像相关弹窗样式已拆分到 chat-message-settings.css。
+       2. 挂载阶段并行加载，避免首次进入聊天设置页或头像来源弹窗时出现未样式化闪屏。
+       3. 仅接入本次指定拆分区域，不改动任何其它持久化逻辑。
+       ====================================================================== */
+    loadCSS('./js/apps/chat/chat-message-settings.css', 'chat-msg-settings-css'),
+    /* ======================================================================
        [区域标注·已完成·HTML卡片独立样式预加载] 聊天 HTML 卡片专用 CSS
        说明：
        1. 单独拆分 chat-html-card.css，方便后续只改 HTML 卡片样式。
@@ -359,6 +367,8 @@ export async function mount(container, context) {
       removeCSS('chat-app-css');
       removeCSS('chat-moments-css');
       removeCSS('chat-msg-css');
+      /* [区域标注·本次拆分·聊天设置页独立样式接线] 卸载聊天设置页独立 CSS */
+      removeCSS('chat-msg-settings-css');
       removeCSS('chat-html-card-css');
       removeCSS('chat-gift-css');
       removeCSS('chat-text-image-css');
@@ -379,4 +389,3 @@ export async function unmount(instance) {
     instance.destroy();
   }
 }
-
