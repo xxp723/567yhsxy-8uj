@@ -577,6 +577,14 @@ export async function sendMessage(container, state, db, content, settingsManager
       db,
       activeMaskId: state.activeMaskId,
       currentSession: session,
+      /* ======================================================================
+         [区域标注·已完成·头像与备注：向角色展示头像发送源对齐]
+         说明：
+         1. 这里把聊天界面当前实际展示给用户的“用户头像来源”一并透传给 prompt.js。
+         2. 来源规则与聊天界面显示层保持一致：优先当前会话 session.userAvatar，缺失时回退到用户主页头像 state.profile.avatar。
+         3. 仅用于本轮 API 请求的多模态头像发送，不写入消息历史，不新增持久化，不使用 localStorage/sessionStorage。
+         ====================================================================== */
+      currentUserAvatarForRole: String(session.userAvatar || state.profile?.avatar || '').trim(),
       currentContact: state.contacts.find(contact => String(contact.id) === String(session.id)) || null,
       /* [区域标注·已完成·本次角色卡/用户面具上下文修复] 传入刚从 IndexedDB 刷新的完整档案上下文 */
       archiveData: latestArchiveDataForAi,

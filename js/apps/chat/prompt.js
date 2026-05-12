@@ -885,6 +885,7 @@ async function collectPromptRuntimeContext({
   db,
   activeMaskId = '',
   currentSession = null,
+  currentUserAvatarForRole = '',
   currentContact = null,
   archiveData = null,
   worldBooks = null,
@@ -922,6 +923,7 @@ async function collectPromptRuntimeContext({
     db,
     activeMaskId: safeActiveMaskId,
     currentSession,
+    currentUserAvatarForRole: String(currentUserAvatarForRole || '').trim(),
     currentContact,
     archiveData: normalizedArchive,
     worldBooks: normalizedWorldBooks,
@@ -981,8 +983,9 @@ export function getDefaultChatPromptSettings() {
        [区域标注·已完成·更换会话头像：向角色展示用户头像开关默认值]
        说明：
        1. 该开关仅作用于“当前面具 + 当前聊天对象”的独立聊天设置。
-       2. 开启后，仅在最新一轮用户消息中向角色展示当前会话 userAvatar，并注入简短评论提示。
-       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       2. 开启后，仅在最新一轮用户消息中向角色展示当前聊天界面实际使用的用户头像，并注入简短评论提示。
+       3. 头像来源与聊天界面显示层保持一致：优先当前会话 userAvatar，缺失时回退到用户主页头像。
+       4. 不使用 localStorage/sessionStorage，不写双份存储兜底。
        ====================================================================== */
     showUserAvatarToRole: false,
 
@@ -1043,7 +1046,8 @@ export function normalizeChatPromptSettings(rawSettings) {
        [区域标注·已完成·更换会话头像：向角色展示用户头像开关规范化]
        说明：
        1. 该字段只读取当前聊天设置中的 showUserAvatarToRole。
-       2. 不回退到全局资料头像；是否展示完全由当前会话 userAvatar 与当前开关共同决定。
+       2. 是否展示由当前聊天开关与当前聊天界面实际使用的用户头像共同决定。
+       3. 头像来源与聊天界面显示层保持一致：优先当前会话 userAvatar，缺失时回退到用户主页头像。
        ====================================================================== */
     showUserAvatarToRole: Boolean(source.showUserAvatarToRole),
 
@@ -2142,14 +2146,15 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
       ? currentUserRoundMessages.filter(item => item?.role === 'user' && getMessageVisualUrl(item))
       : [];
     /* ========================================================================
-       [区域标注·已完成·更换会话头像：最新一轮向角色展示当前会话用户头像]
+       [区域标注·已完成·更换会话头像：最新一轮向角色展示当前聊天界面用户头像]
        说明：
-       1. 仅当当前聊天设置 showUserAvatarToRole 开启，且当前会话存在 session.userAvatar 时，才在最新一轮 user message 中附带该头像。
-       2. 该头像仅作为本轮多模态输入发送给角色，不写入历史消息，不污染角色卡/用户面具，不回退到全局 profile.avatar。
-       3. 同时注入一段简短提示词，引导角色在本轮自然、简短地评论这个头像。
+       1. 当前聊天设置 showUserAvatarToRole 开启后，最新一轮 user message 会附带当前聊天界面实际展示给用户的头像。
+       2. 头像来源与聊天界面显示层保持一致：优先当前会话 session.userAvatar，缺失时回退到用户主页头像。
+       3. 该头像仅作为本轮多模态输入发送给角色，不写入历史消息，不污染角色卡/用户面具。
+       4. 同时注入一段简短提示词，引导角色在本轮自然、简短地评论这个头像。
        ======================================================================== */
-    const sessionUserAvatar = String(context?.currentSession?.userAvatar || '').trim();
-    const shouldShowUserAvatarToRole = Boolean(normalizedSettings.showUserAvatarToRole && sessionUserAvatar);
+    const userAvatarForRole = String(context?.currentUserAvatarForRole || context?.currentSession?.userAvatar || '').trim();
+    const shouldShowUserAvatarToRole = Boolean(normalizedSettings.showUserAvatarToRole && userAvatarForRole);
 
     if (currentRoundVisualMessages.length || shouldShowUserAvatarToRole) {
       const contentParts = [{ type: 'text', text: finalUserContent }];
@@ -2165,7 +2170,7 @@ export function buildChatMessages({ userInput, history = [], currentUserRoundMes
           type: 'text',
           text: '下面这张图片是用户当前会话正在使用的头像。请你在本轮回复里自然、简短地对这个头像作出评论，但不要把这句提示词原样说出来。'
         });
-        contentParts.push(createVisionImagePart(sessionUserAvatar));
+        contentParts.push(createVisionImagePart(userAvatarForRole));
       }
 
       messages.push({ role: 'user', content: contentParts });
@@ -2394,6 +2399,7 @@ export async function chat({
   db,
   activeMaskId = '',
   currentSession = null,
+  currentUserAvatarForRole = '',
   currentContact = null,
   archiveData = null,
   worldBooks = null,
@@ -2415,6 +2421,7 @@ export async function chat({
     db,
     activeMaskId,
     currentSession,
+    currentUserAvatarForRole,
     currentContact,
     archiveData,
     worldBooks,
