@@ -73,7 +73,7 @@ export function buildAppShell(state) {
            ================================================================ -->
       <!-- [区域标注] 聊天列表板块 -->
       <div class="chat-panel ${state.activePanel === 'chatList' ? 'is-active' : ''}" data-panel="chatList">
-        ${renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed)}
+        ${renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed, state.contacts)}
       </div>
       <!-- [区域标注] 通讯录板块 -->
       <div class="chat-panel ${state.activePanel === 'contacts' ? 'is-active' : ''}" data-panel="contacts">
@@ -147,7 +147,7 @@ export function refreshPanel(container, state, panelKey) {
 
   switch (panelKey) {
     case 'chatList':
-      panelEl.innerHTML = renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed);
+      panelEl.innerHTML = renderChatList(getVisibleChatSessions(state), state.chatSubTab, state.chatSearchKeyword, state.sectionCollapsed, state.contacts);
       break;
     case 'contacts':
       panelEl.innerHTML = renderContacts(state.contacts, state.contactGroups, state.activeContactGroupId);

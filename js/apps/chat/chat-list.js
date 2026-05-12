@@ -36,7 +36,24 @@ function formatTime(ts) {
    [区域标注] 渲染聊天列表 HTML
    说明：根据当前子TAB（all/private/group）和搜索关键词过滤并渲染列表
    ========================================================================== */
-export function renderChatList(chatSessions, subTab, searchKeyword, sectionCollapsed) {
+function getCurrentContactForChatListSession(session, contacts = []) {
+  const safeContacts = Array.isArray(contacts) ? contacts : [];
+  const sessionId = String(session?.id || '').trim();
+  const sessionRoleId = String(session?.roleId || '').trim();
+
+  return safeContacts.find(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const contactRoleId = String(contact?.roleId || '').trim();
+    return (
+      (contactId && sessionId && contactId === sessionId)
+      || (contactRoleId && sessionRoleId && contactRoleId === sessionRoleId)
+      || (contactRoleId && sessionId && contactRoleId === sessionId)
+      || (contactId && sessionRoleId && contactId === sessionRoleId)
+    );
+  }) || null;
+}
+
+export function renderChatList(chatSessions, subTab, searchKeyword, sectionCollapsed, contacts = []) {
   const keyword = (searchKeyword || '').toLowerCase().trim();
 
   /* [区域标注] 过滤会话列表 */
@@ -66,12 +83,25 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
   `;
 
   /* [区域标注] 渲染单个聊天条目 */
-  const renderItem = (session) => `
+  const renderItem = (session) => {
+    /* ========================================================================
+       [区域标注·已完成·本次修改1：聊天列表角色头像与当前会话头像同步显示]
+       说明：
+       1. 聊天列表角色头像优先显示当前会话单独设置的 session.avatar。
+       2. 删除当前会话单独设置头像后，聊天列表与当前会话窗口统一回退到通讯录联系人头像。
+       3. 只有当前会话头像与联系人头像都不存在时，才回退为首字占位。
+       4. 本区域只读取现有 session / contacts 运行时数据，不新增 localStorage/sessionStorage 或双份存储。
+       ======================================================================== */
+    const currentContact = getCurrentContactForChatListSession(session, contacts);
+    const contactAvatar = String(currentContact?.avatar || '').trim();
+    const roleAvatarSrc = String(session?.avatar || contactAvatar || '').trim();
+
+    return `
     <!-- === [本次修改] 聊天列表长按删除联系人：长按该聊天条目仅从聊天列表隐藏 === -->
     <div class="chat-item" data-action="open-chat" data-long-press-action="delete-chat-list-contact" data-chat-id="${session.id}">
       <div class="chat-item__avatar">
-        ${session.avatar
-          ? `<img src="${escapeHtml(session.avatar)}" alt="${escapeHtml(session.name)}">`
+        ${roleAvatarSrc
+          ? `<img src="${escapeHtml(roleAvatarSrc)}" alt="${escapeHtml(session.name)}">`
           : escapeHtml((session.name || '?').charAt(0).toUpperCase())}
       </div>
       <div class="chat-item__info">
@@ -84,6 +114,7 @@ export function renderChatList(chatSessions, subTab, searchKeyword, sectionColla
       </div>
     </div>
   `;
+  };
 
   /* [区域标注] 渲染分组区块（带可折叠标题） */
   const renderSection = (title, key, items) => {

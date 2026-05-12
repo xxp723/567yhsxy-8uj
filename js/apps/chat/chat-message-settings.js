@@ -60,13 +60,14 @@ export function renderChatMessageSettingsPage({
       </div>
       <div class="msg-settings-body">
         <!-- ==================================================================
-             [区域标注·本次修改·头像与备注3点需求：双头像/隐藏头像/当前会话备注]
+             [区域标注·已完成·本次修改1与修改2：双头像回退/隐藏头像说明文字移除]
              说明：
              1. 本区域只修改当前聊天会话的 session.avatar / session.userAvatar / session.remark，与聊天设置 showUserAvatarToRole / hideAvatars。
              2. 删除当前会话角色头像后，显示层优先回退到通讯录/联系人资料头像；删除当前会话用户头像后，显示层回退到用户主页头像。
              3. 角色名称固定显示当前联系人的本名 session.name，不显示备注；用户名称固定显示用户主页显示名。
-             4. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
-             5. 不使用 localStorage/sessionStorage；头像点击后仅打开应用内来源选择弹窗。
+             4. “隐藏头像”小板块说明性文字已按本次要求移除，仅保留标题与开关。
+             5. 不写入 contacts、contact.avatar、state.profile.avatar；持久化统一走 DB.js / IndexedDB。
+             6. 不使用 localStorage/sessionStorage；头像点击后仅打开应用内来源选择弹窗。
              ================================================================== -->
         <section class="msg-settings-avatar-section">
           <div class="msg-settings-section-title">头像与备注</div>
@@ -109,7 +110,6 @@ export function renderChatMessageSettingsPage({
             <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-avatar-switch-copy">
                 <div class="msg-settings-card__title">隐藏头像</div>
-                <div class="msg-settings-card__desc">开启后仅隐藏当前会话窗口中的角色头像和用户头像，不影响其它页面。</div>
               </div>
               <button class="msg-ios-switch ${chatSettings.hideAvatars ? 'is-on' : ''}" data-action="toggle-chat-hide-avatars" type="button" aria-label="隐藏头像"></button>
             </div>
