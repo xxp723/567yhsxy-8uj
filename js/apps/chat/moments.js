@@ -355,8 +355,40 @@ function renderComments(comments, options = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 单条动态卡片渲染
-   说明：保留 moment-like / moment-comment data-action，兼容现有事件委托。
+   [区域标注·已完成·本次朋友圈分享转发删除互动] 转发动态预览渲染
+   说明：
+   1. 仅在朋友圈动态卡片内部渲染转发来源摘要，不包含任何持久化存储读写。
+   2. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+   ========================================================================== */
+function renderMomentRepostPreview(moment) {
+  const sourceMomentId = String(moment?.repostSourceMomentId || '').trim();
+  if (!sourceMomentId) return '';
+
+  const sourceAuthorName = String(moment?.repostSourceAuthorName || '原动态作者').trim() || '原动态作者';
+  const sourceContent = String(moment?.repostSourceContent || '').trim();
+  const sourceLocation = String(moment?.repostSourceLocation || '').trim();
+  const sourceTimeText = formatTimeAgo(moment?.repostSourceCreatedAt);
+  const sourceImages = Array.isArray(moment?.repostSourceImages)
+    ? moment.repostSourceImages.map(item => String(item || '').trim()).filter(Boolean).slice(0, 9)
+    : [];
+
+  return `
+    <!-- [区域标注·已完成·本次朋友圈分享转发删除互动] 转发来源动态预览 -->
+    <div class="moments-card__repost-preview" aria-label="转发来源动态">
+      <div class="moments-card__repost-meta">
+        <strong>${escapeHtml(sourceAuthorName)}</strong>
+        <span>${escapeHtml(sourceTimeText)}</span>
+      </div>
+      ${sourceContent ? `<p class="moments-card__repost-text">${escapeHtml(sourceContent)}</p>` : ''}
+      ${sourceLocation ? `<p class="moments-card__repost-location">@${escapeHtml(sourceLocation)}</p>` : ''}
+      ${renderImageGrid(sourceImages)}
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈分享转发删除互动] 单条动态卡片渲染
+   说明：保留 moment-like / moment-comment data-action，并新增分享 / 转发 / 删除互动入口。
    ========================================================================== */
 function renderMomentCard(moment, options = {}) {
   const id = escapeHtml(moment?.id ?? '');
@@ -399,9 +431,10 @@ function renderMomentCard(moment, options = {}) {
       <div class="moments-card__body">
         ${content ? `<p class="moments-card__content">${content}</p>` : ''}
         ${renderImageGrid(moment?.images)}
+        ${renderMomentRepostPreview(moment)}
       </div>
 
-      <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 互动栏（点赞红色态、评论展开态保留原 data-action） -->
+      <!-- [区域标注·已完成·本次朋友圈分享转发删除互动] 互动栏（点赞/评论保留原 data-action，并新增转发/分享/删除入口） -->
       <div class="moments-card__actions">
         <div class="moments-card__action-group" aria-label="动态互动">
           <button class="moments-action-btn ${isLiked ? 'moments-action-btn--liked' : ''}" type="button" data-action="moment-like" data-moment-id="${id}" aria-label="${isLiked ? '取消点赞' : '点赞'}" aria-pressed="${isLiked ? 'true' : 'false'}">
@@ -412,16 +445,16 @@ function renderMomentCard(moment, options = {}) {
             ${ICONS.comment}
             <span>${commentCount}</span>
           </button>
-          <button class="moments-action-btn moments-action-btn--static" type="button" aria-label="转发">
+          <button class="moments-action-btn" type="button" data-action="open-moment-repost-modal" data-moment-id="${id}" aria-label="转发">
             ${ICONS.repost}
             ${repostCount ? `<span>${repostCount}</span>` : ''}
           </button>
-          <button class="moments-action-btn moments-action-btn--static" type="button" aria-label="分享">
+          <button class="moments-action-btn" type="button" data-action="open-moment-share-modal" data-moment-id="${id}" aria-label="分享">
             ${ICONS.feedShare}
             ${shareCount ? `<span>${shareCount}</span>` : ''}
           </button>
         </div>
-        <button class="moments-action-btn moments-action-btn--bookmark" type="button" aria-label="收藏">
+        <button class="moments-action-btn moments-action-btn--bookmark" type="button" data-action="open-moment-delete-modal" data-moment-id="${id}" aria-label="删除动态">
           ${ICONS.bookmark}
         </button>
       </div>
@@ -1132,6 +1165,126 @@ export function openMomentsComposeVisibilityModal(container, state) {
     </div>
     <div class="chat-modal-footer">
       <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">完成</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈分享转发删除互动] 动态分享 / 转发 / 删除弹窗
+   说明：
+   1. 仅渲染应用内 chat-modal，不使用原生浏览器弹窗或选择器。
+   2. 分享目标、转发文案、删除确认均由点击事件模块接管后续 DB.js / IndexedDB 持久化。
+   3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+   ========================================================================== */
+export function openMomentShareModal(container, state, momentId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const { moment } = getMomentById(state, momentId);
+  const sessions = getVisibleChatSessions(state).filter(session => session && String(session.id || '').trim());
+  if (!mask || !panel || !moment) return;
+
+  const authorName = String(moment?.authorName || '未命名').trim() || '未命名';
+  const previewText = String(moment?.content || '').trim();
+  const previewMeta = [
+    previewText || '这条动态没有正文',
+    Array.isArray(moment?.images) && moment.images.length ? `[图片x${moment.images.length}]` : '',
+    String(moment?.location || '').trim() ? `@${String(moment.location || '').trim()}` : ''
+  ].filter(Boolean).join(' ');
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>分享到聊天</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-section">
+        <p class="chat-modal-contact__name">${escapeHtml(authorName)} 的动态</p>
+        <p class="chat-modal-contact__meta">${escapeHtml(previewMeta || '选择一个聊天窗口进行分享')}</p>
+      </div>
+      ${sessions.length ? sessions.map(session => {
+        const sessionId = String(session?.id || '').trim();
+        const sessionName = escapeHtml(String(session?.remark || session?.name || '未命名聊天').trim() || '未命名聊天');
+        const sessionMeta = escapeHtml(String(session?.lastMessage || '').trim() || '点击后立即分享到该聊天');
+        return `
+          <button
+            class="chat-modal-contact"
+            data-action="share-moment-to-chat"
+            data-chat-id="${escapeHtml(sessionId)}"
+            data-moment-id="${escapeHtml(String(moment?.id || ''))}"
+            type="button">
+            <span>
+              <span class="chat-modal-contact__name">${sessionName}</span>
+              <span class="chat-modal-contact__meta">${sessionMeta}</span>
+            </span>
+            <span class="chat-modal-contact__meta">${ICONS.send}</span>
+          </button>
+        `;
+      }).join('') : '<p class="chat-modal-empty">当前聊天列表暂无可分享联系人。</p>'}
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+export function openMomentRepostModal(container, state, momentId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const { moment } = getMomentById(state, momentId);
+  if (!mask || !panel || !moment) return;
+
+  const sourceAuthorName = String(moment?.authorName || '未命名').trim() || '未命名';
+  const sourceContent = String(moment?.content || '').trim();
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>转发到朋友圈</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <label class="chat-modal-field">
+        <span class="chat-modal-field__label">转发文案</span>
+        <textarea
+          class="chat-modal-input"
+          data-role="moment-repost-text-input"
+          rows="4"
+          placeholder="写点转发时想说的话…"></textarea>
+      </label>
+      <div class="chat-modal-section">
+        <p class="chat-modal-contact__name">原动态：${escapeHtml(sourceAuthorName)}</p>
+        <p class="chat-modal-contact__meta">${escapeHtml(sourceContent || '这条动态没有正文')}</p>
+      </div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-moment-repost" data-moment-id="${escapeHtml(String(moment?.id || ''))}" type="button">确认转发</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+export function openMomentDeleteModal(container, state, momentId) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  const { moment } = getMomentById(state, momentId);
+  if (!mask || !panel || !moment) return;
+
+  const authorName = String(moment?.authorName || '未命名').trim() || '未命名';
+  const content = String(moment?.content || '').trim();
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>删除确认</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-section">
+        <p class="chat-modal-contact__name">确定删除这条动态吗？</p>
+        <p class="chat-modal-contact__meta">${escapeHtml(`${authorName}：${content || '这条动态没有正文'}`)}</p>
+      </div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-delete-moment" data-moment-id="${escapeHtml(String(moment?.id || ''))}" type="button">删除动态</button>
     </div>
   `;
   mask.classList.remove('is-hidden');

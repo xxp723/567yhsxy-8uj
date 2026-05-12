@@ -130,8 +130,12 @@ import {
   openMomentsComposeLocationModal,
   openMomentsComposeShareModal,
   openMomentsComposeVisibilityModal,
+  openMomentShareModal,
+  openMomentRepostModal,
+  openMomentDeleteModal,
   resetMomentsInteractionState,
-  handleMomentsInteractionAction
+  handleMomentsInteractionAction,
+  refreshMomentsPanel
 } from './moments.js';
 import { handleTranslationSettingsClick } from './chat-translation.js';
 import {
@@ -333,6 +337,175 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         persistMoments: () => dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), Array.isArray(state.moments) ? state.moments : [])
       });
       break;
+
+    /* ========================================================================
+       [区域标注·已完成·本次朋友圈分享转发删除互动] 朋友圈动态分享 / 转发 / 删除
+       说明：
+       1. 仅接线朋友圈动态卡片上的分享、转发、删除按钮与应用内弹窗。
+       2. 持久化统一走 DB.js / IndexedDB，不使用 localStorage/sessionStorage，不写双份兜底。
+       3. 分享后打开目标聊天窗口；转发与删除仅局部刷新朋友圈面板，减少闪屏。
+       ======================================================================== */
+    case 'open-moment-share-modal': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      if (!momentId) break;
+      openMomentShareModal(container, state, momentId);
+      break;
+    }
+
+    case 'open-moment-repost-modal': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      if (!momentId) break;
+      openMomentRepostModal(container, state, momentId);
+      break;
+    }
+
+    case 'open-moment-delete-modal': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      if (!momentId) break;
+      openMomentDeleteModal(container, state, momentId);
+      break;
+    }
+
+    case 'share-moment-to-chat': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      const chatId = String(target.dataset.chatId || '').trim();
+      const targetSession = state.sessions.find(session => String(session?.id || '') === chatId);
+      const moment = (Array.isArray(state.moments) ? state.moments : []).find(item => String(item?.id || '') === momentId);
+
+      if (!moment || !targetSession || !chatId) {
+        renderModalNotice(container, '未找到可分享的目标聊天');
+        break;
+      }
+
+      const now = Date.now();
+      const momentText = String(moment?.content || '').trim();
+      const momentImages = Array.isArray(moment?.images)
+        ? moment.images.map(src => ({ src: String(src || '').trim() })).filter(item => item.src)
+        : [];
+      const shareMessage = {
+        id: createUid('moment_share'),
+        role: 'user',
+        type: 'moment_share',
+        momentShareMomentId: momentId,
+        momentShareText: momentText,
+        momentShareImageCount: momentImages.length,
+        momentShareLocation: String(moment?.location || '').trim(),
+        momentShareAuthorName: String(moment?.authorName || state.profile?.nickname || state.profile?.name || '当前面具身份').trim() || '当前面具身份',
+        content: buildMomentsComposeShareMessage({
+          text: momentText,
+          images: momentImages,
+          location: String(moment?.location || '').trim()
+        }),
+        timestamp: now
+      };
+
+      const targetKey = DATA_KEY_MESSAGES_PREFIX(state.activeMaskId) + chatId;
+      const targetMessages = (await dbGet(db, targetKey)) || [];
+      targetMessages.push(shareMessage);
+
+      const nextShares = Array.isArray(moment?.shares) ? moment.shares.slice() : [];
+      nextShares.push({
+        id: createUid('moment_share_record'),
+        chatId,
+        chatName: String(targetSession.remark || targetSession.name || '').trim() || '未命名聊天',
+        sharedAt: now
+      });
+      moment.shares = nextShares;
+
+      targetSession.lastMessage = shareMessage.content;
+      targetSession.lastTime = now;
+
+      await Promise.all([
+        dbPut(db, targetKey, targetMessages),
+        dbPut(db, DATA_KEY_SESSIONS(state.activeMaskId), state.sessions),
+        dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), Array.isArray(state.moments) ? state.moments : [])
+      ]);
+
+      closeModal(container);
+      refreshMomentsPanel(container, state);
+      refreshPanel(container, state, 'chatList');
+      await openChatMessage(container, state, db, chatId);
+      break;
+    }
+
+    case 'confirm-moment-repost': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      const sourceMoment = (Array.isArray(state.moments) ? state.moments : []).find(item => String(item?.id || '') === momentId);
+      if (!sourceMoment) {
+        renderModalNotice(container, '未找到要转发的动态');
+        break;
+      }
+
+      const input = container.querySelector('[data-role="moment-repost-text-input"]');
+      const repostText = String(input?.value || '').trim();
+      const now = Date.now();
+      const authorName = String(state.profile?.nickname || state.profile?.name || '当前面具身份').trim() || '当前面具身份';
+      const authorAvatar = String(state.profile?.avatar || '').trim();
+
+      const nextReposts = Array.isArray(sourceMoment?.reposts) ? sourceMoment.reposts.slice() : [];
+      nextReposts.push({
+        id: createUid('moment_repost_record'),
+        authorId: String(state.activeMaskId || '').trim(),
+        authorName,
+        repostedAt: now
+      });
+      sourceMoment.reposts = nextReposts;
+
+      const repostMoment = {
+        id: createUid('moment'),
+        authorId: String(state.activeMaskId || '').trim(),
+        authorName,
+        authorAvatar,
+        content: repostText,
+        images: [],
+        likes: [],
+        comments: [],
+        reposts: [],
+        shares: [],
+        createdAt: now,
+        location: '',
+        visibilityMode: 'public',
+        visibleContactIds: [],
+        visibleContactNames: [],
+        repostSourceMomentId: String(sourceMoment?.id || '').trim(),
+        repostSourceAuthorName: String(sourceMoment?.authorName || '原动态作者').trim() || '原动态作者',
+        repostSourceContent: String(sourceMoment?.content || '').trim(),
+        repostSourceImages: Array.isArray(sourceMoment?.images) ? sourceMoment.images.map(item => String(item || '').trim()).filter(Boolean) : [],
+        repostSourceCreatedAt: sourceMoment?.createdAt || now,
+        repostSourceLocation: String(sourceMoment?.location || '').trim()
+      };
+
+      state.moments = [repostMoment, ...(Array.isArray(state.moments) ? state.moments : [])];
+      resetMomentsInteractionState(state);
+
+      await dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments);
+      closeModal(container);
+      refreshMomentsPanel(container, state);
+      break;
+    }
+
+    case 'confirm-delete-moment': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      const prevMoments = Array.isArray(state.moments) ? state.moments : [];
+      const nextMoments = prevMoments.filter(moment => String(moment?.id || '') !== momentId);
+      if (nextMoments.length === prevMoments.length) {
+        renderModalNotice(container, '未找到要删除的动态');
+        break;
+      }
+
+      state.moments = nextMoments;
+      state.momentsExpandedCommentIds = (Array.isArray(state.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds : [])
+        .map(String)
+        .filter(id => id !== momentId);
+      if (String(state.momentsReplyTarget?.momentId || '') === momentId) {
+        state.momentsReplyTarget = null;
+      }
+
+      await dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments);
+      closeModal(container);
+      refreshMomentsPanel(container, state);
+      break;
+    }
 
     case 'moments-compose-back':
       closeMomentsComposePage(container, state, PANEL_KEYS);
