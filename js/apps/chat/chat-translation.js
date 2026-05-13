@@ -91,15 +91,17 @@ function escapeHtml(text) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语言翻译设置去图标] 渲染设置页折叠栏 HTML
+   [区域标注·已完成·双语模式设置布局] 渲染聊天设置页“双语模式”板块 HTML
    说明：
-   1. 本区域负责聊天设置页「语言翻译」折叠栏 HTML。
-   2. 本次已移除标题左侧翻译图标，仅保留标题文字、展开箭头与 iPhone 风格开关。
-   3. 所有 data-action 继续使用 "trans-" 前缀，与 index.js 事件委托 action.startsWith('trans-') 对齐。
+   1. 本区域负责聊天设置页「双语模式」板块 HTML，原“语言翻译”小折叠栏已改为统一设置板块。
+   2. 布局参考“自主活动”：左上角板块标题 + 暖色设置卡片 + 右侧 iPhone 风格滑动开关。
+   3. 已移除原“>”折叠按钮；点击右侧滑动开关后，同步开启/关闭翻译总开关，并以抽屉方式展开/收起原有配置内容。
+   4. 不改变翻译设置字段、语言选择弹窗、消息气泡翻译与 IndexedDB 持久化逻辑；不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function renderTranslationSettingsHtml(translationSettings, session, userAvatar, userName) {
   const ts = normalizeTranslationSettings(translationSettings);
-  const isOpen = false; // 折叠栏默认折叠
+  const isOpen = Boolean(ts.enabled);
+  const drawerId = 'msg-translation-drawer';
   const charAvatar = session?.avatar
     ? `<img src="${escapeHtml(session.avatar)}" alt="">`
     : escapeHtml((session?.name || '?').charAt(0).toUpperCase());
@@ -108,22 +110,31 @@ export function renderTranslationSettingsHtml(translationSettings, session, user
     : `<span>${escapeHtml((userName || '我').charAt(0))}</span>`;
 
   return `
-    <!-- ===== 闲谈应用：语言翻译设置 START ===== -->
-    <div class="msg-translation-section ${isOpen ? 'is-open' : ''}" data-role="trans-section">
-      <div class="msg-translation-header" data-action="trans-toggle-section">
-        <div class="msg-translation-header__left">
-          <span class="msg-translation-header__title">语言翻译</span>
-          <span class="msg-translation-header__arrow">${TRANSLATION_ICONS.arrowDown}</span>
+    <!-- ===== 闲谈应用：双语模式设置 START ===== -->
+    <section class="msg-settings-avatar-section msg-translation-section ${isOpen ? 'is-open' : ''}" data-role="trans-section">
+      <div class="msg-settings-section-title">双语模式</div>
+      <section class="msg-settings-card msg-settings-avatar-card msg-translation-card">
+        <div class="msg-settings-row msg-settings-avatar-switch-row msg-translation-header">
+          <div class="msg-settings-card__title msg-translation-header__title">双语模式</div>
+          <button
+            class="msg-ios-switch ${ts.enabled ? 'is-on' : ''}"
+            data-action="trans-toggle-enabled"
+            data-role="trans-enabled-switch"
+            type="button"
+            aria-label="双语模式"
+            aria-controls="${drawerId}"
+            aria-expanded="${isOpen ? 'true' : 'false'}"></button>
         </div>
-        <div class="msg-translation-header__switch" data-action="trans-toggle-enabled">
-          <div class="msg-ios-switch ${ts.enabled ? 'is-on' : ''}" data-role="trans-enabled-switch"></div>
-        </div>
-      </div>
-      <div class="msg-translation-body">
-        <div class="msg-translation-body__inner">
+        <div
+          class="msg-translation-body"
+          id="${drawerId}"
+          data-role="trans-drawer"
+          aria-hidden="${isOpen ? 'false' : 'true'}">
+          <div class="msg-settings-avatar-divider"></div>
+          <div class="msg-translation-body__inner">
 
-          <!-- 角色翻译配置 -->
-          <div class="msg-translation-target" data-translation-target="character">
+            <!-- 角色翻译配置 -->
+            <div class="msg-translation-target" data-translation-target="character">
             <div class="msg-translation-target__avatar">${charAvatar}</div>
             <div class="msg-translation-target__config">
               <div class="msg-translation-target__label">角色语言翻译</div>
@@ -142,43 +153,44 @@ export function renderTranslationSettingsHtml(translationSettings, session, user
             </div>
           </div>
 
-          <!-- 用户翻译配置 -->
-          <div class="msg-translation-target" data-translation-target="user">
-            <div class="msg-translation-target__avatar msg-translation-target__avatar--user">${userAvatarHtml}</div>
-            <div class="msg-translation-target__config">
-              <div class="msg-translation-target__label">用户语言翻译</div>
-              <div class="msg-translation-target__row">
-                <span class="msg-translation-target__row-label">当前语言</span>
-                <button class="msg-translation-lang-btn" data-action="trans-pick-lang" data-target="user" data-field="sourceLang" type="button">
-                  ${getLangLabel(ts.user.sourceLang)}${TRANSLATION_ICONS.smallArrow}
-                </button>
-              </div>
-              <div class="msg-translation-target__row">
-                <span class="msg-translation-target__row-label">翻译为</span>
-                <button class="msg-translation-lang-btn" data-action="trans-pick-lang" data-target="user" data-field="targetLang" type="button">
-                  ${getLangLabel(ts.user.targetLang)}${TRANSLATION_ICONS.smallArrow}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 显示模式选择 -->
-          <div class="msg-translation-display-mode">
-            <div class="msg-translation-display-mode__title">翻译显示方式</div>
-            <div class="msg-translation-display-mode__options">
-              <div class="msg-translation-display-mode__option ${ts.displayMode === 'inline' ? 'is-active' : ''}" data-action="trans-set-display" data-mode="inline">
-                直接展开
-              </div>
-              <div class="msg-translation-display-mode__option ${ts.displayMode === 'tap' ? 'is-active' : ''}" data-action="trans-set-display" data-mode="tap">
-                双击展开
+            <!-- 用户翻译配置 -->
+            <div class="msg-translation-target" data-translation-target="user">
+              <div class="msg-translation-target__avatar msg-translation-target__avatar--user">${userAvatarHtml}</div>
+              <div class="msg-translation-target__config">
+                <div class="msg-translation-target__label">用户语言翻译</div>
+                <div class="msg-translation-target__row">
+                  <span class="msg-translation-target__row-label">当前语言</span>
+                  <button class="msg-translation-lang-btn" data-action="trans-pick-lang" data-target="user" data-field="sourceLang" type="button">
+                    ${getLangLabel(ts.user.sourceLang)}${TRANSLATION_ICONS.smallArrow}
+                  </button>
+                </div>
+                <div class="msg-translation-target__row">
+                  <span class="msg-translation-target__row-label">翻译为</span>
+                  <button class="msg-translation-lang-btn" data-action="trans-pick-lang" data-target="user" data-field="targetLang" type="button">
+                    ${getLangLabel(ts.user.targetLang)}${TRANSLATION_ICONS.smallArrow}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
+            <!-- 显示模式选择 -->
+            <div class="msg-translation-display-mode">
+              <div class="msg-translation-display-mode__title">翻译显示方式</div>
+              <div class="msg-translation-display-mode__options">
+                <div class="msg-translation-display-mode__option ${ts.displayMode === 'inline' ? 'is-active' : ''}" data-action="trans-set-display" data-mode="inline">
+                  直接展开
+                </div>
+                <div class="msg-translation-display-mode__option ${ts.displayMode === 'tap' ? 'is-active' : ''}" data-action="trans-set-display" data-mode="tap">
+                  双击展开
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
-      </div>
-    </div>
-    <!-- ===== 闲谈应用：语言翻译设置 END ===== -->
+      </section>
+    </section>
+    <!-- ===== 闲谈应用：双语模式设置 END ===== -->
   `;
 }
 
@@ -280,7 +292,7 @@ export async function handleTranslationSettingsClick(e, target, action, state, c
   }
 
   switch (action) {
-    // ===== 折叠栏展开/折叠 =====
+    // ===== 兼容旧折叠栏事件：当前“双语模式”已移除“>”折叠按钮，页面内不再主动触发此 action =====
     case 'trans-toggle-section': {
       // 若点击的是开关区域则忽略，由 trans-toggle-enabled 处理
       if (e.target.closest('[data-action="trans-toggle-enabled"]')) return false;
@@ -289,12 +301,19 @@ export async function handleTranslationSettingsClick(e, target, action, state, c
       return true;
     }
 
-    // ===== 总开关 =====
+    // ===== 双语模式总开关：同步原翻译 enabled 逻辑，并控制设置抽屉展开/收起 =====
     case 'trans-toggle-enabled': {
-      e.stopPropagation(); // 阻止冒泡到折叠栏
+      e.stopPropagation();
       state.translationSettings.enabled = !state.translationSettings.enabled;
+      const section = container.querySelector('[data-role="trans-section"]');
+      const drawer = container.querySelector('[data-role="trans-drawer"]');
       const sw = container.querySelector('[data-role="trans-enabled-switch"]');
-      if (sw) sw.classList.toggle('is-on', state.translationSettings.enabled);
+      if (section) section.classList.toggle('is-open', state.translationSettings.enabled);
+      if (drawer) drawer.setAttribute('aria-hidden', state.translationSettings.enabled ? 'false' : 'true');
+      if (sw) {
+        sw.classList.toggle('is-on', state.translationSettings.enabled);
+        sw.setAttribute('aria-expanded', state.translationSettings.enabled ? 'true' : 'false');
+      }
       await persistTranslation();
       return true;
     }

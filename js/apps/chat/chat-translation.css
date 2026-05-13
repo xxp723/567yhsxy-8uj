@@ -1,86 +1,57 @@
 /* ==========================================================================
-   [区域标注·已完成·语言翻译] 闲谈应用 — 语言翻译折叠栏 & 翻译气泡样式
+   [区域标注·已完成·双语模式] 闲谈应用 — 双语模式设置板块 & 翻译气泡样式
    说明：
    1. 本文件为语言翻译功能的独立 CSS，由 index.js 通过 loadCSS 加载。
-   2. 折叠栏放在聊天设置页 msg-settings-page 内，视觉风格与 msg-settings-card 一致。
-   3. 已完成修复：在聊天设置页 flex 滚动容器内禁止折叠栏被压缩，确保“语言翻译”入口稳定显示。
-   4. 翻译气泡在消息气泡下方显示，上方原文 + 虚线 + 下方译文。
-   5. 不使用浏览器原生选择器，自定义下拉用 chat-modal 弹窗风格。
+   2. 聊天设置页入口已由原“语言翻译”折叠栏改为“双语模式”统一板块。
+   3. “双语模式”板块参考“自主活动”：左上角标题 + 暖色卡片 + 右侧 iPhone 风格滑动开关；原“>”折叠按钮已移除。
+   4. 点击右侧滑动开关时，原设置内容以向下抽屉方式展开/收起，避免重渲染造成页面闪屏。
+   5. 翻译气泡在消息气泡下方显示，上方原文 + 虚线 + 下方译文。
+   6. 不使用浏览器原生选择器，自定义语言选择弹窗保持应用内弹窗样式。
    ========================================================================== */
 
-/* ===== [区域标注·已完成·本次语言翻译折叠栏颜色对齐设置卡片] 折叠栏容器：颜色、边框、阴影已与聊天设置页其它卡片一致 ===== */
+/* ==========================================================================
+   [区域标注·已完成·双语模式设置板块样式]
+   说明：
+   1. 仅服务聊天设置页“双语模式”板块，外层复用 msg-settings-avatar-section / msg-settings-section-title。
+   2. 内层卡片复用 msg-settings-card / msg-settings-avatar-card，与“自主活动”布局保持一致。
+   3. 抽屉使用 max-height / opacity / transform 过渡；样式层不涉及持久化存储。
+   ========================================================================== */
 .msg-translation-section {
-  flex: 0 0 auto;
   flex-shrink: 0;
-  width: 100%;
-  min-height: 46px;
-  box-sizing: border-box;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(74, 52, 42, 0.07);
-  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.06);
-  padding: 0;
-  margin-bottom: 12px;
+}
+
+.msg-translation-card {
   overflow: hidden;
 }
 
-/* ===== 折叠栏标题行 ===== */
 .msg-translation-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  gap: 10px;
-}
-
-.msg-translation-header__left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
 }
 
 .msg-translation-header__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary, #2D1810);
+  margin-bottom: 0;
   white-space: nowrap;
 }
 
-.msg-translation-header__arrow {
-  width: 18px;
-  height: 18px;
-  color: var(--text-secondary, #8B7355);
-  transition: transform 0.25s ease;
-  flex-shrink: 0;
-}
-
-.msg-translation-section.is-open .msg-translation-header__arrow {
-  transform: rotate(180deg);
-}
-
-/* ===== 折叠栏主开关（标题行右侧） ===== */
-.msg-translation-header__switch {
-  flex-shrink: 0;
-}
-
-/* ===== 折叠内容区 ===== */
+/* ===== 双语模式抽屉内容区 ===== */
 .msg-translation-body {
   max-height: 0;
+  opacity: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease;
+  transform: translateY(-4px);
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+  will-change: max-height, opacity, transform;
 }
 
 .msg-translation-section.is-open .msg-translation-body {
   max-height: 800px;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .msg-translation-body__inner {
-  padding: 0 18px 16px;
+  padding: 14px 0 2px;
 }
 
 /* ===== 角色/用户翻译配置卡片 ===== */

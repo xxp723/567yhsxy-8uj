@@ -215,11 +215,12 @@ export function renderChatMessageSettingsPage({
         </section>
 
         <!-- ==========================================================================
-             [区域标注·已完成·本次语言翻译设置位置调整] 语言翻译折叠栏板块
+             [区域标注·已完成·双语模式设置布局] 双语模式板块
              说明：
-             1. 本板块已按本次要求下移到「HTML卡片」板块下方、「查看控制台日志」板块上方。
-             2. HTML 仍由 chat-translation.js 的 renderTranslationSettingsHtml() 生成；板块标题图标已在该模块中移除。
-             3. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；本次只调整显示位置，不新增 localStorage/sessionStorage 逻辑。
+             1. 本板块由 chat-translation.js 的 renderTranslationSettingsHtml() 生成，已从原“语言翻译”折叠栏改为“双语模式”统一板块。
+             2. 板块布局参考“自主活动”：左上角标题 + 暖色设置卡片 + 右侧 iPhone 风格滑动开关。
+             3. 原“>”折叠按钮已移除；点击右侧滑动开关后，原有翻译配置内容向下抽屉式展开/收起。
+             4. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；不新增 localStorage/sessionStorage 逻辑。
              ========================================================================== -->
         ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
 
