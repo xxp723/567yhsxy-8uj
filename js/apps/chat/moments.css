@@ -393,6 +393,71 @@
   word-break: break-word;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈转发动态微信式引用框] 转发来源动态预览
+   说明：
+   1. 仅服务朋友圈转发来源卡片 .moments-card__repost-preview，不影响普通动态正文、评论区或发帖页。
+   2. 转发后用户自己写的文案继续沿用 .moments-card__content 原字号；仅将转发来源内容缩小一圈并放入主题色引用框内。
+   3. 本区域只包含样式，不涉及任何持久化存储逻辑。
+   ========================================================================== */
+.moments-card__repost-preview {
+  margin-top: 12px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--moments-accent) 62%, rgba(255, 252, 247, 0.92));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--moments-accent-soft) 22%, rgba(255, 252, 247, 0.92));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: inset 0 0 0 1px rgba(125, 90, 68, 0.04);
+}
+
+.moments-card__repost-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--moments-accent);
+  font-family: var(--moments-font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.moments-card__repost-meta strong {
+  min-width: 0;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moments-card__repost-text {
+  margin: 0;
+  color: color-mix(in srgb, var(--moments-text) 88%, rgba(74, 52, 42, 0.52));
+  font-family: var(--moments-font-sans);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.moments-card__repost-location {
+  margin: -2px 0 0;
+  color: var(--moments-muted);
+  font-family: var(--moments-font-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.moments-card__repost-preview .moments-card__images {
+  margin-top: 2px;
+}
+
+.moments-card__repost-preview .moments-card__image-wrap {
+  border-radius: 10px;
+}
+
 .moments-card__images {
   display: grid;
   gap: 6px;
