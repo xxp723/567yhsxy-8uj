@@ -564,6 +564,15 @@ export async function sendMessage(container, state, db, content, settingsManager
       'info',
       `开始请求 AI：conversationRound=第${promptPayload.conversationRoundIndex || 0}轮，historyRounds=${promptPayload.historyRoundCount || 0}，historyMessages=${promptPayload.historyMessageCount ?? promptPayload.history.length}，currentRoundMessages=${promptPayload.currentRoundMessageCount ?? promptPayload.currentUserRoundMessages.length}`
     );
+    /* ======================================================================
+       [区域标注·已完成·控制台标题Token显示] 本轮请求开始时重置标题 token
+       说明：
+       1. chatConsoleTokenUsage 只作为当前运行时标题显示，不写入 DB.js / IndexedDB。
+       2. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+       3. API 返回后会用 prompt.js 归一化后的真实 tokenUsage 覆盖本值。
+       ====================================================================== */
+    state.chatConsoleTokenUsage = null;
+    syncChatConsoleDock(container, state);
     const result = await chat({
       userInput: userInputForAi,
       history: promptPayload.history,
@@ -601,6 +610,16 @@ export async function sendMessage(container, state, db, content, settingsManager
       asideSettings: state.asideSettings,
       asideHistory: state.asideHistory
     });
+
+    /* ======================================================================
+       [区域标注·已完成·控制台标题Token显示] AI 返回后刷新标题 token
+       说明：
+       1. tokenUsage 来自 prompt.js 对各 API 响应 usage / usageMetadata 的归一化结果。
+       2. 仅用于控制台标题最右侧实时显示“发送 / 返回”tokens，不做任何持久化。
+       3. 不使用 localStorage/sessionStorage，也不新增兜底估算或长文本过滤逻辑。
+       ====================================================================== */
+    state.chatConsoleTokenUsage = result?.tokenUsage || null;
+    syncChatConsoleDock(container, state);
 
     const rawAiTextOriginal = result?.rawText || result?.text || '';
 
@@ -1604,7 +1623,8 @@ export function syncChatConsoleDock(container, state) {
     chatConsoleEnabled: state.chatConsoleEnabled,
     chatConsoleExpanded: state.chatConsoleExpanded,
     chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
-    visibleConsoleLogs: visibleLogs
+    visibleConsoleLogs: visibleLogs,
+    chatConsoleTokenUsage: state.chatConsoleTokenUsage
   });
 
   if (!nextHtml) {

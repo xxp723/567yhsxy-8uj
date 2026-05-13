@@ -154,14 +154,35 @@ export function getVisibleChatConsoleLogs(chatConsoleLogs = [], warnErrorOnly = 
     : logs;
 }
 
+function formatChatConsoleTokenCount(value) {
+  const count = Math.floor(Number(value));
+  return Number.isFinite(count) && count >= 0 ? String(count) : '--';
+}
+
+/* ==========================================================================
+   [区域标注·已完成·控制台标题Token显示] 控制台标题右侧每轮 Token 显示
+   说明：
+   1. 只读取本轮 AI 请求返回的 tokenUsage 运行时结果，用于当前页面标题实时显示。
+   2. 不写入 DB.js / IndexedDB，也不使用 localStorage/sessionStorage，不做双份存储兜底。
+   3. 发送给 AI 的 tokens 显示为“发送”，AI 返回的 tokens 显示为“返回”，方便下次直接定位修改。
+   ========================================================================== */
+function renderChatConsoleTokenMetaHtml(tokenUsage = null) {
+  const usage = tokenUsage && typeof tokenUsage === 'object' ? tokenUsage : {};
+  const inputText = formatChatConsoleTokenCount(usage.inputTokens);
+  const outputText = formatChatConsoleTokenCount(usage.outputTokens);
+  return `<span class="msg-console-dock__tokens" title="本轮发送给 AI / AI 返回 tokens">发送 ${escapeHtml(inputText)} / 返回 ${escapeHtml(outputText)}</span>`;
+}
+
 export function renderChatConsoleDockHtml({
   chatConsoleEnabled = false,
   chatConsoleExpanded = false,
   chatConsoleWarnErrorOnly = false,
-  visibleConsoleLogs = []
+  visibleConsoleLogs = [],
+  chatConsoleTokenUsage = null
 } = {}) {
   if (!chatConsoleEnabled) return '';
 
+  const tokenMetaHtml = renderChatConsoleTokenMetaHtml(chatConsoleTokenUsage);
   const displayConsoleLogs = (Array.isArray(visibleConsoleLogs) ? visibleConsoleLogs : [])
     .map((item, index) => ({ item, index }))
     .sort((a, b) => (
@@ -174,7 +195,7 @@ export function renderChatConsoleDockHtml({
     <div class="msg-console-dock ${chatConsoleExpanded ? 'is-expanded' : ''}" data-role="msg-console-dock">
       <button class="msg-console-dock__trigger" type="button" data-action="toggle-chat-console-expand">
         <span class="msg-console-dock__title">${MSG_ICONS.monitor}<em>查看控制台 (Log/警告/错误)</em></span>
-        <span class="msg-console-dock__meta">${visibleConsoleLogs.length} 条</span>
+        <span class="msg-console-dock__meta"><span>${visibleConsoleLogs.length} 条</span>${tokenMetaHtml}</span>
       </button>
       <div class="msg-console-dock__panel">
         <div class="msg-console-dock__toolbar">
@@ -750,7 +771,8 @@ export function renderChatMessage(chatSession, messages, options = {}) {
         chatConsoleEnabled,
         chatConsoleExpanded,
         chatConsoleWarnErrorOnly,
-        visibleConsoleLogs
+        visibleConsoleLogs,
+        chatConsoleTokenUsage: options.chatConsoleTokenUsage
       })}
 
       <div class="msg-input-bar">
@@ -904,6 +926,7 @@ export function renderCurrentChatMessage(container, state, options = {}) {
     chatConsoleExpanded: state.chatConsoleExpanded,
     chatConsoleWarnErrorOnly: state.chatConsoleWarnErrorOnly,
     chatConsoleLogs: state.chatConsoleLogs,
+    chatConsoleTokenUsage: state.chatConsoleTokenUsage,
     chatSearchOpen: state.chatMessageSearchOpen,
     chatSearchKeyword: state.chatMessageSearchKeyword,
     chatMessageVisibleCount: state.chatMessageVisibleCount,

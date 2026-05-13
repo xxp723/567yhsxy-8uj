@@ -433,6 +433,8 @@ export function createInitialChatState({
     chatConsoleExpanded: false,
     chatConsoleWarnErrorOnly: false,
     chatConsoleLogs: [],
+    /* [区域标注·已完成·控制台标题Token显示] 最新一轮 AI token 用量，仅用于控制台标题运行时显示；不持久化。 */
+    chatConsoleTokenUsage: null,
     /* ===== [区域标注·已完成·语言翻译] 翻译设置状态 ===== */
     translationSettings: null
   };
@@ -559,4 +561,3 @@ export async function performMaskSwitch(container, state, db, eventBus, newMaskI
   /* 重新渲染全部板块 */
   container.innerHTML = buildAppShell(state);
 }
-

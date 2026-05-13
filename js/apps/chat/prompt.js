@@ -2308,6 +2308,48 @@ function toClaudeContent(content) {
     .filter(Boolean);
 }
 
+/* ==========================================================================
+   [区域标注·已完成·需求1·控制台标题Token统计来源]
+   说明：
+   1. 只从各 AI 服务商本轮 API 响应中的 usage / usageMetadata 提取真实 token 数。
+   2. 该数据仅随 chat() 返回给聊天页运行时展示，不写入 DB.js / IndexedDB，也不使用 localStorage/sessionStorage。
+   3. 不做长文本过滤、不新增双份存储兜底；服务商未返回统计时保持为空，由界面显示 “--”。
+   ========================================================================== */
+function normalizeAiTokenUsage(provider, payload) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const usage = source.usage && typeof source.usage === 'object' ? source.usage : {};
+  const usageMetadata = source.usageMetadata && typeof source.usageMetadata === 'object' ? source.usageMetadata : {};
+
+  const inputTokens = Number(
+    usage.prompt_tokens
+    ?? usage.input_tokens
+    ?? usageMetadata.promptTokenCount
+    ?? NaN
+  );
+  const outputTokens = Number(
+    usage.completion_tokens
+    ?? usage.output_tokens
+    ?? usageMetadata.candidatesTokenCount
+    ?? NaN
+  );
+  const totalTokens = Number(
+    usage.total_tokens
+    ?? usageMetadata.totalTokenCount
+    ?? (
+      Number.isFinite(inputTokens) && Number.isFinite(outputTokens)
+        ? inputTokens + outputTokens
+        : NaN
+    )
+  );
+
+  return {
+    provider: String(provider || ''),
+    inputTokens: Number.isFinite(inputTokens) ? Math.max(0, Math.floor(inputTokens)) : null,
+    outputTokens: Number.isFinite(outputTokens) ? Math.max(0, Math.floor(outputTokens)) : null,
+    totalTokens: Number.isFinite(totalTokens) ? Math.max(0, Math.floor(totalTokens)) : null
+  };
+}
+
 async function requestOpenAiLike(profile, messages) {
   const endpoint = `${trimSlash(profile.baseUrl)}/chat/completions`;
   const response = await fetch(endpoint, {
@@ -2337,7 +2379,10 @@ async function requestOpenAiLike(profile, messages) {
     });
   }
 
-  return payload?.choices?.[0]?.message?.content || '';
+  return {
+    rawText: payload?.choices?.[0]?.message?.content || '',
+    tokenUsage: normalizeAiTokenUsage(profile.provider, payload)
+  };
 }
 
 /* ==========================================================================
@@ -2380,7 +2425,10 @@ async function requestGemini(profile, messages) {
     });
   }
 
-  return payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return {
+    rawText: payload?.candidates?.[0]?.content?.parts?.[0]?.text || '',
+    tokenUsage: normalizeAiTokenUsage(profile.provider, payload)
+  };
 }
 
 /* ==========================================================================
@@ -2422,7 +2470,10 @@ async function requestClaude(profile, messages) {
     });
   }
 
-  return payload?.content?.find?.(item => item?.type === 'text')?.text || payload?.content?.[0]?.text || '';
+  return {
+    rawText: payload?.content?.find?.(item => item?.type === 'text')?.text || payload?.content?.[0]?.text || '',
+    tokenUsage: normalizeAiTokenUsage(profile.provider, payload)
+  };
 }
 
 /* ==========================================================================
@@ -2512,17 +2563,27 @@ export async function chat({
   }
 
   let rawText = '';
+  let tokenUsage = null;
   switch (profile.provider) {
     case 'openai':
-    case 'deepseek':
-      rawText = await requestOpenAiLike(profile, messages);
+    case 'deepseek': {
+      const requestResult = await requestOpenAiLike(profile, messages);
+      rawText = requestResult.rawText;
+      tokenUsage = requestResult.tokenUsage;
       break;
-    case 'gemini':
-      rawText = await requestGemini(profile, messages);
+    }
+    case 'gemini': {
+      const requestResult = await requestGemini(profile, messages);
+      rawText = requestResult.rawText;
+      tokenUsage = requestResult.tokenUsage;
       break;
-    case 'claude':
-      rawText = await requestClaude(profile, messages);
+    }
+    case 'claude': {
+      const requestResult = await requestClaude(profile, messages);
+      rawText = requestResult.rawText;
+      tokenUsage = requestResult.tokenUsage;
       break;
+    }
     default:
       throw createApiError(`不支持的主 API 服务商：${profile.provider}`, {
         code: 'config_error',
@@ -2559,6 +2620,8 @@ export async function chat({
     rawText,
     text: stripThinkBlocks(rawText),
     generatedImages,
+    /* [区域标注·已完成·需求1·控制台标题Token统计回传] 本轮真实 token 统计仅用于聊天页控制台标题展示，不做持久化存储。 */
+    tokenUsage,
     /* [区域标注·已完成·AI文字图/生图互斥运行时状态] 供聊天消息页决定是否接收 [文字图] 协议；状态只来自 DB.js / IndexedDB 中的 imageApi 配置。 */
     imageApiReady,
     textImageProtocolEnabled: !imageApiReady
