@@ -158,12 +158,13 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·聊天控制合并板块样式]
+   [区域标注·已完成·聊天控制合并板块样式与抽屉修复]
    说明：
    1. 仅服务聊天设置页“聊天控制”板块：每轮回复气泡数量、短期记忆、自定义思维链、当前指令、查看控制台日志。
-   2. 外层参考“头像与备注”的左上角标题与暖色卡片结构，控制台日志继续使用 iPhone 风格滑动开关。
-   3. 四个可配置项使用 IconPark 风格右箭头按钮，展开时抽屉向下滑出，避免整页重绘造成闪屏。
-   4. 本区域只改布局样式，不改任何 DB.js / IndexedDB 持久化逻辑；不涉及 localStorage/sessionStorage。
+   2. 外层已对齐“头像与备注”的左上角标题、暖色卡片底色、边框与阴影结构，控制台日志继续使用 iPhone 风格滑动开关。
+   3. 四个可配置项使用无圆形背景的 IconPark 风格右箭头图标，展开时抽屉向下滑出，避免整页重绘造成闪屏。
+   4. 抽屉点击接线已在 chat-event-click.js 中修复；本区域只负责目标板块样式，不改任何 DB.js / IndexedDB 持久化逻辑。
+   5. 不涉及 localStorage/sessionStorage，不使用原生弹窗或原生选择器。
    ========================================================================== */
 .msg-settings-chat-control-section {
   display: flex;
@@ -177,6 +178,8 @@
   gap: 0;
   overflow: hidden;
   background: rgba(255, 252, 247, 0.94);
+  border: 1px solid rgba(74, 52, 42, 0.07);
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.06);
 }
 
 .msg-settings-chat-control-item {
@@ -205,16 +208,14 @@
 }
 
 .msg-settings-chat-control-arrow {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: rgba(74, 52, 42, 0.08);
+  width: 22px;
+  height: 22px;
   color: rgba(74, 52, 42, 0.72);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: transform 0.18s ease, background 0.15s ease, color 0.15s ease;
+  transition: transform 0.18s ease, color 0.15s ease;
 }
 
 .msg-settings-chat-control-arrow svg {
@@ -224,7 +225,6 @@
 
 .msg-settings-chat-control-item.is-open .msg-settings-chat-control-arrow {
   transform: rotate(90deg);
-  background: rgba(74, 52, 42, 0.13);
   color: #4A342A;
 }
 
