@@ -12,6 +12,7 @@
    2. 颜色引用项目主题变量，并提供同色系 fallback。
    3. 本文件不包含任何持久化存储逻辑。
    ========================================================================== */
+.chat-app[data-active-panel="moments"],
 [data-panel="moments"] {
   --moments-bg: var(--c-bg-wallpaper, #F5F1EA);
   --moments-surface: rgba(255, 252, 247, 0.68);
@@ -1047,7 +1048,76 @@
   gap: 10px;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈选择选项主题色与选中态]
+   说明：
+   1. 仅服务朋友圈发帖页选项与朋友圈相关 chat-modal 选择项，不影响其它聊天弹窗。
+   2. 选中态统一使用朋友圈主题色/主题柔色，未选中保持暖色浅底，避免黑灰色导致无法区分。
+   3. 本区域只包含样式，不涉及任何持久化存储逻辑。
+   ========================================================================== */
+.moments-compose-option.is-selected,
+.moments-compose-option[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--moments-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--moments-accent-soft) 34%, rgba(255, 252, 247, 0.86));
+  box-shadow: 0 10px 24px rgba(125, 90, 68, 0.13);
+}
+
+.moments-compose-option.is-selected .moments-compose-option__icon,
+.moments-compose-option[aria-pressed="true"] .moments-compose-option__icon,
+.moments-compose-option.is-selected .moments-compose-option__label,
+.moments-compose-option[aria-pressed="true"] .moments-compose-option__label {
+  color: var(--moments-accent);
+}
+
+.moments-compose-option.is-selected .moments-compose-option__value,
+.moments-compose-option[aria-pressed="true"] .moments-compose-option__value {
+  color: var(--moments-text);
+  font-weight: 800;
+}
+
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice {
+  border-color: color-mix(in srgb, var(--moments-accent) 18%, transparent);
+  background: rgba(255, 252, 247, 0.72);
+  color: var(--moments-text);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice:hover {
+  background: color-mix(in srgb, var(--moments-accent-soft) 24%, rgba(255, 252, 247, 0.82));
+}
+
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice.is-selected,
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--moments-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--moments-accent-soft) 42%, rgba(255, 252, 247, 0.88));
+  box-shadow: 0 10px 24px rgba(125, 90, 68, 0.14);
+}
+
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice.is-selected .chat-modal-contact__name,
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice[aria-pressed="true"] .chat-modal-contact__name {
+  color: var(--moments-accent);
+}
+
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice.is-selected .chat-modal-contact__meta,
+.chat-app[data-active-panel="moments"] .chat-modal-contact.moments-theme-choice[aria-pressed="true"] .chat-modal-contact__meta {
+  color: var(--moments-text);
+}
+
+.chat-app[data-active-panel="moments"] .moments-theme-choice-btn {
+  border-color: color-mix(in srgb, var(--moments-accent) 20%, transparent);
+  background: rgba(255, 252, 247, 0.72);
+  color: var(--moments-accent);
+}
+
+.chat-app[data-active-panel="moments"] .moments-theme-choice-btn.is-selected,
+.chat-app[data-active-panel="moments"] .moments-theme-choice-btn[aria-pressed="true"] {
+  border-color: var(--moments-accent);
+  background: var(--moments-accent);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(125, 90, 68, 0.16);
 }
 
 .moments-compose-option__icon {

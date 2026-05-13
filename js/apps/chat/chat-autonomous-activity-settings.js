@@ -414,8 +414,8 @@ function summarizeWorldBooksForAutonomousPrompt(worldBooks = [], context = {}) {
 /* ==========================================================================
    [区域标注·已完成·AI自主/单选发布朋友圈提示词]
    说明：
-   1. 本提示词只在“主动发朋友圈”开关开启时构建并注入副 API 请求；关闭开关不会注入。
-   2. 用于自主活动定时发布和爱心按钮单选即时发布，只为当前一个联系人生成一条朋友圈。
+   1. 本提示词用于“主动发朋友圈”后台定时发布，以及朋友圈爱心按钮单联系人即时发布。
+   2. 爱心按钮即时发布不依赖聊天设置里的“主动发朋友圈”开关；二者分别对应被动即时触发与主动定时触发。
    3. 世界书完整注入：命中的全局/角色绑定世界书全部发送，启用条目全部发送，不再截断 6 本/8 条。
    4. 提示词要求 AI 严格返回单条 JSON 对象，便于写入朋友圈 IndexedDB 记录；不暴露 API、系统、提示词或生成过程。
    ========================================================================== */
@@ -693,10 +693,11 @@ async function publishAutonomousMoment({ state, container, db, settingsManager }
    [区域标注·已完成·朋友圈左上角爱心即时 AI 发布]
    说明：
    1. 本区只服务朋友圈页面左上角“爱心”按钮选择通讯录联系人后即时发布朋友圈。
-   2. 只有联系人独立聊天设置里的“主动发朋友圈”开关开启时，才会注入 AI 发布朋友圈提示词。
-   3. 单选走单人提示词；多选每批最多 4 位联系人调用一次副 API，并在同批次内让用户设定、全局世界书、共用角色世界书只发送一次。
-   4. 批量提示词明确要求 AI 按 contactId 分别为每位联系人生成动态，避免把多位联系人当群聊、共同发帖或互相串戏。
-   5. AI 生成朋友圈动态仅调用设置应用里的副 API；朋友圈写入统一走 DB.js / IndexedDB；不使用 localStorage/sessionStorage，不做长文本/大媒体字段过滤。
+   2. 爱心按钮即时发布会直接生成并写入朋友圈动态，不再要求联系人聊天设置里的“主动发朋友圈”开关开启。
+   3. 即时发布与“主动发朋友圈”开关没有前后因果关系：爱心按钮是被动即时触发，开关只控制后台主动定时发布。
+   4. 单选/多选统一按批次调用副 API；每批最多 4 位联系人，并在同批次内让用户设定、全局世界书、共用角色世界书只发送一次。
+   5. 批量提示词明确要求 AI 按 contactId 分别为每位联系人生成动态，避免把多位联系人当群聊、共同发帖或互相串戏。
+   6. AI 生成朋友圈动态仅调用设置应用里的副 API；朋友圈写入统一走 DB.js / IndexedDB；不使用 localStorage/sessionStorage，不做长文本/大媒体字段过滤。
    ========================================================================== */
 const INSTANT_AUTONOMOUS_MOMENTS_BATCH_SIZE = 4;
 
@@ -784,14 +785,6 @@ async function collectInstantAutonomousMomentItems({
       continue;
     }
 
-    const settings = normalizeAutonomousActivitySettings(
-      await dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, session.id))
-    );
-    if (!settings.autonomousMomentsEnabled) {
-      result.skippedDisabled += 1;
-      continue;
-    }
-
     const now = Date.now();
     const [messages] = await Promise.all([
       loadMessagesForAutonomousMoments(state, db, session)
@@ -802,7 +795,6 @@ async function collectInstantAutonomousMomentItems({
       session,
       contact,
       character,
-      settings,
       messages: getLatestOneDayMessages(messages, now)
     });
   }
@@ -898,7 +890,6 @@ export async function publishInstantAutonomousMomentsForContacts({
   const result = {
     total: selectedIds.length,
     published: 0,
-    skippedDisabled: 0,
     failed: 0,
     message: ''
   };
@@ -926,61 +917,36 @@ export async function publishInstantAutonomousMomentsForContacts({
   });
 
   if (!eligibleItems.length) {
-    result.message = result.skippedDisabled
-      ? `所选联系人均未开启主动发朋友圈${result.failed ? `，另有 ${result.failed} 位发布失败` : ''}`
-      : '未能发布朋友圈动态，请检查联系人设置';
+    result.message = '未能发布朋友圈动态，请检查联系人设置';
     return result;
   }
 
-  if (eligibleItems.length === 1) {
-    const item = eligibleItems[0];
+  const mask = getMaskForAutonomousMoments(state);
+  const worldBooks = await readRawDbRecordValue(db, WORLDBOOK_DB_RECORD_ID);
+  const batches = chunkInstantAutonomousMomentItems(eligibleItems);
+
+  for (const batchItems of batches) {
     try {
-      const published = await publishAutonomousMomentForSession({
+      const batchResult = await publishInstantAutonomousMomentBatch({
         state,
-        container,
         db,
-        session: item.session,
-        settings: item.settings,
         profile,
-        source: 'moments-heart-instant'
+        mask,
+        worldBooks: Array.isArray(worldBooks) ? worldBooks : [],
+        items: batchItems
       });
-      if (published) {
-        result.published += 1;
-      } else {
-        result.failed += 1;
-      }
+
+      const persisted = await persistInstantAutonomousMomentRecords({
+        state,
+        db,
+        recordItems: batchResult.recordItems,
+        now: batchResult.now
+      });
+      result.published += persisted;
+      result.failed += Math.max(0, batchItems.length - persisted);
     } catch (error) {
-      console.warn('[Chat] 朋友圈爱心单选即时 AI 发布失败:', error);
-      result.failed += 1;
-    }
-  } else {
-    const mask = getMaskForAutonomousMoments(state);
-    const worldBooks = await readRawDbRecordValue(db, WORLDBOOK_DB_RECORD_ID);
-    const batches = chunkInstantAutonomousMomentItems(eligibleItems);
-
-    for (const batchItems of batches) {
-      try {
-        const batchResult = await publishInstantAutonomousMomentBatch({
-          state,
-          db,
-          profile,
-          mask,
-          worldBooks: Array.isArray(worldBooks) ? worldBooks : [],
-          items: batchItems
-        });
-
-        const persisted = await persistInstantAutonomousMomentRecords({
-          state,
-          db,
-          recordItems: batchResult.recordItems,
-          now: batchResult.now
-        });
-        result.published += persisted;
-        result.failed += Math.max(0, batchItems.length - persisted);
-      } catch (error) {
-        console.warn('[Chat] 朋友圈爱心多选批量 AI 发布失败:', error);
-        result.failed += batchItems.length;
-      }
+      console.warn('[Chat] 朋友圈爱心即时 AI 发布失败:', error);
+      result.failed += batchItems.length;
     }
   }
 
@@ -989,10 +955,8 @@ export async function publishInstantAutonomousMomentsForContacts({
   }
 
   result.message = result.published
-    ? `已发布 ${result.published} 条朋友圈动态${result.skippedDisabled ? `，${result.skippedDisabled} 位联系人未开启主动发朋友圈` : ''}${result.failed ? `，${result.failed} 位发布失败` : ''}`
-    : (result.skippedDisabled
-        ? `所选联系人均未开启主动发朋友圈${result.failed ? `，另有 ${result.failed} 位发布失败` : ''}`
-        : '未能发布朋友圈动态，请检查副 API 与联系人设置');
+    ? `已发布 ${result.published} 条朋友圈动态${result.failed ? `，${result.failed} 位发布失败` : ''}`
+    : '未能发布朋友圈动态，请检查副 API 与联系人设置';
   return result;
 }
 

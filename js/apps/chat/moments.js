@@ -936,19 +936,19 @@ export function renderMomentsComposePage(draft, options = {}) {
 
         <section class="moments-compose-block">
           <div class="moments-compose-options">
-            <button class="moments-compose-option" type="button" data-action="open-moments-compose-location-modal">
+            <button class="moments-compose-option ${location ? 'is-selected' : ''}" type="button" data-action="open-moments-compose-location-modal" aria-pressed="${location ? 'true' : 'false'}">
               <span class="moments-compose-option__icon">${ICONS.location}</span>
               <span class="moments-compose-option__label">所在地点</span>
               <span class="moments-compose-option__value">${escapeHtml(location || '点击添加地点')}</span>
             </button>
 
-            <button class="moments-compose-option" type="button" data-action="open-moments-compose-share-modal">
+            <button class="moments-compose-option ${shareTargetName ? 'is-selected' : ''}" type="button" data-action="open-moments-compose-share-modal" aria-pressed="${shareTargetName ? 'true' : 'false'}">
               <span class="moments-compose-option__icon">${ICONS.share}</span>
               <span class="moments-compose-option__label">分享帖子</span>
               <span class="moments-compose-option__value">${escapeHtml(shareTargetName || '不分享到聊天')}</span>
             </button>
 
-            <button class="moments-compose-option" type="button" data-action="open-moments-compose-visibility-modal">
+            <button class="moments-compose-option ${visibilityLabel !== '公开' ? 'is-selected' : ''}" type="button" data-action="open-moments-compose-visibility-modal" aria-pressed="${visibilityLabel !== '公开' ? 'true' : 'false'}">
               <span class="moments-compose-option__icon">${ICONS.visible}</span>
               <span class="moments-compose-option__label">可见范围</span>
               <span class="moments-compose-option__value">${escapeHtml(visibilityLabel)}</span>
@@ -1080,7 +1080,7 @@ export function openMomentsComposeShareModal(container, state) {
     </div>
     <div class="chat-modal-body">
       <button
-        class="chat-modal-contact"
+        class="chat-modal-contact moments-theme-choice ${draft.shareChatId ? '' : 'is-selected'}"
         data-action="select-moments-compose-share"
         data-chat-id=""
         type="button"
@@ -1094,7 +1094,7 @@ export function openMomentsComposeShareModal(container, state) {
         const isSelected = String(session?.id || '') === String(draft.shareChatId || '');
         return `
           <button
-            class="chat-modal-contact"
+            class="chat-modal-contact moments-theme-choice ${isSelected ? 'is-selected' : ''}"
             data-action="select-moments-compose-share"
             data-chat-id="${escapeHtml(String(session?.id || ''))}"
             type="button"
@@ -1127,14 +1127,14 @@ export function openMomentsComposeVisibilityModal(container, state) {
     <div class="chat-modal-body">
       <div class="chat-modal-actions">
         <button
-          class="chat-modal-btn ${draft.visibilityMode === 'public' ? 'chat-modal-btn--primary' : ''}"
+          class="chat-modal-btn moments-theme-choice-btn ${draft.visibilityMode === 'public' ? 'chat-modal-btn--primary is-selected' : ''}"
           data-action="set-moments-compose-visibility-mode"
           data-visibility-mode="public"
           type="button">
           公开
         </button>
         <button
-          class="chat-modal-btn ${draft.visibilityMode === 'contacts' ? 'chat-modal-btn--primary' : ''}"
+          class="chat-modal-btn moments-theme-choice-btn ${draft.visibilityMode === 'contacts' ? 'chat-modal-btn--primary is-selected' : ''}"
           data-action="set-moments-compose-visibility-mode"
           data-visibility-mode="contacts"
           type="button">
@@ -1150,7 +1150,7 @@ export function openMomentsComposeVisibilityModal(container, state) {
             const checked = draft.visibleContactIds.includes(contactId) || (!!roleId && draft.visibleContactIds.includes(roleId));
             return `
               <button
-                class="chat-modal-contact"
+                class="chat-modal-contact moments-theme-choice ${checked ? 'is-selected' : ''}"
                 data-action="toggle-moments-compose-visible-contact"
                 data-contact-id="${escapeHtml(contactId || roleId)}"
                 type="button"
@@ -1176,7 +1176,8 @@ export function openMomentsComposeVisibilityModal(container, state) {
    1. 点击朋友圈页面左上角 IconPark 爱心按钮后，使用本区应用内弹窗选择通讯录联系人。
    2. 支持多选或单选联系人；不使用原生浏览器弹窗，不使用浏览器原生选择器。
    3. 本区只维护运行时选择状态，不写入持久化存储；确认发布后的 IndexedDB 写入由事件模块调用自主活动模块完成。
-   4. 弹窗文案已更新为“已完成”状态，提示开关开启后才注入 AI 朋友圈提示词并仅调用设置应用副 API。
+   4. 爱心即时发布不再依赖聊天设置里的“主动发朋友圈”开关；该开关只控制后台主动定时发布。
+   5. 联系人选项使用朋友圈主题色与明确选中态，便于区分已选/未选。
    ========================================================================== */
 function getInstantAutonomousMomentSelectedIds(state = {}) {
   return Array.from(new Set(
@@ -1203,7 +1204,7 @@ export function openInstantAutonomousMomentContactsModal(container, state) {
     <div class="chat-modal-body">
       <div class="chat-modal-section">
         <p class="chat-modal-contact__name">选择通讯录联系人</p>
-        <p class="chat-modal-contact__meta">可一次选择多位，也可以只选择一位。仅当该联系人聊天设置里的“主动发朋友圈”开关开启时，才会注入 AI 朋友圈提示词，并且只调用设置应用副 API。</p>
+        <p class="chat-modal-contact__meta">可一次选择多位，也可以只选择一位。确认后会直接为所选联系人生成并发布朋友圈；无需开启聊天设置里的“主动发朋友圈”开关，并且只调用设置应用副 API。</p>
       </div>
       ${contacts.length ? contacts.map(contact => {
         const contactId = String(contact?.id || contact?.roleId || '').trim();
@@ -1212,7 +1213,7 @@ export function openInstantAutonomousMomentContactsModal(container, state) {
         const checked = selectedSet.has(contactId);
         return `
           <button
-            class="chat-modal-contact"
+            class="chat-modal-contact moments-theme-choice ${checked ? 'is-selected' : ''}"
             data-action="toggle-instant-autonomous-moment-contact"
             data-contact-id="${escapeHtml(contactId)}"
             type="button"
