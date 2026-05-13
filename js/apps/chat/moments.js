@@ -1171,6 +1171,88 @@ export function openMomentsComposeVisibilityModal(container, state) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·朋友圈左上角爱心即时 AI 发布弹窗]
+   说明：
+   1. 点击朋友圈页面左上角 IconPark 爱心按钮后，使用本区应用内弹窗选择通讯录联系人。
+   2. 支持多选或单选联系人；不使用原生浏览器弹窗，不使用浏览器原生选择器。
+   3. 本区只维护运行时选择状态，不写入持久化存储；确认发布后的 IndexedDB 写入由事件模块调用自主活动模块完成。
+   4. 弹窗文案已更新为“已完成”状态，提示开关开启后才注入 AI 朋友圈提示词并仅调用设置应用副 API。
+   ========================================================================== */
+function getInstantAutonomousMomentSelectedIds(state = {}) {
+  return Array.from(new Set(
+    (Array.isArray(state.instantAutonomousMomentContactIds) ? state.instantAutonomousMomentContactIds : [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  ));
+}
+
+export function openInstantAutonomousMomentContactsModal(container, state) {
+  const mask = container.querySelector('[data-role="modal-mask"]');
+  const panel = container.querySelector('[data-role="modal-panel"]');
+  if (!mask || !panel) return;
+
+  const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+  const selectedIds = getInstantAutonomousMomentSelectedIds(state);
+  const selectedSet = new Set(selectedIds);
+
+  panel.innerHTML = `
+    <div class="chat-modal-header">
+      <span>让联系人即时发朋友圈</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button" aria-label="关闭">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-section">
+        <p class="chat-modal-contact__name">选择通讯录联系人</p>
+        <p class="chat-modal-contact__meta">可一次选择多位，也可以只选择一位。仅当该联系人聊天设置里的“主动发朋友圈”开关开启时，才会注入 AI 朋友圈提示词，并且只调用设置应用副 API。</p>
+      </div>
+      ${contacts.length ? contacts.map(contact => {
+        const contactId = String(contact?.id || contact?.roleId || '').trim();
+        const contactName = escapeHtml(String(contact?.name || contact?.nickname || contact?.contact || '未命名联系人').trim() || '未命名联系人');
+        const contactMeta = escapeHtml(String(contact?.remark || contact?.contact || contact?.roleName || '点击切换选择').trim() || '点击切换选择');
+        const checked = selectedSet.has(contactId);
+        return `
+          <button
+            class="chat-modal-contact"
+            data-action="toggle-instant-autonomous-moment-contact"
+            data-contact-id="${escapeHtml(contactId)}"
+            type="button"
+            aria-pressed="${checked ? 'true' : 'false'}">
+            <span>
+              <span class="chat-modal-contact__name">${contactName}</span>
+              <span class="chat-modal-contact__meta">${contactMeta}</span>
+            </span>
+            <span class="chat-modal-contact__meta">${checked ? ICON_CHECK : ''}</span>
+          </button>
+        `;
+      }).join('') : '<p class="chat-modal-empty">当前通讯录暂无可选联系人。</p>'}
+      <p class="chat-modal-notice" data-role="modal-notice"></p>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn" data-action="close-modal" type="button">取消</button>
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-instant-autonomous-moments" type="button">立即发布</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+}
+
+export function toggleInstantAutonomousMomentContact(state, contactId) {
+  const safeContactId = String(contactId || '').trim();
+  if (!safeContactId) return;
+
+  const selectedSet = new Set(getInstantAutonomousMomentSelectedIds(state));
+  if (selectedSet.has(safeContactId)) {
+    selectedSet.delete(safeContactId);
+  } else {
+    selectedSet.add(safeContactId);
+  }
+  state.instantAutonomousMomentContactIds = Array.from(selectedSet);
+}
+
+export function getInstantAutonomousMomentContactIds(state) {
+  return getInstantAutonomousMomentSelectedIds(state);
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次朋友圈分享转发删除互动] 动态分享 / 转发 / 删除弹窗
    说明：
    1. 仅渲染应用内 chat-modal，不使用原生浏览器弹窗或选择器。

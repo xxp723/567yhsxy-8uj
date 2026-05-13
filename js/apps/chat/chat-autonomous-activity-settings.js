@@ -8,6 +8,7 @@
 import {
   DATA_KEY_MOMENTS,
   DATA_KEY_MESSAGES_PREFIX,
+  DATA_KEY_CHAT_PROMPT_SETTINGS,
   STORE_NAME,
   dbGet,
   dbPut,
@@ -321,49 +322,108 @@ function formatMessagesForAutonomousPrompt(messages = []) {
     .join('\n');
 }
 
-function summarizeWorldBooksForAutonomousPrompt(worldBooks = [], character = null) {
-  const books = Array.isArray(worldBooks) ? worldBooks : [];
-  const characterId = String(character?.id || '').trim();
-  const candidates = books.filter(book => {
-    if (!book || typeof book !== 'object') return false;
-    if (book.enabled === false) return false;
-    const boundIds = Array.isArray(book.boundCharacterIds) ? book.boundCharacterIds.map(String) : [];
-    return !boundIds.length || !characterId || boundIds.includes(characterId);
-  });
+/* ==========================================================================
+   [区域标注·已完成·AI朋友圈世界书完整注入与批量去重工具]
+   说明：
+   1. 自主活动/即时发布均不再限制世界书本数，也不限制每本世界书的启用条目数量。
+   2. 只筛选世界书自身 enabled !== false、条目 enabled !== false；不做长文本/大媒体字段过滤。
+   3. 全局世界书（无绑定角色）与角色绑定世界书统一按世界书 id 去重；批量即时发布同一批副 API 请求内同一本世界书正文只发送一次。
+   4. 世界书数据只从 DB.js / IndexedDB 读取，不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function getWorldBookStableId(book = {}, index = 0) {
+  return String(book?.id || book?.archiveSourceKey || book?.name || book?.title || `worldbook-${index}`).trim() || `worldbook-${index}`;
+}
 
-  return candidates
-    .slice(0, 6)
-    .map(book => {
-      const entries = Array.isArray(book.entries) ? book.entries : [];
-      const entryText = entries
-        .filter(entry => entry && entry.enabled !== false)
-        .slice(0, 8)
-        .map(entry => {
-          const title = String(entry.title || entry.name || '').trim();
-          const content = String(entry.content || entry.text || entry.description || '').trim();
-          return [title, content].filter(Boolean).join('：');
-        })
-        .filter(Boolean)
-        .join('\n');
-      const bookName = String(book.name || book.title || '世界书').trim();
-      return [bookName ? `【${bookName}】` : '', entryText].filter(Boolean).join('\n');
+function getWorldBookBoundCharacterIds(book = {}) {
+  return Array.from(new Set(
+    (Array.isArray(book?.boundCharacterIds) ? book.boundCharacterIds : (book?.boundCharacterId ? [book.boundCharacterId] : []))
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  ));
+}
+
+function getMomentCharacterCandidateIds(character = null, session = {}, contact = {}) {
+  return Array.from(new Set([
+    character?.id,
+    contact?.roleId,
+    session?.roleId,
+    contact?.characterId,
+    session?.characterId,
+    contact?.id,
+    session?.id
+  ].map(item => String(item || '').trim()).filter(Boolean)));
+}
+
+function isWorldBookApplicableToMomentContext(book = {}, candidateIds = []) {
+  if (!book || typeof book !== 'object') return false;
+  if (book.enabled === false) return false;
+
+  const boundIds = getWorldBookBoundCharacterIds(book);
+  if (!boundIds.length) return true;
+
+  const candidateSet = new Set((Array.isArray(candidateIds) ? candidateIds : []).map(id => String(id || '').trim()).filter(Boolean));
+  return boundIds.some(id => candidateSet.has(id));
+}
+
+function getApplicableWorldBooksForMoment(worldBooks = [], { character = null, session = {}, contact = {} } = {}) {
+  const books = Array.isArray(worldBooks) ? worldBooks : [];
+  const candidateIds = getMomentCharacterCandidateIds(character, session, contact);
+  return books
+    .map((book, index) => ({ book, index, stableId: getWorldBookStableId(book, index) }))
+    .filter(item => isWorldBookApplicableToMomentContext(item.book, candidateIds));
+}
+
+function formatWorldBookForAutonomousPrompt(book = {}, index = 0) {
+  const stableId = getWorldBookStableId(book, index);
+  const bookName = String(book?.name || book?.title || '世界书').trim() || '世界书';
+  const boundIds = getWorldBookBoundCharacterIds(book);
+  const scopeText = boundIds.length ? `绑定角色ID：${boundIds.join(', ')}` : '全局世界书：适用于本批任务中所有联系人';
+  const entries = Array.isArray(book?.entries) ? book.entries : [];
+  const entryText = entries
+    .filter(entry => entry && entry.enabled !== false)
+    .map((entry, entryIndex) => {
+      const title = String(entry.title || entry.name || `条目${entryIndex + 1}`).trim() || `条目${entryIndex + 1}`;
+      const content = String(entry.content || entry.text || entry.description || '').trim();
+      const keywords = Array.isArray(entry.keywords) && entry.keywords.length
+        ? `关键词：${entry.keywords.map(keyword => String(keyword || '').trim()).filter(Boolean).join('、')}`
+        : '';
+      return [
+        `- ${title}`,
+        keywords ? `  ${keywords}` : '',
+        content ? `  内容：${content}` : ''
+      ].filter(Boolean).join('\n');
     })
+    .filter(Boolean)
+    .join('\n');
+
+  return [
+    `【${bookName}】`,
+    `世界书ID：${stableId}`,
+    scopeText,
+    entryText || '（本世界书当前没有启用条目）'
+  ].filter(Boolean).join('\n');
+}
+
+function summarizeWorldBooksForAutonomousPrompt(worldBooks = [], context = {}) {
+  return getApplicableWorldBooksForMoment(worldBooks, context)
+    .map(item => formatWorldBookForAutonomousPrompt(item.book, item.index))
     .filter(Boolean)
     .join('\n\n');
 }
 
 /* ==========================================================================
-   [区域标注·已完成·AI自主发布朋友圈提示词]
+   [区域标注·已完成·AI自主/单选发布朋友圈提示词]
    说明：
-   1. 本提示词只在“主动发朋友圈”开关开启且到达间隔时构建并注入副 API 请求。
-   2. 关闭开关时不会注入本提示词，不会自主调用 API 发布朋友圈。
-   3. 提示词要求 AI 严格返回 JSON，便于写入朋友圈 IndexedDB 记录；不暴露 API、系统、提示词或生成过程。
+   1. 本提示词只在“主动发朋友圈”开关开启时构建并注入副 API 请求；关闭开关不会注入。
+   2. 用于自主活动定时发布和爱心按钮单选即时发布，只为当前一个联系人生成一条朋友圈。
+   3. 世界书完整注入：命中的全局/角色绑定世界书全部发送，启用条目全部发送，不再截断 6 本/8 条。
+   4. 提示词要求 AI 严格返回单条 JSON 对象，便于写入朋友圈 IndexedDB 记录；不暴露 API、系统、提示词或生成过程。
    ========================================================================== */
 function buildAutonomousMomentsPrompt({ character, mask, session, contact, worldBooks, messages }) {
   const roleName = String(character?.name || contact?.name || session?.remark || session?.name || '当前角色').trim() || '当前角色';
   const userName = String(mask?.name || mask?.nickname || '用户面具身份').trim() || '用户面具身份';
   const conversationText = formatMessagesForAutonomousPrompt(messages) || '最近一天暂无可用聊天内容。';
-  const worldBookText = summarizeWorldBooksForAutonomousPrompt(worldBooks, character) || '当前没有命中的世界书条目。';
+  const worldBookText = summarizeWorldBooksForAutonomousPrompt(worldBooks, { character, session, contact }) || '当前没有命中的世界书条目。';
 
   return [
     {
@@ -371,14 +431,15 @@ function buildAutonomousMomentsPrompt({ character, mask, session, contact, world
       content: `你正在扮演“${roleName}”。现在需要你以这个角色本人的身份，主动发布一条朋友圈动态。
 
 硬性规则：
-1. 只根据角色人设、用户面具身份、世界书条目、最近一天对话内容来写。
-2. 动态要像角色自己自然发布的日常、感想、吐槽、分享或隐晦情绪，不要像剧情总结。
-3. 可以含蓄提到与“${userName}”相关的情绪或事件，但不要替用户发言，不要泄露后台资料。
-4. 禁止出现“AI、模型、API、系统、提示词、生成、设定要求”等出戏词。
-5. 不要使用 Markdown，不要解释。
-6. 只输出一个 JSON 对象，格式必须是：
+1. 这是单人朋友圈生成任务：只为“${roleName}”生成一条朋友圈，不要生成多条。
+2. 只根据角色人设、用户面具身份、世界书条目、最近一天对话内容来写。
+3. 动态要像角色自己自然发布的日常、感想、吐槽、分享或隐晦情绪，不要像剧情总结。
+4. 可以含蓄提到与“${userName}”相关的情绪或事件，但不要替用户发言，不要泄露后台资料。
+5. 禁止出现“AI、模型、API、系统、提示词、生成、设定要求”等出戏词。
+6. 不要使用 Markdown，不要解释。
+7. 只输出一个 JSON 对象，格式必须是：
 {"content":"朋友圈正文，1到120字","location":"可选地点，没有就留空"}
-7. 不要输出 JSON 以外的任何字符。`
+8. 不要输出 JSON 以外的任何字符。`
     },
     {
       role: 'user',
@@ -394,7 +455,95 @@ ${worldBookText}
 【最近一天与用户的对话】
 ${conversationText}
 
-请现在生成一条符合角色状态的朋友圈动态。`
+请现在只为“${roleName}”生成一条符合角色状态的朋友圈动态。`
+    }
+  ];
+}
+
+/* ==========================================================================
+   [区域标注·已完成·朋友圈爱心多选批量提示词]
+   说明：
+   1. 仅用于朋友圈左上角爱心按钮多选联系人即时发布；每批最多 4 个联系人调用一次副 API。
+   2. 同一批次中用户设定只发送一次；全局世界书只发送一次；多个联系人共用的角色绑定世界书按 id 去重后只发送一次。
+   3. 每位联系人仍单独携带自己的角色人设、适用世界书引用、最新一天对话，提示词明确要求逐联系人独立生成，避免串戏。
+   4. 返回必须是 {"moments":[...]}，每条结果带 contactId；后续写入仍走 DB.js / IndexedDB。
+   ========================================================================== */
+function buildBatchAutonomousMomentsPrompt({ mask, items = [], worldBooks = [] }) {
+  const userName = String(mask?.name || mask?.nickname || '用户面具身份').trim() || '用户面具身份';
+  const uniqueWorldBookMap = new Map();
+
+  (Array.isArray(items) ? items : []).forEach(item => {
+    getApplicableWorldBooksForMoment(worldBooks, {
+      character: item.character,
+      session: item.session,
+      contact: item.contact
+    }).forEach(worldBookItem => {
+      if (!uniqueWorldBookMap.has(worldBookItem.stableId)) {
+        uniqueWorldBookMap.set(worldBookItem.stableId, worldBookItem);
+      }
+    });
+  });
+
+  const sharedWorldBookText = Array.from(uniqueWorldBookMap.values())
+    .map(item => formatWorldBookForAutonomousPrompt(item.book, item.index))
+    .filter(Boolean)
+    .join('\n\n') || '本批联系人没有命中的世界书条目。';
+
+  const contactTasksText = (Array.isArray(items) ? items : []).map((item, index) => {
+    const roleName = String(item.character?.name || item.contact?.name || item.session?.remark || item.session?.name || `联系人${index + 1}`).trim() || `联系人${index + 1}`;
+    const worldBookRefs = getApplicableWorldBooksForMoment(worldBooks, {
+      character: item.character,
+      session: item.session,
+      contact: item.contact
+    }).map(worldBookItem => {
+      const name = String(worldBookItem.book?.name || worldBookItem.book?.title || '世界书').trim() || '世界书';
+      return `${worldBookItem.stableId}（${name}）`;
+    });
+    return `【联系人任务 ${index + 1}】
+contactId：${item.contactId}
+角色名：${roleName}
+适用世界书引用：${worldBookRefs.length ? worldBookRefs.join('；') : '无'}
+角色人设：
+${formatEntityForPrompt(item.character || item.contact || item.session, roleName)}
+
+最近一天与用户的对话：
+${formatMessagesForAutonomousPrompt(item.messages) || '最近一天暂无可用聊天内容。'}`;
+  }).join('\n\n');
+
+  const expectedIds = (Array.isArray(items) ? items : []).map(item => item.contactId).join('、');
+
+  return [
+    {
+      role: 'system',
+      content: `你正在执行“批量生成朋友圈动态”任务。本次会给出多位联系人，但必须分别为每位联系人独立生成一条朋友圈。
+
+硬性规则：
+1. 这是多联系人批量任务，不是群聊，不是共同发帖，不要把多位联系人合并成同一条动态。
+2. 必须为每个 contactId 各生成一条朋友圈；返回数量必须等于本批联系人数量。
+3. 每条朋友圈只能使用该 contactId 对应联系人的角色人设、适用世界书引用、最近一天对话来写；共享用户设定和共享世界书只作为公共背景。
+4. 不要把 A 联系人的语气、经历、对话或情绪写到 B 联系人的朋友圈里。
+5. 不要在某位联系人的朋友圈里提到其它被选择联系人，除非该联系人自己的对话或人设里自然出现。
+6. 动态要像角色自己自然发布的日常、感想、吐槽、生活分享或隐晦情绪，有互动感，但不要像剧情总结。
+7. 可以含蓄体现与“${userName}”相关的情绪或事件，但不要替用户发言，不要泄露后台资料。
+8. 禁止出现“AI、模型、API、系统、提示词、生成、设定要求”等出戏词。
+9. 不要使用 Markdown，不要解释。
+10. 只输出一个 JSON 对象，格式必须是：
+{"moments":[{"contactId":"联系人ID","content":"该联系人自己的朋友圈正文，1到120字","location":"可选地点，没有就留空"}]}
+11. contactId 只能使用以下值，不能新增、改写或遗漏：${expectedIds || '无'}。
+12. 不要输出 JSON 以外的任何字符。`
+    },
+    {
+      role: 'user',
+      content: `【共享用户面具身份，只发送一次，适用于本批所有联系人】
+${formatEntityForPrompt(mask, userName)}
+
+【共享世界书，只发送一次；包含全局世界书和本批联系人命中的角色绑定世界书，已按世界书ID去重】
+${sharedWorldBookText}
+
+【联系人任务列表：请逐个 contactId 独立生成，不要混淆】
+${contactTasksText}
+
+请严格按 contactId 分别生成朋友圈动态，并返回 JSON。`
     }
   ];
 }
@@ -408,6 +557,18 @@ function normalizeAutonomousMomentPayload(rawPayload = {}) {
     content: content.slice(0, 240),
     location: location.slice(0, 40)
   };
+}
+
+function normalizeBatchAutonomousMomentPayload(rawPayload = {}) {
+  const moments = Array.isArray(rawPayload?.moments)
+    ? rawPayload.moments
+    : (Array.isArray(rawPayload) ? rawPayload : []);
+  return moments
+    .map(item => ({
+      contactId: String(item?.contactId || item?.id || '').trim(),
+      ...normalizeAutonomousMomentPayload(item)
+    }))
+    .filter(item => item.contactId && item.content);
 }
 
 async function loadAutonomousMomentsSettingsForCurrentChat(state, db) {
@@ -429,18 +590,20 @@ async function loadMessagesForAutonomousMoments(state, db, session) {
   return (await dbGet(db, `${DATA_KEY_MESSAGES_PREFIX(state.activeMaskId)}${session.id}`)) || [];
 }
 
-async function publishAutonomousMoment({ state, container, db, settingsManager }) {
-  const session = getSessionForAutonomousMoments(state);
+async function publishAutonomousMomentForSession({
+  state,
+  container,
+  db,
+  session,
+  settings,
+  profile,
+  source = 'chat-autonomous-activity'
+} = {}) {
   if (!session) return false;
 
-  const settings = await loadAutonomousMomentsSettingsForCurrentChat(state, db);
-  if (!settings.autonomousMomentsEnabled) return false;
-
-  const allSettings = settingsManager && typeof settingsManager.getAll === 'function'
-    ? await settingsManager.getAll()
-    : {};
-  const profile = normalizeSecondaryApiProfile(allSettings?.api || {});
-  if (!profile.apiKey || !profile.model) return false;
+  const normalizedSettings = normalizeAutonomousActivitySettings(settings || {});
+  if (!normalizedSettings.autonomousMomentsEnabled) return false;
+  if (!profile?.apiKey || !profile?.model) return false;
 
   const now = Date.now();
   const contact = getContactForAutonomousMoments(state, session);
@@ -481,7 +644,7 @@ async function publishAutonomousMoment({ state, container, db, settingsManager }
     visibilityMode: 'public',
     visibleContactIds: [],
     visibleContactNames: [],
-    autonomousSource: 'chat-autonomous-activity'
+    autonomousSource: source
   };
 
   const currentMoments = Array.isArray(state.moments)
@@ -501,6 +664,336 @@ async function publishAutonomousMoment({ state, container, db, settingsManager }
   });
 
   return true;
+}
+
+async function publishAutonomousMoment({ state, container, db, settingsManager }) {
+  const session = getSessionForAutonomousMoments(state);
+  if (!session) return false;
+
+  const settings = await loadAutonomousMomentsSettingsForCurrentChat(state, db);
+  if (!settings.autonomousMomentsEnabled) return false;
+
+  const allSettings = settingsManager && typeof settingsManager.getAll === 'function'
+    ? await settingsManager.getAll()
+    : {};
+  const profile = normalizeSecondaryApiProfile(allSettings?.api || {});
+
+  return publishAutonomousMomentForSession({
+    state,
+    container,
+    db,
+    session,
+    settings,
+    profile,
+    source: 'chat-autonomous-activity'
+  });
+}
+
+/* ==========================================================================
+   [区域标注·已完成·朋友圈左上角爱心即时 AI 发布]
+   说明：
+   1. 本区只服务朋友圈页面左上角“爱心”按钮选择通讯录联系人后即时发布朋友圈。
+   2. 只有联系人独立聊天设置里的“主动发朋友圈”开关开启时，才会注入 AI 发布朋友圈提示词。
+   3. 单选走单人提示词；多选每批最多 4 位联系人调用一次副 API，并在同批次内让用户设定、全局世界书、共用角色世界书只发送一次。
+   4. 批量提示词明确要求 AI 按 contactId 分别为每位联系人生成动态，避免把多位联系人当群聊、共同发帖或互相串戏。
+   5. AI 生成朋友圈动态仅调用设置应用里的副 API；朋友圈写入统一走 DB.js / IndexedDB；不使用 localStorage/sessionStorage，不做长文本/大媒体字段过滤。
+   ========================================================================== */
+const INSTANT_AUTONOMOUS_MOMENTS_BATCH_SIZE = 4;
+
+function getSessionForInstantAutonomousMoment(state = {}, contact = {}) {
+  const contactId = String(contact?.id || contact?.roleId || '').trim();
+  const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+  const existed = sessions.find(session => String(session?.id || '') === contactId);
+  if (existed) return existed;
+
+  return {
+    id: contactId,
+    name: String(contact?.name || contact?.nickname || contact?.contact || '未命名联系人').trim() || '未命名联系人',
+    remark: String(contact?.remark || '').trim(),
+    avatar: String(contact?.avatar || '').trim(),
+    roleId: String(contact?.roleId || '').trim(),
+    characterId: String(contact?.characterId || '').trim()
+  };
+}
+
+function createAutonomousMomentRecord({
+  state = {},
+  session = {},
+  contact = null,
+  character = null,
+  parsed = {},
+  now = Date.now(),
+  source = 'chat-autonomous-activity'
+} = {}) {
+  const roleName = String(character?.name || contact?.name || session?.remark || session?.name || '角色').trim() || '角色';
+  const roleAvatar = String(contact?.avatar || session?.avatar || character?.avatar || '').trim();
+
+  return {
+    id: createUid('moment'),
+    authorId: String(character?.id || contact?.roleId || session?.id || '').trim(),
+    authorName: roleName,
+    authorAvatar: roleAvatar,
+    content: parsed.content,
+    images: [],
+    likes: [],
+    comments: [],
+    reposts: [],
+    shares: [],
+    createdAt: now,
+    location: parsed.location,
+    visibilityMode: 'public',
+    visibleContactIds: [],
+    visibleContactNames: [],
+    autonomousSource: source
+  };
+}
+
+function chunkInstantAutonomousMomentItems(items = [], size = INSTANT_AUTONOMOUS_MOMENTS_BATCH_SIZE) {
+  const chunks = [];
+  const safeSize = Math.max(1, Number(size) || INSTANT_AUTONOMOUS_MOMENTS_BATCH_SIZE);
+  for (let index = 0; index < items.length; index += safeSize) {
+    chunks.push(items.slice(index, index + safeSize));
+  }
+  return chunks;
+}
+
+async function collectInstantAutonomousMomentItems({
+  state = {},
+  db = null,
+  selectedIds = [],
+  result = {}
+} = {}) {
+  const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+  const items = [];
+
+  for (const selectedId of selectedIds) {
+    const contact = contacts.find(item => {
+      const id = String(item?.id || '').trim();
+      const roleId = String(item?.roleId || '').trim();
+      return id === selectedId || roleId === selectedId;
+    });
+
+    if (!contact) {
+      result.failed += 1;
+      continue;
+    }
+
+    const session = getSessionForInstantAutonomousMoment(state, contact);
+    if (!String(session?.id || '').trim()) {
+      result.failed += 1;
+      continue;
+    }
+
+    const settings = normalizeAutonomousActivitySettings(
+      await dbGet(db, DATA_KEY_CHAT_PROMPT_SETTINGS(state.activeMaskId, session.id))
+    );
+    if (!settings.autonomousMomentsEnabled) {
+      result.skippedDisabled += 1;
+      continue;
+    }
+
+    const now = Date.now();
+    const [messages] = await Promise.all([
+      loadMessagesForAutonomousMoments(state, db, session)
+    ]);
+    const character = getCharacterForAutonomousMoments(state, session, contact);
+    items.push({
+      contactId: String(session.id || selectedId).trim(),
+      session,
+      contact,
+      character,
+      settings,
+      messages: getLatestOneDayMessages(messages, now)
+    });
+  }
+
+  return items;
+}
+
+async function persistInstantAutonomousMomentRecords({
+  state = {},
+  db = null,
+  recordItems = [],
+  now = Date.now()
+} = {}) {
+  const safeRecordItems = (Array.isArray(recordItems) ? recordItems : [])
+    .filter(item => item?.record?.content && item?.sourceItem?.session?.id);
+  if (!safeRecordItems.length) return 0;
+
+  const safeRecords = safeRecordItems.map(item => item.record);
+  const currentMoments = Array.isArray(state.moments)
+    ? state.moments
+    : ((await dbGet(db, DATA_KEY_MOMENTS(state.activeMaskId))) || []);
+  state.moments = [...safeRecords, ...currentMoments];
+  await dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments);
+
+  await Promise.all(safeRecordItems.map(item => {
+    const sessionId = String(item.sourceItem?.session?.id || '').trim();
+    if (!sessionId) return Promise.resolve();
+    return dbPut(db, AUTONOMOUS_MOMENTS_META_KEY(state.activeMaskId, sessionId), {
+      lastPublishedAt: now,
+      lastMomentId: item.record.id,
+      updatedAt: now
+    });
+  }));
+
+  return safeRecords.length;
+}
+
+async function publishInstantAutonomousMomentBatch({
+  state = {},
+  db = null,
+  profile = null,
+  mask = null,
+  worldBooks = [],
+  items = []
+} = {}) {
+  const now = Date.now();
+  const promptMessages = buildBatchAutonomousMomentsPrompt({
+    mask,
+    items,
+    worldBooks
+  });
+  const rawText = await requestAutonomousMomentsBySecondaryApi(profile, promptMessages);
+  const parsedItems = normalizeBatchAutonomousMomentPayload(extractJsonObjectFromAiText(rawText));
+  const parsedByContactId = new Map(parsedItems.map(item => [String(item.contactId || '').trim(), item]));
+  const recordItems = [];
+
+  (Array.isArray(items) ? items : []).forEach(item => {
+    const parsed = parsedByContactId.get(String(item.contactId || '').trim());
+    if (!parsed) return;
+    recordItems.push({
+      sourceItem: item,
+      record: createAutonomousMomentRecord({
+        state,
+        session: item.session,
+        contact: item.contact,
+        character: item.character,
+        parsed,
+        now,
+        source: 'moments-heart-instant-batch'
+      })
+    });
+  });
+
+  return {
+    now,
+    recordItems
+  };
+}
+
+export async function publishInstantAutonomousMomentsForContacts({
+  state = {},
+  container = null,
+  db = null,
+  settingsManager = null,
+  contactIds = []
+} = {}) {
+  const selectedIds = Array.from(new Set(
+    (Array.isArray(contactIds) ? contactIds : [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  ));
+
+  const result = {
+    total: selectedIds.length,
+    published: 0,
+    skippedDisabled: 0,
+    failed: 0,
+    message: ''
+  };
+
+  if (!selectedIds.length) {
+    result.message = '请选择要发布朋友圈的通讯录联系人';
+    return result;
+  }
+
+  const allSettings = settingsManager && typeof settingsManager.getAll === 'function'
+    ? await settingsManager.getAll()
+    : {};
+  const profile = normalizeSecondaryApiProfile(allSettings?.api || {});
+  if (!profile.apiKey || !profile.model) {
+    result.failed = selectedIds.length;
+    result.message = '请先在设置应用配置副 API Key 和模型';
+    return result;
+  }
+
+  const eligibleItems = await collectInstantAutonomousMomentItems({
+    state,
+    db,
+    selectedIds,
+    result
+  });
+
+  if (!eligibleItems.length) {
+    result.message = result.skippedDisabled
+      ? `所选联系人均未开启主动发朋友圈${result.failed ? `，另有 ${result.failed} 位发布失败` : ''}`
+      : '未能发布朋友圈动态，请检查联系人设置';
+    return result;
+  }
+
+  if (eligibleItems.length === 1) {
+    const item = eligibleItems[0];
+    try {
+      const published = await publishAutonomousMomentForSession({
+        state,
+        container,
+        db,
+        session: item.session,
+        settings: item.settings,
+        profile,
+        source: 'moments-heart-instant'
+      });
+      if (published) {
+        result.published += 1;
+      } else {
+        result.failed += 1;
+      }
+    } catch (error) {
+      console.warn('[Chat] 朋友圈爱心单选即时 AI 发布失败:', error);
+      result.failed += 1;
+    }
+  } else {
+    const mask = getMaskForAutonomousMoments(state);
+    const worldBooks = await readRawDbRecordValue(db, WORLDBOOK_DB_RECORD_ID);
+    const batches = chunkInstantAutonomousMomentItems(eligibleItems);
+
+    for (const batchItems of batches) {
+      try {
+        const batchResult = await publishInstantAutonomousMomentBatch({
+          state,
+          db,
+          profile,
+          mask,
+          worldBooks: Array.isArray(worldBooks) ? worldBooks : [],
+          items: batchItems
+        });
+
+        const persisted = await persistInstantAutonomousMomentRecords({
+          state,
+          db,
+          recordItems: batchResult.recordItems,
+          now: batchResult.now
+        });
+        result.published += persisted;
+        result.failed += Math.max(0, batchItems.length - persisted);
+      } catch (error) {
+        console.warn('[Chat] 朋友圈爱心多选批量 AI 发布失败:', error);
+        result.failed += batchItems.length;
+      }
+    }
+  }
+
+  if (container?.isConnected && state.activePanel === 'moments') {
+    refreshMomentsPanel(container, state);
+  }
+
+  result.message = result.published
+    ? `已发布 ${result.published} 条朋友圈动态${result.skippedDisabled ? `，${result.skippedDisabled} 位联系人未开启主动发朋友圈` : ''}${result.failed ? `，${result.failed} 位发布失败` : ''}`
+    : (result.skippedDisabled
+        ? `所选联系人均未开启主动发朋友圈${result.failed ? `，另有 ${result.failed} 位发布失败` : ''}`
+        : '未能发布朋友圈动态，请检查副 API 与联系人设置');
+  return result;
 }
 
 /* ==========================================================================

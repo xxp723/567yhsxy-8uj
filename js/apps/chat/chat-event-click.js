@@ -133,12 +133,18 @@ import {
   openMomentShareModal,
   openMomentRepostModal,
   openMomentDeleteModal,
+  openInstantAutonomousMomentContactsModal,
+  toggleInstantAutonomousMomentContact,
+  getInstantAutonomousMomentContactIds,
   resetMomentsInteractionState,
   handleMomentsInteractionAction,
   refreshMomentsPanel
 } from './moments.js';
 import { handleTranslationSettingsClick } from './chat-translation.js';
-import { handleAutonomousActivitySettingsClick } from './chat-autonomous-activity-settings.js';
+import {
+  handleAutonomousActivitySettingsClick,
+  publishInstantAutonomousMomentsForContacts
+} from './chat-autonomous-activity-settings.js';
 import {
   openInnerVoicePanel,
   findInnerVoiceForMessage,
@@ -757,9 +763,50 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       break;
     }
 
+    /* ========================================================================
+       [区域标注·已完成·朋友圈左上角爱心即时 AI 发布点击接线]
+       说明：
+       1. 仅接线朋友圈页左上角爱心按钮的多选联系人弹窗与确认发布。
+       2. 确认发布后调用自主活动模块，只有联系人“主动发朋友圈”开关开启才注入提示词并调用设置应用副 API。
+       3. 发布结果通过应用内弹窗提示；不使用原生浏览器弹窗/选择器。
+       4. 朋友圈持久化仍由自主活动模块统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
+       ======================================================================== */
+    case 'open-instant-autonomous-moments-modal':
     case 'moments-notifications':
-      renderModalNotice(container, '暂无互动通知');
+      openInstantAutonomousMomentContactsModal(container, state);
       break;
+
+    case 'toggle-instant-autonomous-moment-contact': {
+      toggleInstantAutonomousMomentContact(state, target.dataset.contactId);
+      openInstantAutonomousMomentContactsModal(container, state);
+      break;
+    }
+
+    case 'confirm-instant-autonomous-moments': {
+      const contactIds = getInstantAutonomousMomentContactIds(state);
+      if (!contactIds.length) {
+        renderModalNotice(container, '请选择要发布朋友圈的通讯录联系人');
+        break;
+      }
+
+      target.disabled = true;
+      target.textContent = '发布中…';
+
+      const result = await publishInstantAutonomousMomentsForContacts({
+        state,
+        container,
+        db,
+        settingsManager,
+        contactIds
+      });
+
+      state.instantAutonomousMomentContactIds = [];
+      refreshMomentsPanel(container, state);
+      renderModalNotice(container, result.message || '朋友圈即时发布已完成');
+      target.disabled = false;
+      target.textContent = '立即发布';
+      break;
+    }
 
     case 'close-modal':
       closeModal(container);

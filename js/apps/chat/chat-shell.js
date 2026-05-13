@@ -48,8 +48,8 @@ export function buildAppShell(state) {
            说明：左上角">"返回桌面，中间花体字"Chat"，右上角"+"添加
            ================================================================ -->
       <div class="chat-top-bar">
-        <!-- [区域标注·已完成·本次朋友圈标题栏按钮位置调整] 朋友圈页标题左侧爱心与右侧“+”，仅在 Moments 板块显示 -->
-        <button class="chat-top-bar__moments-action chat-top-bar__moments-action--left" data-action="moments-notifications" type="button" aria-label="朋友圈互动通知" style="${showMomentsActions ? '' : 'display:none;'}">${ICON_MOMENTS_HEART}</button>
+        <!-- [区域标注·已完成·朋友圈左上角爱心即时 AI 发布入口] 朋友圈页标题左侧 IconPark 爱心按钮：打开多选通讯录联系人弹窗，即时触发已开启“主动发朋友圈”的联系人用副 API 发布动态 -->
+        <button class="chat-top-bar__moments-action chat-top-bar__moments-action--left" data-action="open-instant-autonomous-moments-modal" type="button" aria-label="选择通讯录联系人即时发布朋友圈" style="${showMomentsActions ? '' : 'display:none;'}">${ICON_MOMENTS_HEART}</button>
         <!-- [区域标注·本次需求4] Chat/Contacts 标题组：右侧紧跟缩小后的 IconPark "+" 按钮 -->
         <div class="chat-top-bar__title-wrap">
           <button class="chat-top-bar__title" data-action="go-home" type="button">${shellTitle}</button>
