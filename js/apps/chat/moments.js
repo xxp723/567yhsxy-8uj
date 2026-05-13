@@ -119,21 +119,40 @@ function normalizeAddedAt(value) {
    3. 联系人按 addedAt 从旧到新由左向右排列；最新添加项位于更右侧，满足从右往左查看添加顺序。
    ========================================================================== */
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈联系人头像动态筛选] 头像栏渲染与联系人筛选入口
+   [区域标注·已完成·本次朋友圈头像点击切换动态范围] 头像栏渲染与动态范围切换入口
    说明：
-   1. 仅为朋友圈联系人头像增加运行时筛选入口，不新增任何持久化存储读写。
-   2. 联系人头像点击后由 chat-event-click.js 事件代理设置 state.momentsContactFilterId。
-   3. 当前面具身份头像保持原展示作用，不增加筛选行为，避免改动无关逻辑。
+   1. 当前用户头像点击后恢复显示“用户 + 全部联系人”的全部朋友圈动态。
+   2. 联系人头像点击后仅显示该联系人的朋友圈动态；再次点击同一联系人头像时取消筛选。
+   3. 本区域只维护运行时筛选入口，不新增任何持久化存储读写。
    ========================================================================== */
 function renderStoryAvatar(name, avatar, isSelf = false, options = {}) {
   const safeName = escapeHtml(name || (isSelf ? '我的主页' : '未命名'));
-  const label = isSelf ? `当前身份：${safeName}` : `联系人：${safeName}`;
   const contactId = String(options?.contactId || '').trim();
-  const isSelected = !!options?.isSelected && !isSelf;
+  const isSelected = !!options?.isSelected;
 
-  if (isSelf || !contactId) {
+  if (isSelf) {
     return `
-      <div class="moments-story-avatar ${isSelf ? 'moments-story-avatar--self' : ''}" role="listitem" aria-label="${label}" title="${safeName}">
+      <button
+        class="moments-story-avatar moments-story-avatar--self ${isSelected ? 'moments-story-avatar--selected' : ''}"
+        type="button"
+        role="listitem"
+        data-action="show-all-moments"
+        aria-pressed="${isSelected ? 'true' : 'false'}"
+        aria-label="显示全部朋友圈动态：${safeName}"
+        title="${safeName}">
+        <span class="moments-story-avatar__ring" aria-hidden="true">
+          ${avatar
+            ? `<img src="${escapeHtml(avatar)}" alt="">`
+            : `<span class="moments-story-avatar__initial">${escapeHtml(getInitial(name))}</span>`}
+        </span>
+        <span class="moments-story-avatar__name">${safeName}</span>
+      </button>
+    `;
+  }
+
+  if (!contactId) {
+    return `
+      <div class="moments-story-avatar" role="listitem" aria-label="联系人：${safeName}" title="${safeName}">
         <span class="moments-story-avatar__ring" aria-hidden="true">
           ${avatar
             ? `<img src="${escapeHtml(avatar)}" alt="">`
@@ -152,7 +171,7 @@ function renderStoryAvatar(name, avatar, isSelf = false, options = {}) {
       data-action="filter-moments-by-contact"
       data-contact-id="${escapeHtml(contactId)}"
       aria-pressed="${isSelected ? 'true' : 'false'}"
-      aria-label="${label}"
+      aria-label="只显示联系人朋友圈动态：${safeName}"
       title="${safeName}">
       <span class="moments-story-avatar__ring" aria-hidden="true">
         ${avatar
@@ -178,10 +197,10 @@ function renderMomentsStories(profile, contacts, options = {}) {
     });
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈联系人头像动态筛选] 仿 Instagram 横向头像列表与联系人筛选入口 -->
+    <!-- [区域标注·已完成·本次朋友圈头像点击切换动态范围] 仿 Instagram 横向头像列表与动态范围切换入口 -->
     <section class="moments-story-strip" aria-label="朋友圈头像列表">
       <div class="moments-story-strip__scroller" role="list">
-        ${renderStoryAvatar(selfName, selfAvatar, true)}
+        ${renderStoryAvatar(selfName, selfAvatar, true, { isSelected: !activeFilterId })}
         ${sortedContacts.map(contact => {
           const contactId = String(contact?.id || contact?.roleId || '').trim();
           return renderStoryAvatar(
@@ -1277,6 +1296,7 @@ export function openMomentsComposeVisibilityModal(container, state) {
    3. 本区只维护运行时选择状态，不写入持久化存储；确认发布后的 IndexedDB 写入由事件模块调用自主活动模块完成。
    4. 爱心即时发布不再依赖聊天设置里的“主动发朋友圈”开关；该开关只控制后台主动定时发布。
    5. 联系人选项使用朋友圈主题色与明确选中态，便于区分已选/未选。
+   6. 底部已移除“取消”按钮，仅保留右上角关闭按钮，避免重复操作入口。
    ========================================================================== */
 function getInstantAutonomousMomentSelectedIds(state = {}) {
   return Array.from(new Set(
@@ -1328,7 +1348,6 @@ export function openInstantAutonomousMomentContactsModal(container, state) {
       <p class="chat-modal-notice" data-role="modal-notice"></p>
     </div>
     <div class="chat-modal-footer">
-      <button class="chat-modal-btn" data-action="close-modal" type="button">取消</button>
       <button class="chat-modal-btn chat-modal-btn--primary" data-action="confirm-instant-autonomous-moments" type="button">立即发布</button>
     </div>
   `;

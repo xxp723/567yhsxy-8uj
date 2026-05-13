@@ -361,12 +361,18 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       break;
 
     /* ========================================================================
-       [区域标注·已完成·本次朋友圈联系人头像动态筛选] 点击联系人头像后仅显示该联系人动态
+       [区域标注·已完成·本次朋友圈头像点击切换动态范围] 用户头像显示全部，联系人头像只显示单联系人动态
        说明：
-       1. 仅维护运行时筛选状态 state.momentsContactFilterId，不新增任何 DB.js / IndexedDB 写入。
-       2. 再次点击同一联系人头像时取消筛选，恢复显示全部未删除动态。
-       3. 只局部刷新朋友圈面板，不改动评论、回复、删除、分享、转发等既有逻辑。
+       1. 点击用户头像时清空运行时筛选状态 state.momentsContactFilterId，恢复显示全部未删除动态。
+       2. 点击联系人头像时仅显示该联系人动态；再次点击同一联系人头像时取消筛选，恢复全部动态。
+       3. 仅局部刷新朋友圈面板，不新增任何 DB.js / IndexedDB 写入，不改动评论、回复、删除、分享、转发等既有逻辑。
        ======================================================================== */
+    case 'show-all-moments':
+      state.momentsContactFilterId = '';
+      resetMomentsInteractionState(state);
+      refreshMomentsPanel(container, state);
+      break;
+
     case 'filter-moments-by-contact': {
       const contactId = String(target.dataset.contactId || '').trim();
       if (!contactId) break;
