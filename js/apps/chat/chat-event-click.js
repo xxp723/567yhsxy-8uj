@@ -361,6 +361,24 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       break;
 
     /* ========================================================================
+       [区域标注·已完成·本次朋友圈联系人头像动态筛选] 点击联系人头像后仅显示该联系人动态
+       说明：
+       1. 仅维护运行时筛选状态 state.momentsContactFilterId，不新增任何 DB.js / IndexedDB 写入。
+       2. 再次点击同一联系人头像时取消筛选，恢复显示全部未删除动态。
+       3. 只局部刷新朋友圈面板，不改动评论、回复、删除、分享、转发等既有逻辑。
+       ======================================================================== */
+    case 'filter-moments-by-contact': {
+      const contactId = String(target.dataset.contactId || '').trim();
+      if (!contactId) break;
+      state.momentsContactFilterId = String(state.momentsContactFilterId || '').trim() === contactId
+        ? ''
+        : contactId;
+      resetMomentsInteractionState(state);
+      refreshMomentsPanel(container, state);
+      break;
+    }
+
+    /* ========================================================================
        [区域标注·已完成·本次朋友圈分享转发删除互动] 朋友圈动态分享 / 转发 / 删除
        说明：
        1. 仅接线朋友圈动态卡片上的分享、转发、删除按钮与应用内弹窗。

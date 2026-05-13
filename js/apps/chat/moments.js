@@ -118,25 +118,56 @@ function normalizeAddedAt(value) {
    2. 后续头像由 index.js 传入 state.contacts 运行时渲染，不新增任何持久化读写。
    3. 联系人按 addedAt 从旧到新由左向右排列；最新添加项位于更右侧，满足从右往左查看添加顺序。
    ========================================================================== */
-function renderStoryAvatar(name, avatar, isSelf = false) {
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈联系人头像动态筛选] 头像栏渲染与联系人筛选入口
+   说明：
+   1. 仅为朋友圈联系人头像增加运行时筛选入口，不新增任何持久化存储读写。
+   2. 联系人头像点击后由 chat-event-click.js 事件代理设置 state.momentsContactFilterId。
+   3. 当前面具身份头像保持原展示作用，不增加筛选行为，避免改动无关逻辑。
+   ========================================================================== */
+function renderStoryAvatar(name, avatar, isSelf = false, options = {}) {
   const safeName = escapeHtml(name || (isSelf ? '我的主页' : '未命名'));
   const label = isSelf ? `当前身份：${safeName}` : `联系人：${safeName}`;
+  const contactId = String(options?.contactId || '').trim();
+  const isSelected = !!options?.isSelected && !isSelf;
+
+  if (isSelf || !contactId) {
+    return `
+      <div class="moments-story-avatar ${isSelf ? 'moments-story-avatar--self' : ''}" role="listitem" aria-label="${label}" title="${safeName}">
+        <span class="moments-story-avatar__ring" aria-hidden="true">
+          ${avatar
+            ? `<img src="${escapeHtml(avatar)}" alt="">`
+            : `<span class="moments-story-avatar__initial">${escapeHtml(getInitial(name))}</span>`}
+        </span>
+        <span class="moments-story-avatar__name">${safeName}</span>
+      </div>
+    `;
+  }
 
   return `
-    <div class="moments-story-avatar ${isSelf ? 'moments-story-avatar--self' : ''}" role="listitem" aria-label="${label}" title="${safeName}">
+    <button
+      class="moments-story-avatar moments-story-avatar--filter ${isSelected ? 'moments-story-avatar--selected' : ''}"
+      type="button"
+      role="listitem"
+      data-action="filter-moments-by-contact"
+      data-contact-id="${escapeHtml(contactId)}"
+      aria-pressed="${isSelected ? 'true' : 'false'}"
+      aria-label="${label}"
+      title="${safeName}">
       <span class="moments-story-avatar__ring" aria-hidden="true">
         ${avatar
           ? `<img src="${escapeHtml(avatar)}" alt="">`
           : `<span class="moments-story-avatar__initial">${escapeHtml(getInitial(name))}</span>`}
       </span>
       <span class="moments-story-avatar__name">${safeName}</span>
-    </div>
+    </button>
   `;
 }
 
-function renderMomentsStories(profile, contacts) {
+function renderMomentsStories(profile, contacts, options = {}) {
   const selfName = profile?.nickname || profile?.name || '我的主页';
   const selfAvatar = profile?.avatar || '';
+  const activeFilterId = String(options?.activeContactFilterId || '').trim();
   const sortedContacts = (Array.isArray(contacts) ? contacts : [])
     .filter(contact => contact && (contact.name || contact.nickname || contact.contact || contact.avatar))
     .slice()
@@ -147,15 +178,22 @@ function renderMomentsStories(profile, contacts) {
     });
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈标题栏下方头像横滑栏] 仿 Instagram 横向头像列表 -->
+    <!-- [区域标注·已完成·本次朋友圈联系人头像动态筛选] 仿 Instagram 横向头像列表与联系人筛选入口 -->
     <section class="moments-story-strip" aria-label="朋友圈头像列表">
       <div class="moments-story-strip__scroller" role="list">
         ${renderStoryAvatar(selfName, selfAvatar, true)}
-        ${sortedContacts.map(contact => renderStoryAvatar(
-          contact?.name || contact?.nickname || contact?.contact || '未命名',
-          contact?.avatar || '',
-          false
-        )).join('')}
+        ${sortedContacts.map(contact => {
+          const contactId = String(contact?.id || contact?.roleId || '').trim();
+          return renderStoryAvatar(
+            contact?.name || contact?.nickname || contact?.contact || '未命名',
+            contact?.avatar || '',
+            false,
+            {
+              contactId,
+              isSelected: !!contactId && contactId === activeFilterId
+            }
+          );
+        }).join('')}
       </div>
     </section>
   `;
@@ -485,11 +523,13 @@ function renderMomentCard(moment, options = {}) {
 /* ==========================================================================
    [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 空状态渲染
    ========================================================================== */
-function renderEmptyState(profile, contacts) {
+function renderEmptyState(profile, contacts, options = {}) {
+  const activeContactFilterId = String(options?.activeContactFilterId || '').trim();
+
   return `
-    <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈页面容器与空状态 -->
+    <!-- [区域标注·已完成·本次朋友圈联系人头像动态筛选] 朋友圈页面容器与空状态 -->
     <div class="moments-page" aria-label="朋友圈">
-      ${renderMomentsStories(profile, contacts)}
+      ${renderMomentsStories(profile, contacts, { activeContactFilterId })}
       <div class="moments-empty-state">
         <div class="moments-empty-state__body">
           <span class="moments-empty-state__icon">${ICONS.earth}</span>
@@ -674,7 +714,8 @@ export function getMomentsRenderOptions(state) {
     contacts: Array.isArray(state?.contacts) ? state.contacts : [],
     viewerId: getMomentsViewerId(state),
     expandedCommentIds: Array.isArray(state?.momentsExpandedCommentIds) ? state.momentsExpandedCommentIds : [],
-    replyTarget: state?.momentsReplyTarget || null
+    replyTarget: state?.momentsReplyTarget || null,
+    activeContactFilterId: String(state?.momentsContactFilterId || '').trim()
   };
 }
 
@@ -1442,21 +1483,74 @@ export function openMomentDeleteModal(container, state, momentId) {
    2. 不使用 localStorage/sessionStorage，不写双份存储兜底。
    3. 不使用原生浏览器弹窗/选择器。
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·本次朋友圈联系人头像动态筛选] 联系人动态过滤工具
+   说明：
+   1. 仅在渲染阶段根据当前运行时筛选条件过滤朋友圈动态。
+   2. 已删除动态不显示：兼容 deleted / isDeleted / deletedAt 软删除标记。
+   3. 不改动点赞、评论、回复、删除、分享、转发等原有动态内部逻辑。
+   ========================================================================== */
+function isDeletedMoment(moment) {
+  if (!moment || typeof moment !== 'object') return true;
+  if (moment.deleted === true) return true;
+  if (moment.isDeleted === true) return true;
+  if (moment.deletedAt) return true;
+  return false;
+}
+
+function isMomentOwnedByContact(moment, contactFilterId, contacts = []) {
+  const safeFilterId = String(contactFilterId || '').trim();
+  if (!safeFilterId) return true;
+
+  const authorIdCandidates = [
+    moment?.authorId,
+    moment?.authorRoleId,
+    moment?.roleId,
+    moment?.contactId,
+    moment?.userId
+  ]
+    .map(id => String(id || '').trim())
+    .filter(Boolean);
+
+  if (authorIdCandidates.includes(safeFilterId)) return true;
+
+  const matchedContact = (Array.isArray(contacts) ? contacts : []).find(contact => {
+    const contactId = String(contact?.id || '').trim();
+    const roleId = String(contact?.roleId || '').trim();
+    return contactId === safeFilterId || roleId === safeFilterId;
+  });
+
+  if (!matchedContact) return false;
+
+  const matchedContactIds = new Set(
+    [matchedContact?.id, matchedContact?.roleId]
+      .map(id => String(id || '').trim())
+      .filter(Boolean)
+  );
+
+  return authorIdCandidates.some(id => matchedContactIds.has(id));
+}
+
 export function renderMoments(moments, options = {}) {
-  const list = Array.isArray(moments) ? moments : [];
+  const sourceList = Array.isArray(moments) ? moments : [];
   const profile = options?.profile || {};
   const contacts = Array.isArray(options?.contacts) ? options.contacts : [];
+  const activeContactFilterId = String(options?.activeContactFilterId || '').trim();
+  const list = sourceList.filter(moment => (
+    !isDeletedMoment(moment)
+    && isMomentOwnedByContact(moment, activeContactFilterId, contacts)
+  ));
 
   if (list.length === 0) {
-    return renderEmptyState(profile, contacts);
+    return renderEmptyState(profile, contacts, { activeContactFilterId });
   }
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈页面容器 -->
+    <!-- [区域标注·已完成·本次朋友圈联系人头像动态筛选] 朋友圈页面容器 -->
     <div class="moments-page" aria-label="朋友圈">
-      ${renderMomentsStories(profile, contacts)}
+      ${renderMomentsStories(profile, contacts, { activeContactFilterId })}
 
-      <!-- [区域标注·已完成·本次朋友圈图1区域去除与头像横滑栏] 朋友圈动态列表 -->
+      <!-- [区域标注·已完成·本次朋友圈联系人头像动态筛选] 朋友圈动态列表 -->
       <div class="moments-feed">
         ${list.map(moment => renderMomentCard(moment, options)).join('')}
       </div>
