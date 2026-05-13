@@ -14,11 +14,14 @@
    ========================================================================== */
 
 /* ==========================================================================
-   [区域标注·本次需求3] 聊天设置页表情包挂载分组
-   说明：仅显示分组名称，支持多选，和输入栏表情包面板风格统一。
+   [区域标注·已完成·功能玩法表情包挂载抽屉分组]
+   说明：
+   1. 表情包挂载已并入聊天设置页“功能玩法”板块，分组按钮显示在抽屉展开区。
+   2. 仍仅显示分组名称、支持多选，并继续复用原 data-action 挂载逻辑。
+   3. 样式层不涉及持久化存储；保存仍由 JS 通过 DB.js / IndexedDB 处理。
    ========================================================================== */
 .msg-settings-sticker-groups {
-  margin-top: 12px;
+  margin-top: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -56,6 +59,102 @@
   text-align: center;
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·功能玩法合并板块样式]
+   说明：
+   1. 仅服务聊天设置页“功能玩法”板块：HTML卡片开关 + 表情包挂载抽屉。
+   2. 外层参考“头像与备注”的左上角标题与暖色卡片结构，行内开关继续使用 iPhone 风格滑动开关。
+   3. 表情包挂载使用 IconPark 风格右箭头按钮，展开时抽屉向下滑出，避免整页重绘造成闪屏。
+   4. 本区域只改布局样式，不改 HTML卡片与表情包挂载的 DB.js / IndexedDB 持久化逻辑。
+   ========================================================================== */
+.msg-settings-feature-play-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-settings-feature-play-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: rgba(255, 252, 247, 0.94);
+}
+
+.msg-settings-feature-play-sticker {
+  display: flex;
+  flex-direction: column;
+}
+
+.msg-settings-feature-play-sticker-toggle {
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0;
+  border: none;
+  background: transparent;
+  color: #4A342A;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg-settings-feature-play-sticker-toggle .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+.msg-settings-feature-play-sticker-toggle:active {
+  opacity: 0.72;
+}
+
+.msg-settings-feature-play-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.08);
+  color: rgba(74, 52, 42, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.18s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.msg-settings-feature-play-arrow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.msg-settings-feature-play-sticker.is-open .msg-settings-feature-play-arrow {
+  transform: rotate(90deg);
+  background: rgba(74, 52, 42, 0.13);
+  color: #4A342A;
+}
+
+.msg-settings-feature-play-drawer {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+  will-change: max-height, opacity, transform;
+}
+
+.msg-settings-feature-play-sticker.is-open .msg-settings-feature-play-drawer {
+  max-height: 260px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.msg-settings-feature-play-drawer__inner {
+  padding: 0 0 14px;
+}
+
+@media (max-width: 360px) {
+  .msg-settings-feature-play-sticker.is-open .msg-settings-feature-play-drawer {
+    max-height: 320px;
+  }
 }
 
 /* ==========================================================================

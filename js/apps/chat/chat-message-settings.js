@@ -155,20 +155,55 @@ export function renderChatMessageSettingsPage({
         </section>
 
         <!-- ==================================================================
-             [区域标注·已完成·HTML卡片设置开关] 聊天设置页 HTML 卡片注入开关
+             [区域标注·已完成·功能玩法合并板块] HTML卡片开关 + 表情包挂载抽屉
              说明：
-             1. 仅当此开关开启时，prompt.js 才会给 AI 注入 HTML 卡片系统提示词。
-             2. 开关样式沿用现有 iPhone 风格滑动开关；持久化由 index.js 写入 DB.js / IndexedDB。
-             3. 本区域只新增 html 卡片功能相关设置，不修改其它聊天设置行为。
+             1. 本区域已按本次要求把“HTML卡片”和“表情包挂载”合并到同一“功能玩法”板块。
+             2. 外层布局参考“头像与备注”：左上角标题 + 暖色设置卡片 + 行分割线。
+             3. “HTML卡片”继续使用原 data-action="toggle-html-card"，持久化仍由 index.js 写入 DB.js / IndexedDB。
+             4. “表情包挂载”继续使用原 data-action="toggle-mounted-sticker-group" 与分组 id，不改变挂载逻辑。
+             5. 表情包列表通过右侧 IconPark 风格 “>” 折叠按钮抽屉式展开；板块内已移除说明性文字。
+             6. 本区域不使用 localStorage/sessionStorage，不写双份兜底，不使用原生弹窗或原生选择器。
              ================================================================== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-row">
-            <div>
+        <section class="msg-settings-feature-play-section">
+          <div class="msg-settings-section-title">功能玩法</div>
+          <section class="msg-settings-card msg-settings-feature-play-card">
+            <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-card__title">HTML卡片</div>
-              <div class="msg-settings-card__desc">开启后，角色会在对话中发送趣味性HTML卡片。</div>
+              <button class="msg-ios-switch ${chatSettings.htmlCardEnabled ? 'is-on' : ''}" data-action="toggle-html-card" type="button" aria-label="HTML卡片"></button>
             </div>
-            <button class="msg-ios-switch ${chatSettings.htmlCardEnabled ? 'is-on' : ''}" data-action="toggle-html-card" type="button" aria-label="HTML卡片"></button>
-          </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-feature-play-sticker">
+              <button
+                class="msg-settings-row msg-settings-feature-play-sticker-toggle"
+                data-action="toggle-settings-sticker-drawer"
+                type="button"
+                aria-label="展开表情包挂载"
+                aria-expanded="false">
+                <span class="msg-settings-card__title">表情包挂载</span>
+                <span class="msg-settings-feature-play-arrow" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div class="msg-settings-feature-play-drawer" data-role="settings-sticker-drawer">
+                <div class="msg-settings-feature-play-drawer__inner">
+                  <div class="msg-settings-sticker-groups">
+                    ${stickerGroups.length
+                      ? stickerGroups.map(group => `
+                          <button class="msg-settings-sticker-group-btn ${mountedStickerGroupIds.includes(group.id) ? 'is-active' : ''}"
+                                  data-action="toggle-mounted-sticker-group"
+                                  data-sticker-group-id="${escapeHtml(group.id)}"
+                                  type="button">
+                            ${escapeHtml(group.name)}
+                          </button>
+                        `).join('')
+                      : `<div class="msg-settings-sticker-empty">暂无可挂载的表情包分组</div>`}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <!-- ==========================================================================
@@ -205,27 +240,6 @@ export function renderChatMessageSettingsPage({
           <div class="msg-settings-card__title">自定义思维链</div>
           <div class="msg-settings-card__desc">留空时使用默认静默审查协议；自定义内容也应要求 AI 后台自检，最终回复禁止输出 think 标签、审查过程或幕后说明。</div>
           <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【静默审查】输出前先在后台核对角色卡事实、已知细节、情感事实和消息格式；最终只输出符合通用消息协议的可见回复，禁止输出 <think>、审查步骤或幕后说明。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
-        </section>
-
-        <!-- ==================================================================
-             [区域标注·本次需求3] AI 表情包挂载设置
-             说明：只显示分组名称；支持多选；不同用户面具只决定 AI 挂载哪些分组。
-             ========================================================================== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">表情包挂载</div>
-          <div class="msg-settings-card__desc">选择要挂载给 AI 使用的表情包分组。AI 只能从已挂载分组里选择符合当前聊天情景的表情包发送。</div>
-          <div class="msg-settings-sticker-groups">
-            ${stickerGroups.length
-              ? stickerGroups.map(group => `
-                  <button class="msg-settings-sticker-group-btn ${mountedStickerGroupIds.includes(group.id) ? 'is-active' : ''}"
-                          data-action="toggle-mounted-sticker-group"
-                          data-sticker-group-id="${escapeHtml(group.id)}"
-                          type="button">
-                    ${escapeHtml(group.name)}
-                  </button>
-                `).join('')
-              : `<div class="msg-settings-sticker-empty">暂无可挂载的表情包分组</div>`}
-          </div>
         </section>
 
         <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 START ===== -->

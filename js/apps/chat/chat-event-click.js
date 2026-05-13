@@ -2332,6 +2332,23 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       break;
 
     /* ========================================================================
+       [区域标注·已完成·功能玩法表情包挂载抽屉点击接线]
+       说明：
+       1. 仅处理聊天设置页“功能玩法”板块内“表情包挂载”右侧 IconPark 风格折叠按钮。
+       2. 只切换当前 DOM 的 is-open 与 aria-expanded，不重渲染聊天设置页，避免页面闪屏。
+       3. 不读写 DB.js / IndexedDB；表情包挂载的持久化仍由 toggle-mounted-sticker-group 分支负责。
+       4. 不使用 localStorage/sessionStorage，不使用原生弹窗或原生选择器。
+       ======================================================================== */
+    case 'toggle-settings-sticker-drawer': {
+      const stickerBlock = target.closest('.msg-settings-feature-play-sticker');
+      if (!stickerBlock) break;
+      const nextOpen = !stickerBlock.classList.contains('is-open');
+      stickerBlock.classList.toggle('is-open', nextOpen);
+      target.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+      break;
+    }
+
+    /* ========================================================================
        [区域标注·已完成·自主活动设置点击接线]
        说明：
        1. 本区只把“自主活动”模块的点击事件转交给 chat-autonomous-activity-settings.js。
