@@ -44,6 +44,8 @@ const ICONS = {
   visible: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 12C13 12 6.5 24 6.5 24S13 36 24 36s17.5-12 17.5-12S35 12 24 12Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="24" r="5" stroke="currentColor" stroke-width="3"/></svg>`,
   /* [区域标注·已完成·本次朋友圈独立发帖页] 关闭/删除图标 */
   close: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·朋友圈星星 AI 评论按钮] 星星图标（IconPark 风格，用于手动触发 AI 评论/互评） */
+  star: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 4l6.18 12.52L44 18.53l-10 9.75L36.36 42L24 35.5L11.64 42L14 28.28l-10-9.75l13.82-2.01L24 4Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
   /* [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 删除评论图标（IconPark 风格） */
   deleteComment: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 20v12M27 20v12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
@@ -458,8 +460,11 @@ function renderMomentRepostPreview(moment) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈分享转发删除互动] 单条动态卡片渲染
-   说明：保留 moment-like / moment-comment data-action，并新增分享 / 转发 / 删除互动入口。
+   [区域标注·已完成·朋友圈星星 AI 评论按钮与分享转发删除互动] 单条动态卡片渲染
+   说明：
+   1. 保留 moment-like / moment-comment data-action，并保留分享 / 转发 / 删除互动入口。
+   2. 已在每条动态右上角新增 IconPark 风格“星星”按钮，点击后由事件模块调用副 API 生成 AI 评论/互评。
+   3. 本渲染函数不包含持久化存储读写；评论写入仍由 chat-autonomous-activity-settings.js 通过 DB.js / IndexedDB 完成。
    ========================================================================== */
 function renderMomentCard(moment, options = {}) {
   const id = escapeHtml(moment?.id ?? '');
@@ -496,7 +501,18 @@ function renderMomentCard(moment, options = {}) {
             <span>${subline}</span>
           </div>
         </div>
-        ${visibilityNamesHtml}
+        <div class="moments-card__header-actions">
+          ${visibilityNamesHtml}
+          <button
+            class="moments-card__ai-btn"
+            type="button"
+            data-action="moment-ai-comment"
+            data-moment-id="${id}"
+            aria-label="让 AI 评论这条动态"
+            title="让 AI 评论">
+            ${ICONS.star}
+          </button>
+        </div>
       </header>
 
       <div class="moments-card__body">

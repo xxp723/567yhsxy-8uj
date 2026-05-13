@@ -337,6 +337,58 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·朋友圈星星 AI 评论按钮] 动态右上角 AI 评论触发按钮
+   说明：
+   1. 仅服务 renderMomentCard 输出的 .moments-card__ai-btn，不影响下方点赞/评论/转发/分享栏。
+   2. 图标采用 IconPark 风格星星 SVG，颜色跟随朋友圈主题变量。
+   3. 点击后的 API 调用与 IndexedDB 写入由事件模块和自主活动模块处理，本区域不包含持久化逻辑。
+   ========================================================================== */
+.moments-card__header-actions {
+  margin-left: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+}
+
+.moments-card__ai-btn {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 1px solid rgba(125, 90, 68, 0.14);
+  border-radius: 50%;
+  background: rgba(255, 252, 247, 0.78);
+  color: var(--moments-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(44, 32, 22, 0.05);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-card__ai-btn:active,
+.moments-card__ai-btn.is-loading {
+  color: #fff;
+  background: var(--moments-accent);
+  transform: scale(0.94);
+}
+
+.moments-card__ai-btn:disabled {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.moments-card__ai-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.8;
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次朋友圈个别人可见名单显示] 动态右上角可见联系人标签
    说明：
    1. 仅服务 renderMomentVisibleContactsBadge 输出的可见联系人姓名显示。
@@ -344,7 +396,6 @@
    3. 本区域不包含任何持久化存储逻辑。
    ========================================================================== */
 .moments-card__visibility-badge {
-  margin-left: auto;
   max-width: 132px;
   min-width: 0;
   border: 1px solid rgba(125, 90, 68, 0.14);

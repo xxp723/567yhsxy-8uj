@@ -331,6 +331,32 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       openMomentsComposePage(container, state);
       break;
 
+    /* ========================================================================
+       [区域标注·已完成·朋友圈星星按钮 AI 评论接线]
+       说明：
+       1. 每条动态右上角星星按钮点击后，调用自主活动模块的单条动态 AI 互动入口。
+       2. 评论、点赞与互评写回 DATA_KEY_MOMENTS，经 DB.js / IndexedDB 持久化；不使用 localStorage/sessionStorage。
+       3. 使用后台 void 调用并局部刷新朋友圈，避免页面闪屏；无原生浏览器弹窗。
+       ======================================================================== */
+    case 'moment-ai-comment': {
+      const momentId = String(target.dataset.momentId || '').trim();
+      if (!momentId) break;
+      target.disabled = true;
+      target.classList.add('is-loading');
+      void publishUserMomentAiInteraction({
+        state,
+        container,
+        db,
+        settingsManager,
+        momentId
+      }).finally(() => {
+        if (!target.isConnected) return;
+        target.disabled = false;
+        target.classList.remove('is-loading');
+      });
+      break;
+    }
+
     case 'moment-like':
     case 'moment-comment':
     case 'moment-reply-comment':
