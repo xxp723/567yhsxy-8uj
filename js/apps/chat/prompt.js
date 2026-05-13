@@ -996,7 +996,18 @@ export function getDefaultChatPromptSettings() {
        2. 开启后，只隐藏当前会话窗口中的角色/用户消息头像，不影响档案、通讯录、顶部栏和其它联系人。
        3. 持久化统一由调用方写入 DB.js / IndexedDB；本默认值区不使用 localStorage/sessionStorage。
        ====================================================================== */
-    hideAvatars: false
+    hideAvatars: false,
+
+    /* ======================================================================
+       [区域标注·已完成·自主活动设置默认值]
+       说明：
+       1. 该设置仅作用于“当前面具 + 当前聊天对象”的独立聊天设置。
+       2. 默认关闭“主动发朋友圈”，默认间隔为 1 小时。
+       3. 持久化统一由调用方写入 DB.js / IndexedDB；本默认值区不使用 localStorage/sessionStorage。
+       ====================================================================== */
+    autonomousMomentsEnabled: false,
+    autonomousMomentsIntervalValue: 1,
+    autonomousMomentsIntervalUnit: 'hour'
   };
 }
 
@@ -1017,6 +1028,22 @@ export function normalizeChatPromptSettings(rawSettings) {
   const mountedStickerGroupIds = Array.isArray(source.mountedStickerGroupIds)
     ? Array.from(new Set(source.mountedStickerGroupIds.map(item => String(item || '').trim()).filter(Boolean)))
     : defaults.mountedStickerGroupIds;
+
+  /* ========================================================================
+     [区域标注·已完成·自主活动设置规范化]
+     说明：
+     1. 只规范化“自主活动”三个字段，不影响其它聊天设置。
+     2. 时间间隔最小为 1；单位仅允许 minute/hour，对应应用内“分钟/小时”分段按钮。
+     3. 本区不读写持久化存储，不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const rawAutonomousIntervalValue = Number(source.autonomousMomentsIntervalValue ?? defaults.autonomousMomentsIntervalValue);
+  const autonomousMomentsIntervalValue = Number.isFinite(rawAutonomousIntervalValue)
+    ? Math.max(1, Math.floor(rawAutonomousIntervalValue))
+    : defaults.autonomousMomentsIntervalValue;
+  const rawAutonomousIntervalUnit = String(source.autonomousMomentsIntervalUnit || defaults.autonomousMomentsIntervalUnit);
+  const autonomousMomentsIntervalUnit = ['minute', 'hour'].includes(rawAutonomousIntervalUnit)
+    ? rawAutonomousIntervalUnit
+    : defaults.autonomousMomentsIntervalUnit;
 
   return {
     externalContextEnabled: Boolean(source.externalContextEnabled),
@@ -1058,7 +1085,18 @@ export function normalizeChatPromptSettings(rawSettings) {
        2. 该字段仅控制当前会话窗口消息头像显示，不参与头像资料写入。
        3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
        ====================================================================== */
-    hideAvatars: Boolean(source.hideAvatars)
+    hideAvatars: Boolean(source.hideAvatars),
+
+    /* ======================================================================
+       [区域标注·已完成·自主活动设置规范化输出]
+       说明：
+       1. 输出字段供聊天设置页“自主活动”模块渲染、同步与保存使用。
+       2. 当前模块只保存设置值，不在 prompt 中额外注入主动发朋友圈逻辑。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ====================================================================== */
+    autonomousMomentsEnabled: Boolean(source.autonomousMomentsEnabled),
+    autonomousMomentsIntervalValue,
+    autonomousMomentsIntervalUnit
   };
 }
 

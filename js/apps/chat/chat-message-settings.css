@@ -752,3 +752,107 @@
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* ==========================================================================
+   [区域标注·已完成·自主活动设置板块样式]
+   说明：
+   1. 仅服务聊天设置页“自主活动”新版块；功能逻辑位于 chat-autonomous-activity-settings.js。
+   2. 复用“头像与备注”板块的 section/card/row 基础布局与 iPhone 风格滑动开关。
+   3. 详情区使用抽屉式 max-height/opacity 展开，避免整页重建造成闪屏。
+   4. 单位切换为应用内分段按钮，不使用浏览器原生选择器；样式层不涉及持久化存储。
+   ========================================================================== */
+.msg-autonomous-activity-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-autonomous-activity-card {
+  overflow: hidden;
+}
+
+.msg-autonomous-activity-drawer {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+  will-change: max-height, opacity, transform;
+}
+
+.msg-autonomous-activity-drawer.is-open {
+  max-height: 220px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.msg-autonomous-activity-drawer__inner {
+  padding: 14px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg-autonomous-activity-interval-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.78fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.msg-autonomous-activity-interval-value {
+  min-width: 0;
+}
+
+.msg-autonomous-activity-unit-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.62);
+}
+
+.msg-autonomous-activity-unit-group {
+  min-height: 40px;
+  padding: 3px;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.08);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.msg-autonomous-activity-unit-btn {
+  min-width: 0;
+  border: none;
+  border-radius: 13px;
+  background: transparent;
+  color: rgba(74, 52, 42, 0.58);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.msg-autonomous-activity-unit-btn.is-active {
+  background: rgba(255, 252, 247, 0.96);
+  color: #4A342A;
+  box-shadow: 0 5px 12px rgba(74, 52, 42, 0.12);
+}
+
+.msg-autonomous-activity-unit-btn:active {
+  transform: scale(0.96);
+}
+
+@media (max-width: 360px) {
+  .msg-autonomous-activity-interval-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .msg-autonomous-activity-drawer.is-open {
+    max-height: 280px;
+  }
+}

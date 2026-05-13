@@ -138,6 +138,7 @@ import {
   refreshMomentsPanel
 } from './moments.js';
 import { handleTranslationSettingsClick } from './chat-translation.js';
+import { handleAutonomousActivitySettingsClick } from './chat-autonomous-activity-settings.js';
 import {
   openInnerVoicePanel,
   findInnerVoiceForMessage,
@@ -2200,6 +2201,24 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       state.chatPromptSettings.htmlCardEnabled = !state.chatPromptSettings.htmlCardEnabled;
       await dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
       target.classList.toggle('is-on', state.chatPromptSettings.htmlCardEnabled);
+      break;
+
+    /* ========================================================================
+       [区域标注·已完成·自主活动设置点击接线]
+       说明：
+       1. 本区只把“自主活动”模块的点击事件转交给 chat-autonomous-activity-settings.js。
+       2. 实际状态规范化、抽屉同步与 DB.js / IndexedDB 持久化均在独立模块内完成。
+       3. 不使用 localStorage/sessionStorage，不改动其它聊天设置分支。
+       ======================================================================== */
+    case 'toggle-autonomous-moments':
+    case 'set-autonomous-moments-interval-unit':
+      await handleAutonomousActivitySettingsClick({
+        action,
+        target,
+        state,
+        container,
+        db
+      });
       break;
 
     case 'toggle-chat-console':

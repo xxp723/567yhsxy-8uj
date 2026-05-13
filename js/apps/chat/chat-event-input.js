@@ -34,9 +34,19 @@ import {
   ensureMomentsComposeDraft
 } from './moments.js';
 import { updateChatAvatarCropPreview } from './chat-message.js';
+import { handleAutonomousActivitySettingsInput } from './chat-autonomous-activity-settings.js';
 
 export function handleInput(e, state, container, db) {
   const target = e.target;
+
+  /* ==========================================================================
+     [区域标注·已完成·自主活动设置输入接线]
+     说明：
+     1. 本区只把“自主活动”模块的时间间隔输入转交给 chat-autonomous-activity-settings.js。
+     2. 实际规范化、局部同步与 DB.js / IndexedDB 持久化均在独立模块内完成。
+     3. 不使用 localStorage/sessionStorage，不改动其它聊天设置输入分支。
+     ========================================================================== */
+  if (handleAutonomousActivitySettingsInput(e, state, container, db)) return;
 
   if (target.matches('[data-role="msg-input"]')) {
     syncMessageInputAutoHeight(target);

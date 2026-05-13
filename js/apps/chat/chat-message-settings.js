@@ -10,6 +10,7 @@ import { MSG_ICONS } from './chat-message-icons.js';
 import { renderTranslationSettingsHtml } from './chat-translation.js';
 import { renderChatExportImportSettingsSection } from './chat-export-import.js';
 import { renderChatCleanupSettingsSection } from './chat-cleanup-settings.js';
+import { renderAutonomousActivitySettingsSection } from './chat-autonomous-activity-settings.js';
 
 /* ==========================================================================
    [区域标注·已完成·本次拆分] 独立聊天设置页面
@@ -125,6 +126,8 @@ export function renderChatMessageSettingsPage({
             </div>
           </section>
         </section>
+
+        ${renderAutonomousActivitySettingsSection(chatSettings)}
 
         <section class="msg-settings-card">
           <div class="msg-settings-card__title">当前指令</div>
