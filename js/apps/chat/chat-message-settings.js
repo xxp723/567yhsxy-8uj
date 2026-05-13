@@ -143,15 +143,23 @@ export function renderChatMessageSettingsPage({
           </div>
         </section>
 
-        <!-- ===== 闲谈应用：时间感知设置 START ===== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-row">
-            <div>
+        <!-- ==================================================================
+             [区域标注·已完成·时间设定独立板块]
+             说明：
+             1. 本区域已按要求将原“时间感知”单列为“时间设定”板块。
+             2. 外层布局参考“自主活动/头像与备注”：左上角标题 + 暖色设置卡片 + 右侧 iPhone 风格滑动开关。
+             3. 板块内已移除说明性文字，仅保留设置项标题与原有开关。
+             4. 保持原 data-action="toggle-time-awareness" 与 chatSettings.timeAwarenessEnabled 逻辑不变。
+             5. 本区域不读写 localStorage/sessionStorage；持久化仍由原事件逻辑写入 DB.js / IndexedDB。
+             ================================================================== -->
+        <section class="msg-settings-avatar-section">
+          <div class="msg-settings-section-title">时间设定</div>
+          <section class="msg-settings-card msg-settings-avatar-card">
+            <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-card__title">时间感知</div>
-              <div class="msg-settings-card__desc">开启后角色会感知到真实时间。</div>
+              <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
             </div>
-            <button class="msg-ios-switch ${chatSettings.timeAwarenessEnabled ? 'is-on' : ''}" data-action="toggle-time-awareness" type="button" aria-label="时间感知"></button>
-          </div>
+          </section>
         </section>
 
         <!-- ==================================================================
@@ -228,7 +236,6 @@ export function renderChatMessageSettingsPage({
             <button class="msg-ios-switch ${chatConsoleEnabled ? 'is-on' : ''}" data-action="toggle-chat-console" type="button" aria-label="查看控制台日志"></button>
           </div>
         </section>
-        <!-- ===== 闲谈应用：时间感知设置 END ===== -->
         <!-- ==================================================================
              [区域标注·已同步静默审查] 自定义思维链设置
              说明：
