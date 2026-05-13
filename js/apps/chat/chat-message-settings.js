@@ -129,9 +129,120 @@ export function renderChatMessageSettingsPage({
 
         ${renderAutonomousActivitySettingsSection(chatSettings)}
 
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">当前指令</div>
-          <textarea class="msg-settings-textarea" data-role="msg-current-command" placeholder="输入仅对下一次/当前状态生效的临时指令">${escapeHtml(chatSettings.currentCommand || '')}</textarea>
+        <!-- ==================================================================
+             [区域标注·已完成·聊天控制合并板块]
+             说明：
+             1. 本区域已按本次要求合并“每轮回复气泡数量 / 短期记忆 / 自定义思维链 / 当前指令 / 查看控制台日志”为同一“聊天控制”板块。
+             2. 外层布局参考“头像与备注”：左上角标题 + 暖色设置卡片 + 行分割线。
+             3. “每轮回复气泡数量 / 短期记忆 / 自定义思维链 / 当前指令”使用右侧 IconPark 风格 “>” 折叠按钮，并向下抽屉式展开原输入内容。
+             4. “查看控制台日志”保留原 data-action="toggle-chat-console" 与 chatConsoleEnabled 逻辑，仅调整到本合并板块内。
+             5. 板块内已移除说明性文字；原 data-role / data-action 保持不变，不改变既有保存与控制逻辑。
+             6. 本区域不读写 localStorage/sessionStorage，不写双份兜底；持久化仍由既有事件逻辑写入 DB.js / IndexedDB。
+             ================================================================== -->
+        <section class="msg-settings-chat-control-section">
+          <div class="msg-settings-section-title">聊天控制</div>
+          <section class="msg-settings-card msg-settings-chat-control-card">
+            <div class="msg-settings-chat-control-item">
+              <button
+                class="msg-settings-row msg-settings-chat-control-toggle"
+                data-action="toggle-settings-sticker-drawer"
+                type="button"
+                aria-label="展开每轮回复气泡数量"
+                aria-expanded="false">
+                <span class="msg-settings-card__title">每轮回复气泡数量</span>
+                <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div class="msg-settings-chat-control-drawer" data-role="settings-reply-bubble-drawer">
+                <div class="msg-settings-chat-control-drawer__inner">
+                  <div class="msg-settings-number-grid">
+                    <label class="msg-settings-number-field">
+                      <span>最低</span>
+                      <input class="msg-settings-number-input" data-role="msg-reply-bubble-min" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMin || 1)}">
+                    </label>
+                    <label class="msg-settings-number-field">
+                      <span>最高</span>
+                      <input class="msg-settings-number-input" data-role="msg-reply-bubble-max" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMax || 3)}">
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-chat-control-item">
+              <button
+                class="msg-settings-row msg-settings-chat-control-toggle"
+                data-action="toggle-settings-sticker-drawer"
+                type="button"
+                aria-label="展开短期记忆"
+                aria-expanded="false">
+                <span class="msg-settings-card__title">短期记忆</span>
+                <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div class="msg-settings-chat-control-drawer" data-role="settings-short-term-memory-drawer">
+                <div class="msg-settings-chat-control-drawer__inner">
+                  <label class="msg-settings-number-field msg-settings-number-field--full">
+                    <span>发送之前轮数</span>
+                    <input class="msg-settings-number-input" data-role="msg-short-term-memory-rounds" type="number" min="0" step="1" value="${escapeHtml(chatSettings.shortTermMemoryRounds ?? 8)}">
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-chat-control-item">
+              <button
+                class="msg-settings-row msg-settings-chat-control-toggle"
+                data-action="toggle-settings-sticker-drawer"
+                type="button"
+                aria-label="展开自定义思维链"
+                aria-expanded="false">
+                <span class="msg-settings-card__title">自定义思维链</span>
+                <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div class="msg-settings-chat-control-drawer" data-role="settings-custom-thinking-drawer">
+                <div class="msg-settings-chat-control-drawer__inner">
+                  <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【静默审查】输出前先在后台核对角色卡事实、已知细节、情感事实和消息格式；最终只输出符合通用消息协议的可见回复，禁止输出 <think>、审查步骤或幕后说明。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
+                </div>
+              </div>
+            </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-chat-control-item">
+              <button
+                class="msg-settings-row msg-settings-chat-control-toggle"
+                data-action="toggle-settings-sticker-drawer"
+                type="button"
+                aria-label="展开当前指令"
+                aria-expanded="false">
+                <span class="msg-settings-card__title">当前指令</span>
+                <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" fill="none">
+                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div class="msg-settings-chat-control-drawer" data-role="settings-current-command-drawer">
+                <div class="msg-settings-chat-control-drawer__inner">
+                  <textarea class="msg-settings-textarea" data-role="msg-current-command" placeholder="输入仅对下一次/当前状态生效的临时指令">${escapeHtml(chatSettings.currentCommand || '')}</textarea>
+                </div>
+              </div>
+            </div>
+            <div class="msg-settings-avatar-divider"></div>
+            <div class="msg-settings-row msg-settings-chat-control-console-row">
+              <div class="msg-settings-card__title">查看控制台日志</div>
+              <button class="msg-ios-switch ${chatConsoleEnabled ? 'is-on' : ''}" data-action="toggle-chat-console" type="button" aria-label="查看控制台日志"></button>
+            </div>
+          </section>
         </section>
         <!-- ==================================================================
              [区域标注·已完成·外部注入独立板块]
@@ -232,60 +343,6 @@ export function renderChatMessageSettingsPage({
              4. 翻译设置仍独立存储于 IndexedDB，键名 chat_translation_settings::*；不新增 localStorage/sessionStorage 逻辑。
              ========================================================================== -->
         ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
-
-        <!-- ==================================================================
-             [区域标注·已完成·本次控制台日志开关] 聊天设置页新增开关
-             说明：开启后在聊天页底栏上方显示日志入口，实时查看发送/API/警告/错误日志。
-             ================================================================== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-row">
-            <div>
-              <div class="msg-settings-card__title">查看控制台日志</div>
-              <div class="msg-settings-card__desc">实时显示当前聊天页消息发送情况、API 错误、警告和其它错误。</div>
-            </div>
-            <button class="msg-ios-switch ${chatConsoleEnabled ? 'is-on' : ''}" data-action="toggle-chat-console" type="button" aria-label="查看控制台日志"></button>
-          </div>
-        </section>
-        <!-- ==================================================================
-             [区域标注·已同步静默审查] 自定义思维链设置
-             说明：
-             1. 本区域已同步 prompt.js 的默认静默审查方案。
-             2. 自定义内容应要求 AI 后台自检，禁止显式输出 <think>...</think>。
-             3. 这里只修改设置提示文案，不改 IndexedDB 持久化逻辑。
-             ========================================================================== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">自定义思维链</div>
-          <div class="msg-settings-card__desc">留空时使用默认静默审查协议；自定义内容也应要求 AI 后台自检，最终回复禁止输出 think 标签、审查过程或幕后说明。</div>
-          <textarea class="msg-settings-textarea" data-role="msg-custom-thinking" placeholder="【静默审查】输出前先在后台核对角色卡事实、已知细节、情感事实和消息格式；最终只输出符合通用消息协议的可见回复，禁止输出 <think>、审查步骤或幕后说明。">${escapeHtml(chatSettings.customThinkingInstruction || '')}</textarea>
-        </section>
-
-        <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 START ===== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">每轮回复气泡数量</div>
-          <div class="msg-settings-card__desc">控制 AI 每一轮回复必须拆成多少个消息气泡；除非用户当轮明确允许突破，否则 AI 必须严格遵守。</div>
-          <div class="msg-settings-number-grid">
-            <label class="msg-settings-number-field">
-              <span>最低</span>
-              <input class="msg-settings-number-input" data-role="msg-reply-bubble-min" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMin || 1)}">
-            </label>
-            <label class="msg-settings-number-field">
-              <span>最高</span>
-              <input class="msg-settings-number-input" data-role="msg-reply-bubble-max" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMax || 3)}">
-            </label>
-          </div>
-        </section>
-        <!-- ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== -->
-
-        <!-- ===== 闲谈应用：短期记忆设置 START ===== -->
-        <section class="msg-settings-card">
-          <div class="msg-settings-card__title">短期记忆</div>
-          <div class="msg-settings-card__desc">控制下次请求 AI 时携带之前多少轮对话上文；0 表示不携带历史上文。</div>
-          <label class="msg-settings-number-field msg-settings-number-field--full">
-            <span>发送之前轮数</span>
-            <input class="msg-settings-number-input" data-role="msg-short-term-memory-rounds" type="number" min="0" step="1" value="${escapeHtml(chatSettings.shortTermMemoryRounds ?? 8)}">
-          </label>
-        </section>
-        <!-- ===== 闲谈应用：短期记忆设置 END ===== -->
 
         ${renderChatExportImportSettingsSection()}
 

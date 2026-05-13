@@ -158,6 +158,116 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·聊天控制合并板块样式]
+   说明：
+   1. 仅服务聊天设置页“聊天控制”板块：每轮回复气泡数量、短期记忆、自定义思维链、当前指令、查看控制台日志。
+   2. 外层参考“头像与备注”的左上角标题与暖色卡片结构，控制台日志继续使用 iPhone 风格滑动开关。
+   3. 四个可配置项使用 IconPark 风格右箭头按钮，展开时抽屉向下滑出，避免整页重绘造成闪屏。
+   4. 本区域只改布局样式，不改任何 DB.js / IndexedDB 持久化逻辑；不涉及 localStorage/sessionStorage。
+   ========================================================================== */
+.msg-settings-chat-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-settings-chat-control-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: rgba(255, 252, 247, 0.94);
+}
+
+.msg-settings-chat-control-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.msg-settings-chat-control-toggle {
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0;
+  border: none;
+  background: transparent;
+  color: #4A342A;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg-settings-chat-control-toggle .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+.msg-settings-chat-control-toggle:active {
+  opacity: 0.72;
+}
+
+.msg-settings-chat-control-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.08);
+  color: rgba(74, 52, 42, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.18s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.msg-settings-chat-control-arrow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.msg-settings-chat-control-item.is-open .msg-settings-chat-control-arrow {
+  transform: rotate(90deg);
+  background: rgba(74, 52, 42, 0.13);
+  color: #4A342A;
+}
+
+.msg-settings-chat-control-drawer {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+  will-change: max-height, opacity, transform;
+}
+
+.msg-settings-chat-control-item.is-open .msg-settings-chat-control-drawer {
+  max-height: 220px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.msg-settings-chat-control-drawer__inner {
+  padding: 0 0 14px;
+}
+
+.msg-settings-chat-control-drawer .msg-settings-number-grid,
+.msg-settings-chat-control-drawer .msg-settings-number-field--full {
+  margin-top: 0;
+}
+
+.msg-settings-chat-control-console-row {
+  min-height: 44px;
+  padding: 14px 0;
+}
+
+.msg-settings-chat-control-console-row .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+@media (max-width: 360px) {
+  .msg-settings-chat-control-item.is-open .msg-settings-chat-control-drawer {
+    max-height: 260px;
+  }
+}
+
+/* ==========================================================================
    [区域标注·本次需求] 聊天设置独立页面
    说明：三点按钮进入；不使用浏览器原生弹窗。
    ========================================================================== */
