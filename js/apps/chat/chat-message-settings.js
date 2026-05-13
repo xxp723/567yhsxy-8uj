@@ -8,8 +8,6 @@
 import { escapeHtml } from './chat-utils.js';
 import { MSG_ICONS } from './chat-message-icons.js';
 import { renderTranslationSettingsHtml } from './chat-translation.js';
-import { renderChatExportImportSettingsSection } from './chat-export-import.js';
-import { renderChatCleanupSettingsSection } from './chat-cleanup-settings.js';
 import { renderAutonomousActivitySettingsSection } from './chat-autonomous-activity-settings.js';
 
 /* ==========================================================================
@@ -344,9 +342,57 @@ export function renderChatMessageSettingsPage({
              ========================================================================== -->
         ${renderTranslationSettingsHtml(options.translationSettings, session, options.userProfile?.avatar, options.userProfile?.nickname)}
 
-        ${renderChatExportImportSettingsSection()}
-
-        ${renderChatCleanupSettingsSection({ broomIcon: MSG_ICONS.broom })}
+        <!-- ==================================================================
+             [区域标注·已完成·聊天消息合并板块]
+             说明：
+             1. 本区域已按本次要求将原“聊天记录导入导出”和底部“清理本窗口图片 / 清空聊天消息”合并为同一个“聊天消息”板块。
+             2. 板块固定保留在聊天设置页最下方，结构参考“聊天控制”：左上角标题 + 暖色卡片 + 行分割线 + 右侧 IconPark 风格 “>” 按钮。
+             3. 板块内仅列出“导出聊天记录 / 导入聊天记录 / 清理本窗口图片 / 清空聊天消息”四个入口，已移除说明性文字和原有图标。
+             4. 四个入口保留原 data-action，不改变导出、导入、清理图片、清空消息的既有逻辑。
+             5. 导入 JSON 继续复用隐藏 input；读取、校验和持久化仍由既有逻辑通过 DB.js / IndexedDB 完成。
+             6. 本区域不读写 localStorage/sessionStorage，不写双份兜底，不使用原生浏览器弹窗。
+             ================================================================== -->
+        <section class="msg-settings-chat-message-section">
+          <div class="msg-settings-section-title">聊天消息</div>
+          <section class="msg-settings-card msg-settings-chat-message-card">
+            <button class="msg-settings-row msg-settings-chat-message-action" data-action="open-chat-export-modal" type="button" aria-label="导出聊天记录">
+              <span class="msg-settings-card__title">导出聊天记录</span>
+              <span class="msg-settings-chat-message-arrow" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none">
+                  <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <div class="msg-settings-avatar-divider"></div>
+            <button class="msg-settings-row msg-settings-chat-message-action" data-action="open-chat-import-json-picker" type="button" aria-label="导入聊天记录">
+              <span class="msg-settings-card__title">导入聊天记录</span>
+              <span class="msg-settings-chat-message-arrow" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none">
+                  <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <div class="msg-settings-avatar-divider"></div>
+            <button class="msg-settings-row msg-settings-chat-message-action" data-action="open-clear-current-chat-images-modal" type="button" aria-label="清理本窗口图片">
+              <span class="msg-settings-card__title">清理本窗口图片</span>
+              <span class="msg-settings-chat-message-arrow" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none">
+                  <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <div class="msg-settings-avatar-divider"></div>
+            <button class="msg-settings-row msg-settings-chat-message-action msg-settings-chat-message-action--danger" data-action="open-clear-all-messages-modal" type="button" aria-label="清空聊天消息">
+              <span class="msg-settings-card__title">清空聊天消息</span>
+              <span class="msg-settings-chat-message-arrow" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none">
+                  <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <input data-role="chat-import-json-file-input" type="file" accept="application/json,.json" hidden>
+          </section>
+        </section>
       </div>
     </div>
   `;

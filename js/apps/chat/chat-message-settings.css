@@ -155,6 +155,78 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·聊天消息合并板块样式]
+   说明：
+   1. 仅服务聊天设置页最下方“聊天消息”板块：导出聊天记录、导入聊天记录、清理本窗口图片、清空聊天消息。
+   2. 本区域已将原“聊天记录导入导出”和底部清理操作统一成左上角标题 + 暖色卡片 + 四行入口布局，参考“聊天控制”板块视觉。
+   3. 四个入口保留原 data-action；右侧统一使用无圆形背景的 IconPark 风格 “>” 图标，已移除说明性文字和原有图标。
+   4. 本区域只改目标板块样式，不改导出/导入/清理/清空逻辑，不涉及任何 DB.js / IndexedDB 持久化实现。
+   5. 不新增 localStorage/sessionStorage，不使用原生弹窗或原生选择器。
+   ========================================================================== */
+.msg-settings-chat-message-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-settings-card.msg-settings-chat-message-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: rgba(255, 252, 247, 0.94);
+  border: 1px solid rgba(74, 52, 42, 0.07);
+  box-shadow: 0 12px 28px rgba(74, 52, 42, 0.06);
+}
+
+.msg-settings-chat-message-action {
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0;
+  border: none;
+  background: transparent;
+  color: #4A342A;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.msg-settings-chat-message-action .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+.msg-settings-chat-message-action:active {
+  opacity: 0.72;
+  transform: scale(0.995);
+}
+
+.msg-settings-chat-message-action--danger {
+  color: #9d3f31;
+}
+
+.msg-settings-chat-message-action--danger .msg-settings-card__title,
+.msg-settings-chat-message-action--danger .msg-settings-chat-message-arrow {
+  color: #9d3f31;
+}
+
+.msg-settings-chat-message-arrow {
+  width: 22px;
+  height: 22px;
+  color: rgba(74, 52, 42, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.msg-settings-chat-message-arrow svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ==========================================================================
    [区域标注·已完成·聊天控制卡片颜色对齐与抽屉修复]
    说明：
    1. 仅服务聊天设置页“聊天控制”板块：每轮回复气泡数量、短期记忆、自定义思维链、当前指令、查看控制台日志。
@@ -518,8 +590,11 @@
 /* ===== 闲谈应用：聊天设置数字输入板块 END ===== */
 
 /* ==========================================================================
-   [区域标注·本次需求4] 清空聊天记录危险操作入口
-   说明：聊天设置页中的“清空全部聊天记录”选项，保持与闲谈应用暖色主题统一。
+   [区域标注·已完成·历史清理危险操作样式保留]
+   说明：
+   1. 原“清理本窗口图片 / 清空聊天消息”入口已合并到聊天设置页最下方“聊天消息”板块。
+   2. 以下旧样式仅为兼容仍可能复用的清理入口类名保留，不再作为聊天设置页底部独立板块布局使用。
+   3. 本区域不涉及持久化逻辑，不新增 localStorage/sessionStorage。
    ========================================================================== */
 .msg-settings-danger-card {
   padding: 0;
