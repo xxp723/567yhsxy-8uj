@@ -133,14 +133,23 @@ export function renderChatMessageSettingsPage({
           <div class="msg-settings-card__title">当前指令</div>
           <textarea class="msg-settings-textarea" data-role="msg-current-command" placeholder="输入仅对下一次/当前状态生效的临时指令">${escapeHtml(chatSettings.currentCommand || '')}</textarea>
         </section>
-        <section class="msg-settings-card">
-          <div class="msg-settings-row">
-            <div>
+        <!-- ==================================================================
+             [区域标注·已完成·外部注入独立板块]
+             说明：
+             1. 本区域已按要求将“外部应用消息注入”单列为“外部注入”板块。
+             2. 外层布局参考“自主活动”：左上角标题 + 暖色设置卡片 + 右侧 iPhone 风格滑动开关。
+             3. 板块内已移除说明性文字，仅保留设置项标题与原有开关。
+             4. 保持原 data-action="toggle-external-context" 与 chatSettings.externalContextEnabled 逻辑不变。
+             5. 本区域不读写 localStorage/sessionStorage；持久化仍由原事件逻辑写入 DB.js / IndexedDB。
+             ================================================================== -->
+        <section class="msg-settings-avatar-section">
+          <div class="msg-settings-section-title">外部注入</div>
+          <section class="msg-settings-card msg-settings-avatar-card">
+            <div class="msg-settings-row msg-settings-avatar-switch-row">
               <div class="msg-settings-card__title">外部应用消息注入</div>
-              <div class="msg-settings-card__desc">开启后会在提示词中注入外部应用上下文。</div>
+              <button class="msg-ios-switch ${chatSettings.externalContextEnabled ? 'is-on' : ''}" data-action="toggle-external-context" type="button" aria-label="外部应用消息注入"></button>
             </div>
-            <button class="msg-ios-switch ${chatSettings.externalContextEnabled ? 'is-on' : ''}" data-action="toggle-external-context" type="button" aria-label="外部应用消息注入"></button>
-          </div>
+          </section>
         </section>
 
         <!-- ==================================================================
