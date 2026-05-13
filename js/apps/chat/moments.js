@@ -43,7 +43,9 @@ const ICONS = {
   /* [区域标注·已完成·本次朋友圈独立发帖页] 可见范围图标 */
   visible: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 12C13 12 6.5 24 6.5 24S13 36 24 36s17.5-12 17.5-12S35 12 24 12Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="24" r="5" stroke="currentColor" stroke-width="3"/></svg>`,
   /* [区域标注·已完成·本次朋友圈独立发帖页] 关闭/删除图标 */
-  close: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
+  close: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 14l20 20M34 14L14 34" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+  /* [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 删除评论图标（IconPark 风格） */
+  deleteComment: `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M8 11h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M19 11V7h10v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11l2 30h16l2-30" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 20v12M27 20v12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`
 };
 
 /* ==========================================================================
@@ -236,11 +238,12 @@ function renderMomentVisibleContactsBadge(moment, contacts = []) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈点赞评论互动] 点赞、评论与回复渲染工具
+   [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 点赞、评论、回复与删除渲染工具
    说明：
    1. 本区域只生成 DOM 字符串，不包含任何持久化存储读写。
-   2. 点赞/评论/回复数据由 index.js 通过 DB.js/IndexedDB 统一保存。
-   3. 不使用 localStorage/sessionStorage，不做双份存储兜底。
+   2. 点赞/评论/回复/删除数据由 index.js 通过 DB.js/IndexedDB 统一保存。
+   3. 评论删除按钮仅渲染 IconPark 风格图标，不使用文字按钮，不使用原生浏览器弹窗。
+   4. 不使用 localStorage/sessionStorage，不做双份存储兜底。
    ========================================================================== */
 function getViewerId(options = {}) {
   return String(options?.viewerId || options?.profile?.id || options?.profile?.maskId || options?.profile?.name || 'self').trim() || 'self';
@@ -298,7 +301,7 @@ function renderComments(comments, options = {}) {
     : '写下你的评论…';
 
   return `
-    <!-- [区域标注·已完成·本次朋友圈点赞评论互动] 评论列表、评论输入框与回复入口 -->
+    <!-- [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 评论列表、评论输入框、回复入口与单条删除图标 -->
     <div class="moments-comments ${isExpanded ? 'moments-comments--expanded' : ''}">
       ${list.length ? list.map(c => {
         const commentId = escapeHtml(c?.id ?? '');
@@ -306,8 +309,10 @@ function renderComments(comments, options = {}) {
         return `
           <div class="moments-comment ${isReplying ? 'moments-comment--replying' : ''}">
             <div class="moments-comment__main">
-              <span class="moments-comment__author">${escapeHtml(c?.authorName || '匿名')}：</span>
-              <span class="moments-comment__text">${escapeHtml(c?.content || '')}</span>
+              <span class="moments-comment__body">
+                <span class="moments-comment__author">${escapeHtml(c?.authorName || '匿名')}：</span>
+                <span class="moments-comment__text">${escapeHtml(c?.content || '')}</span>
+              </span>
               <button
                 class="moments-comment__reply-btn"
                 type="button"
@@ -317,6 +322,15 @@ function renderComments(comments, options = {}) {
                 data-comment-author="${escapeHtml(c?.authorName || '匿名')}"
                 aria-label="回复 ${escapeHtml(c?.authorName || '这条评论')}">
                 回复
+              </button>
+              <button
+                class="moments-comment__delete-btn"
+                type="button"
+                data-action="moment-delete-comment"
+                data-moment-id="${momentId}"
+                data-comment-id="${commentId}"
+                aria-label="删除 ${escapeHtml(c?.authorName || '这条评论')} 的评论">
+                ${ICONS.deleteComment}
               </button>
             </div>
             ${renderCommentReplies(c?.replies)}
@@ -626,11 +640,12 @@ export function buildMomentsComposeShareMessage(draft) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈点赞评论互动模块化] 互动状态、事件处理与局部刷新
+   [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 互动状态、事件处理与局部刷新
    说明：
-   1. 本区域集中维护朋友圈点赞、评论展开、发表评论与回复评论的主要逻辑。
+   1. 本区域集中维护朋友圈点赞、评论展开、发表评论、回复评论与单条评论删除的主要逻辑。
    2. 本模块不直接 import DB.js，不直接调用 dbPut；持久化由 index.js 传入 persistMoments 回调接线。
-   3. 不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本字段过滤。
+   3. 评论删除不使用原生浏览器弹窗；点击 IconPark 删除图标后直接删除单条评论并局部刷新。
+   4. 不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本字段过滤。
    ========================================================================== */
 export function createMomentsInteractionState() {
   return {
@@ -769,6 +784,25 @@ function cancelMomentReply({ target, state, container }) {
   refreshMomentsPanel(container, state, { focusMomentId: momentId });
 }
 
+async function deleteMomentComment({ target, state, container, persistMoments }) {
+  const momentId = String(target?.dataset?.momentId || '').trim();
+  const commentId = String(target?.dataset?.commentId || '').trim();
+  const { moment } = getMomentById(state, momentId);
+  if (!moment || !commentId) return;
+
+  const comments = Array.isArray(moment.comments) ? moment.comments : [];
+  const nextComments = comments.filter(comment => String(comment?.id || '') !== commentId);
+  if (nextComments.length === comments.length) return;
+
+  moment.comments = nextComments;
+  if (String(state.momentsReplyTarget?.momentId || '') === momentId && String(state.momentsReplyTarget?.commentId || '') === commentId) {
+    state.momentsReplyTarget = null;
+  }
+
+  await persistMoments?.();
+  refreshMomentsPanel(container, state);
+}
+
 async function submitMomentComment({ target, state, container, createUid, showNotice, persistMoments }) {
   const momentId = String(target?.dataset?.momentId || '').trim();
   const { moment } = getMomentById(state, momentId);
@@ -846,6 +880,9 @@ export async function handleMomentsInteractionAction(options = {}) {
       return true;
     case 'cancel-moment-reply':
       cancelMomentReply(options);
+      return true;
+    case 'moment-delete-comment':
+      await deleteMomentComment(options);
       return true;
     case 'submit-moment-comment':
       await submitMomentComment(options);

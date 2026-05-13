@@ -462,11 +462,12 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次朋友圈点赞评论互动] 点赞红色态、评论展开与回复输入区
+   [区域标注·已完成·朋友圈发布后 AI 即时互动与评论删除] 点赞红色态、评论展开、回复输入区与评论删除图标
    说明：
-   1. 仅服务朋友圈动态下方点赞、评论、回复交互，不影响发帖页或其它聊天页面。
-   2. 点赞按钮使用 currentColor 驱动 IconPark SVG 图标变红。
-   3. 本区域不包含任何持久化存储逻辑。
+   1. 仅服务朋友圈动态下方点赞、评论、回复与单条评论删除交互，不影响发帖页或其它聊天页面。
+   2. 点赞按钮与评论删除按钮均使用 currentColor 驱动 IconPark 风格 SVG 图标。
+   3. 删除按钮仅显示图标，不显示文字；不使用原生浏览器弹窗。
+   4. 本区域不包含任何持久化存储逻辑。
    ========================================================================== */
 .moments-action-btn--liked {
   color: #E5484D;
@@ -553,6 +554,34 @@
   color: var(--moments-accent);
   background: rgba(125, 90, 68, 0.08);
   transform: scale(0.96);
+}
+
+.moments-comment__delete-btn {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(125, 90, 68, 0.06);
+  color: var(--moments-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.moments-comment__delete-btn:active {
+  color: #C93A3F;
+  background: rgba(229, 72, 77, 0.1);
+  transform: scale(0.94);
+}
+
+.moments-comment__delete-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.8;
 }
 
 .moments-comment__replies {

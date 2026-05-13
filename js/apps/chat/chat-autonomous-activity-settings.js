@@ -156,16 +156,112 @@ async function requestAutonomousMomentsOpenAiLike(profile, messages) {
   return String(payload?.choices?.[0]?.message?.content || '').trim();
 }
 
+function getSecondaryMessageContentText(content) {
+  if (Array.isArray(content)) {
+    return content
+      .map(part => {
+        if (typeof part === 'string') return part;
+        if (part?.type === 'text') return String(part.text || '');
+        if (part?.type === 'image_url') return `[朋友圈图片] ${String(part.image_url?.url || '').trim()}`;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return String(content || '');
+}
+
+function isImageDataUrl(url = '') {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(url || '').trim());
+}
+
+function parseImageDataUrl(url = '') {
+  const match = String(url || '').trim().match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+  return match ? { mimeType: match[1], data: match[2] } : null;
+}
+
+function getImageMimeTypeFromUrl(url = '') {
+  const value = String(url || '').split('?')[0].split('#')[0].toLowerCase();
+  if (isImageDataUrl(value)) return parseImageDataUrl(url)?.mimeType || 'image/png';
+  if (value.endsWith('.jpg') || value.endsWith('.jpeg')) return 'image/jpeg';
+  if (value.endsWith('.webp')) return 'image/webp';
+  if (value.endsWith('.gif')) return 'image/gif';
+  if (value.endsWith('.png')) return 'image/png';
+  return 'image/png';
+}
+
+function toGeminiContentPart(part) {
+  if (typeof part === 'string') return { text: part };
+  if (part?.type === 'text') return { text: String(part.text || '') };
+  if (part?.type === 'image_url') {
+    const url = String(part.image_url?.url || '').trim();
+    if (!url) return null;
+    const dataUrl = parseImageDataUrl(url);
+    if (dataUrl) {
+      return {
+        inlineData: {
+          mimeType: dataUrl.mimeType,
+          data: dataUrl.data
+        }
+      };
+    }
+    return {
+      fileData: {
+        mimeType: getImageMimeTypeFromUrl(url),
+        fileUri: url
+      }
+    };
+  }
+  return null;
+}
+
+function toClaudeContentBlock(part) {
+  if (typeof part === 'string') return { type: 'text', text: part };
+  if (part?.type === 'text') return { type: 'text', text: String(part.text || '') };
+  if (part?.type === 'image_url') {
+    const url = String(part.image_url?.url || '').trim();
+    if (!url) return null;
+    const dataUrl = parseImageDataUrl(url);
+    if (dataUrl) {
+      return {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: dataUrl.mimeType,
+          data: dataUrl.data
+        }
+      };
+    }
+    return {
+      type: 'image',
+      source: {
+        type: 'url',
+        url
+      }
+    };
+  }
+  return null;
+}
+
 async function requestAutonomousMomentsGemini(profile, messages) {
-  const text = messages
-    .map(item => `${item.role === 'system' ? '系统' : '用户'}：\n${item.content}`)
-    .join('\n\n');
+  const parts = [];
+  messages.forEach(item => {
+    const roleLabel = item.role === 'system' ? '系统' : '用户';
+    parts.push({ text: `${roleLabel}：` });
+    if (Array.isArray(item.content)) {
+      item.content.map(toGeminiContentPart).filter(Boolean).forEach(part => parts.push(part));
+    } else {
+      parts.push({ text: getSecondaryMessageContentText(item.content) });
+    }
+    parts.push({ text: '\n\n' });
+  });
+
   const url = `${trimSlash(profile.baseUrl)}/models/${encodeURIComponent(profile.model)}:generateContent?key=${encodeURIComponent(profile.apiKey)}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text }] }],
+      contents: [{ parts }],
       generationConfig: {
         temperature: profile.temperature,
         maxOutputTokens: profile.maxTokens
@@ -182,11 +278,17 @@ async function requestAutonomousMomentsGemini(profile, messages) {
 }
 
 async function requestAutonomousMomentsClaude(profile, messages) {
-  const system = messages.find(item => item.role === 'system')?.content || '';
-  const userText = messages
-    .filter(item => item.role !== 'system')
-    .map(item => item.content)
+  const system = messages
+    .filter(item => item.role === 'system')
+    .map(item => getSecondaryMessageContentText(item.content))
+    .filter(Boolean)
     .join('\n\n');
+  const userContent = messages
+    .filter(item => item.role !== 'system')
+    .flatMap(item => Array.isArray(item.content)
+      ? item.content.map(toClaudeContentBlock).filter(Boolean)
+      : [{ type: 'text', text: getSecondaryMessageContentText(item.content) }])
+    .filter(part => part?.type !== 'text' || String(part.text || '').trim());
   const response = await fetch(`${trimSlash(profile.baseUrl)}/messages`, {
     method: 'POST',
     headers: {
@@ -199,7 +301,7 @@ async function requestAutonomousMomentsClaude(profile, messages) {
       temperature: profile.temperature,
       max_tokens: profile.maxTokens,
       system,
-      messages: [{ role: 'user', content: userText }]
+      messages: [{ role: 'user', content: userContent.length ? userContent : [{ type: 'text', text: '请按要求返回 JSON。' }] }]
     })
   });
 
@@ -320,6 +422,89 @@ function formatMessagesForAutonomousPrompt(messages = []) {
     })
     .filter(Boolean)
     .join('\n');
+}
+
+/* ==========================================================================
+   [区域标注·已完成·朋友圈发布后 AI 即时互动提示词与识图工具]
+   说明：
+   1. 本区只服务“用户发布朋友圈后，当前聊天角色即时点赞并评论该朋友圈”的后台互动。
+   2. 互动与“主动发朋友圈”开关无关；只读取设置应用副 API，不回退主 API，不写双份请求兜底。
+   3. 若用户朋友圈带图，会把图片作为视觉输入交给支持识图的副 API；不使用长文本/大媒体字段过滤。
+   4. 最终点赞与评论仍写回朋友圈 IndexedDB 记录；不使用 localStorage/sessionStorage。
+   ========================================================================== */
+function normalizeMomentImagesForVision(images = []) {
+  return (Array.isArray(images) ? images : [])
+    .map(item => String(item || '').trim())
+    .filter(Boolean);
+}
+
+function buildUserMomentInteractionPrompt({ character, mask, session, contact, worldBooks, messages, moment }) {
+  const roleName = String(character?.name || contact?.name || session?.remark || session?.name || '当前角色').trim() || '当前角色';
+  const userName = String(mask?.name || mask?.nickname || '用户面具身份').trim() || '用户面具身份';
+  const conversationText = formatMessagesForAutonomousPrompt(messages) || '最近一天暂无可用聊天内容。';
+  const worldBookText = summarizeWorldBooksForAutonomousPrompt(worldBooks, { character, session, contact }) || '当前没有命中的世界书条目。';
+  const momentText = String(moment?.content || '').trim() || '（用户没有写文字）';
+  const momentLocation = String(moment?.location || '').trim();
+  const images = normalizeMomentImagesForVision(moment?.images);
+  const userParts = [
+    {
+      type: 'text',
+      text: `【角色人设】
+${formatEntityForPrompt(character || contact || session, roleName)}
+
+【用户面具身份】
+${formatEntityForPrompt(mask, userName)}
+
+【世界书条目】
+${worldBookText}
+
+【最近一天与用户的对话】
+${conversationText}
+
+【用户刚发布的朋友圈】
+发布者：${userName}
+文案：${momentText}
+${momentLocation ? `地点：${momentLocation}` : '地点：无'}
+图片数量：${images.length}
+${images.length ? '下面附带的图片就是这条朋友圈配图，请结合图像内容与文案一起评论。' : '这条朋友圈没有图片，请只根据文案与上下文评论。'}
+
+请以“${roleName}”的身份，在已经点赞这条朋友圈的前提下，写一条像微信朋友圈评论区里的自然短评。`
+    },
+    ...images.map(url => ({
+      type: 'image_url',
+      image_url: { url }
+    }))
+  ];
+
+  return [
+    {
+      role: 'system',
+      content: `你正在扮演“${roleName}”。现在用户“${userName}”刚刚发布了一条朋友圈，你需要以角色本人身份即时互动：已经点赞，并留下一条评论。
+
+硬性规则：
+1. 评论必须符合“${roleName}”的人设、与用户关系、世界书背景和最近一天对话氛围，不能 OOC。
+2. 如果有图片，必须结合图片内容与文案一起评论；不要只说“图片很好看”这种空泛话。
+3. 评论要像真实朋友圈互动，短、有情绪、有熟人感，可以含蓄、吐槽、关心或轻轻接梗。
+4. 不要替用户发言，不要总结剧情，不要暴露后台资料。
+5. 禁止出现“AI、模型、API、系统、提示词、生成、设定要求、识图”等出戏词。
+6. 不要使用 Markdown，不要解释。
+7. 只输出一个 JSON 对象，格式必须是：
+{"comment":"朋友圈评论，4到60字"}
+8. 不要输出 JSON 以外的任何字符。`
+    },
+    {
+      role: 'user',
+      content: userParts
+    }
+  ];
+}
+
+function normalizeMomentInteractionCommentPayload(rawPayload = {}) {
+  const comment = String(rawPayload?.comment || rawPayload?.content || rawPayload?.text || '').trim();
+  if (!comment) return null;
+  return {
+    comment: comment.slice(0, 120)
+  };
 }
 
 /* ==========================================================================
@@ -872,6 +1057,107 @@ async function publishInstantAutonomousMomentBatch({
     now,
     recordItems
   };
+}
+
+export async function publishUserMomentAiInteraction({
+  state = {},
+  container = null,
+  db = null,
+  settingsManager = null,
+  momentId = ''
+} = {}) {
+  const safeMomentId = String(momentId || '').trim();
+  if (!safeMomentId) return false;
+
+  try {
+    const session = getSessionForAutonomousMoments(state);
+    if (!session) return false;
+
+    const allSettings = settingsManager && typeof settingsManager.getAll === 'function'
+      ? await settingsManager.getAll()
+      : {};
+    const profile = normalizeSecondaryApiProfile(allSettings?.api || {});
+    if (!profile.apiKey || !profile.model) return false;
+
+    const now = Date.now();
+    const contact = getContactForAutonomousMoments(state, session);
+    const character = getCharacterForAutonomousMoments(state, session, contact);
+    const mask = getMaskForAutonomousMoments(state);
+    const [worldBooks, messages, storedMoments] = await Promise.all([
+      readRawDbRecordValue(db, WORLDBOOK_DB_RECORD_ID),
+      loadMessagesForAutonomousMoments(state, db, session),
+      dbGet(db, DATA_KEY_MOMENTS(state.activeMaskId))
+    ]);
+
+    const moments = Array.isArray(storedMoments)
+      ? storedMoments
+      : (Array.isArray(state.moments) ? state.moments : []);
+    const targetMoment = moments.find(moment => String(moment?.id || '') === safeMomentId);
+    if (!targetMoment) return false;
+
+    const promptMessages = buildUserMomentInteractionPrompt({
+      character,
+      mask,
+      session,
+      contact,
+      worldBooks: Array.isArray(worldBooks) ? worldBooks : [],
+      messages: getLatestOneDayMessages(messages, now),
+      moment: targetMoment
+    });
+    const rawText = await requestAutonomousMomentsBySecondaryApi(profile, promptMessages);
+    const parsed = normalizeMomentInteractionCommentPayload(extractJsonObjectFromAiText(rawText));
+    if (!parsed) return false;
+
+    const roleId = String(character?.id || contact?.roleId || session?.id || 'moment_ai_interactor').trim() || 'moment_ai_interactor';
+    const roleName = String(character?.name || contact?.name || session?.remark || session?.name || '角色').trim() || '角色';
+    const likes = Array.isArray(targetMoment.likes) ? targetMoment.likes.slice() : [];
+    const alreadyLiked = likes.some(item => {
+      if (typeof item === 'string' || typeof item === 'number') return String(item) === roleId;
+      return String(item?.id || item?.viewerId || item?.authorId || '') === roleId;
+    });
+    if (!alreadyLiked) {
+      likes.push({
+        id: roleId,
+        name: roleName,
+        likedAt: now,
+        source: 'user-moment-ai-interaction'
+      });
+    }
+
+    const comments = Array.isArray(targetMoment.comments) ? targetMoment.comments.slice() : [];
+    const alreadyCommented = comments.some(comment =>
+      String(comment?.authorId || '') === roleId
+      && String(comment?.autonomousSource || '') === 'user-moment-ai-interaction'
+    );
+
+    targetMoment.likes = likes;
+    if (!alreadyCommented) {
+      targetMoment.comments = [
+        ...comments,
+        {
+          id: createUid('moment_comment'),
+          authorId: roleId,
+          authorName: roleName,
+          content: parsed.comment,
+          createdAt: now,
+          replies: [],
+          autonomousSource: 'user-moment-ai-interaction'
+        }
+      ];
+    }
+
+    state.moments = moments;
+    await dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), state.moments);
+
+    if (container?.isConnected && state.activePanel === 'moments') {
+      refreshMomentsPanel(container, state);
+    }
+
+    return true;
+  } catch (error) {
+    console.warn('[Chat] 用户发布朋友圈后的 AI 即时互动失败:', error);
+    return false;
+  }
 }
 
 export async function publishInstantAutonomousMomentsForContacts({

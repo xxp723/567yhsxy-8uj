@@ -143,7 +143,8 @@ import {
 import { handleTranslationSettingsClick } from './chat-translation.js';
 import {
   handleAutonomousActivitySettingsClick,
-  publishInstantAutonomousMomentsForContacts
+  publishInstantAutonomousMomentsForContacts,
+  publishUserMomentAiInteraction
 } from './chat-autonomous-activity-settings.js';
 import {
   openInnerVoicePanel,
@@ -333,6 +334,7 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
     case 'moment-comment':
     case 'moment-reply-comment':
     case 'cancel-moment-reply':
+    case 'moment-delete-comment':
     case 'submit-moment-comment':
       await handleMomentsInteractionAction({
         action,
@@ -625,6 +627,22 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
       refreshPanel(container, state, 'moments');
       if (shareTarget) refreshPanel(container, state, 'chatList');
       closeMomentsComposePage(container, state, PANEL_KEYS, { resetDraft: true });
+
+      /* ========================================================================
+         [区域标注·已完成·朋友圈发布后 AI 即时互动触发]
+         说明：
+         1. 用户发布朋友圈成功写入 DB.js / IndexedDB 后，后台调用设置应用副 API 生成当前聊天角色的点赞与评论。
+         2. 本功能与“主动发朋友圈”开关无关；这里只针对用户刚发布的这条朋友圈做即时互动。
+         3. 若动态包含图片，由自主活动模块把图片交给支持识图的副 API；不使用 localStorage/sessionStorage，不写双份兜底。
+         4. 使用 void 后台执行，不阻塞发帖页关闭与朋友圈刷新，避免页面闪屏。
+         ======================================================================== */
+      void publishUserMomentAiInteraction({
+        state,
+        container,
+        db,
+        settingsManager,
+        momentId: nextMoment.id
+      });
       break;
     }
 
@@ -767,7 +785,7 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
        [区域标注·已完成·朋友圈左上角爱心即时 AI 发布点击接线]
        说明：
        1. 仅接线朋友圈页左上角爱心按钮的多选联系人弹窗与确认发布。
-       2. 确认发布后调用自主活动模块，只有联系人“主动发朋友圈”开关开启才注入提示词并调用设置应用副 API。
+       2. 确认发布后调用自主活动模块；该即时发布与“主动发朋友圈”开关无关，开关只控制后台定时发布。
        3. 发布结果通过应用内弹窗提示；不使用原生浏览器弹窗/选择器。
        4. 朋友圈持久化仍由自主活动模块统一写入 DB.js / IndexedDB，不使用 localStorage/sessionStorage。
        ======================================================================== */
