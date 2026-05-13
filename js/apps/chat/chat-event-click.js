@@ -144,6 +144,7 @@ import { handleTranslationSettingsClick } from './chat-translation.js';
 import {
   handleAutonomousActivitySettingsClick,
   publishInstantAutonomousMomentsForContacts,
+  publishMomentCommentAiInteraction,
   publishUserMomentAiInteraction
 } from './chat-autonomous-activity-settings.js';
 import {
@@ -343,7 +344,19 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         container,
         createUid,
         showNotice: message => renderModalNotice(container, message),
-        persistMoments: () => dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), Array.isArray(state.moments) ? state.moments : [])
+        persistMoments: () => dbPut(db, DATA_KEY_MOMENTS(state.activeMaskId), Array.isArray(state.moments) ? state.moments : []),
+        onCommentSubmitted: action === 'submit-moment-comment'
+          ? payload => publishMomentCommentAiInteraction({
+              state,
+              container,
+              db,
+              settingsManager,
+              momentId: payload?.momentId,
+              commentId: payload?.comment?.id || payload?.comment?.commentId || '',
+              comment: payload?.comment,
+              replyTarget: payload?.replyTarget || null
+            })
+          : null
       });
       break;
 

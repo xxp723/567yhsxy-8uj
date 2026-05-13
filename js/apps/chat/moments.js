@@ -803,7 +803,7 @@ async function deleteMomentComment({ target, state, container, persistMoments })
   refreshMomentsPanel(container, state);
 }
 
-async function submitMomentComment({ target, state, container, createUid, showNotice, persistMoments }) {
+async function submitMomentComment({ target, state, container, createUid, showNotice, persistMoments, onCommentSubmitted }) {
   const momentId = String(target?.dataset?.momentId || '').trim();
   const { moment } = getMomentById(state, momentId);
   if (!moment) return;
@@ -824,35 +824,41 @@ async function submitMomentComment({ target, state, container, createUid, showNo
     ? state.momentsReplyTarget
     : null;
 
+  let committedComment = null;
+  let committedReply = null;
+
   if (replyTarget?.commentId) {
     const replyCommentId = String(replyTarget.commentId);
+    const nextReply = {
+      id: createUid?.('moment_reply') || `moment_reply_${now}`,
+      authorId: viewerId,
+      authorName: viewerName,
+      content,
+      createdAt: now
+    };
     moment.comments = comments.map(comment => {
       if (String(comment?.id || '') !== replyCommentId) return comment;
       return {
         ...comment,
         replies: [
           ...(Array.isArray(comment?.replies) ? comment.replies : []),
-          {
-            id: createUid?.('moment_reply') || `moment_reply_${now}`,
-            authorId: viewerId,
-            authorName: viewerName,
-            content,
-            createdAt: now
-          }
+          nextReply
         ]
       };
     });
+    committedReply = nextReply;
   } else {
+    committedComment = {
+      id: createUid?.('moment_comment') || `moment_comment_${now}`,
+      authorId: viewerId,
+      authorName: viewerName,
+      content,
+      createdAt: now,
+      replies: []
+    };
     moment.comments = [
       ...comments,
-      {
-        id: createUid?.('moment_comment') || `moment_comment_${now}`,
-        authorId: viewerId,
-        authorName: viewerName,
-        content,
-        createdAt: now,
-        replies: []
-      }
+      committedComment
     ];
   }
 
@@ -863,6 +869,21 @@ async function submitMomentComment({ target, state, container, createUid, showNo
   state.momentsReplyTarget = null;
 
   await persistMoments?.();
+
+  if (typeof onCommentSubmitted === 'function') {
+    void onCommentSubmitted({
+      state,
+      container,
+      momentId,
+      moment,
+      comment: committedComment || committedReply,
+      replyTarget,
+      viewerId,
+      viewerName,
+      content
+    });
+  }
+
   refreshMomentsPanel(container, state, { focusMomentId: momentId });
 }
 
