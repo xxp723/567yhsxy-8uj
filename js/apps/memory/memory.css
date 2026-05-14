@@ -3,6 +3,25 @@
    说明：旧事应用视觉集中在本文件；按钮图标由 memory-ui.js 的 IconPark 风格 SVG 提供。
          本次已改为极简编辑风（Editorial Minimal UI），并统一使用 style.css 主题变量。
    ========================================================================== */
+/* ==========================================================================
+   [区域标注·已完成·旧事窗口独立接管区]
+   说明：
+   1. 旧事应用已像闲谈 chat 页面一样隐藏系统默认标题栏，从窗口顶部开始接管页面。
+   2. 不影响其它应用窗口，仅作用于 data-app-id="memory"。
+   ========================================================================== */
+.app-window[data-app-id="memory"] .app-window__header {
+  display: none !important;
+}
+
+.app-window[data-app-id="memory"] .app-window__content {
+  padding: 0 !important;
+  background: var(--c-bg-wallpaper, #f5f1ea);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
 .memory-app {
   /* [区域标注·已完成·主题色强制对齐 style.css 指定轻奢色组]
      明确使用：
@@ -37,8 +56,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 0;
+  padding: 0;
 }
 
 /* ==========================================================================
@@ -78,33 +97,35 @@
 .memory-home {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 12px;
-  padding: 14px;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--memory-bg);
 }
 
-.memory-home__header h2 {
+.memory-home__intro {
+  padding: 0 20px 2px;
+}
+
+.memory-home__intro p {
   margin: 0;
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-}
-
-.memory-home__header p {
-  margin: 6px 0 0;
   color: var(--memory-muted);
   font-size: 13px;
   line-height: 1.45;
+  text-align: center;
 }
 
 .memory-identity-rail {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 4px;
+  padding: 4px 16px 8px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .memory-identity-rail::-webkit-scrollbar {
@@ -112,28 +133,28 @@
 }
 
 .memory-identity-chip {
-  border: 1px solid var(--memory-border);
-  background: var(--memory-bg);
+  border: 0;
+  background: transparent;
   color: var(--memory-text);
-  border-radius: 999px;
-  min-width: 84px;
-  padding: 8px 10px;
+  border-radius: 18px;
+  min-width: 74px;
+  padding: 6px 4px;
   display: grid;
   justify-items: center;
-  gap: 4px;
+  gap: 5px;
   cursor: pointer;
   font: inherit;
 }
 
 .memory-identity-chip.is-active {
-  border-color: color-mix(in srgb, var(--memory-primary) 64%, transparent);
-  background: color-mix(in srgb, var(--memory-primary) 10%, var(--memory-bg));
+  background: color-mix(in srgb, var(--memory-primary) 16%, transparent);
 }
 
 .memory-identity-chip__avatar {
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--memory-border) 18%, transparent);
 }
 
 .memory-identity-chip__name {
@@ -159,8 +180,9 @@
   overflow: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding-right: 2px;
+  align-content: start;
+  gap: 12px;
+  padding: 8px 16px 24px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -170,16 +192,18 @@
 }
 
 .memory-role-card {
-  border: 1px solid var(--memory-border);
-  background: var(--memory-card-strong);
+  min-height: 132px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 12%, transparent);
+  background: color-mix(in srgb, var(--memory-card) 76%, #ffffff);
   color: inherit;
-  border-radius: 14px;
-  padding: 10px;
+  border-radius: 18px;
+  padding: 12px;
   text-align: left;
   display: grid;
-  gap: 8px;
+  gap: 9px;
   cursor: pointer;
   font: inherit;
+  box-shadow: 0 6px 16px rgba(74, 52, 42, 0.045);
 }
 
 .memory-role-card__head {
@@ -244,52 +268,96 @@
   display: grid;
   grid-template-rows: auto auto auto 1fr;
   gap: 10px;
-  padding: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--memory-bg);
 }
 
-.memory-page-header {
+/* ==========================================================================
+   [区域标注·已完成·旧事Chat同款标题栏区]
+   说明：
+   1. 标题位置、留白、居中方式参照闲谈 chat 页面。
+   2. 子页面左侧“>”返回按钮固定在标题栏左侧，不挤压居中标题。
+   ========================================================================== */
+.memory-chat-top-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--memory-border);
-}
-
-.memory-page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 0.01em;
-}
-
-.memory-back-chevron {
-  border: 1px solid var(--memory-border);
+  justify-content: center;
+  padding: 26px 16px 12px;
   background: var(--memory-bg);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.memory-chat-top-bar__title-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.memory-chat-top-bar__title {
+  min-width: 120px;
+  padding: 4px 16px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-family: Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--memory-text);
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+  letter-spacing: 1.5px;
+  border-radius: 14px;
+}
+
+.memory-top-back {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--memory-text) 8%, transparent);
+  color: var(--memory-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font: inherit;
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
+  z-index: 2;
+}
+
+.memory-top-back:active {
+  background: color-mix(in srgb, var(--memory-text) 18%, transparent);
+  transform: translateY(-50%) scale(0.92);
 }
 
 .memory-library-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
+  padding: 14px 16px 24px;
 }
 
 .memory-app-card {
-  border: 1px solid var(--memory-border);
-  background: var(--memory-card);
+  border: 1px solid color-mix(in srgb, var(--memory-border) 12%, transparent);
+  background: color-mix(in srgb, var(--memory-card) 76%, #ffffff);
   color: inherit;
-  border-radius: 14px;
+  border-radius: 18px;
   min-height: 144px;
-  padding: 12px;
+  padding: 14px;
   display: grid;
   align-content: start;
   gap: 8px;
@@ -334,8 +402,8 @@
   flex-wrap: wrap;
   color: var(--memory-muted);
   font-size: 12px;
-  padding: 2px 0 8px;
-  border-bottom: 1px solid var(--memory-border);
+  padding: 0 16px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--memory-border) 10%, transparent);
 }
 
 .memory-chat-page__meta span {
@@ -351,10 +419,13 @@
 }
 
 .memory-search-panel {
-  border-radius: 14px;
-  padding: 10px;
+  margin: 0 16px;
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 12px;
   display: grid;
   gap: 10px;
+  background: color-mix(in srgb, var(--memory-text) 6%, transparent);
 }
 
 .memory-search {
@@ -460,6 +531,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  padding: 0 16px;
 }
 
 .memory-stat-card {
@@ -493,7 +565,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-right: 2px;
+  padding: 0 16px 96px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -716,7 +788,10 @@
 }
 
 .memory-floating-add {
-  justify-self: end;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
 }
 
 .memory-ios-switch {
@@ -1014,12 +1089,16 @@
 }
 
 @media (max-width: 430px) {
-  .memory-role-cards,
-  .memory-library-grid,
   .memory-type-options,
   .memory-custom-range,
   .memory-stats {
     grid-template-columns: 1fr;
+  }
+
+  .memory-role-cards,
+  .memory-library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .memory-item-card__footer,

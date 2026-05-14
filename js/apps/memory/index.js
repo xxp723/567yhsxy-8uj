@@ -82,20 +82,46 @@ function ensureMemoryStyles() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事首页身份分组区]
-   说明：首页横向头像来源于档案角色身份（identity），点击身份后展示该身份下角色记忆卡片。
+   [区域标注·已完成·旧事首页身份面具分组区]
+   说明：
+   1. 首页横向圆形头像来源于档案应用里的用户面具身份字段，不使用旧角色列表 UI。
+   2. 仅读取 IndexedDB 启动数据中的角色/档案字段，不新增 localStorage/sessionStorage 或双份存储。
+   3. 若旧数据缺少 identity/maskName/profileName 等身份字段，才回退到角色名作为显示占位。
    ========================================================================== */
+function getArchiveMaskIdentityName(character = {}) {
+  return (
+    character.identity
+    || character.maskName
+    || character.profileName
+    || character.personaName
+    || character.displayIdentity
+    || character.name
+    || '未命名身份'
+  ).trim();
+}
+
+function getArchiveMaskIdentityAvatar(character = {}) {
+  return (
+    character.identityAvatar
+    || character.maskAvatar
+    || character.profileAvatar
+    || character.personaAvatar
+    || character.avatar
+    || ''
+  ).trim();
+}
+
 function buildIdentityGroups(characters = [], recordsByCharacterId = {}) {
   const map = new Map();
 
   characters.forEach((character) => {
-    const identityName = (character.identity || character.name || '未命名身份').trim();
+    const identityName = getArchiveMaskIdentityName(character);
     const key = identityName.toLowerCase();
     if (!map.has(key)) {
       map.set(key, {
         key,
         label: identityName,
-        avatar: character.avatar || '',
+        avatar: getArchiveMaskIdentityAvatar(character),
         characters: []
       });
     }
@@ -131,6 +157,26 @@ function getRoleCardMemoryCount(state, characterId) {
     ? state.recordsByCharacterId[characterId].chatMemory.items
     : [];
   return items.length;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事Chat页面标题栏区]
+   说明：
+   1. 旧事应用从窗口顶部接管，标题栏位置与闲谈 chat 页面一致。
+   2. 标题使用同款居中布局；子页面左侧显示“>”返回按钮，图案由本文件自绘文本按钮承载。
+   3. 本区只负责 UI 渲染，不涉及任何持久化读写。
+   ========================================================================== */
+function renderMemoryTopBar({ title = 'Memory', backAction = '' } = {}) {
+  return `
+    <header class="memory-chat-top-bar">
+      ${backAction
+        ? `<button class="memory-top-back" type="button" data-action="${escapeHtml(backAction)}" aria-label="返回上一级">></button>`
+        : ''}
+      <div class="memory-chat-top-bar__title-wrap">
+        <div class="memory-chat-top-bar__title">${escapeHtml(title)}</div>
+      </div>
+    </header>
+  `;
 }
 
 /* ==========================================================================
@@ -209,10 +255,10 @@ function renderIdentityHome(state) {
 
   return `
     <section class="memory-home">
-      <header class="memory-home__header">
-        <h2>旧事</h2>
+      ${renderMemoryTopBar({ title: 'Memory' })}
+      <section class="memory-home__intro">
         <p>身份面具与角色记忆库</p>
-      </header>
+      </section>
       <section class="memory-identity-rail" aria-label="身份头像横向滑动区">
         ${identityRail}
       </section>
@@ -236,10 +282,7 @@ function renderRoleLibrary(state) {
 
   return `
     <section class="memory-library">
-      <header class="memory-page-header">
-        <button class="memory-back-chevron" type="button" data-action="back-to-home" aria-label="返回上一级">></button>
-        <h2>${escapeHtml(character.name)}的记忆库</h2>
-      </header>
+      ${renderMemoryTopBar({ title: `${character.name}的记忆库`, backAction: 'back-to-home' })}
       <section class="memory-library-grid">
         <button class="memory-app-card is-chat" type="button" data-action="open-chat-memory" data-id="${escapeHtml(character.id)}">
           <div class="memory-app-card__icon">${MEMORY_ICONS.chat}</div>
@@ -272,10 +315,7 @@ function renderChatMemory(state) {
 
   return `
     <section class="memory-chat-page">
-      <header class="memory-page-header">
-        <button class="memory-back-chevron" type="button" data-action="back-to-library" aria-label="返回角色记忆库">></button>
-        <h2>${escapeHtml(character.name)}的记忆库</h2>
-      </header>
+      ${renderMemoryTopBar({ title: `${character.name}的记忆库`, backAction: 'back-to-library' })}
       <section class="memory-chat-page__meta">
         <span>${MEMORY_ICONS.chat} 闲谈应用</span>
         <span>更新于 ${escapeHtml(formatDateTime(record?.updatedAt || Date.now()))}</span>
