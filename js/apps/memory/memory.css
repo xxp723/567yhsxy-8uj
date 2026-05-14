@@ -1,0 +1,861 @@
+/* ==========================================================================
+   [区域标注·已完成·旧事应用独立样式区]
+   说明：旧事应用视觉集中在本文件；按钮图标由 memory-ui.js 的 IconPark 风格 SVG 提供。
+   ========================================================================== */
+.memory-app {
+  --memory-bg: var(--ui-bg, #f7f7fb);
+  --memory-card: var(--ui-card-bg, rgba(255, 255, 255, 0.88));
+  --memory-card-strong: var(--ui-card-bg-strong, rgba(255, 255, 255, 0.96));
+  --memory-text: var(--ui-text, #1f2937);
+  --memory-muted: var(--ui-muted, #7b8494);
+  --memory-border: var(--ui-border, rgba(30, 41, 59, 0.1));
+  --memory-primary: var(--theme-color, #3b82f6);
+  --memory-danger: #ef4444;
+  --memory-success: #22c55e;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  color: var(--memory-text);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--memory-primary) 14%, transparent), transparent 34%),
+    var(--memory-bg);
+  overflow: hidden;
+}
+
+.memory-app * {
+  box-sizing: border-box;
+}
+
+.memory-shell {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.memory-header,
+.memory-toolbar,
+.memory-detail-header,
+.memory-search-panel,
+.memory-form-modal__panel {
+  background: var(--memory-card);
+  border: 1px solid var(--memory-border);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事顶部与布局区]
+   说明：首页与单角色页布局已收束为“角色列表 + 闲谈记忆库”。
+   ========================================================================== */
+.memory-header {
+  border-radius: 24px;
+  padding: 16px;
+  flex: 0 0 auto;
+}
+
+.memory-header__title,
+.memory-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+}
+
+.memory-header__title {
+  font-size: 22px;
+}
+
+.memory-section-title {
+  font-size: 15px;
+}
+
+.memory-header__title svg,
+.memory-section-title svg {
+  width: 23px;
+  height: 23px;
+  color: var(--memory-primary);
+}
+
+.memory-header__desc {
+  margin: 8px 0 0;
+  color: var(--memory-muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.memory-layout {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.86fr) minmax(0, 1.74fr);
+  gap: 12px;
+}
+
+.memory-sidebar,
+.memory-main {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.memory-toolbar {
+  border-radius: 20px;
+  padding: 10px;
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事角色列表样式区]
+   说明：角色卡已更新为头像、角色名、总记忆数、已注入记忆数、永久记忆数、最近更新时间。
+   ========================================================================== */
+.memory-character-list,
+.memory-items {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.memory-character-card,
+.memory-item-card,
+.memory-plan-card,
+.memory-empty,
+.memory-stat-card {
+  border: 1px solid var(--memory-border);
+  background: var(--memory-card);
+  border-radius: 20px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+.memory-character-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  border-width: 1px;
+  width: 100%;
+  font: inherit;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.memory-character-card:active {
+  transform: scale(0.985);
+}
+
+.memory-character-card.is-active {
+  border-color: color-mix(in srgb, var(--memory-primary) 60%, transparent);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--memory-primary) 18%, transparent);
+}
+
+.memory-character-card__main {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+
+.memory-character-card__name {
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.memory-character-card__stats {
+  display: grid;
+  gap: 3px;
+  color: var(--memory-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.memory-character-card__meta,
+.memory-item-card__meta,
+.memory-plan-card p {
+  color: var(--memory-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  color: var(--memory-primary);
+  background: color-mix(in srgb, var(--memory-primary) 13%, white);
+}
+
+.memory-avatar svg {
+  width: 24px;
+  height: 24px;
+}
+
+.memory-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事单角色顶部区]
+   说明：单角色页顶部包含返回按钮、头像、角色名和“闲谈记忆库”信息。
+   ========================================================================== */
+.memory-detail-header {
+  border-radius: 24px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.memory-detail-header__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.memory-detail-header__title {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.memory-detail-header__sub {
+  color: var(--memory-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事按钮与开关样式区]
+   说明：所有图标按钮使用 IconPark 风格 SVG；独立开关使用 iPhone 风格滑动开关。
+   ========================================================================== */
+.memory-icon-btn,
+.memory-primary-btn,
+.memory-secondary-btn,
+.memory-filter-chip,
+.memory-type-option {
+  border: 0;
+  outline: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.memory-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.14);
+  flex: 0 0 auto;
+}
+
+.memory-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.memory-icon-btn.is-danger,
+.memory-primary-btn.is-danger {
+  color: #fff;
+  background: var(--memory-danger);
+}
+
+.memory-primary-btn,
+.memory-secondary-btn {
+  min-height: 36px;
+  border-radius: 14px;
+  padding: 0 14px;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.memory-primary-btn {
+  color: #fff;
+  background: var(--memory-primary);
+}
+
+.memory-secondary-btn {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.memory-primary-btn svg,
+.memory-secondary-btn svg,
+.memory-type-option svg,
+.memory-filter-chip svg {
+  width: 18px;
+  height: 18px;
+}
+
+.memory-ios-switch {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.memory-ios-switch__track {
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  display: block;
+  position: relative;
+  background: var(--ui-switch-off, rgba(148, 163, 184, 0.38));
+  transition: background 0.18s ease;
+}
+
+.memory-ios-switch__thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  background: var(--ui-switch-thumb, #fff);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.memory-ios-switch.is-on .memory-ios-switch__track {
+  background: var(--ui-switch-on, var(--memory-primary));
+}
+
+.memory-ios-switch.is-on .memory-ios-switch__thumb {
+  transform: translateX(18px);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事搜索模块样式区]
+   说明：关键词搜索与时间搜索均为应用内 UI，不使用浏览器原生日期控件。
+   ========================================================================== */
+.memory-search-panel {
+  border-radius: 22px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.memory-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.13);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.memory-search svg {
+  width: 18px;
+  height: 18px;
+  color: var(--memory-muted);
+  flex: 0 0 auto;
+}
+
+.memory-search input,
+.memory-date-filter input,
+.memory-form-field input,
+.memory-form-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--memory-text);
+  font: inherit;
+}
+
+.memory-time-search {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-time-search__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--memory-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.memory-time-search__head svg {
+  width: 17px;
+  height: 17px;
+  color: var(--memory-primary);
+}
+
+.memory-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.memory-filter-chip {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--memory-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.memory-filter-chip.is-active {
+  color: #fff;
+  background: var(--memory-primary);
+}
+
+.memory-custom-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.memory-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.13);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.memory-date-filter span {
+  color: var(--memory-muted);
+  font-size: 12px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事统计与时间线样式区]
+   说明：统计文案与时间线条目已对齐本次记忆控制逻辑。
+   ========================================================================== */
+.memory-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.memory-stat-card {
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.memory-stat-card__icon {
+  color: var(--memory-primary);
+}
+
+.memory-stat-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.memory-stat-card__value {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.memory-stat-card__label {
+  font-size: 11px;
+  color: var(--memory-muted);
+}
+
+.memory-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-item-card {
+  padding: 12px;
+}
+
+.memory-item-card__top {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.memory-item-card__type {
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--memory-primary);
+  background: color-mix(in srgb, var(--memory-primary) 12%, transparent);
+  flex: 0 0 auto;
+}
+
+.memory-item-card__type svg {
+  width: 19px;
+  height: 19px;
+}
+
+.memory-item-card__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.memory-item-card__title-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.memory-item-card__title {
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.memory-item-card__summary {
+  margin-top: 7px;
+  color: var(--memory-text);
+  line-height: 1.58;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.memory-tags,
+.memory-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.memory-tag,
+.memory-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.memory-tag {
+  color: var(--memory-primary);
+  background: color-mix(in srgb, var(--memory-primary) 12%, transparent);
+}
+
+.memory-badge {
+  color: color-mix(in srgb, var(--memory-primary) 78%, #111827);
+  background: color-mix(in srgb, var(--memory-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--memory-primary) 16%, transparent);
+  font-weight: 800;
+}
+
+.memory-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.memory-item-card__footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.memory-switch-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-switch-label {
+  color: var(--memory-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事空状态与方案卡样式区]
+   说明：无结果、无角色、加载中均使用主题内空状态卡片。
+   ========================================================================== */
+.memory-empty {
+  padding: 26px 18px;
+  text-align: center;
+}
+
+.memory-empty__icon {
+  margin: 0 auto 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--memory-primary) 12%, transparent);
+  color: var(--memory-primary);
+}
+
+.memory-empty__icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.memory-empty h3 {
+  margin: 0;
+}
+
+.memory-empty p {
+  margin: 8px 0 0;
+  color: var(--memory-muted);
+  line-height: 1.55;
+}
+
+.memory-plan {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-plan-card {
+  padding: 13px;
+}
+
+.memory-plan-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.memory-plan-card p {
+  margin: 0;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事应用内弹窗样式区]
+   说明：新增、编辑、删除确认均为应用内弹窗，并与主题 UI 统一。
+   ========================================================================== */
+.memory-form-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.memory-form-modal__panel {
+  width: min(560px, 100%);
+  max-height: 92%;
+  overflow: auto;
+  border-radius: 26px;
+  padding: 14px;
+}
+
+.memory-form-modal__panel--compact {
+  width: min(440px, 100%);
+}
+
+.memory-form-modal__head,
+.memory-form-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memory-form-modal__head h3 {
+  margin: 0;
+}
+
+.memory-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.memory-form-field {
+  display: grid;
+  gap: 6px;
+  color: var(--memory-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.memory-form-field input,
+.memory-form-field textarea {
+  min-height: 40px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.memory-form-field textarea {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.memory-form-help {
+  color: var(--memory-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.memory-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.memory-type-option {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.15);
+  font-weight: 900;
+}
+
+.memory-type-option.is-active {
+  color: #fff;
+  background: var(--memory-primary);
+}
+
+.memory-form-checks {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-form-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.memory-form-toggle-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.memory-form-toggle-row strong {
+  font-size: 13px;
+}
+
+.memory-form-toggle-row span {
+  color: var(--memory-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.memory-form-modal__foot {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.memory-delete-preview {
+  margin-top: 12px;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事轻提示样式区]
+   说明：操作提示使用应用内 Toast，不使用浏览器原生提示。
+   ========================================================================== */
+.memory-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 40;
+  transform: translate(-50%, 10px);
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.86);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.memory-toast.is-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 720px) {
+  .memory-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-sidebar {
+    max-height: 38%;
+  }
+
+  .memory-custom-range,
+  .memory-stats,
+  .memory-type-options {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .memory-detail-header {
+    flex-wrap: wrap;
+  }
+
+  .memory-detail-header__main {
+    min-width: 160px;
+  }
+}
+
+@media (max-width: 430px) {
+  .memory-stats,
+  .memory-custom-range,
+  .memory-type-options {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-item-card__footer,
+  .memory-item-card__title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
