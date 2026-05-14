@@ -79,22 +79,50 @@ function createStore(db) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事角色来源读取区]
-   说明：只读取档案应用标准 IndexedDB 主记录 value.characters 作为角色来源；
-         不写档案数据，不写双份兜底，不使用浏览器同步存储。
+   [区域标注·已完成·旧事首页档案面具联动读取区]
+   说明：
+   1. 首页身份头像改为读取档案应用标准 IndexedDB 主记录 value.masks。
+   2. 面具下方角色来自档案用户面具 roleBindingIds 绑定的 value.characters。
+   3. 本区只读档案数据；不写档案数据，不使用 localStorage/sessionStorage，不写双份兜底。
    ========================================================================== */
-export async function loadArchiveCharacters(db) {
-  const store = createStore(db);
-  const record = await store.get(ARCHIVE_APP_ID, ARCHIVE_DATA_KEY);
-  const characters = Array.isArray(record?.value?.characters) ? record.value.characters : [];
-
-  return characters.map((item) => ({
+function normalizeArchiveCharacter(item = {}) {
+  return {
     id: normalizeText(item?.id) || `character-${Math.random().toString(16).slice(2)}`,
     name: normalizeText(item?.name) || '未命名角色',
     avatar: normalizeText(item?.avatar),
     signature: normalizeText(item?.signature),
     identity: normalizeText(item?.identity)
-  }));
+  };
+}
+
+function normalizeArchiveMask(item = {}, characters = []) {
+  const characterIds = new Set(characters.map((character) => character.id));
+  const roleBindingIds = Array.isArray(item?.roleBindingIds)
+    ? item.roleBindingIds.map((id) => normalizeText(id)).filter((id) => id && characterIds.has(id))
+    : [];
+
+  return {
+    id: normalizeText(item?.id) || `mask-${Math.random().toString(16).slice(2)}`,
+    name: normalizeText(item?.name) || '未命名面具',
+    avatar: normalizeText(item?.avatar),
+    roleBindingIds
+  };
+}
+
+export async function loadArchiveProfiles(db) {
+  const store = createStore(db);
+  const record = await store.get(ARCHIVE_APP_ID, ARCHIVE_DATA_KEY);
+  const characters = (Array.isArray(record?.value?.characters) ? record.value.characters : [])
+    .map((item) => normalizeArchiveCharacter(item));
+  const masks = (Array.isArray(record?.value?.masks) ? record.value.masks : [])
+    .map((item) => normalizeArchiveMask(item, characters));
+
+  return { masks, characters };
+}
+
+export async function loadArchiveCharacters(db) {
+  const { characters } = await loadArchiveProfiles(db);
+  return characters;
 }
 
 /* ==========================================================================
@@ -122,12 +150,13 @@ export async function saveCharacterMemory(db, characterId, memoryRecord) {
 }
 
 export async function loadMemoryBootData(db) {
-  const characters = await loadArchiveCharacters(db);
+  const { masks, characters } = await loadArchiveProfiles(db);
   const records = await Promise.all(
     characters.map(async (character) => [character.id, await loadCharacterMemory(db, character.id)])
   );
 
   return {
+    masks,
     characters,
     recordsByCharacterId: Object.fromEntries(records)
   };

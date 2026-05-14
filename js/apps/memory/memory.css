@@ -91,13 +91,16 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事首页身份头像横滑区]
-   说明：首页改为 ins 风格横向滑动圆形身份头像，点击后展示下方角色记忆卡片。
+   [区域标注·已完成·旧事首页档案用户面具头像区]
+   说明：
+   1. 首页已去除“身份面具与角色记忆库”文字行。
+   2. 横向头像区已改为档案应用“用户面具”圆形头像，点击后展示绑定角色。
+   3. 面具头像下方只保留名称，不再显示“xx条”统计。
    ========================================================================== */
 .memory-home {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto 1fr;
   gap: 10px;
   padding: 0;
   border: 0;
@@ -119,10 +122,10 @@
 
 .memory-identity-rail {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 16px 8px;
+  padding: 6px 16px 10px;
   scrollbar-width: none;
   -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
@@ -141,18 +144,23 @@
   padding: 6px 4px;
   display: grid;
   justify-items: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
   font: inherit;
 }
 
 .memory-identity-chip.is-active {
-  background: color-mix(in srgb, var(--memory-primary) 16%, transparent);
+  background: transparent;
+}
+
+.memory-identity-chip.is-active .memory-identity-chip__avatar {
+  border-color: var(--memory-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--memory-primary) 22%, transparent);
 }
 
 .memory-identity-chip__avatar {
-  width: 58px;
-  height: 58px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, var(--memory-border) 18%, transparent);
 }
@@ -164,11 +172,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.memory-identity-chip__meta {
-  font-size: 11px;
-  color: var(--memory-muted);
 }
 
 /* ==========================================================================
@@ -316,6 +319,16 @@
   color: var(--memory-text);
   letter-spacing: 1.5px;
   border-radius: 14px;
+}
+
+button.memory-chat-top-bar__title {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+button.memory-chat-top-bar__title:active {
+  background: color-mix(in srgb, var(--memory-text) 8%, transparent);
+  transform: scale(0.98);
 }
 
 .memory-top-back {

@@ -82,64 +82,37 @@ function ensureMemoryStyles() {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事首页身份面具分组区]
+   [区域标注·已完成·旧事首页档案用户面具联动角色区]
    说明：
-   1. 首页横向圆形头像来源于档案应用里的用户面具身份字段，不使用旧角色列表 UI。
-   2. 仅读取 IndexedDB 启动数据中的角色/档案字段，不新增 localStorage/sessionStorage 或双份存储。
-   3. 若旧数据缺少 identity/maskName/profileName 等身份字段，才回退到角色名作为显示占位。
+   1. 首页圆形头像已改为直接读取档案应用“用户面具”板块中的 masks。
+   2. 点击某个用户面具头像后，下方只展示该面具 roleBindingIds 绑定的对应角色。
+   3. 本区仅读取 memory-db.js 返回的 IndexedDB 数据，不新增 localStorage/sessionStorage 或双份存储。
    ========================================================================== */
-function getArchiveMaskIdentityName(character = {}) {
-  return (
-    character.identity
-    || character.maskName
-    || character.profileName
-    || character.personaName
-    || character.displayIdentity
-    || character.name
-    || '未命名身份'
-  ).trim();
-}
+function buildIdentityGroups(masks = [], characters = [], recordsByCharacterId = {}) {
+  const characterMap = new Map(characters.map((character) => [character.id, character]));
 
-function getArchiveMaskIdentityAvatar(character = {}) {
-  return (
-    character.identityAvatar
-    || character.maskAvatar
-    || character.profileAvatar
-    || character.personaAvatar
-    || character.avatar
-    || ''
-  ).trim();
-}
+  return masks.map((mask) => {
+    const boundCharacters = (Array.isArray(mask.roleBindingIds) ? mask.roleBindingIds : [])
+      .map((characterId) => characterMap.get(characterId))
+      .filter(Boolean)
+      .map((character) => {
+        const record = recordsByCharacterId?.[character.id];
+        const items = Array.isArray(record?.chatMemory?.items) ? record.chatMemory.items : [];
 
-function buildIdentityGroups(characters = [], recordsByCharacterId = {}) {
-  const map = new Map();
-
-  characters.forEach((character) => {
-    const identityName = getArchiveMaskIdentityName(character);
-    const key = identityName.toLowerCase();
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        label: identityName,
-        avatar: getArchiveMaskIdentityAvatar(character),
-        characters: []
+        return {
+          ...character,
+          memoryCount: items.length,
+          updatedAt: Number(record?.updatedAt) || 0
+        };
       });
-    }
-    const group = map.get(key);
-    const record = recordsByCharacterId?.[character.id];
-    const items = Array.isArray(record?.chatMemory?.items) ? record.chatMemory.items : [];
-    group.characters.push({
-      ...character,
-      memoryCount: items.length,
-      updatedAt: Number(record?.updatedAt) || 0
-    });
-  });
 
-  return Array.from(map.values()).map((group) => ({
-    ...group,
-    memoryCount: group.characters.reduce((sum, item) => sum + item.memoryCount, 0),
-    updatedAt: group.characters.reduce((max, item) => Math.max(max, item.updatedAt || 0), 0)
-  }));
+    return {
+      key: mask.id,
+      label: mask.name,
+      avatar: mask.avatar,
+      characters: boundCharacters
+    };
+  });
 }
 
 function getSelectedIdentity(state) {
@@ -166,14 +139,18 @@ function getRoleCardMemoryCount(state, characterId) {
    2. 标题使用同款居中布局；子页面左侧显示“>”返回按钮，图案由本文件自绘文本按钮承载。
    3. 本区只负责 UI 渲染，不涉及任何持久化读写。
    ========================================================================== */
-function renderMemoryTopBar({ title = 'Memory', backAction = '' } = {}) {
+function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '' } = {}) {
+  const titleNode = titleAction
+    ? `<button class="memory-chat-top-bar__title" type="button" data-action="${escapeHtml(titleAction)}" aria-label="返回小手机桌面">${escapeHtml(title)}</button>`
+    : `<div class="memory-chat-top-bar__title">${escapeHtml(title)}</div>`;
+
   return `
     <header class="memory-chat-top-bar">
       ${backAction
         ? `<button class="memory-top-back" type="button" data-action="${escapeHtml(backAction)}" aria-label="返回上一级">></button>`
         : ''}
       <div class="memory-chat-top-bar__title-wrap">
-        <div class="memory-chat-top-bar__title">${escapeHtml(title)}</div>
+        ${titleNode}
       </div>
     </header>
   `;
@@ -196,8 +173,11 @@ function renderStats(items) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事首页渲染区]
-   说明：首页为 ins 风格横向圆形身份头像，下方为该身份角色记忆卡片（一行两卡、竖向滚动、隐藏滚动条）。
+   [区域标注·已完成·旧事首页档案用户面具渲染区]
+   说明：
+   1. 已去除“身份面具与角色记忆库”文字行。
+   2. “Memory”标题可点击关闭旧事并返回小手机桌面。
+   3. 圆形头像链接档案应用用户面具；点击头像后，下方展示该面具绑定角色。
    ========================================================================== */
 function renderIdentityHome(state) {
   const identities = Array.isArray(state.identityGroups) ? state.identityGroups : [];
@@ -212,57 +192,62 @@ function renderIdentityHome(state) {
           type="button"
           data-action="select-identity"
           data-id="${escapeHtml(identity.key)}"
+          aria-label="查看${escapeHtml(identity.label)}绑定的角色"
         >
           ${renderAvatar({ name: identity.label, avatar: identity.avatar }, 'memory-identity-chip__avatar')}
           <span class="memory-identity-chip__name">${escapeHtml(identity.label)}</span>
-          <span class="memory-identity-chip__meta">${escapeHtml(identity.memoryCount)} 条</span>
         </button>
       `;
     }).join('')
     : renderEmptyState(
-      '暂无身份面具',
-      '请先在档案应用创建带有身份信息的角色，旧事会自动读取并展示。',
+      '暂无用户面具',
+      '请先在档案应用的用户面具板块创建面具，旧事会自动读取并展示。',
       MEMORY_ICONS.user
     );
 
   const roleCards = selectedIdentity
-    ? selectedIdentity.characters.map((character) => `
-      <button
-        class="memory-role-card"
-        type="button"
-        data-action="open-role-library"
-        data-id="${escapeHtml(character.id)}"
-      >
-        <div class="memory-role-card__head">
-          ${renderAvatar(character, 'memory-role-card__avatar')}
-          <div class="memory-role-card__title-wrap">
-            <div class="memory-role-card__title">${escapeHtml(character.name)}</div>
-            <div class="memory-role-card__sub">${escapeHtml(selectedIdentity.label)}</div>
-          </div>
-        </div>
-        <div class="memory-role-card__line"></div>
-        <div class="memory-role-card__foot">
-          <span>${escapeHtml(getRoleCardMemoryCount(state, character.id))} 条记忆</span>
-          <span>${escapeHtml(character.updatedAt ? formatDateTime(character.updatedAt) : '暂无更新')}</span>
-        </div>
-      </button>
-    `).join('')
+    ? (
+      selectedIdentity.characters.length
+        ? selectedIdentity.characters.map((character) => `
+          <button
+            class="memory-role-card"
+            type="button"
+            data-action="open-role-library"
+            data-id="${escapeHtml(character.id)}"
+          >
+            <div class="memory-role-card__head">
+              ${renderAvatar(character, 'memory-role-card__avatar')}
+              <div class="memory-role-card__title-wrap">
+                <div class="memory-role-card__title">${escapeHtml(character.name)}</div>
+                <div class="memory-role-card__sub">${escapeHtml(selectedIdentity.label)}</div>
+              </div>
+            </div>
+            <div class="memory-role-card__line"></div>
+            <div class="memory-role-card__foot">
+              <span>${escapeHtml(getRoleCardMemoryCount(state, character.id))} 条记忆</span>
+              <span>${escapeHtml(character.updatedAt ? formatDateTime(character.updatedAt) : '暂无更新')}</span>
+            </div>
+          </button>
+        `).join('')
+        : `
+          <section class="memory-role-placeholder">
+            ${renderEmptyState('暂无绑定角色', '这个用户面具还没有在档案应用中绑定对应角色。', MEMORY_ICONS.chat)}
+          </section>
+        `
+    )
     : `
       <section class="memory-role-placeholder">
-        ${renderEmptyState('请选择身份', '点击上方圆形身份头像后，在这里查看该身份下的角色记忆卡片。', MEMORY_ICONS.chat)}
+        ${renderEmptyState('请选择用户面具', '点击上方圆形用户面具头像后，在这里查看该面具绑定的对应角色。', MEMORY_ICONS.chat)}
       </section>
     `;
 
   return `
     <section class="memory-home">
-      ${renderMemoryTopBar({ title: 'Memory' })}
-      <section class="memory-home__intro">
-        <p>身份面具与角色记忆库</p>
-      </section>
-      <section class="memory-identity-rail" aria-label="身份头像横向滑动区">
+      ${renderMemoryTopBar({ title: 'Memory', titleAction: 'close-memory' })}
+      <section class="memory-identity-rail" aria-label="档案用户面具头像区">
         ${identityRail}
       </section>
-      <section class="memory-role-cards" aria-label="角色记忆卡片区">
+      <section class="memory-role-cards" aria-label="用户面具绑定角色区">
         ${roleCards}
       </section>
     </section>
@@ -371,8 +356,10 @@ export async function mount(container, context) {
     appMeta: context.appMeta,
     db: context.db,
     characters: [],
+    masks: [],
     identityGroups: [],
     recordsByCharacterId: {},
+    eventBus: context.eventBus,
     selectedIdentityKey: '',
     selectedCharacterId: '',
     stage: 'home',
@@ -392,11 +379,12 @@ export async function mount(container, context) {
     try {
       const bootData = await loadMemoryBootData(state.db);
       state.characters = bootData.characters;
+      state.masks = bootData.masks;
       state.recordsByCharacterId = bootData.recordsByCharacterId;
-      state.identityGroups = buildIdentityGroups(state.characters, state.recordsByCharacterId);
+      state.identityGroups = buildIdentityGroups(state.masks, state.characters, state.recordsByCharacterId);
 
       if (!keepSelection) {
-        state.selectedIdentityKey = state.identityGroups[0]?.key || '';
+        state.selectedIdentityKey = '';
         state.selectedCharacterId = '';
         state.stage = 'home';
       } else {
@@ -410,6 +398,7 @@ export async function mount(container, context) {
       }
     } catch (error) {
       state.characters = [];
+      state.masks = [];
       state.identityGroups = [];
       state.recordsByCharacterId = {};
       toast.show('旧事读取失败，请查看日志');
@@ -423,8 +412,9 @@ export async function mount(container, context) {
   const refreshRecordsOnly = async () => {
     const bootData = await loadMemoryBootData(state.db);
     state.characters = bootData.characters;
+    state.masks = bootData.masks;
     state.recordsByCharacterId = bootData.recordsByCharacterId;
-    state.identityGroups = buildIdentityGroups(state.characters, state.recordsByCharacterId);
+    state.identityGroups = buildIdentityGroups(state.masks, state.characters, state.recordsByCharacterId);
   };
 
   const getItemById = (id) => getSelectedItems(state).find((item) => item.id === id) || null;
@@ -440,6 +430,11 @@ export async function mount(container, context) {
 
     const action = actionEl.dataset.action;
     const id = actionEl.dataset.id;
+
+    if (action === 'close-memory') {
+      state.eventBus?.emit('app:close', { appId: state.appMeta?.id || 'memory' });
+      return;
+    }
 
     if (action === 'select-identity') {
       state.selectedIdentityKey = id || '';
