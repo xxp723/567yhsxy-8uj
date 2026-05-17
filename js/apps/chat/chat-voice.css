@@ -23,12 +23,12 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次语音转文字标题去图标与正文贴顶收紧]
+   [区域标注·已完成·本次语音气泡展开不变大与上下留白收紧]
    说明：
    1. 语音消息气泡宽度会配合渲染层输出的 CSS 变量，在上限内按转文字内容长度自适应，短文本时整个气泡也会同步变短。
    2. 已去除语音气泡独立粗边框与右侧下载箭头，仅保留播放键、波形条与 0:xx 秒数。
-   3. 双击展开后的“语音转文字”标题已去图标并缩小字号；转文字正文区域取消多余上下留白，从顶部直接开始显示。
-   4. 转文字浅色背景改为跟随整段展开内容宽度，不再只形成一个偏窄的小块。
+   3. 双击展开后转文字内容改为占用原播放行位置，不再额外撑高气泡；“语音转文字”提示在展开态隐藏，避免上下空白。
+   4. 展开态转文字背景、margin 与内层上下 padding 已收紧，气泡整体维持原有高度与宽度。
    5. 本区域只做语音气泡视觉展示，不涉及持久化存储逻辑，不使用 localStorage/sessionStorage。
    ========================================================================== */
 .msg-bubble--voice {
@@ -166,6 +166,37 @@
   line-height: 1.45;
   font-weight: 500;
   text-align: left;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·本次语音展开态不撑高气泡]
+   说明：
+   1. 只覆盖 .msg-voice-bubble.is-expanded 展开态，不影响普通文字、图片、礼物、转账等其它消息气泡。
+   2. 展开时隐藏播放行与标题提示，让语音转文字直接占用原气泡内容行，避免气泡变高和上下出现空白。
+   3. 转文字单行省略显示，保持原语音气泡大小；再次双击仍由外层 data-action 收起。
+   ========================================================================== */
+.msg-voice-bubble.is-expanded .msg-voice-bubble__main,
+.msg-voice-bubble.is-expanded .msg-voice-bubble__toggle-hint {
+  display: none;
+}
+
+.msg-voice-bubble.is-expanded .msg-voice-bubble__transcript {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.msg-voice-bubble.is-expanded .msg-voice-bubble__text {
+  width: 100%;
+  padding: 0;
+  line-height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .msg-bubble-row--right .msg-voice-bubble__transcript {
