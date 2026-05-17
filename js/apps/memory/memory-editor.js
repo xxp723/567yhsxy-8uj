@@ -20,28 +20,67 @@ import {
 
 /* ==========================================================================
    [区域标注·已完成·旧事编辑表单数据区]
-   说明：新增/编辑表单提交后统一从这里解析为记忆条目结构。
+   说明：
+   1. 新增/编辑表单提交后统一从这里解析为记忆条目结构。
+   2. 本区已完成“去事件标题 + 单注入开关 + 重点长期固定注入”口径更新。
+   3. 用户侧不再暴露“永久记忆/高优先级”开关；重点长期内部仍复用 isPermanent 作为固定注入标记。
    ========================================================================== */
 export function parseMemoryForm(form) {
   const data = new FormData(form);
+  const type = normalizeText(data.get('type')) || 'longterm';
+  const isPermanent = data.get('isPermanent') === 'true';
+
   return {
     id: normalizeText(data.get('id')),
-    type: normalizeText(data.get('type')) || 'longterm',
-    title: normalizeText(data.get('title')),
+    type,
     summary: normalizeText(data.get('summary')),
     timelineAt: parseDateText(data.get('timelineAt')) || Date.now(),
     emotionTags: parseTagInput(data.get('emotionTags')),
-    injectionEnabled: data.get('injectionEnabled') === 'true',
-    isPermanent: data.get('isPermanent') === 'true',
-    isHighPriority: data.get('isHighPriority') === 'true'
+    injectionEnabled: (type === 'longterm' && isPermanent) || (type !== 'pending' && data.get('injectionEnabled') === 'true'),
+    isPermanent,
+    isHighPriority: isPermanent
   };
 }
 
-export function renderTypeOptions(activeType) {
-  return Object.entries(MEMORY_TYPE_META).map(([type, meta]) => `
-    <button class="memory-type-option ${type === activeType ? 'is-active' : ''}" type="button" data-action="choose-memory-type" data-type="${escapeHtml(type)}">
-      ${meta.icon}
-      <span>${escapeHtml(meta.label)}</span>
+const MEMORY_FORM_TYPE_OPTIONS = [
+  {
+    key: 'longterm',
+    type: 'longterm',
+    isPermanent: false,
+    label: '长期记忆',
+    icon: MEMORY_TYPE_META.longterm.icon,
+    desc: '普通长期记忆；开启“允许注入”后进入靠后的补充注入池。'
+  },
+  {
+    key: 'longterm-focus',
+    type: 'longterm',
+    isPermanent: true,
+    label: '重点长期',
+    icon: MEMORY_ICONS.pin,
+    desc: '长期记忆中的重点项；每次固定注入，注入位置最靠前。'
+  },
+  {
+    key: 'pending',
+    type: 'pending',
+    isPermanent: false,
+    label: '待确认',
+    icon: MEMORY_TYPE_META.pending.icon,
+    desc: '暂不进入自动注入，确认后再转为长期记忆。'
+  }
+];
+
+function getFormTypeKey(item = {}) {
+  if (item.type === 'pending') return 'pending';
+  if (item.type === 'longterm' && item.isPermanent) return 'longterm-focus';
+  return 'longterm';
+}
+
+export function renderTypeOptions(item = {}) {
+  const activeKey = getFormTypeKey(item);
+  return MEMORY_FORM_TYPE_OPTIONS.map((option) => `
+    <button class="memory-type-option ${option.key === activeKey ? 'is-active' : ''}" type="button" data-action="choose-memory-type" data-type="${escapeHtml(option.type)}" data-permanent="${option.isPermanent ? 'true' : 'false'}" data-desc="${escapeHtml(option.desc)}">
+      ${option.icon}
+      <span>${escapeHtml(option.label)}</span>
     </button>
   `).join('');
 }
@@ -67,6 +106,7 @@ function renderFormToggle({ field, active, label, hint }) {
    1. 新增/编辑闲谈记忆的弹窗已完成模块化，后续改表单只改本区。
    2. “发生时间”已改为应用内时间选择器，不允许手动输入，不使用浏览器原生选择器。
    3. 新增/编辑弹窗底部“取消”按钮已移除，关闭请使用右上角 IconPark 关闭按钮。
+   4. 本区已去除事件标题输入；“记忆类型 + 开关”已精简为类型按钮 + 单个“允许注入”开关。
    ========================================================================== */
 export function renderMemoryFormModal(state) {
   if (!state.modal || state.modal.kind !== 'form') return '';
@@ -86,10 +126,7 @@ export function renderMemoryFormModal(state) {
         <form class="memory-form" data-memory-form="1">
           <input type="hidden" name="id" value="${escapeHtml(item.id || '')}">
           <input type="hidden" name="type" value="${escapeHtml(type)}">
-          <label class="memory-form-field">
-            标题
-            <input name="title" type="text" value="${escapeHtml(item.title || '')}" placeholder="例如：那次关于考试的深聊">
-          </label>
+          <input type="hidden" name="isPermanent" value="${item.isPermanent ? 'true' : 'false'}">
           <label class="memory-form-field">
             记忆摘要
             <textarea name="summary" placeholder="建议写成 100~200 字精炼摘要，保留事件经过、关系变化和关键情绪。">${escapeHtml(item.summary || '')}</textarea>
@@ -111,28 +148,16 @@ export function renderMemoryFormModal(state) {
           <div class="memory-form-field">
             记忆类型
             <div class="memory-type-options">
-              ${renderTypeOptions(type)}
+              ${renderTypeOptions(item)}
             </div>
-            <span class="memory-form-help" data-type-desc>${escapeHtml(getMemoryTypeMeta(type).desc)}</span>
+            <span class="memory-form-help" data-type-desc>${escapeHtml(MEMORY_FORM_TYPE_OPTIONS.find((option) => option.key === getFormTypeKey(item))?.desc || getMemoryTypeMeta(type).desc)}</span>
           </div>
           <div class="memory-form-checks">
             ${renderFormToggle({
               field: 'injectionEnabled',
-              active: item.injectionEnabled !== false,
+              active: (type === 'longterm' && item.isPermanent) || (item.injectionEnabled !== false && type !== 'pending'),
               label: '允许注入',
-              hint: '只表示进入候选池；未标永久时权重较低。'
-            })}
-            ${renderFormToggle({
-              field: 'isPermanent',
-              active: Boolean(item.isPermanent),
-              label: '永久记忆',
-              hint: '单独开启后每次固定注入，不受“允许注入”开关限制。'
-            })}
-            ${renderFormToggle({
-              field: 'isHighPriority',
-              active: Boolean(item.isHighPriority),
-              label: '高优先级',
-              hint: '用于红线、闪光灯或强优先项统计。'
+              hint: '普通长期记忆开启后进入靠后候选池；重点长期会固定靠前注入。'
             })}
           </div>
           <div class="memory-form-modal__foot">
@@ -160,7 +185,7 @@ export function renderDeleteModal(state) {
         </div>
         <div class="memory-empty memory-delete-preview">
           <div class="memory-empty__icon">${MEMORY_ICONS.warning}</div>
-          <h3>${escapeHtml(state.modal.item?.title || '未命名记忆')}</h3>
+          <h3>${escapeHtml(state.modal.item?.summary || '这条记忆')}</h3>
           <p>删除后会从该角色的闲谈记忆库中移除。本操作不会改动档案应用，也不会写入其它存储。</p>
         </div>
         <div class="memory-form-modal__foot">
@@ -176,12 +201,29 @@ export function applyTypeChoice(button) {
   const form = button.closest('form');
   if (!form) return;
   const typeInput = form.querySelector('input[name="type"]');
-  if (typeInput) typeInput.value = button.dataset.type || 'longterm';
+  const permanentInput = form.querySelector('input[name="isPermanent"]');
+  const injectionInput = form.querySelector('input[name="injectionEnabled"]');
+  const injectionButton = form.querySelector('[data-action="form-toggle"][data-field="injectionEnabled"]');
+  const nextType = button.dataset.type || 'longterm';
+
+  if (typeInput) typeInput.value = nextType;
+  if (permanentInput) permanentInput.value = button.dataset.permanent === 'true' ? 'true' : 'false';
+  if (nextType === 'longterm' && button.dataset.permanent === 'true' && injectionInput && injectionButton) {
+    injectionInput.value = 'true';
+    injectionButton.classList.add('is-on');
+    injectionButton.setAttribute('aria-pressed', 'true');
+  }
+  if (nextType === 'pending' && injectionInput && injectionButton) {
+    injectionInput.value = 'false';
+    injectionButton.classList.remove('is-on');
+    injectionButton.setAttribute('aria-pressed', 'false');
+  }
+
   form.querySelectorAll('[data-action="choose-memory-type"]').forEach((item) => {
     item.classList.toggle('is-active', item === button);
   });
   const desc = form.querySelector('[data-type-desc]');
-  if (desc) desc.textContent = getMemoryTypeMeta(typeInput?.value).desc;
+  if (desc) desc.textContent = button.dataset.desc || getMemoryTypeMeta(typeInput?.value).desc;
 }
 
 export function applyFormToggle(button) {
@@ -189,6 +231,14 @@ export function applyFormToggle(button) {
   const field = button.dataset.field;
   const input = form?.querySelector(`input[name="${field}"]`);
   if (!input) return;
+  const permanentInput = form?.querySelector('input[name="isPermanent"]');
+  const typeInput = form?.querySelector('input[name="type"]');
+  if (field === 'injectionEnabled' && typeInput?.value === 'longterm' && permanentInput?.value === 'true') {
+    input.value = 'true';
+    button.classList.add('is-on');
+    button.setAttribute('aria-pressed', 'true');
+    return;
+  }
   const active = input.value !== 'true';
   input.value = active ? 'true' : 'false';
   button.classList.toggle('is-on', active);

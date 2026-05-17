@@ -88,7 +88,7 @@ export function getTimeRange(search = {}) {
 /* ==========================================================================
    [区域标注·已完成·旧事搜索过滤与面板精简区]
    说明：
-   1. 关键词仍搜索标题 / 摘要 / 情绪标签；时间搜索 timelineAt 字段。
+   1. 关键词已同步为搜索摘要 / 记忆类型 / 情绪标签；事件标题已从新增编辑与搜索口径中移除。
    2. 单个应用记忆页已删除“搜索闲谈记忆”标题和输入框说明文字，只保留简洁搜索栏。
    ========================================================================== */
 export function filterMemoryItems(items = [], search = {}) {
@@ -103,7 +103,6 @@ export function filterMemoryItems(items = [], search = {}) {
 
       if (!keyword) return true;
       const haystack = [
-        item.title,
         item.summary,
         getMemoryTypeMeta(item.type).label,
         ...(Array.isArray(item.emotionTags) ? item.emotionTags : [])

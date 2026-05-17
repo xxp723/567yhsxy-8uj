@@ -44,7 +44,7 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-top-actions-search-picker';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-editor-injection-slim';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
@@ -174,17 +174,17 @@ function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '
 
 /* ==========================================================================
    [区域标注·已完成·旧事统计展示区]
-   说明：闲谈记忆页统计文案统一为“总记忆数 / 已注入记忆数 / 永久记忆数 / 高优先级记忆数”，
-         四张统计卡片已去除图标，数字与文字由 memory.css 居中显示。
+   说明：闲谈记忆页统计文案已同步为“总记忆数 / 允许注入 / 重点长期 / 补充候选”，
+         对应本次“重点固定靠前注入、普通允许注入靠后”的精简口径。
    ========================================================================== */
 function renderStats(items) {
   const stats = getMemoryStats(items);
   return `
     <section class="memory-stats">
       ${renderStatCard('总记忆数', stats.total)}
-      ${renderStatCard('已注入记忆数', stats.injected)}
-      ${renderStatCard('永久记忆数', stats.permanent)}
-      ${renderStatCard('高优先级记忆数', stats.highPriority)}
+      ${renderStatCard('允许注入', stats.injected)}
+      ${renderStatCard('重点长期', stats.focusLongterm)}
+      ${renderStatCard('补充候选', stats.supplemental)}
     </section>
   `;
 }
@@ -627,13 +627,10 @@ export async function mount(container, context) {
       return;
     }
 
-    if (action === 'toggle-injection' || action === 'toggle-permanent') {
+    if (action === 'toggle-injection') {
       const item = getItemById(id);
       if (!item) return;
-      const patch = action === 'toggle-injection'
-        ? { injectionEnabled: !item.injectionEnabled }
-        : { isPermanent: !item.isPermanent };
-      await patchMemoryItem(state.db, state.selectedCharacterId, id, patch);
+      await patchMemoryItem(state.db, state.selectedCharacterId, id, { injectionEnabled: !item.injectionEnabled });
       await refreshRecordsOnly();
       renderApp(container, state);
       return;

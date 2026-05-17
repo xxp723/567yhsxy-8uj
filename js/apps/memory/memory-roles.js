@@ -16,7 +16,7 @@ import {
 
 /* ==========================================================================
    [区域标注·已完成·旧事角色列表统计区]
-   说明：角色卡只显示头像、角色名、总记忆数、已注入记忆数、永久记忆数、最近更新时间。
+   说明：角色卡只显示头像、角色名、总记忆数、允许注入数、重点长期数、最近更新时间。
    ========================================================================== */
 export function getCharacterMemoryItems(state, characterId) {
   const record = state.recordsByCharacterId?.[characterId];
@@ -51,8 +51,8 @@ export function renderCharacterList(state) {
           <span class="memory-character-card__name">${escapeHtml(character.name)}</span>
           <span class="memory-character-card__stats">
             <span>总记忆数 ${escapeHtml(stats.total)}</span>
-            <span>已注入记忆数 ${escapeHtml(stats.injected)}</span>
-            <span>永久记忆数 ${escapeHtml(stats.permanent)}</span>
+            <span>允许注入 ${escapeHtml(stats.injected)}</span>
+            <span>重点长期 ${escapeHtml(stats.focusLongterm)}</span>
           </span>
           <span class="memory-character-card__meta">最近更新：${escapeHtml(updatedAt ? formatDateTime(updatedAt) : '暂无')}</span>
         </span>
