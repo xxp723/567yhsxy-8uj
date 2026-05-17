@@ -44,16 +44,30 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-scroll-icon';
 
 /* ==========================================================================
-   [区域标注·已完成·旧事防闪屏样式加载区]
-   说明：挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
+   [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
+   说明：
+   1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
+   2. 本次为滚动与搜索图标修正加入 CSS 版本号；如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
   return new Promise((resolve) => {
     const existing = document.getElementById(MEMORY_CSS_ID);
     if (existing) {
+      if (existing.getAttribute('href') !== MEMORY_CSS_HREF) {
+        existing.dataset.loaded = '0';
+        const done = () => {
+          existing.dataset.loaded = '1';
+          resolve();
+        };
+        existing.addEventListener('load', done, { once: true });
+        existing.addEventListener('error', done, { once: true });
+        existing.href = MEMORY_CSS_HREF;
+        return;
+      }
+
       if (existing.dataset.loaded === '1' || existing.sheet) {
         resolve();
         return;

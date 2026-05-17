@@ -66,14 +66,16 @@
    ========================================================================== */
 .memory-layout {
   min-height: 0;
+  height: 100%;
   flex: 1;
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
 }
 
 .memory-layout--single {
-  align-content: start;
+  align-content: stretch;
 }
 
 .memory-home,
@@ -271,7 +273,7 @@
 .memory-library,
 .memory-chat-page {
   min-height: 0;
-  overflow: hidden;
+  height: 100%;
   display: grid;
   gap: 10px;
   padding: 0;
@@ -281,11 +283,29 @@
 }
 
 .memory-library {
+  overflow: hidden;
+}
+
+.memory-library {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .memory-chat-page {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  /* [区域标注·已完成·本次闲谈应用整页滑动修正区]
+     说明：之前只让记忆列表自身滚动，触摸起点落在搜索/统计区域时看起来像“整页不能滑动”。
+     本次改为闲谈应用页整体纵向滚动，保证从标题下方任意内容区域都能上下滑动。 */
+  grid-template-rows: auto auto auto auto auto;
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.memory-chat-page::-webkit-scrollbar {
+  display: none;
 }
 
 /* ==========================================================================
@@ -454,7 +474,26 @@ button.memory-chat-top-bar__title:active {
   color: var(--memory-primary);
 }
 
+/* [区域标注·已完成·本次搜索标题图标尺寸区]
+   说明：旧事“闲谈应用”搜索面板顶部“搜索闲谈记忆”的放大镜图标单独限尺寸，避免继承 SVG 默认大图。 */
+.memory-section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--memory-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.memory-search-panel > .memory-section-title > svg {
+  width: 12px !important;
+  height: 12px !important;
+  flex: 0 0 12px;
+  color: var(--memory-primary);
+}
+
 .memory-search-panel {
+  min-height: 0;
   margin: 0 16px;
   border: 0;
   border-radius: 16px;
@@ -475,11 +514,11 @@ button.memory-chat-top-bar__title:active {
 
 /* [区域标注·已完成·本次闲谈应用搜索图标尺寸区]
    说明：仅缩小旧事“闲谈应用”搜索栏图标，不影响其它 IconPark 图标按钮。 */
-.memory-search svg {
-  width: 14px;
-  height: 14px;
+.memory-search > svg {
+  width: 12px !important;
+  height: 12px !important;
   color: var(--memory-muted);
-  flex: 0 0 auto;
+  flex: 0 0 12px;
 }
 
 .memory-search input,
@@ -599,7 +638,7 @@ button.memory-chat-top-bar__title:active {
 
 .memory-items {
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 10px;
