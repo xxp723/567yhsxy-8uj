@@ -14,6 +14,7 @@ import {
   normalizeText,
   parseDateText,
   parseTagInput,
+  renderDateTimePickerButton,
   renderIconButton
 } from './memory-ui.js';
 
@@ -62,7 +63,10 @@ function renderFormToggle({ field, active, label, hint }) {
 
 /* ==========================================================================
    [区域标注·已完成·旧事应用内编辑弹窗区]
-   说明：新增/编辑闲谈记忆的弹窗已完成模块化，后续改表单只改本区。
+   说明：
+   1. 新增/编辑闲谈记忆的弹窗已完成模块化，后续改表单只改本区。
+   2. “发生时间”已改为应用内时间选择器，不允许手动输入，不使用浏览器原生选择器。
+   3. 新增/编辑弹窗底部“取消”按钮已移除，关闭请使用右上角 IconPark 关闭按钮。
    ========================================================================== */
 export function renderMemoryFormModal(state) {
   if (!state.modal || state.modal.kind !== 'form') return '';
@@ -70,6 +74,7 @@ export function renderMemoryFormModal(state) {
   const item = state.modal.item || {};
   const isEdit = Boolean(item.id);
   const type = item.type || 'longterm';
+  const timelineValue = normalizeText(state.modal.draftTimelineAt) || (item.timelineAt ? formatDateTime(item.timelineAt) : formatDateTime(Date.now()));
 
   return `
     <section class="memory-form-modal" role="dialog" aria-modal="true" aria-label="${isEdit ? '编辑记忆' : '新增记忆'}">
@@ -90,10 +95,15 @@ export function renderMemoryFormModal(state) {
             <textarea name="summary" placeholder="建议写成 100~200 字精炼摘要，保留事件经过、关系变化和关键情绪。">${escapeHtml(item.summary || '')}</textarea>
             <span class="memory-form-help">长期记忆建议 100~200 字；红线铁则可更短但要明确。</span>
           </label>
-          <label class="memory-form-field">
+          <div class="memory-form-field">
             发生时间
-            <input name="timelineAt" type="text" value="${escapeHtml(item.timelineAt ? formatDateTime(item.timelineAt) : formatDateTime(Date.now()))}" placeholder="YYYY-MM-DD HH:mm">
-          </label>
+            ${renderDateTimePickerButton({
+              field: 'timelineAt',
+              value: timelineValue,
+              label: '时间选择器',
+              includeTime: true
+            })}
+          </div>
           <label class="memory-form-field">
             情绪/关键词标签
             <input name="emotionTags" type="text" value="${escapeHtml((item.emotionTags || []).join('，'))}" placeholder="例如：焦虑，信任，承诺">
@@ -116,7 +126,7 @@ export function renderMemoryFormModal(state) {
               field: 'isPermanent',
               active: Boolean(item.isPermanent),
               label: '永久记忆',
-              hint: '永久记忆会每次固定注入。'
+              hint: '单独开启后每次固定注入，不受“允许注入”开关限制。'
             })}
             ${renderFormToggle({
               field: 'isHighPriority',
@@ -126,7 +136,6 @@ export function renderMemoryFormModal(state) {
             })}
           </div>
           <div class="memory-form-modal__foot">
-            <button class="memory-secondary-btn" type="button" data-action="close-modal">取消</button>
             <button class="memory-primary-btn" type="submit">${MEMORY_ICONS.save}<span>保存</span></button>
           </div>
         </form>

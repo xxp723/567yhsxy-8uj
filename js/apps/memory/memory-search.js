@@ -3,7 +3,7 @@
  * 用途: 旧事应用单角色页搜索功能。
  * 说明:
  * 1. 本文件只负责搜索栏渲染、搜索状态与结果过滤。
- * 2. 不使用浏览器原生日期选择器；自定义时间段使用普通文本输入 YYYY-MM-DD。
+ * 2. 不使用浏览器原生日期选择器；自定义时间段使用应用内时间选择器，不允许手动输入。
  */
 import {
   MEMORY_ICONS,
@@ -11,7 +11,8 @@ import {
   formatDateOnly,
   getMemoryTypeMeta,
   normalizeText,
-  parseDateText
+  parseDateText,
+  renderDateTimePickerButton
 } from './memory-ui.js';
 
 export const MEMORY_TIME_PRESETS = {
@@ -19,7 +20,7 @@ export const MEMORY_TIME_PRESETS = {
   today: { label: '今天', days: 1 },
   seven: { label: '最近7天', days: 7 },
   thirty: { label: '最近30天', days: 30 },
-  custom: { label: '自定义时间段', days: -1 }
+  custom: { label: '自定义', days: -1 }
 };
 
 /* ==========================================================================
@@ -136,14 +137,25 @@ export function renderSearchPanel(search = createDefaultSearchState()) {
         </div>
         ${safe.timePreset === 'custom' ? `
           <div class="memory-custom-range">
-            <label class="memory-date-filter">
+            <div class="memory-date-filter">
               <span>开始</span>
-              <input data-search-field="customStartDate" type="text" value="${escapeHtml(safe.customStartDate)}" placeholder="${escapeHtml(formatDateOnly(Date.now()))}">
-            </label>
-            <label class="memory-date-filter">
+              ${renderDateTimePickerButton({
+                field: 'customStartDate',
+                value: safe.customStartDate || formatDateOnly(Date.now()),
+                label: '时间选择器',
+                searchField: 'customStartDate'
+              })}
+            </div>
+            <div class="memory-date-filter">
               <span>结束</span>
-              <input data-search-field="customEndDate" type="text" value="${escapeHtml(safe.customEndDate)}" placeholder="${escapeHtml(formatDateOnly(Date.now()))}">
-            </label>
+              ${renderDateTimePickerButton({
+                field: 'customEndDate',
+                value: safe.customEndDate || formatDateOnly(Date.now()),
+                label: '时间选择器',
+                endOfDay: true,
+                searchField: 'customEndDate'
+              })}
+            </div>
           </div>
         ` : ''}
       </div>

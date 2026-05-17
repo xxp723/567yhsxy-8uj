@@ -69,6 +69,103 @@ export function formatDateOnly(timestamp) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·旧事应用内时间选择器工具区]
+   说明：
+   1. 旧事的发生时间与自定义时间筛选统一走应用内时间选择器，不使用浏览器原生日期/时间选择器。
+   2. 本区只负责日期时间格式、选项生成与按钮渲染，不读写 localStorage/sessionStorage，也不做持久化兜底。
+   ========================================================================== */
+export function getDateParts(value, { includeTime = false, endOfDay = false } = {}) {
+  const parsed = parseDateText(value, endOfDay);
+  const date = new Date(parsed || Date.now());
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return {
+    year: date.getFullYear(),
+    month: pad(date.getMonth() + 1),
+    day: pad(date.getDate()),
+    hour: pad(date.getHours()),
+    minute: pad(date.getMinutes()),
+    text: includeTime ? formatDateTime(date.getTime()) : formatDateOnly(date.getTime())
+  };
+}
+
+export function buildDateText(parts = {}, { includeTime = false, endOfDay = false } = {}) {
+  const now = getDateParts(Date.now(), { includeTime, endOfDay });
+  const year = Number(parts.year) || now.year;
+  const month = String(parts.month || now.month).padStart(2, '0');
+  const day = String(parts.day || now.day).padStart(2, '0');
+
+  if (!includeTime) return `${year}-${month}-${day}`;
+
+  const hour = String(parts.hour ?? (endOfDay ? '23' : now.hour)).padStart(2, '0');
+  const minute = String(parts.minute ?? (endOfDay ? '59' : now.minute)).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+export function renderDateTimePickerButton({
+  field,
+  value,
+  label = '时间选择器',
+  includeTime = false,
+  endOfDay = false,
+  searchField = ''
+} = {}) {
+  const safeValue = normalizeText(value) || buildDateText({}, { includeTime, endOfDay });
+  const display = includeTime ? formatDateTime(parseDateText(safeValue) || Date.now()) : safeValue;
+  return `
+    <button class="memory-date-picker-trigger" type="button" data-action="open-time-picker" data-picker-field="${escapeHtml(field)}" data-picker-include-time="${includeTime ? 'true' : 'false'}" data-picker-end-of-day="${endOfDay ? 'true' : 'false'}" ${searchField ? `data-picker-search-field="${escapeHtml(searchField)}"` : ''}>
+      ${MEMORY_ICONS.calendar}
+      <span>${escapeHtml(display)}</span>
+      <small>${escapeHtml(label)}</small>
+    </button>
+    <input type="hidden" name="${escapeHtml(field)}" ${searchField ? `data-search-field="${escapeHtml(searchField)}"` : ''} value="${escapeHtml(safeValue)}">
+  `;
+}
+
+export function renderTimePickerModal(picker) {
+  if (!picker) return '';
+
+  const parts = getDateParts(picker.value, {
+    includeTime: Boolean(picker.includeTime),
+    endOfDay: Boolean(picker.endOfDay)
+  });
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 11 }, (_, index) => currentYear - 5 + index);
+  const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
+  const days = Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, '0'));
+  const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
+  const minutes = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0'));
+  const renderOptions = (name, values, active) => `
+    <div class="memory-time-picker__column" data-picker-part="${escapeHtml(name)}">
+      ${values.map((item) => `
+        <button class="memory-time-picker__option ${String(item) === String(active) ? 'is-active' : ''}" type="button" data-action="set-time-picker-part" data-picker-part="${escapeHtml(name)}" data-picker-value="${escapeHtml(item)}">${escapeHtml(item)}</button>
+      `).join('')}
+    </div>
+  `;
+
+  return `
+    <section class="memory-form-modal memory-time-picker-modal" role="dialog" aria-modal="true" aria-label="时间选择器">
+      <div class="memory-form-modal__panel memory-form-modal__panel--compact">
+        <div class="memory-form-modal__head">
+          <h3>时间选择器</h3>
+          ${renderIconButton({ action: 'close-time-picker', icon: MEMORY_ICONS.close, label: '关闭时间选择器' })}
+        </div>
+        <div class="memory-time-picker">
+          ${renderOptions('year', years, parts.year)}
+          ${renderOptions('month', months, parts.month)}
+          ${renderOptions('day', days, parts.day)}
+          ${picker.includeTime ? renderOptions('hour', hours, parts.hour) : ''}
+          ${picker.includeTime ? renderOptions('minute', minutes, parts.minute) : ''}
+        </div>
+        <div class="memory-form-modal__foot">
+          <button class="memory-primary-btn" type="button" data-action="apply-time-picker">${MEMORY_ICONS.save}<span>确定</span></button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 export function parseDateText(value, endOfDay = false) {
   const text = normalizeText(value);
   if (!text) return 0;
@@ -139,10 +236,10 @@ export function renderSwitchButton({ action, id, active, label, extraAttrs = '' 
   `;
 }
 
-export function renderStatCard(label, value, icon) {
+export function renderStatCard(label, value, icon = '') {
   return `
     <article class="memory-stat-card">
-      <span class="memory-stat-card__icon">${icon}</span>
+      ${icon ? `<span class="memory-stat-card__icon">${icon}</span>` : ''}
       <span class="memory-stat-card__value">${escapeHtml(value)}</span>
       <span class="memory-stat-card__label">${escapeHtml(label)}</span>
     </article>

@@ -31,17 +31,20 @@ import {
 import { renderTimeline } from './memory-timeline.js';
 import {
   MEMORY_ICONS,
+  buildDateText,
   createToast,
+  getDateParts,
   escapeHtml,
   formatDateTime,
   renderAvatar,
   renderEmptyState,
   renderIconButton,
-  renderStatCard
+  renderStatCard,
+  renderTimePickerModal
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-chat-compact';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-picker-stats-back';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
@@ -147,7 +150,7 @@ function getRoleCardMemoryCount(state, characterId) {
    [区域标注·已完成·本次旧事标题栏返回与标题按钮区]
    说明：
    1. 旧事应用从窗口顶部接管，标题栏位置与闲谈 chat 页面一致。
-   2. 子页面左侧“>”返回按钮仅保留透明图标按钮样式；具体视觉见 memory.css。
+   2. 子页面左侧返回按钮已由“>”改为 IconPark 风格“<”图标，透明按钮视觉见 memory.css。
    3. 首页、“xxx的记忆库”和“闲谈应用”页标题均可按需作为按钮，点击后返回小手机桌面。
    4. 本区只负责 UI 渲染与 data-action 标记，不涉及任何持久化读写。
    ========================================================================== */
@@ -159,7 +162,7 @@ function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '
   return `
     <header class="memory-chat-top-bar">
       ${backAction
-        ? `<button class="memory-top-back" type="button" data-action="${escapeHtml(backAction)}" aria-label="返回上一级">></button>`
+        ? `<button class="memory-top-back" type="button" data-action="${escapeHtml(backAction)}" aria-label="返回上一级">${MEMORY_ICONS.back}</button>`
         : ''}
       <div class="memory-chat-top-bar__title-wrap">
         ${titleNode}
@@ -170,16 +173,17 @@ function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '
 
 /* ==========================================================================
    [区域标注·已完成·旧事统计展示区]
-   说明：闲谈记忆页统计文案统一为“总记忆数 / 已注入记忆数 / 永久记忆数 / 高优先级记忆数”。
+   说明：闲谈记忆页统计文案统一为“总记忆数 / 已注入记忆数 / 永久记忆数 / 高优先级记忆数”，
+         四张统计卡片已去除图标，数字与文字由 memory.css 居中显示。
    ========================================================================== */
 function renderStats(items) {
   const stats = getMemoryStats(items);
   return `
     <section class="memory-stats">
-      ${renderStatCard('总记忆数', stats.total, MEMORY_ICONS.memory)}
-      ${renderStatCard('已注入记忆数', stats.injected, MEMORY_ICONS.link)}
-      ${renderStatCard('永久记忆数', stats.permanent, MEMORY_ICONS.pin)}
-      ${renderStatCard('高优先级记忆数', stats.highPriority, MEMORY_ICONS.spark)}
+      ${renderStatCard('总记忆数', stats.total)}
+      ${renderStatCard('已注入记忆数', stats.injected)}
+      ${renderStatCard('永久记忆数', stats.permanent)}
+      ${renderStatCard('高优先级记忆数', stats.highPriority)}
     </section>
   `;
 }
@@ -270,7 +274,7 @@ function renderIdentityHome(state) {
    [区域标注·已完成·本次角色记忆库页面区]
    说明：
    1. 标题为“xxx的记忆库”，点击标题可返回小手机桌面。
-   2. 左侧为透明无圆形背景的“>”返回按钮；应用卡片一行两列，目前只提供闲谈应用入口。
+   2. 左侧为透明无圆形背景的“<”返回按钮；应用卡片一行两列，目前只提供闲谈应用入口。
    ========================================================================== */
 function renderRoleLibrary(state) {
   const character = getSelectedCharacter(state);
@@ -302,7 +306,7 @@ function renderRoleLibrary(state) {
    [区域标注·已完成·本次单个应用记忆页精简结构区]
    说明：
    1. 标题显示当前进入的应用名“闲谈应用”，点击标题可返回小手机桌面。
-   2. 标题左侧透明“>”按钮返回角色记忆库。
+   2. 标题左侧透明“<”按钮返回角色记忆库。
    3. 已删除标题下方“闲谈应用 / 更新于……”元信息行，只保留下方搜索栏、统计卡片与时间线。
    4. 顶部搜索栏、统计卡片和时间筛选的舒适紧凑布局由 memory.css 对应区域控制。
    ========================================================================== */
@@ -355,6 +359,7 @@ function renderApp(root, state) {
     </div>
     ${renderMemoryFormModal(state)}
     ${renderDeleteModal(state)}
+    ${renderTimePickerModal(state.timePicker)}
   `;
 }
 
@@ -378,6 +383,7 @@ export async function mount(container, context) {
     stage: 'home',
     search: createDefaultSearchState(),
     modal: null,
+    timePicker: null,
     loading: true
   };
 
@@ -497,14 +503,72 @@ export async function mount(container, context) {
       return;
     }
 
+    if (action === 'open-time-picker') {
+      const field = actionEl.dataset.pickerField || '';
+      const input = actionEl.parentElement?.querySelector(`input[name="${field}"]`);
+      const includeTime = actionEl.dataset.pickerIncludeTime === 'true';
+      const endOfDay = actionEl.dataset.pickerEndOfDay === 'true';
+      const value = input?.value || '';
+      state.timePicker = {
+        field,
+        searchField: actionEl.dataset.pickerSearchField || '',
+        includeTime,
+        endOfDay,
+        value,
+        parts: getDateParts(value, { includeTime, endOfDay })
+      };
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'close-time-picker') {
+      state.timePicker = null;
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'set-time-picker-part') {
+      if (!state.timePicker) return;
+      state.timePicker.parts = {
+        ...getDateParts(state.timePicker.value, {
+          includeTime: state.timePicker.includeTime,
+          endOfDay: state.timePicker.endOfDay
+        }),
+        ...(state.timePicker.parts || {}),
+        [actionEl.dataset.pickerPart || '']: actionEl.dataset.pickerValue || ''
+      };
+      state.timePicker.value = buildDateText(state.timePicker.parts, {
+        includeTime: state.timePicker.includeTime,
+        endOfDay: state.timePicker.endOfDay
+      });
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'apply-time-picker') {
+      if (!state.timePicker) return;
+      const value = state.timePicker.value || buildDateText(state.timePicker.parts || {}, {
+        includeTime: state.timePicker.includeTime,
+        endOfDay: state.timePicker.endOfDay
+      });
+      if (state.timePicker.searchField) {
+        patchSearchState(state, { [state.timePicker.searchField]: value });
+      } else if (state.modal?.kind === 'form' && state.timePicker.field === 'timelineAt') {
+        state.modal.draftTimelineAt = value;
+      }
+      state.timePicker = null;
+      renderApp(container, state);
+      return;
+    }
+
     if (action === 'open-add') {
-      state.modal = { kind: 'form', item: null };
+      state.modal = { kind: 'form', item: null, draftTimelineAt: formatDateTime(Date.now()) };
       renderApp(container, state);
       return;
     }
 
     if (action === 'open-edit') {
-      state.modal = { kind: 'form', item: getItemById(id) };
+      state.modal = { kind: 'form', item: getItemById(id), draftTimelineAt: '' };
       renderApp(container, state);
       return;
     }
