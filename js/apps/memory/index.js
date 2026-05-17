@@ -133,11 +133,12 @@ function getRoleCardMemoryCount(state, characterId) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事Chat页面标题栏区]
+   [区域标注·已完成·本次旧事标题栏返回与标题按钮区]
    说明：
    1. 旧事应用从窗口顶部接管，标题栏位置与闲谈 chat 页面一致。
-   2. 标题使用同款居中布局；子页面左侧显示“>”返回按钮，图案由本文件自绘文本按钮承载。
-   3. 本区只负责 UI 渲染，不涉及任何持久化读写。
+   2. 子页面左侧“>”返回按钮仅保留透明图标按钮样式；具体视觉见 memory.css。
+   3. 首页、“xxx的记忆库”和“闲谈应用”页标题均可按需作为按钮，点击后返回小手机桌面。
+   4. 本区只负责 UI 渲染与 data-action 标记，不涉及任何持久化读写。
    ========================================================================== */
 function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '' } = {}) {
   const titleNode = titleAction
@@ -255,8 +256,10 @@ function renderIdentityHome(state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·角色记忆库页面区]
-   说明：标题为“xxx的记忆库”，左侧为“>”返回按钮；应用卡片一行两列，目前只提供闲谈应用入口。
+   [区域标注·已完成·本次角色记忆库页面区]
+   说明：
+   1. 标题为“xxx的记忆库”，点击标题可返回小手机桌面。
+   2. 左侧为透明无圆形背景的“>”返回按钮；应用卡片一行两列，目前只提供闲谈应用入口。
    ========================================================================== */
 function renderRoleLibrary(state) {
   const character = getSelectedCharacter(state);
@@ -267,7 +270,7 @@ function renderRoleLibrary(state) {
 
   return `
     <section class="memory-library">
-      ${renderMemoryTopBar({ title: `${character.name}的记忆库`, backAction: 'back-to-home' })}
+      ${renderMemoryTopBar({ title: `${character.name}的记忆库`, backAction: 'back-to-home', titleAction: 'close-memory' })}
       <section class="memory-library-grid">
         <button class="memory-app-card is-chat" type="button" data-action="open-chat-memory" data-id="${escapeHtml(character.id)}">
           <div class="memory-app-card__icon">${MEMORY_ICONS.chat}</div>
@@ -285,8 +288,11 @@ function renderRoleLibrary(state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·角色闲谈记忆页面区]
-   说明：标题左侧“>”返回角色记忆库，顶部搜索栏，命中后只显示对应卡片；下方时间线按时间顺序并用竖线串联。
+   [区域标注·已完成·本次角色闲谈记忆页面区]
+   说明：
+   1. 标题显示当前进入的应用名“闲谈应用”，点击标题可返回小手机桌面。
+   2. 标题左侧透明“>”按钮返回角色记忆库。
+   3. 顶部搜索栏图标尺寸与滚动布局由 memory.css 本次区域控制；下方时间线按时间顺序并用竖线串联。
    ========================================================================== */
 function renderChatMemory(state) {
   const character = getSelectedCharacter(state);
@@ -300,7 +306,7 @@ function renderChatMemory(state) {
 
   return `
     <section class="memory-chat-page">
-      ${renderMemoryTopBar({ title: `${character.name}的记忆库`, backAction: 'back-to-library' })}
+      ${renderMemoryTopBar({ title: '闲谈应用', backAction: 'back-to-library', titleAction: 'close-memory' })}
       <section class="memory-chat-page__meta">
         <span>${MEMORY_ICONS.chat} 闲谈应用</span>
         <span>更新于 ${escapeHtml(formatDateTime(record?.updatedAt || Date.now()))}</span>

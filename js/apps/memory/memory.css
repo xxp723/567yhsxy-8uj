@@ -262,19 +262,30 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·角色记忆库页标题与应用卡片区]
-   说明：标题“xxx的记忆库”，左侧“>”返回；应用入口按一行两卡排列（当前仅闲谈可点）。
+   [区域标注·已完成·本次角色记忆库/应用页滚动布局区]
+   说明：
+   1. “xxx的记忆库”页标题可点击返回桌面，左侧“>”返回按钮为透明无圆形背景样式。
+   2. “闲谈应用”页使用 5 行受控网格：标题栏 / 元信息 / 搜索 / 统计 / 记忆列表。
+   3. 记忆列表行使用 minmax(0, 1fr)，确保进入单个应用页后可以上下滑动，不让隐式行撑破容器。
    ========================================================================== */
 .memory-library,
 .memory-chat-page {
   min-height: 0;
+  overflow: hidden;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
   gap: 10px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: var(--memory-bg);
+}
+
+.memory-library {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.memory-chat-page {
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 
 /* ==========================================================================
@@ -331,6 +342,8 @@ button.memory-chat-top-bar__title:active {
   transform: scale(0.98);
 }
 
+/* [区域标注·已完成·本次透明返回按钮区]
+   说明：旧事子页面标题栏左侧“>”按钮已去除圆形背景，仅保留透明图标按钮与可点击区域。 */
 .memory-top-back {
   position: absolute;
   left: 16px;
@@ -339,8 +352,8 @@ button.memory-chat-top-bar__title:active {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--memory-text) 8%, transparent);
+  border-radius: 0;
+  background: transparent;
   color: var(--memory-text);
   display: inline-flex;
   align-items: center;
@@ -353,15 +366,25 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-top-back:active {
-  background: color-mix(in srgb, var(--memory-text) 18%, transparent);
+  background: transparent;
+  opacity: 0.66;
   transform: translateY(-50%) scale(0.92);
 }
 
 .memory-library-grid {
+  min-height: 0;
+  overflow: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 12px;
   padding: 14px 16px 24px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.memory-library-grid::-webkit-scrollbar {
+  display: none;
 }
 
 .memory-app-card {
@@ -450,9 +473,11 @@ button.memory-chat-top-bar__title:active {
   border-bottom: 1px solid var(--memory-border);
 }
 
+/* [区域标注·已完成·本次闲谈应用搜索图标尺寸区]
+   说明：仅缩小旧事“闲谈应用”搜索栏图标，不影响其它 IconPark 图标按钮。 */
 .memory-search svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   color: var(--memory-muted);
   flex: 0 0 auto;
 }
