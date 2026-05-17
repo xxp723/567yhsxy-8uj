@@ -20,10 +20,7 @@ import {
   renderMemoryFormModal
 } from './memory-editor.js';
 import { getMemoryStats } from './memory-injection.js';
-import {
-  getSelectedItems,
-  getSelectedRecord
-} from './memory-roles.js';
+import { getSelectedItems } from './memory-roles.js';
 import {
   createDefaultSearchState,
   filterMemoryItems,
@@ -44,13 +41,13 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-scroll-icon';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-chat-compact';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为滚动与搜索图标修正加入 CSS 版本号；如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
+   2. 本次为单个应用记忆页精简布局加入 CSS 版本号；如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
   return new Promise((resolve) => {
@@ -302,11 +299,12 @@ function renderRoleLibrary(state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次角色闲谈记忆页面区]
+   [区域标注·已完成·本次单个应用记忆页精简结构区]
    说明：
    1. 标题显示当前进入的应用名“闲谈应用”，点击标题可返回小手机桌面。
    2. 标题左侧透明“>”按钮返回角色记忆库。
-   3. 顶部搜索栏图标尺寸与滚动布局由 memory.css 本次区域控制；下方时间线按时间顺序并用竖线串联。
+   3. 已删除标题下方“闲谈应用 / 更新于……”元信息行，只保留下方搜索栏、统计卡片与时间线。
+   4. 顶部搜索栏、统计卡片和时间筛选的舒适紧凑布局由 memory.css 对应区域控制。
    ========================================================================== */
 function renderChatMemory(state) {
   const character = getSelectedCharacter(state);
@@ -314,17 +312,12 @@ function renderChatMemory(state) {
     return renderEmptyState('角色不存在', '请选择有效角色后再查看闲谈记忆。', MEMORY_ICONS.warning);
   }
 
-  const record = getSelectedRecord(state);
   const items = getSelectedItems(state);
   const filteredItems = filterMemoryItems(items, state.search);
 
   return `
     <section class="memory-chat-page">
       ${renderMemoryTopBar({ title: '闲谈应用', backAction: 'back-to-library', titleAction: 'close-memory' })}
-      <section class="memory-chat-page__meta">
-        <span>${MEMORY_ICONS.chat} 闲谈应用</span>
-        <span>更新于 ${escapeHtml(formatDateTime(record?.updatedAt || Date.now()))}</span>
-      </section>
       ${renderSearchPanel(state.search)}
       ${renderStats(items)}
       <section class="memory-items">

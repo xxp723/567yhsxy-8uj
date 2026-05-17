@@ -264,11 +264,11 @@
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次角色记忆库/应用页滚动布局区]
+   [区域标注·已完成·本次单个应用记忆页精简布局区]
    说明：
    1. “xxx的记忆库”页标题可点击返回桌面，左侧“>”返回按钮为透明无圆形背景样式。
-   2. “闲谈应用”页使用 5 行受控网格：标题栏 / 元信息 / 搜索 / 统计 / 记忆列表。
-   3. 记忆列表行使用 minmax(0, 1fr)，确保进入单个应用页后可以上下滑动，不让隐式行撑破容器。
+   2. “闲谈应用”页已删除标题下方元信息行，页面结构为：标题栏 / 搜索 / 统计 / 记忆列表。
+   3. 搜索、时间筛选与统计卡片已改为紧凑尺寸，避免遮挡“自定义时间段”等文字。
    ========================================================================== */
 .memory-library,
 .memory-chat-page {
@@ -291,10 +291,10 @@
 }
 
 .memory-chat-page {
-  /* [区域标注·已完成·本次闲谈应用整页滑动修正区]
-     说明：之前只让记忆列表自身滚动，触摸起点落在搜索/统计区域时看起来像“整页不能滑动”。
-     本次改为闲谈应用页整体纵向滚动，保证从标题下方任意内容区域都能上下滑动。 */
-  grid-template-rows: auto auto auto auto auto;
+  /* [区域标注·已完成·本次单个应用记忆页整页滑动与精简行区]
+     说明：已删除“闲谈应用 / 更新于……”元信息行，并保持整页纵向滚动，
+     保证从标题下方任意内容区域都能上下滑动，同时减少顶部占用空间。 */
+  grid-template-rows: auto auto auto auto;
   align-content: start;
   overflow-x: hidden;
   overflow-y: auto;
@@ -448,68 +448,30 @@ button.memory-chat-top-bar__title:active {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·角色闲谈记忆页搜索与统计区]
-   说明：顶部搜索命中后仅展示匹配项；输入框使用极简下划线风格，无原生选择器。
+   [区域标注·已完成·本次单个应用记忆页搜索与统计紧凑区]
+   说明：
+   1. 已移除“搜索闲谈记忆”标题行和搜索输入框说明文字，只保留简洁搜索栏。
+   2. 搜索面板、时间筛选、统计卡片均缩小间距和字号，提升单页布局舒适度。
+   3. 本区只作用于旧事单个应用记忆页，不涉及持久化、不使用原生弹窗或原生选择器。
    ========================================================================== */
-.memory-chat-page__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  color: var(--memory-muted);
-  font-size: 12px;
-  padding: 0 16px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--memory-border) 10%, transparent);
-}
-
-.memory-chat-page__meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.memory-chat-page__meta svg {
-  width: 16px;
-  height: 16px;
-  color: var(--memory-primary);
-}
-
-/* [区域标注·已完成·本次搜索标题图标尺寸区]
-   说明：旧事“闲谈应用”搜索面板顶部“搜索闲谈记忆”的放大镜图标单独限尺寸，避免继承 SVG 默认大图。 */
-.memory-section-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--memory-muted);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.memory-search-panel > .memory-section-title > svg {
-  width: 12px !important;
-  height: 12px !important;
-  flex: 0 0 12px;
-  color: var(--memory-primary);
-}
-
 .memory-search-panel {
   min-height: 0;
   margin: 0 16px;
   border: 0;
-  border-radius: 16px;
-  padding: 10px 12px;
+  border-radius: 14px;
+  padding: 8px 10px;
   display: grid;
-  gap: 10px;
-  background: color-mix(in srgb, var(--memory-text) 6%, transparent);
+  gap: 8px;
+  background: color-mix(in srgb, var(--memory-text) 5%, transparent);
 }
 
 .memory-search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 38px;
+  gap: 7px;
+  min-height: 32px;
   padding: 0 2px;
-  border-bottom: 1px solid var(--memory-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--memory-border) 72%, transparent);
 }
 
 /* [区域标注·已完成·本次闲谈应用搜索图标尺寸区]
@@ -536,38 +498,38 @@ button.memory-chat-top-bar__title:active {
 
 .memory-time-search {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .memory-time-search__head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   color: var(--memory-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .memory-time-search__head svg {
-  width: 17px;
-  height: 17px;
+  width: 13px;
+  height: 13px;
   color: var(--memory-primary);
 }
 
 .memory-filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 5px;
 }
 
 .memory-filter-chip {
   border: 1px solid var(--memory-border);
-  min-height: 30px;
-  padding: 0 10px;
+  min-height: 24px;
+  padding: 0 7px;
   border-radius: 999px;
   background: var(--memory-bg);
   color: var(--memory-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -581,23 +543,27 @@ button.memory-chat-top-bar__title:active {
 .memory-custom-range {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .memory-date-filter {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
+  gap: 6px;
+  min-height: 30px;
   padding: 0 2px;
-  border-bottom: 1px solid var(--memory-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--memory-border) 72%, transparent);
 }
 
 .memory-date-filter span {
   color: var(--memory-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   flex: 0 0 auto;
+}
+
+.memory-date-filter input {
+  font-size: 11px;
 }
 
 /* ==========================================================================
@@ -607,14 +573,16 @@ button.memory-chat-top-bar__title:active {
 .memory-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
   padding: 0 16px;
 }
 
 .memory-stat-card {
-  padding: 10px;
+  min-height: 58px;
+  padding: 7px 8px;
   display: grid;
-  gap: 4px;
+  gap: 2px;
+  align-content: center;
 }
 
 .memory-stat-card__icon {
@@ -622,17 +590,19 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-stat-card__icon svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 .memory-stat-card__value {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 900;
+  line-height: 1.1;
 }
 
 .memory-stat-card__label {
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1.2;
   color: var(--memory-muted);
 }
 
@@ -1167,9 +1137,12 @@ button.memory-chat-top-bar__title:active {
 
 @media (max-width: 430px) {
   .memory-type-options,
-  .memory-custom-range,
-  .memory-stats {
+  .memory-custom-range {
     grid-template-columns: 1fr;
+  }
+
+  .memory-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .memory-role-cards,

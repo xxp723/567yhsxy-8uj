@@ -85,8 +85,10 @@ export function getTimeRange(search = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事关键词与时间过滤区]
-   说明：关键词搜索标题 / 摘要 / 情绪标签；时间搜索 timelineAt 字段。
+   [区域标注·已完成·旧事搜索过滤与面板精简区]
+   说明：
+   1. 关键词仍搜索标题 / 摘要 / 情绪标签；时间搜索 timelineAt 字段。
+   2. 单个应用记忆页已删除“搜索闲谈记忆”标题和输入框说明文字，只保留简洁搜索栏。
    ========================================================================== */
 export function filterMemoryItems(items = [], search = {}) {
   const keyword = normalizeText(search.keyword).toLowerCase();
@@ -120,13 +122,9 @@ export function renderSearchPanel(search = createDefaultSearchState()) {
 
   return `
     <section class="memory-search-panel">
-      <div class="memory-section-title">
-        ${MEMORY_ICONS.search}
-        <span>搜索闲谈记忆</span>
-      </div>
       <label class="memory-search">
         ${MEMORY_ICONS.search}
-        <input data-search-field="keyword" type="text" value="${escapeHtml(safe.keyword)}" placeholder="关键词搜索标题、摘要、标签">
+        <input data-search-field="keyword" type="text" value="${escapeHtml(safe.keyword)}" placeholder="">
       </label>
       <div class="memory-time-search">
         <div class="memory-time-search__head">
