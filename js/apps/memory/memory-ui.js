@@ -106,7 +106,7 @@ export function buildDateText(parts = {}, { includeTime = false, endOfDay = fals
 export function renderDateTimePickerButton({
   field,
   value,
-  label = '时间选择器',
+  label = '打开时间选择器',
   includeTime = false,
   endOfDay = false,
   searchField = ''
@@ -114,10 +114,9 @@ export function renderDateTimePickerButton({
   const safeValue = normalizeText(value) || buildDateText({}, { includeTime, endOfDay });
   const display = includeTime ? formatDateTime(parseDateText(safeValue) || Date.now()) : safeValue;
   return `
-    <button class="memory-date-picker-trigger" type="button" data-action="open-time-picker" data-picker-field="${escapeHtml(field)}" data-picker-include-time="${includeTime ? 'true' : 'false'}" data-picker-end-of-day="${endOfDay ? 'true' : 'false'}" ${searchField ? `data-picker-search-field="${escapeHtml(searchField)}"` : ''}>
+    <button class="memory-date-picker-trigger" type="button" data-action="open-time-picker" data-picker-field="${escapeHtml(field)}" data-picker-include-time="${includeTime ? 'true' : 'false'}" data-picker-end-of-day="${endOfDay ? 'true' : 'false'}" ${searchField ? `data-picker-search-field="${escapeHtml(searchField)}"` : ''} aria-label="${escapeHtml(label)}">
       ${MEMORY_ICONS.calendar}
       <span>${escapeHtml(display)}</span>
-      <small>${escapeHtml(label)}</small>
     </button>
     <input type="hidden" name="${escapeHtml(field)}" ${searchField ? `data-search-field="${escapeHtml(searchField)}"` : ''} value="${escapeHtml(safeValue)}">
   `;

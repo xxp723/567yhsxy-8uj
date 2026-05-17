@@ -44,7 +44,7 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-picker-stats-back';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-top-actions-search-picker';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
@@ -154,7 +154,7 @@ function getRoleCardMemoryCount(state, characterId) {
    3. 首页、“xxx的记忆库”和“闲谈应用”页标题均可按需作为按钮，点击后返回小手机桌面。
    4. 本区只负责 UI 渲染与 data-action 标记，不涉及任何持久化读写。
    ========================================================================== */
-function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '' } = {}) {
+function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '', rightActions = '' } = {}) {
   const titleNode = titleAction
     ? `<button class="memory-chat-top-bar__title" type="button" data-action="${escapeHtml(titleAction)}" aria-label="返回小手机桌面">${escapeHtml(title)}</button>`
     : `<div class="memory-chat-top-bar__title">${escapeHtml(title)}</div>`;
@@ -167,6 +167,7 @@ function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '
       <div class="memory-chat-top-bar__title-wrap">
         ${titleNode}
       </div>
+      ${rightActions ? `<div class="memory-chat-top-bar__actions">${rightActions}</div>` : ''}
     </header>
   `;
 }
@@ -303,12 +304,13 @@ function renderRoleLibrary(state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次单个应用记忆页精简结构区]
+   [区域标注·已完成·本次单个应用记忆页标题栏操作区]
    说明：
    1. 标题显示当前进入的应用名“闲谈应用”，点击标题可返回小手机桌面。
    2. 标题左侧透明“<”按钮返回角色记忆库。
-   3. 已删除标题下方“闲谈应用 / 更新于……”元信息行，只保留下方搜索栏、统计卡片与时间线。
-   4. 顶部搜索栏、统计卡片和时间筛选的舒适紧凑布局由 memory.css 对应区域控制。
+   3. 新建记忆入口已从右下角迁移到标题栏最右侧“+”IconPark 图标按钮。
+   4. “+”左侧已加入放大镜 IconPark 图标按钮，用于展开/收起记忆搜索栏。
+   5. 本区只负责 UI 入口与 data-action 标记，不涉及持久化读写。
    ========================================================================== */
 function renderChatMemory(state) {
   const character = getSelectedCharacter(state);
@@ -318,18 +320,38 @@ function renderChatMemory(state) {
 
   const items = getSelectedItems(state);
   const filteredItems = filterMemoryItems(items, state.search);
+  const searchExpanded = Boolean(state.searchExpanded);
+
+  /* [区域标注·已完成·旧事记忆库标题栏操作按钮渲染区]
+     说明：放大镜按钮在“+”左侧；“+”按钮复用原 open-add 应用内弹窗逻辑，右下角新增按钮已移除。 */
+  const topBarActions = `
+    ${renderIconButton({
+      action: 'toggle-search',
+      icon: MEMORY_ICONS.search,
+      label: searchExpanded ? '收起搜索栏' : '展开搜索栏',
+      extraClass: `memory-top-action ${searchExpanded ? 'is-active' : ''}`
+    })}
+    ${renderIconButton({
+      action: 'open-add',
+      icon: MEMORY_ICONS.add,
+      label: '新建记忆',
+      extraClass: 'memory-top-action'
+    })}
+  `;
 
   return `
-    <section class="memory-chat-page">
-      ${renderMemoryTopBar({ title: '闲谈应用', backAction: 'back-to-library', titleAction: 'close-memory' })}
-      ${renderSearchPanel(state.search)}
+    <section class="memory-chat-page ${searchExpanded ? 'is-search-open' : ''}">
+      ${renderMemoryTopBar({
+        title: '闲谈应用',
+        backAction: 'back-to-library',
+        titleAction: 'close-memory',
+        rightActions: topBarActions
+      })}
+      ${searchExpanded ? renderSearchPanel(state.search) : ''}
       ${renderStats(items)}
       <section class="memory-items">
         ${renderTimeline(filteredItems)}
       </section>
-      <button class="memory-primary-btn memory-floating-add" type="button" data-action="open-add">
-        ${MEMORY_ICONS.add}<span>新增记忆</span>
-      </button>
     </section>
   `;
 }
@@ -382,6 +404,7 @@ export async function mount(container, context) {
     selectedCharacterId: '',
     stage: 'home',
     search: createDefaultSearchState(),
+    searchExpanded: false,
     modal: null,
     timePicker: null,
     loading: true
@@ -466,6 +489,7 @@ export async function mount(container, context) {
       state.selectedCharacterId = id || '';
       state.stage = 'role-library';
       resetSearchState(state);
+      state.searchExpanded = false;
       state.modal = null;
       renderApp(container, state);
       return;
@@ -475,6 +499,7 @@ export async function mount(container, context) {
       state.selectedCharacterId = id || state.selectedCharacterId;
       state.stage = 'chat-memory';
       resetSearchState(state);
+      state.searchExpanded = false;
       state.modal = null;
       renderApp(container, state);
       return;
@@ -484,6 +509,7 @@ export async function mount(container, context) {
       state.stage = 'home';
       state.selectedCharacterId = '';
       resetSearchState(state);
+      state.searchExpanded = false;
       state.modal = null;
       renderApp(container, state);
       return;
@@ -492,13 +518,21 @@ export async function mount(container, context) {
     if (action === 'back-to-library') {
       state.stage = 'role-library';
       resetSearchState(state);
+      state.searchExpanded = false;
       state.modal = null;
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'toggle-search') {
+      state.searchExpanded = !state.searchExpanded;
       renderApp(container, state);
       return;
     }
 
     if (action === 'set-time-preset') {
       patchSearchState(state, { timePreset: actionEl.dataset.preset || 'all' });
+      state.searchExpanded = true;
       renderApp(container, state);
       return;
     }

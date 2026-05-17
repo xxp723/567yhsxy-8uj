@@ -362,6 +362,41 @@ button.memory-chat-top-bar__title:active {
   transform: scale(0.98);
 }
 
+/* [区域标注·已完成·旧事单个应用记忆页标题栏操作按钮区]
+   说明：放大镜搜索按钮位于“+”左侧，“+”新建记忆按钮位于标题栏最右侧；
+   二者均使用 memory-ui.js 中 IconPark 风格 SVG，不再使用右下角悬浮“新增记忆”入口。 */
+.memory-chat-top-bar__actions {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateY(-50%);
+}
+
+.memory-top-action {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--memory-text);
+}
+
+.memory-top-action svg {
+  width: 17px;
+  height: 17px;
+}
+
+.memory-top-action.is-active,
+.memory-top-action:active {
+  background: transparent;
+  color: var(--memory-primary);
+  opacity: 0.78;
+}
+
 /* [区域标注·已完成·本次透明返回按钮区]
    说明：旧事子页面标题栏左侧“<”按钮已下移到标题中部并去除圆形背景，仅保留透明图标按钮与可点击区域。 */
 .memory-top-back {
@@ -522,6 +557,9 @@ button.memory-chat-top-bar__title:active {
   gap: 5px;
 }
 
+/* [区域标注·已完成·旧事记忆库时间筛选标签字号区]
+   说明：“全部 / 今天 / 最近7天 / 最近30天 / 自定义”字号已统一为
+   与“按时间搜索”说明文字一致的 10px，只作用于旧事搜索时间标签。 */
 .memory-filter-chip {
   border: 1px solid var(--memory-border);
   min-height: 24px;
@@ -571,19 +609,24 @@ button.memory-chat-top-bar__title:active {
    说明：
    1. 发生时间与自定义时间范围均使用应用内时间选择器按钮，不使用浏览器原生日期/时间选择器。
    2. 时间选择弹窗沿用旧事应用内弹窗样式，图标由 memory-ui.js 的 IconPark 风格 SVG 提供。
+   3. 触发区域已移除浏览器默认黑色边框和可见“时间选择器”文字，只保留点击区域打开应用内弹窗。
    ========================================================================== */
 .memory-date-picker-trigger {
   width: 100%;
   min-width: 0;
   min-height: 32px;
   padding: 0 2px;
+  border: 0;
+  outline: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   background: transparent;
   color: var(--memory-text);
   text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
 .memory-date-picker-trigger svg {
@@ -598,12 +641,6 @@ button.memory-chat-top-bar__title:active {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-  font-weight: 800;
-}
-
-.memory-date-picker-trigger small {
-  color: var(--memory-muted);
-  font-size: 10px;
   font-weight: 800;
 }
 
@@ -917,13 +954,6 @@ button.memory-chat-top-bar__title:active {
 .memory-filter-chip svg {
   width: 18px;
   height: 18px;
-}
-
-.memory-floating-add {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 20;
 }
 
 .memory-ios-switch {
