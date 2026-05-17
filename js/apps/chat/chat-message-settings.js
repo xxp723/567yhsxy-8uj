@@ -9,6 +9,7 @@ import { escapeHtml } from './chat-utils.js';
 import { MSG_ICONS } from './chat-message-icons.js';
 import { renderTranslationSettingsHtml } from './chat-translation.js';
 import { renderAutonomousActivitySettingsSection } from './chat-autonomous-activity-settings.js';
+import { renderChatMemorySettingsSection } from './chat-memory-settings.js';
 
 /* ==========================================================================
    [区域标注·已完成·本次拆分] 独立聊天设置页面
@@ -128,14 +129,15 @@ export function renderChatMessageSettingsPage({
         ${renderAutonomousActivitySettingsSection(chatSettings)}
 
         <!-- ==================================================================
-             [区域标注·已完成·聊天控制合并板块]
+             [区域标注·已完成·本次更新：聊天控制移出短期记忆]
              说明：
-             1. 本区域已按本次要求合并“每轮回复气泡数量 / 短期记忆 / 自定义思维链 / 当前指令 / 查看控制台日志”为同一“聊天控制”板块。
-             2. 外层布局参考“头像与备注”：左上角标题 + 暖色设置卡片 + 行分割线。
-             3. “每轮回复气泡数量 / 短期记忆 / 自定义思维链 / 当前指令”使用右侧 IconPark 风格 “>” 折叠按钮，并向下抽屉式展开原输入内容。
-             4. “查看控制台日志”保留原 data-action="toggle-chat-console" 与 chatConsoleEnabled 逻辑，仅调整到本合并板块内。
-             5. 板块内已移除说明性文字；原 data-role / data-action 保持不变，不改变既有保存与控制逻辑。
-             6. 本区域不读写 localStorage/sessionStorage，不写双份兜底；持久化仍由既有事件逻辑写入 DB.js / IndexedDB。
+             1. 本区域当前只保留“每轮回复气泡数量 / 自定义思维链 / 当前指令 / 查看控制台日志”同一“聊天控制”板块。
+             2. “短期记忆”已按本次要求移入下方“记忆设置”板块，并由 chat-memory-settings.js 独立渲染，方便后续单独修改。
+             3. 外层布局参考“头像与备注”：左上角标题 + 暖色设置卡片 + 行分割线。
+             4. “每轮回复气泡数量 / 自定义思维链 / 当前指令”使用右侧 IconPark 风格 “>” 折叠按钮，并向下抽屉式展开原输入内容。
+             5. “查看控制台日志”保留原 data-action="toggle-chat-console" 与 chatConsoleEnabled 逻辑，仅保留在本板块内。
+             6. 板块内已移除说明性文字；原 data-role / data-action 保持不变，不改变既有保存与控制逻辑。
+             7. 本区域不读写 localStorage/sessionStorage，不写双份兜底；持久化仍由既有事件逻辑写入 DB.js / IndexedDB。
              ================================================================== -->
         <section class="msg-settings-chat-control-section">
           <div class="msg-settings-section-title">聊天控制</div>
@@ -166,30 +168,6 @@ export function renderChatMessageSettingsPage({
                       <input class="msg-settings-number-input" data-role="msg-reply-bubble-max" type="number" min="1" step="1" value="${escapeHtml(chatSettings.replyBubbleMax || 3)}">
                     </label>
                   </div>
-                </div>
-              </div>
-            </div>
-            <div class="msg-settings-avatar-divider"></div>
-            <div class="msg-settings-chat-control-item">
-              <button
-                class="msg-settings-row msg-settings-chat-control-toggle"
-                data-action="toggle-settings-sticker-drawer"
-                type="button"
-                aria-label="展开短期记忆"
-                aria-expanded="false">
-                <span class="msg-settings-card__title">短期记忆</span>
-                <span class="msg-settings-chat-control-arrow" aria-hidden="true">
-                  <svg viewBox="0 0 48 48" fill="none">
-                    <path d="M19 12l12 12-12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </span>
-              </button>
-              <div class="msg-settings-chat-control-drawer" data-role="settings-short-term-memory-drawer">
-                <div class="msg-settings-chat-control-drawer__inner">
-                  <label class="msg-settings-number-field msg-settings-number-field--full">
-                    <span>发送之前轮数</span>
-                    <input class="msg-settings-number-input" data-role="msg-short-term-memory-rounds" type="number" min="0" step="1" value="${escapeHtml(chatSettings.shortTermMemoryRounds ?? 8)}">
-                  </label>
                 </div>
               </div>
             </div>
@@ -242,6 +220,9 @@ export function renderChatMessageSettingsPage({
             </div>
           </section>
         </section>
+
+        ${renderChatMemorySettingsSection(chatSettings)}
+
         <!-- ==================================================================
              [区域标注·已完成·外部注入独立板块]
              说明：
