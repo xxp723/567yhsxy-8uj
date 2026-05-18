@@ -39,8 +39,8 @@ function renderStatusBadges(item) {
    [区域标注·已完成·旧事时间线条目渲染区]
    说明：
    1. 每条记忆已去除事件标题展示，仅展示类型文字、时间、摘要、情绪标签与注入状态。
-   2. 时间线卡片已去除三种记忆类型图标；右上角保留“切换类型 / 羽毛笔编辑”IconPark 图标按钮。
-   3. 底部保留“允许注入”iPhone 风格滑动开关；删除仍走原应用内确认弹窗入口，不使用原生浏览器弹窗。
+   2. 时间线卡片已去除三种记忆类型图标；右上角保留缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮。
+   3. 底部保留“允许注入”iPhone 风格滑动开关；右下角保留缩小后的删除图标按钮，仍走原应用内确认弹窗入口，不使用原生浏览器弹窗。
    ========================================================================== */
 export function renderMemoryItem(item) {
   const meta = getMemoryTypeMeta(item.type);
@@ -71,6 +71,9 @@ export function renderMemoryItem(item) {
         <div class="memory-switch-group">
           <span class="memory-switch-label">允许注入</span>
           ${renderSwitchButton({ action: 'toggle-injection', id: item.id, active: item.injectionEnabled, label: '切换允许注入' })}
+        </div>
+        <div class="memory-item-actions memory-item-actions--bottom">
+          ${renderIconButton({ action: 'open-delete', id: item.id, icon: MEMORY_ICONS.remove, label: '删除这段记忆', danger: true, extraClass: 'memory-card-action' })}
         </div>
       </div>
     </article>

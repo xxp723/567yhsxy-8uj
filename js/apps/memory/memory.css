@@ -691,7 +691,7 @@ button.memory-chat-top-bar__title:active {
    说明：
    1. 记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
    2. 单个应用记忆页底部已增加安全留白，滑到底部时最后一个记忆总结方框下边框完整可见。
-   3. 记忆卡片右上角已加入“切换类型 / 羽毛笔编辑”IconPark 图标按钮；本区已同步去除卡片内类型图标与右下角删除按钮样式残留。
+   3. 记忆卡片右上角已加入缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮；右下角保留缩小后的删除图标按钮。
    ========================================================================== */
 .memory-stats {
   display: grid;
@@ -826,17 +826,21 @@ button.memory-chat-top-bar__title:active {
   margin-top: -3px;
 }
 
+.memory-item-actions--bottom {
+  margin-left: auto;
+}
+
 .memory-card-action {
-  width: 28px;
-  height: 28px;
-  border-radius: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--memory-card) 72%, #ffffff);
   border-color: color-mix(in srgb, var(--memory-border) 42%, transparent);
 }
 
 .memory-card-action svg {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
 }
 
 .memory-item-card__title {
