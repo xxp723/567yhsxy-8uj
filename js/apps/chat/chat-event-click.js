@@ -141,6 +141,7 @@ import {
   refreshMomentsPanel
 } from './moments.js';
 import { handleTranslationSettingsClick } from './chat-translation.js';
+import { handleChatMemorySettingsClick } from './chat-memory-settings.js';
 import {
   handleAutonomousActivitySettingsClick,
   publishInstantAutonomousMomentsForContacts,
@@ -2355,6 +2356,25 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
        2. 实际状态规范化、抽屉同步与 DB.js / IndexedDB 持久化均在独立模块内完成。
        3. 不使用 localStorage/sessionStorage，不改动其它聊天设置分支。
        ======================================================================== */
+    /* ========================================================================
+       [区域标注·已完成·长期记忆设置点击接线]
+       说明：
+       1. 本区只把“长期记忆”的自动总结/手动总结开关转交给 chat-memory-settings.js。
+       2. 实际副 API 调用、旧事写入、应用内完成弹窗与 DB.js / IndexedDB 持久化均在独立模块内完成。
+       3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不改动其它聊天设置分支。
+       ======================================================================== */
+    case 'toggle-long-term-memory-auto-summary':
+    case 'toggle-long-term-memory-manual-summary':
+      await handleChatMemorySettingsClick({
+        action,
+        target,
+        state,
+        container,
+        db,
+        settingsManager
+      });
+      break;
+
     case 'toggle-autonomous-moments':
     case 'set-autonomous-moments-interval-unit':
       await handleAutonomousActivitySettingsClick({

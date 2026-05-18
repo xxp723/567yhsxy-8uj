@@ -168,6 +168,7 @@ import {
   renderMsgStickerPanelGrid as renderMsgStickerPanelGridModule,
   syncMountedStickerGroupButtons as syncMountedStickerGroupButtonsModule
 } from './chat-message-stickers.js';
+import { maybeRunAutoLongTermMemorySummary } from './chat-memory-settings.js';
 
 /* ==========================================================================
    [区域标注·已完成·本次拆分] 聊天消息页 HTML 卡片 iframe 全局桥接接线
@@ -860,6 +861,20 @@ export async function sendMessage(container, state, db, content, settingsManager
     ]);
     if (hasRenderedAiBubble) {
       updateCurrentChatSendingUi(container, state);
+
+      /* ========================================================================
+         [区域标注·已完成·长期记忆自动总结触发点]
+         说明：
+         1. 仅在本轮 AI 回复已成功落入当前聊天消息后触发长期记忆自动总结检查。
+         2. 达到“长期记忆 → 总结轮数”要求时，后台调用设置应用副 API，并写入旧事应用 IndexedDB。
+         3. 不使用 localStorage/sessionStorage，不做主 API 兜底，不使用原生浏览器弹窗，不重绘聊天页以避免闪屏。
+         ======================================================================== */
+      void maybeRunAutoLongTermMemorySummary({
+        state,
+        container,
+        db,
+        settingsManager
+      });
     } else {
       renderCurrentChatMessage(container, state);
     }

@@ -34,6 +34,7 @@ import {
   ensureMomentsComposeDraft
 } from './moments.js';
 import { updateChatAvatarCropPreview } from './chat-message.js';
+import { handleChatMemorySettingsInput } from './chat-memory-settings.js';
 import { handleAutonomousActivitySettingsInput } from './chat-autonomous-activity-settings.js';
 
 export function handleInput(e, state, container, db) {
@@ -46,6 +47,15 @@ export function handleInput(e, state, container, db) {
      2. 实际规范化、局部同步与 DB.js / IndexedDB 持久化均在独立模块内完成。
      3. 不使用 localStorage/sessionStorage，不改动其它聊天设置输入分支。
      ========================================================================== */
+  /* ==========================================================================
+     [区域标注·已完成·长期记忆设置输入接线]
+     说明：
+     1. 本区只把“长期记忆”的总结轮数输入转交给 chat-memory-settings.js。
+     2. 实际规范化、局部同步与 DB.js / IndexedDB 持久化均在独立模块内完成。
+     3. 不使用 localStorage/sessionStorage，不改动其它聊天设置输入分支。
+     ========================================================================== */
+  if (handleChatMemorySettingsInput(e, state, container, db)) return;
+
   if (handleAutonomousActivitySettingsInput(e, state, container, db)) return;
 
   if (target.matches('[data-role="msg-input"]')) {
