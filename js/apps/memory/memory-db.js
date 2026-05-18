@@ -28,8 +28,11 @@ export function buildCharacterMemoryKey(characterId) {
   return `character:${characterId}:chat-memory`;
 }
 
+/* [区域标注·已完成·本次旧事记忆类型归一区]
+   说明：旧事当前只保留“长期记忆 / 重点长期 / 待确认”三类口径；
+   历史废弃类型读取时统一归入 longterm，不再保留额外类型分支。 */
 export function normalizeMemoryType(type) {
-  return ['longterm', 'redline', 'flashbulb', 'pending'].includes(type) ? type : 'longterm';
+  return ['longterm', 'pending'].includes(type) ? type : 'longterm';
 }
 
 export function normalizeTags(tags) {

@@ -129,7 +129,7 @@ export function renderMemoryFormModal(state) {
           <label class="memory-form-field">
             记忆摘要
             <textarea name="summary" placeholder="建议写成 100~200 字精炼摘要，保留事件经过、关系变化和关键情绪。">${escapeHtml(item.summary || '')}</textarea>
-            <span class="memory-form-help">长期记忆建议 100~200 字；红线铁则可更短但要明确。</span>
+            <span class="memory-form-help">长期记忆建议 100~200 字；重点长期会固定靠前注入，待确认不会自动注入。</span>
           </label>
           <div class="memory-form-field">
             发生时间

@@ -44,13 +44,14 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-card-actions-scroll';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-four-stats-mask-scroll-types';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为单个应用记忆页精简布局加入 CSS 版本号；如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
+   2. 本次为“四项统计一排显示、图标按钮透明缩小、弹窗滚动保持、记忆类型精简”刷新 CSS 版本号；
+      如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
   return new Promise((resolve) => {
@@ -425,11 +426,17 @@ export async function mount(container, context) {
       state.recordsByCharacterId = bootData.recordsByCharacterId;
       state.identityGroups = buildIdentityGroups(state.masks, state.characters, state.recordsByCharacterId);
 
+      /* [区域标注·已完成·本次旧事首页默认面具选择区]
+         说明：进入 Memory 后如果已存在用户面具，默认选中第一个面具并直接展示其绑定角色；
+         只有完全没有面具时才显示“请选择用户面具”的空状态。 */
       if (!keepSelection) {
-        state.selectedIdentityKey = '';
+        state.selectedIdentityKey = state.identityGroups[0]?.key || '';
         state.selectedCharacterId = '';
         state.stage = 'home';
       } else {
+        if (!state.selectedIdentityKey && state.identityGroups.length) {
+          state.selectedIdentityKey = state.identityGroups[0]?.key || '';
+        }
         if (state.selectedIdentityKey && !state.identityGroups.some((item) => item.key === state.selectedIdentityKey)) {
           state.selectedIdentityKey = state.identityGroups[0]?.key || '';
         }
@@ -509,8 +516,9 @@ export async function mount(container, context) {
   const getItemById = (id) => getSelectedItems(state).find((item) => item.id === id) || null;
 
   const closeModal = () => {
+    const scrollTop = Number(state.modal?.returnScrollTop) || getChatPageScrollTop();
     state.modal = null;
-    renderApp(container, state);
+    renderKeepingChatScroll(scrollTop);
   };
 
   const handleClick = async (event) => {
@@ -649,14 +657,16 @@ export async function mount(container, context) {
     }
 
     if (action === 'open-edit') {
-      state.modal = { kind: 'form', item: getItemById(id), draftTimelineAt: '' };
-      renderApp(container, state);
+      const scrollTop = getChatPageScrollTop();
+      state.modal = { kind: 'form', item: getItemById(id), draftTimelineAt: '', returnScrollTop: scrollTop };
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 
     if (action === 'open-delete') {
-      state.modal = { kind: 'delete', item: getItemById(id) };
-      renderApp(container, state);
+      const scrollTop = getChatPageScrollTop();
+      state.modal = { kind: 'delete', item: getItemById(id), returnScrollTop: scrollTop };
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 
@@ -666,11 +676,12 @@ export async function mount(container, context) {
     }
 
     if (action === 'confirm-delete') {
+      const scrollTop = Number(state.modal?.returnScrollTop) || getChatPageScrollTop();
       await removeMemoryItem(state.db, state.selectedCharacterId, id);
       await refreshRecordsOnly();
       state.modal = null;
       toast.show('已删除记忆');
-      renderApp(container, state);
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 
@@ -725,11 +736,12 @@ export async function mount(container, context) {
       return;
     }
 
+    const scrollTop = Number(state.modal?.returnScrollTop) || getChatPageScrollTop();
     await upsertMemoryItem(state.db, state.selectedCharacterId, item);
     await refreshRecordsOnly();
     state.modal = null;
     toast.show('已保存记忆');
-    renderApp(container, state);
+    renderKeepingChatScroll(scrollTop);
   };
 
   container.addEventListener('click', handleClick);

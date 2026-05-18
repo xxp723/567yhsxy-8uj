@@ -362,9 +362,9 @@ button.memory-chat-top-bar__title:active {
   transform: scale(0.98);
 }
 
-/* [区域标注·已完成·旧事单个应用记忆页标题栏操作按钮区]
+/* [区域标注·已完成·本次旧事标题栏透明图标按钮区]
    说明：放大镜搜索按钮位于“+”左侧，“+”新建记忆按钮位于标题栏最右侧；
-   二者均使用 memory-ui.js 中 IconPark 风格 SVG，不再使用右下角悬浮“新增记忆”入口。 */
+   二者均使用 memory-ui.js 中 IconPark 风格 SVG，并已改为参考返回“<”按钮的透明无边框小尺寸样式。 */
 .memory-chat-top-bar__actions {
   position: absolute;
   right: 14px;
@@ -377,8 +377,8 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-top-action {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -386,8 +386,8 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-top-action svg {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
 }
 
 .memory-top-action.is-active,
@@ -687,22 +687,22 @@ button.memory-chat-top-bar__title:active {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事统计与时间线串联区]
+   [区域标注·已完成·本次单个应用记忆页四项标签一排区]
    说明：
-   1. 记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
-   2. 单个应用记忆页底部已增加安全留白，滑到底部时最后一个记忆总结方框下边框完整可见。
-   3. 记忆卡片右上角已加入缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮；删除图标按钮已与“允许注入”开关保持同一行靠右显示。
+   1. 单个应用记忆库中的四张统计标签已由两排两列改为一排四个，更紧凑。
+   2. 记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
+   3. 搜索、添加、切换、羽毛笔、删除图标按钮均为透明无边框小尺寸；删除仍走应用内确认弹窗。
    ========================================================================== */
 .memory-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
   padding: 0 16px;
 }
 
 .memory-stat-card {
-  min-height: 58px;
-  padding: 7px 8px;
+  min-height: 48px;
+  padding: 6px 4px;
   display: grid;
   gap: 2px;
   align-content: center;
@@ -720,13 +720,13 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-stat-card__value {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   line-height: 1.1;
 }
 
 .memory-stat-card__label {
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.2;
   color: var(--memory-muted);
 }
@@ -831,16 +831,16 @@ button.memory-chat-top-bar__title:active {
 }
 
 .memory-card-action {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--memory-card) 72%, #ffffff);
-  border-color: color-mix(in srgb, var(--memory-border) 42%, transparent);
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .memory-card-action svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 
 .memory-item-card__title {
@@ -957,16 +957,17 @@ button.memory-chat-top-bar__title:active {
   background: var(--memory-danger);
 }
 
-/* [区域标注·已完成·旧事记忆卡片删除按钮浅红区]
-   说明：仅调整记忆总结方框右下角删除图标按钮，颜色参考闲谈设置页“清空聊天消息”的 #9d3f31 浅红文字风格，不影响弹窗确认按钮。 */
+/* [区域标注·已完成·本次旧事记忆卡片删除透明按钮区]
+   说明：仅调整记忆总结方框右下角删除图标按钮；按钮已去除边框和背景，仅保留浅红 IconPark 删除图标，不影响弹窗确认按钮。 */
 .memory-icon-btn.memory-card-action.is-danger {
   color: #9d3f31;
-  background: rgba(157, 63, 49, 0.08);
-  border-color: rgba(157, 63, 49, 0.18);
+  background: transparent;
+  border-color: transparent;
 }
 
 .memory-icon-btn.memory-card-action.is-danger:active {
-  background: rgba(157, 63, 49, 0.12);
+  background: transparent;
+  opacity: 0.72;
 }
 
 .memory-primary-btn,
@@ -1288,9 +1289,12 @@ button.memory-chat-top-bar__title:active {
   .memory-role-cards,
   .memory-library-grid,
   .memory-type-options,
-  .memory-custom-range,
-  .memory-stats {
+  .memory-custom-range {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .memory-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -1301,7 +1305,7 @@ button.memory-chat-top-bar__title:active {
   }
 
   .memory-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .memory-role-cards,

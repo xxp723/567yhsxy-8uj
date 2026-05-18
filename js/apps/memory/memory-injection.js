@@ -60,6 +60,11 @@ export function getInjectionCandidates(items = []) {
     });
 }
 
+/* ========================================================================== 
+   [区域标注·已完成·本次旧事注入预览精简结构区]
+   说明：预览结构只保留“重点长期 / 补充候选 / 最终预览列表”三项有效口径；
+   已删除历史废弃类型的空数组占位，避免后续误以为仍存在额外记忆类型。
+   ========================================================================== */
 export function buildInjectionPreview(items = []) {
   const candidates = getInjectionCandidates(items);
   const focusLongterm = candidates.filter((item) => item.type === 'longterm' && item.isPermanent);
@@ -71,7 +76,6 @@ export function buildInjectionPreview(items = []) {
   return {
     permanent: focusLongterm,
     focusLongterm,
-    redlines: [],
     supplemental,
     previewItems: [...focusLongterm, ...supplemental].slice(0, 8)
   };
