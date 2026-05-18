@@ -44,13 +44,13 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-grand-summary-bottom-bar';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-grand-summary-fixed-rollback';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为“大总结入口右侧对齐 + 底部多选操作栏”刷新 CSS 版本号；
+   2. 本次为“大总结入口左移 + 固定底栏 + 字数小栏 + 回溯按钮”刷新 CSS 版本号；
       如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
@@ -199,10 +199,11 @@ function renderStats(items) {
    3. 请求结果由 index.js 写回 memory-db.js → AppDataStore → DB.js → IndexedDB。
    ========================================================================== */
 const GRAND_SUMMARY_PROMPT = `你是【记忆档案管理员】。请清洗并重组以下 AI 记忆碎片：
-1. 时间轴合并：提取日期；同一日期的事件必须合并为一条，禁止重复日期标题；按时间先后排序。
-2. 去噪精简：剔除问候、吃喝拉撒、无意义打闹和流水账；保留关系确立、准确金额、重大争吵/和好、称呼变化、亲密互动（隐晦概括）、重要承诺或决定；每天不超过60字。
-3. 人称适配：原文以“我”互动为主则用第一人称；原文全是名字则用第三人称。
-4. 只输出纯文本，不要开场白或结束语；格式：[日期]:[事件概括]
+1. 字数范围：最终大总结必须控制在{{WORD_RANGE}}字内。
+2. 时间轴合并：提取日期；同一日期的事件必须合并为一条，禁止重复日期标题；按时间先后排序。
+3. 去噪精简：剔除问候、吃喝拉撒、无意义打闹和流水账；保留关系确立、准确金额、重大争吵/和好、称呼变化、亲密互动（隐晦概括）、重要承诺或决定；每天不超过60字。
+4. 人称适配：原文以“我”互动为主则用第一人称；原文全是名字则用第三人称。
+5. 只输出纯文本，不要开场白或结束语；格式：[日期]:[事件概括]
 
 现在处理以下记忆文本：`;
 
@@ -281,7 +282,20 @@ async function requestGrandSummaryClaude(profile, global, promptText) {
   return extractApiText(payload);
 }
 
-async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems) {
+function getGrandSummaryWordRange(state) {
+  const minText = String(state.grandSummaryWordMin ?? '100').trim();
+  const maxText = String(state.grandSummaryWordMax ?? '200').trim();
+  const min = Number.parseInt(minText, 10);
+  const max = Number.parseInt(maxText, 10);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0) {
+    return { min: 100, max: 200, label: '100-200', usedFallback: true };
+  }
+  const low = Math.min(min, max);
+  const high = Math.max(min, max);
+  return { min: low, max: high, label: `${low}-${high}`, usedFallback: false };
+}
+
+async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems, wordRangeLabel = '100-200') {
   const allSettings = await settingsStore?.getAll?.();
   const api = allSettings?.api || {};
   const profile = api.secondary || {};
@@ -294,7 +308,7 @@ async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems) {
   const memoryText = selectedItems
     .map((item, index) => `记忆#${index + 1}\n日期：${formatDateTime(item.timelineAt)}\n摘要：${item.summary || ''}`)
     .join('\n\n---\n\n');
-  const promptText = `${GRAND_SUMMARY_PROMPT}\n\n${memoryText}`;
+  const promptText = `${GRAND_SUMMARY_PROMPT.replace('{{WORD_RANGE}}', wordRangeLabel)}\n\n${memoryText}`;
 
   const text = provider === 'gemini'
     ? await requestGrandSummaryGemini(profile, api.global, promptText)
@@ -308,11 +322,11 @@ async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次旧事大总结底部多选操作栏区]
+   [区域标注·已完成·本次旧事大总结固定底栏与字数回溯区]
    说明：
-   1. 大总结模式参考聊天消息页多选界面，底部固定显示“全选 / 总结 / 删除”操作栏。
-   2. 本区只渲染应用内自绘按钮，不显示大号图标，不使用浏览器原生弹窗/选择器。
-   3. 总结与删除的持久化仍由点击事件统一走 memory-db.js → DB.js / IndexedDB。
+   1. 大总结模式底部固定显示字数范围小栏与“全选 / 总结 / 删除 / 回溯 / 取消”操作栏，不因记忆条数少而上移。
+   2. 底栏按钮只保留文字；字数输入框不设置 maxlength/min/max/pattern/step 等输入限制，不使用浏览器原生选择器。
+   3. 总结、删除、回溯的持久化仍由点击事件统一走 memory-db.js → DB.js / IndexedDB，不使用同步存储或双份兜底。
    ========================================================================== */
 function renderGrandSummaryBar(state, visibleItems = []) {
   if (!state.grandSummaryMode) return '';
@@ -324,21 +338,55 @@ function renderGrandSummaryBar(state, visibleItems = []) {
   const message = state.grandSummaryMessage || '可多选/全选记忆后进行总结或删除。';
 
   return `
-    <section class="memory-grand-summary-bar" aria-live="polite">
-      <span class="memory-grand-summary-bar__count">已选 ${escapeHtml(count)} 条</span>
-      <button class="memory-grand-summary-bar__btn" type="button" data-action="select-all-grand-summary" ${busy || !total ? 'disabled' : ''}>
-        ${MEMORY_ICONS.save}<span>${allSelected ? '取消全选' : '全选'}</span>
-      </button>
-      <button class="memory-grand-summary-bar__btn" type="button" data-action="run-grand-summary" ${busy ? 'disabled' : ''}>
-        ${MEMORY_ICONS.summarize}<span>${busy ? '总结中' : '总结'}</span>
-      </button>
-      <button class="memory-grand-summary-bar__btn memory-grand-summary-bar__btn--danger" type="button" data-action="delete-grand-summary-selected" ${busy || !count ? 'disabled' : ''}>
-        ${MEMORY_ICONS.remove}<span>删除</span>
-      </button>
-      <button class="memory-grand-summary-bar__btn" type="button" data-action="cancel-grand-summary" ${busy ? 'disabled' : ''}>
-        ${MEMORY_ICONS.close}<span>取消</span>
-      </button>
-      <span class="memory-grand-summary-bar__message">${escapeHtml(message)}</span>
+    <section class="memory-grand-summary-dock" aria-live="polite">
+      <div class="memory-grand-summary-range">
+        <span class="memory-grand-summary-range__label">总结字数</span>
+        <input class="memory-grand-summary-range__input" type="text" inputmode="numeric" data-grand-summary-word-field="min" value="${escapeHtml(state.grandSummaryWordMin ?? '100')}" aria-label="大总结最少字数">
+        <span class="memory-grand-summary-range__dash">-</span>
+        <input class="memory-grand-summary-range__input" type="text" inputmode="numeric" data-grand-summary-word-field="max" value="${escapeHtml(state.grandSummaryWordMax ?? '200')}" aria-label="大总结最多字数">
+        <span class="memory-grand-summary-range__unit">字</span>
+      </div>
+      <div class="memory-grand-summary-bar">
+        <span class="memory-grand-summary-bar__count">已选 ${escapeHtml(count)} 条</span>
+        <button class="memory-grand-summary-bar__btn" type="button" data-action="select-all-grand-summary" ${busy || !total ? 'disabled' : ''}>
+          <span>${allSelected ? '取消全选' : '全选'}</span>
+        </button>
+        <button class="memory-grand-summary-bar__btn" type="button" data-action="run-grand-summary" ${busy ? 'disabled' : ''}>
+          <span>${busy ? '总结中' : '总结'}</span>
+        </button>
+        <button class="memory-grand-summary-bar__btn memory-grand-summary-bar__btn--danger" type="button" data-action="delete-grand-summary-selected" ${busy || !count ? 'disabled' : ''}>
+          <span>删除</span>
+        </button>
+        <button class="memory-grand-summary-bar__btn" type="button" data-action="open-grand-summary-rollback" ${busy || !state.grandSummaryRollback ? 'disabled' : ''}>
+          <span>回溯</span>
+        </button>
+        <button class="memory-grand-summary-bar__btn" type="button" data-action="cancel-grand-summary" ${busy ? 'disabled' : ''}>
+          <span>取消</span>
+        </button>
+        <span class="memory-grand-summary-bar__message">${escapeHtml(message)}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderGrandSummaryRollbackModal(state) {
+  if (state.modal?.kind !== 'grand-summary-rollback') return '';
+
+  return `
+    <section class="memory-form-modal memory-grand-summary-rollback-modal" role="dialog" aria-modal="true" aria-label="回溯大总结">
+      <div class="memory-form-modal__panel memory-form-modal__panel--compact">
+        <div class="memory-form-modal__head">
+          <h3>回溯大总结</h3>
+          ${renderIconButton({ action: 'close-modal', icon: MEMORY_ICONS.close, label: '关闭回溯确认' })}
+        </div>
+        <div class="memory-delete-preview">
+          ${renderEmptyState('回到本次大总结之前', '将恢复本次大总结前选中的记忆内容与条数。', MEMORY_ICONS.warning)}
+        </div>
+        <div class="memory-form-modal__foot">
+          <button class="memory-secondary-btn" type="button" data-action="close-modal">取消</button>
+          <button class="memory-primary-btn" type="button" data-action="confirm-grand-summary-rollback">确认回溯</button>
+        </div>
+      </div>
     </section>
   `;
 }
@@ -476,16 +524,19 @@ function renderChatMemory(state) {
   const filteredItems = filterMemoryItems(items, state.search);
   const searchExpanded = Boolean(state.searchExpanded);
 
-  /* [区域标注·已完成·本次旧事大总结入口右侧对齐区]
-     说明：大总结按钮已移到标题栏右侧，与“搜索”和“+”保持同组间距，避免和左侧返回“<”按钮重叠；
-     后续调用设置应用 API设置 的副 API，不使用 localStorage/sessionStorage。 */
-  const topBarActions = `
+  /* [区域标注·已完成·本次旧事大总结入口标题左侧均衡区]
+     说明：大总结按钮已移到标题栏左侧并使用 IconPark 风格图标，右侧只保留“搜索”和“+”，
+     标题栏左右视觉更均衡；后续调用设置应用 API设置 的副 API，不使用 localStorage/sessionStorage。 */
+  const leftBarActions = `
     ${renderIconButton({
       action: 'open-grand-summary',
       icon: MEMORY_ICONS.summarize,
       label: state.grandSummaryMode ? '正在大总结多选' : '大总结',
       extraClass: `memory-top-action memory-grand-summary-entry ${state.grandSummaryMode ? 'is-active' : ''}`
     })}
+  `;
+
+  const topBarActions = `
     ${renderIconButton({
       action: 'toggle-search',
       icon: MEMORY_ICONS.search,
@@ -506,6 +557,7 @@ function renderChatMemory(state) {
         title: '闲谈应用',
         backAction: 'back-to-library',
         titleAction: 'close-memory',
+        leftActions: leftBarActions,
         rightActions: topBarActions
       })}
       ${searchExpanded ? renderSearchPanel(state.search) : ''}
@@ -546,6 +598,7 @@ function renderApp(root, state) {
     </div>
     ${renderMemoryFormModal(state)}
     ${renderDeleteModal(state)}
+    ${renderGrandSummaryRollbackModal(state)}
     ${renderTimePickerModal(state.timePicker)}
   `;
 }
@@ -574,6 +627,9 @@ export async function mount(container, context) {
     grandSummarySelectedIds: new Set(),
     grandSummaryBusy: false,
     grandSummaryMessage: '',
+    grandSummaryWordMin: '100',
+    grandSummaryWordMax: '200',
+    grandSummaryRollback: null,
     settings: context.settings,
     modal: null,
     timePicker: null,
@@ -689,6 +745,7 @@ export async function mount(container, context) {
     state.grandSummarySelectedIds = new Set();
     state.grandSummaryBusy = false;
     state.grandSummaryMessage = '';
+    state.grandSummaryRollback = null;
   };
 
   /* ========================================================================
@@ -888,7 +945,17 @@ export async function mount(container, context) {
       renderKeepingChatScroll(scrollTop);
 
       try {
-        const summary = await runGrandSummaryWithSecondaryApi(state.settings, selectedItems);
+        const wordRange = getGrandSummaryWordRange(state);
+        if (wordRange.usedFallback) {
+          toast.show('字数范围已按默认100-200字处理');
+        }
+        const rollbackSnapshot = {
+          characterId: state.selectedCharacterId,
+          items: selectedItems.map((item) => ({ ...item })),
+          keeperId: selectedItems[0]?.id || ''
+        };
+
+        const summary = await runGrandSummaryWithSecondaryApi(state.settings, selectedItems, wordRange.label);
         const keeper = selectedItems[0];
         await patchMemoryItem(state.db, state.selectedCharacterId, keeper.id, {
           summary,
@@ -906,7 +973,11 @@ export async function mount(container, context) {
         }
 
         await refreshRecordsOnly();
-        resetGrandSummaryState();
+        state.grandSummaryRollback = rollbackSnapshot;
+        state.grandSummaryMode = true;
+        state.grandSummarySelectedIds = new Set();
+        state.grandSummaryBusy = false;
+        state.grandSummaryMessage = '已完成大总结，可点击“回溯”恢复本次大总结前的样子。';
         toast.show('大总结已替换选中记忆');
         renderKeepingChatScroll(scrollTop);
       } catch (error) {
@@ -916,6 +987,41 @@ export async function mount(container, context) {
         renderKeepingChatScroll(scrollTop);
         console.error('[memory] grand summary failed', error);
       }
+      return;
+    }
+
+    if (action === 'open-grand-summary-rollback') {
+      if (!state.grandSummaryRollback || state.grandSummaryBusy) return;
+      const scrollTop = getChatPageScrollTop();
+      state.modal = { kind: 'grand-summary-rollback', returnScrollTop: scrollTop };
+      renderKeepingChatScroll(scrollTop);
+      return;
+    }
+
+    if (action === 'confirm-grand-summary-rollback') {
+      if (!state.grandSummaryRollback || state.grandSummaryBusy) return;
+      const scrollTop = Number(state.modal?.returnScrollTop) || getChatPageScrollTop();
+      const snapshot = state.grandSummaryRollback;
+      state.grandSummaryBusy = true;
+      state.grandSummaryMessage = '正在回溯到本次大总结之前...';
+      state.modal = null;
+      renderKeepingChatScroll(scrollTop);
+
+      if (snapshot.keeperId) {
+        await removeMemoryItem(state.db, snapshot.characterId, snapshot.keeperId);
+      }
+      for (const item of snapshot.items || []) {
+        await upsertMemoryItem(state.db, snapshot.characterId, item);
+      }
+
+      await refreshRecordsOnly();
+      state.grandSummaryRollback = null;
+      state.grandSummaryMode = true;
+      state.grandSummarySelectedIds = new Set();
+      state.grandSummaryBusy = false;
+      state.grandSummaryMessage = '已回溯到本次大总结之前。';
+      toast.show('已完成回溯');
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 
@@ -1057,6 +1163,16 @@ export async function mount(container, context) {
   };
 
   const handleInput = (event) => {
+    const wordField = event.target?.dataset?.grandSummaryWordField;
+    if (wordField === 'min' || wordField === 'max') {
+      if (wordField === 'min') {
+        state.grandSummaryWordMin = event.target.value;
+      } else {
+        state.grandSummaryWordMax = event.target.value;
+      }
+      return;
+    }
+
     const field = event.target?.dataset?.searchField;
     if (!field) return;
     patchSearchState(state, { [field]: event.target.value });

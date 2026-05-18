@@ -363,8 +363,9 @@ button.memory-chat-top-bar__title:active {
 }
 
 /* [区域标注·已完成·本次旧事标题栏透明图标按钮放大区]
-   说明：放大镜搜索按钮位于“+”左侧，“+”新建记忆按钮位于标题栏最右侧；
-   二者均使用 memory-ui.js 中 IconPark 风格 SVG，并已按返回“<”按钮参考尺寸放大，保持透明无边框样式。 */
+   说明：大总结按钮已移动到标题左侧；右侧仅保留放大镜搜索按钮和“+”新建记忆按钮。
+   三者均使用 memory-ui.js 中 IconPark 风格 SVG，并已按返回“<”按钮参考尺寸放大，保持透明无边框样式。 */
+.memory-chat-top-bar__left-actions,
 .memory-chat-top-bar__actions {
   position: absolute;
   right: 14px;
@@ -374,6 +375,11 @@ button.memory-chat-top-bar__title:active {
   align-items: center;
   gap: 4px;
   transform: translateY(-50%);
+}
+
+.memory-chat-top-bar__left-actions {
+  left: 48px;
+  right: auto;
 }
 
 .memory-top-action {
@@ -557,25 +563,25 @@ button.memory-chat-top-bar__title:active {
   gap: 5px;
 }
 
-/* [区域标注·已完成·旧事记忆库时间筛选标签字号区]
-   说明：“全部 / 今天 / 最近7天 / 最近30天 / 自定义”字号已统一为
-   与“按时间搜索”说明文字一致的 10px，只作用于旧事搜索时间标签。 */
+/* [区域标注·已完成·旧事记忆库时间筛选标签字号与选中色区]
+   说明：“全部 / 今天 / 最近7天 / 最近30天 / 自定义”字号已缩小一圈，
+   选中态背景改为更明确的主题棕色，只作用于旧事搜索时间标签。 */
 .memory-filter-chip {
   border: 1px solid var(--memory-border);
-  min-height: 24px;
-  padding: 0 7px;
+  min-height: 22px;
+  padding: 0 6px;
   border-radius: 999px;
   background: var(--memory-bg);
   color: var(--memory-muted);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .memory-filter-chip.is-active {
   color: #fff;
-  border-color: var(--memory-primary);
-  background: var(--memory-primary);
+  border-color: color-mix(in srgb, var(--memory-border) 88%, #000);
+  background: color-mix(in srgb, var(--memory-border) 88%, var(--memory-primary));
 }
 
 .memory-custom-range {
@@ -1323,18 +1329,31 @@ button.memory-chat-top-bar__title:active {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次旧事大总结入口与底部多选栏样式区]
+   [区域标注·已完成·本次旧事大总结入口左移与固定底栏样式区]
    说明：
-   1. 大总结入口已加入标题栏右侧操作组，和搜索、“+”保持统一间距，避免与左侧返回“<”重叠。
-   2. 大总结模式不显示页面主体大号图标；参考聊天多选交互，在页面底部固定显示“全选 / 总结 / 删除 / 取消”操作栏。
-   3. 记忆卡片多选态使用应用内自绘圆点勾选和卡片描边，不使用浏览器原生 checkbox/select。
+   1. 大总结入口已移动到标题栏左侧，右侧只保留搜索和“+”，标题栏左右按钮数量更均衡。
+   2. 大总结模式下底部字数小栏与“全选 / 总结 / 删除 / 回溯 / 取消”按钮固定在页面底部，不因记忆条数少而上移。
+   3. 底栏按钮只保留文字；字数输入框无 maxlength/min/max/pattern/step 限制；多选态使用 IconPark 对钩，不使用浏览器原生 checkbox/select。
    ========================================================================== */
-.memory-chat-top-bar__actions .memory-grand-summary-entry {
-  margin-right: 2px;
+.memory-chat-top-bar__left-actions .memory-grand-summary-entry {
+  margin-left: 0;
 }
 
-.memory-chat-page:has(.memory-grand-summary-bar) .memory-items {
-  padding-bottom: 104px;
+.memory-chat-page:has(.memory-grand-summary-dock) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.memory-chat-page:has(.memory-grand-summary-dock) .memory-items {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 14px;
+}
+
+.memory-chat-page:has(.memory-grand-summary-dock) .memory-items::-webkit-scrollbar {
+  display: none;
 }
 
 .memory-timeline.is-grand-summary-mode {
@@ -1379,52 +1398,89 @@ button.memory-chat-top-bar__title:active {
   height: 10px;
 }
 
-.memory-grand-summary-bar {
-  position: sticky;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.memory-grand-summary-dock {
+  flex: 0 0 auto;
   z-index: 18;
   margin: 0 10px 10px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--memory-border) 55%, transparent);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--memory-card) 92%, #ffffff);
-  box-shadow: 0 -8px 26px rgba(74, 52, 42, 0.12);
   display: grid;
-  grid-template-columns: auto repeat(4, minmax(0, auto));
+  gap: 0;
+  filter: drop-shadow(0 -8px 22px rgba(74, 52, 42, 0.12));
+}
+
+.memory-grand-summary-range {
+  justify-self: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 45%, transparent);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: color-mix(in srgb, var(--memory-card) 94%, #ffffff);
+  color: var(--memory-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.memory-grand-summary-range__label,
+.memory-grand-summary-range__unit,
+.memory-grand-summary-range__dash {
+  color: var(--memory-muted);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.memory-grand-summary-range__input {
+  width: 38px;
+  min-width: 0;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 42%, transparent);
+  border-radius: 999px;
+  outline: 0;
+  padding: 0 7px;
+  background: var(--memory-bg);
+  color: var(--memory-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.memory-grand-summary-bar {
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 55%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--memory-card) 94%, #ffffff);
+  box-shadow: none;
+  display: grid;
+  grid-template-columns: auto repeat(5, minmax(0, auto));
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
 }
 
 .memory-grand-summary-bar__count {
   color: var(--memory-text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   white-space: nowrap;
 }
 
 .memory-grand-summary-bar__btn {
-  min-height: 34px;
-  border: 1px solid color-mix(in srgb, var(--memory-border) 62%, transparent);
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 58%, transparent);
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 0 8px;
   background: var(--memory-bg);
   color: var(--memory-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   cursor: pointer;
-}
-
-.memory-grand-summary-bar__btn svg {
-  width: 14px;
-  height: 14px;
+  white-space: nowrap;
 }
 
 .memory-grand-summary-bar__btn--danger {
@@ -1439,7 +1495,7 @@ button.memory-chat-top-bar__title:active {
 .memory-grand-summary-bar__message {
   grid-column: 1 / -1;
   color: var(--memory-muted);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
   text-align: center;
 }

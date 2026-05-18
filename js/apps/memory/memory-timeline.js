@@ -36,10 +36,10 @@ function renderStatusBadges(item) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次旧事大总结卡片多选态渲染区]
+   [区域标注·已完成·本次旧事大总结卡片对钩多选态渲染区]
    说明：
-   1. 大总结模式下整张记忆卡片可点选，选中态用清晰的小圆点勾选与卡片描边显示。
-   2. 不再在页面主体显示大号“大总结”图标；底部操作栏负责全选、总结、删除。
+   1. 大总结模式下整张记忆卡片可点选，选中态用 IconPark 风格“对钩”与卡片描边显示。
+   2. 不再在页面主体显示大号“大总结”图标；固定底部栏负责全选、总结、删除、取消、回溯。
    3. 编辑、删除、开关动作仍只输出 data-action，由 index.js 统一走应用内逻辑与 IndexedDB 持久化。
    ========================================================================== */
 export function renderMemoryItem(item, { grandSummaryMode = false, selectedIds = new Set() } = {}) {
@@ -55,7 +55,7 @@ export function renderMemoryItem(item, { grandSummaryMode = false, selectedIds =
     <article class="memory-item-card ${grandSummaryMode ? 'is-grand-summary-selectable' : ''} ${selected ? 'is-grand-summary-selected' : ''}" data-id="${escapeHtml(item.id)}" ${grandSummaryAttrs}>
       ${grandSummaryMode ? `
         <span class="memory-grand-summary-check ${selected ? 'is-selected' : ''}" aria-hidden="true">
-          ${selected ? MEMORY_ICONS.save : ''}
+          ${selected ? MEMORY_ICONS.check : ''}
         </span>
       ` : ''}
       <div class="memory-item-card__top">
