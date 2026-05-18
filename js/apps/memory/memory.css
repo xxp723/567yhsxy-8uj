@@ -362,9 +362,9 @@ button.memory-chat-top-bar__title:active {
   transform: scale(0.98);
 }
 
-/* [区域标注·已完成·本次旧事标题栏透明图标按钮区]
+/* [区域标注·已完成·本次旧事标题栏透明图标按钮放大区]
    说明：放大镜搜索按钮位于“+”左侧，“+”新建记忆按钮位于标题栏最右侧；
-   二者均使用 memory-ui.js 中 IconPark 风格 SVG，并已改为参考返回“<”按钮的透明无边框小尺寸样式。 */
+   二者均使用 memory-ui.js 中 IconPark 风格 SVG，并已按返回“<”按钮参考尺寸放大，保持透明无边框样式。 */
 .memory-chat-top-bar__actions {
   position: absolute;
   right: 14px;
@@ -947,16 +947,16 @@ button.memory-chat-top-bar__title:active {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事单个应用记忆库透明小号图标按钮区]
+   [区域标注·已完成·旧事单个应用记忆库透明图标按钮放大区]
    说明：
    1. 仅作用于单个应用记忆库的“搜索 / 添加 / 切换 / 羽毛笔 / 删除”图标按钮。
    2. 已去除按钮周围方形边框和背景，参考返回上一级“<”按钮，仅保留透明点击区与 IconPark 图标。
-   3. 已缩小按钮与图标尺寸，不影响弹窗确认按钮、筛选按钮和其它通用按钮。
+   3. 已将按钮与图标放大一圈，不影响弹窗确认按钮、筛选按钮和其它通用按钮。
    ========================================================================== */
 .memory-icon-btn.memory-top-action,
 .memory-icon-btn.memory-card-action {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -965,8 +965,8 @@ button.memory-chat-top-bar__title:active {
 
 .memory-icon-btn.memory-top-action svg,
 .memory-icon-btn.memory-card-action svg {
-  width: 11px;
-  height: 11px;
+  width: 16px;
+  height: 16px;
 }
 
 .memory-icon-btn.memory-top-action:active,
@@ -1126,7 +1126,9 @@ button.memory-chat-top-bar__title:active {
 
 /* ==========================================================================
    [区域标注·已完成·旧事应用内弹窗样式区]
-   说明：新增、编辑、删除确认均为应用内弹窗，并与主题 UI 统一。
+   说明：
+   1. 新增、编辑弹窗保持应用内底部弹出，并与主题 UI 统一。
+   2. 删除确认弹窗通过 memory-delete-modal 专用类改为页面中间弹出。
    ========================================================================== */
 .memory-form-modal {
   position: absolute;
@@ -1137,6 +1139,12 @@ button.memory-chat-top-bar__title:active {
   justify-content: center;
   padding: 14px;
   background: rgba(15, 23, 42, 0.28);
+}
+
+/* [区域标注·已完成·旧事删除确认居中弹窗样式区]
+   说明：仅让记忆总结方框内“删除”触发的确认弹窗居中显示，不影响新增/编辑/时间选择弹窗。 */
+.memory-delete-modal {
+  align-items: center;
 }
 
 .memory-form-modal__panel {

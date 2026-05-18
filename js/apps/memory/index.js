@@ -44,13 +44,13 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-grand-summary';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-delete-center-icons-up';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为“单个应用记忆库大总结多选合并”刷新 CSS 版本号；
+   2. 本次为“删除确认居中 + 单个应用记忆库图标按钮放大”刷新 CSS 版本号；
       如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {

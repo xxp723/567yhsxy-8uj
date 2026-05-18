@@ -169,14 +169,14 @@ export function renderMemoryFormModal(state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事应用内删除确认区]
-   说明：删除确认已替换为主题内弹窗，不使用浏览器原生 confirm。
+   [区域标注·已完成·旧事应用内删除确认居中弹窗区]
+   说明：删除确认已替换为主题内居中弹窗，不使用浏览器原生 confirm。
    ========================================================================== */
 export function renderDeleteModal(state) {
   if (!state.modal || state.modal.kind !== 'delete') return '';
 
   return `
-    <section class="memory-form-modal" role="dialog" aria-modal="true" aria-label="删除记忆确认">
+    <section class="memory-form-modal memory-delete-modal" role="dialog" aria-modal="true" aria-label="删除记忆确认">
       <div class="memory-form-modal__panel memory-form-modal__panel--compact">
         <div class="memory-form-modal__head">
           <h3>删除这条记忆？</h3>
