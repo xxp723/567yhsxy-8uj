@@ -35,16 +35,20 @@ const DEFAULT_LONG_TERM_MEMORY_SETTINGS = Object.freeze({
   longTermMemoryAutoSummaryEnabled: false,
   longTermMemoryManualSummaryEnabled: false,
   longTermMemoryLastAutoSummaryRoundIndex: 0,
-  longTermMemorySummaryPerson: 'third'
+  longTermMemorySummaryPerson: 'third',
+  longTermMemorySummaryMinWords: '100',
+  longTermMemorySummaryMaxWords: '200',
+  longTermMemoryCustomSummaryPrompt: ''
 });
 
 /* ==========================================================================
-   [区域标注·已完成·本次4项修改：长期记忆设置规范化与持久化]
+   [区域标注·已完成·本次自定义长期记忆设置规范化与持久化]
    说明：
    1. 只规范化长期记忆相关字段，不改动其它聊天设置字段。
    2. “总结轮数”允许留空；留空时自动/手动总结均不执行，不强制回填默认数字。
-   3. “自动总结”与“总结轮数/人称”写入当前面具 + 当前聊天对象的 chatPromptSettings，经 DB.js / IndexedDB 持久化。
-   4. 手动总结已改为椭圆按钮：点击立即总结，运行期间显示处理中状态，结束后不保留开关状态。
+   3. “自定义字数范围”默认 100-200 字，输入框不做前端限制，原样保存用户填写文本。
+   4. “自定义总结词”原样保存；有内容时用于替代默认长期记忆总结提示词主体。
+   5. 所有字段写入当前面具 + 当前聊天对象的 chatPromptSettings，经 DB.js / IndexedDB 持久化；不使用 localStorage/sessionStorage。
    ========================================================================== */
 function normalizeLongTermMemorySettings(source = {}) {
   const settings = source && typeof source === 'object' ? source : {};
@@ -67,7 +71,14 @@ function normalizeLongTermMemorySettings(source = {}) {
       : 0,
     longTermMemorySummaryPerson: ['first', 'third'].includes(rawSummaryPerson)
       ? rawSummaryPerson
-      : DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryPerson
+      : DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryPerson,
+    longTermMemorySummaryMinWords: Object.prototype.hasOwnProperty.call(settings, 'longTermMemorySummaryMinWords')
+      ? String(settings.longTermMemorySummaryMinWords ?? '')
+      : DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMinWords,
+    longTermMemorySummaryMaxWords: Object.prototype.hasOwnProperty.call(settings, 'longTermMemorySummaryMaxWords')
+      ? String(settings.longTermMemorySummaryMaxWords ?? '')
+      : DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMaxWords,
+    longTermMemoryCustomSummaryPrompt: String(settings.longTermMemoryCustomSummaryPrompt ?? DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemoryCustomSummaryPrompt)
   };
 }
 
@@ -353,15 +364,30 @@ function getMaskForMemory(state = {}) {
   return (Array.isArray(state.archiveMasks) ? state.archiveMasks : []).find(mask => String(mask?.id || '') === maskId) || null;
 }
 
-function buildLongTermMemoryPrompt({ roundsText = '', session = {}, character = null, mask = null, source = 'auto', summaryPerson = 'third' } = {}) {
-  /* [区域标注·已完成·本次4项修改：长期记忆总结人称与角色姓名]
+function buildLongTermMemoryPrompt({
+  roundsText = '',
+  session = {},
+  character = null,
+  mask = null,
+  source = 'auto',
+  summaryPerson = 'third',
+  minWords = DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMinWords,
+  maxWords = DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMaxWords,
+  customSummaryPrompt = ''
+} = {}) {
+  /* [区域标注·已完成·本次自定义长期记忆总结提示词]
      说明：
-     1. 角色名必须取档案大名 character.name；禁止把联系人备注当角色姓名。
-     2. 第一人称：角色用“我”，用户用第三人称姓名。
-     3. 第三人称：角色和用户都用第三人称姓名。
+     1. 默认总结提示词已按用户给定 Core Memory 要求精简为客观、完整、无主观臆测版本。
+     2. 必须覆盖时间（年月日）、地点、人物、经过、情绪；不遗漏输入中明确出现的信息。
+     3. “自定义总结词”填写后会替代默认总结提示词主体；输出 JSON 格式、人称和角色大名规则仍保留。
+     4. “自定义字数范围”原样写入提示词，不限制输入框内容，不使用 localStorage/sessionStorage。
   */
   const roleName = String(character?.name || session?.name || '当前角色').trim() || '当前角色';
   const userName = String(mask?.name || mask?.nickname || '用户').trim() || '用户';
+  const summaryRangeText = `${String(minWords ?? '').trim() || DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMinWords}到${String(maxWords ?? '').trim() || DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMaxWords}字`;
+  const customPrompt = String(customSummaryPrompt || '').trim();
+  const defaultSummaryPrompt = `请生成客观、完整的长期记忆摘要。不要使用单个词概括；使用包含“主体+动作+上下文”的详细短语或连贯句子。重点记录关键事件、约定、关系变化与情绪状态。必须写清楚输入中明确出现的时间（年月日）、地点、人物、经过、情绪；没有明确出现的项目写“未明确”，不要编造。`;
+  const summaryPrompt = customPrompt || defaultSummaryPrompt;
   const personRule = summaryPerson === 'first'
     ? `总结人称：使用角色第一人称。摘要中把角色「${roleName}」写作“我”，并以第三人称「${userName}」指代用户，保持客观长期记忆口吻。`
     : `总结人称：使用第三人称。摘要中以第三人称「${roleName}」指代角色，以第三人称「${userName}」指代用户，保持客观长期记忆口吻。`;
@@ -371,16 +397,20 @@ function buildLongTermMemoryPrompt({ roundsText = '', session = {}, character = 
       role: 'system',
       content: `你是旧事应用的闲谈长期记忆自动解析器。请把给定聊天轮次解析成一条适合保存到“旧事 → 闲谈记忆库”的长期记忆。
 
+总结要求：
+${summaryPrompt}
+
 硬性规则：
 1. 只根据输入聊天内容总结，不要编造不存在的事件。
-2. 摘要保留事件经过、关系变化、关键承诺、情绪转折和后续可能影响对话的事实。
-3. 不要出现“AI、模型、API、系统、提示词、自动解析”等出戏词。
-4. 不要使用 Markdown，不要解释。
-5. 只输出一个 JSON 对象，格式严格为：
-{"title":"18字以内标题","summary":"100到200字长期记忆摘要","emotionTags":["标签1","标签2"],"type":"longterm","isPermanent":false,"isHighPriority":false}
-6. emotionTags 最多 6 个，短词即可。
-7. ${personRule}
-8. 角色姓名必须是「${roleName}」这个大名；禁止把用户备注、联系人备注或昵称当作角色姓名。`
+2. 摘要必须客观、精简、完整，不加入未在聊天中出现的主观判断。
+3. 摘要必须保留事件经过、关系变化、关键承诺、情绪变化和后续可能影响对话的事实。
+4. 不要出现“AI、模型、API、系统、提示词、自动解析”等出戏词。
+5. 不要使用 Markdown，不要解释。
+6. 只输出一个 JSON 对象，格式严格为：
+{"title":"18字以内标题","summary":"${summaryRangeText}长期记忆摘要","emotionTags":["标签1","标签2"],"type":"longterm","isPermanent":false,"isHighPriority":false}
+7. emotionTags 最多 6 个，短词即可。
+8. ${personRule}
+9. 角色姓名必须是「${roleName}」这个大名；禁止把用户备注、联系人备注或昵称当作角色姓名。`
     },
     {
       role: 'user',
@@ -495,7 +525,17 @@ async function summarizeAndSaveLongTermMemory({
 
   const rawText = await requestLongTermMemoryBySecondaryApi(
     profile,
-    buildLongTermMemoryPrompt({ roundsText, session, character, mask, source, summaryPerson: settings.longTermMemorySummaryPerson })
+    buildLongTermMemoryPrompt({
+      roundsText,
+      session,
+      character,
+      mask,
+      source,
+      summaryPerson: settings.longTermMemorySummaryPerson,
+      minWords: settings.longTermMemorySummaryMinWords,
+      maxWords: settings.longTermMemorySummaryMaxWords,
+      customSummaryPrompt: settings.longTermMemoryCustomSummaryPrompt
+    })
   );
   const parsed = normalizeMemorySummaryPayload(extractJsonObjectFromAiText(rawText), rawText);
   if (!parsed) throw new Error('副 API 没有返回可保存的长期记忆内容');
@@ -665,12 +705,13 @@ function renderShortTermMemoryItem(chatSettings = {}) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次4项修改：长期记忆小版块]
+   [区域标注·已完成·本次长期记忆自定义设置小版块]
    说明：
    1. “总结轮数”保存到当前聊天对象 chatPromptSettings.longTermMemorySummaryRounds，允许留空；留空时不自动总结、不手动总结。
-   2. “自动总结”开启后，每到达设定轮数，会后台调用设置应用副 API，总结最新 N 轮并保存到旧事；开关状态已持久化，只有用户手动关闭才关闭。
-   3. “手动总结”已从滑动开关改为椭圆按钮，点击后立即总结；完成/失败均使用应用内弹窗提示。
-   4. 新增“第一人称/第三人称”按钮组，保存到 chatPromptSettings.longTermMemorySummaryPerson，用于控制长期记忆摘要视角。
+   2. “总结人称”下方已加入“自定义字数范围”，默认 100-200 字，输入框不做限制，原样保存。
+   3. “自定义总结词”为抽屉式折叠栏；填写后替代默认长期记忆总结提示词主体，不填则使用默认提示词。
+   4. “管理记忆”位于“手动总结”下方，点击直接跳转旧事应用该角色的闲谈应用记忆库页面。
+   5. 所有设置经 DB.js / IndexedDB 持久化；不使用 localStorage/sessionStorage，不使用原生弹窗或原生选择器。
    ========================================================================== */
 function renderLongTermMemoryItem(chatSettings = {}) {
   const settings = normalizeLongTermMemorySettings(chatSettings);
@@ -710,6 +751,34 @@ function renderLongTermMemoryItem(chatSettings = {}) {
                 type="button">第三人称</button>
             </div>
           </div>
+          <div class="msg-long-term-memory-word-range">
+            <span>自定义字数范围</span>
+            <div class="msg-long-term-memory-word-range__inputs">
+              <input class="msg-settings-number-input" data-role="msg-long-term-memory-summary-min-words" type="text" value="${escapeHtml(settings.longTermMemorySummaryMinWords)}" aria-label="长期记忆总结最少字数">
+              <span class="msg-long-term-memory-word-range__dash">-</span>
+              <input class="msg-settings-number-input" data-role="msg-long-term-memory-summary-max-words" type="text" value="${escapeHtml(settings.longTermMemorySummaryMaxWords)}" aria-label="长期记忆总结最多字数">
+              <span class="msg-long-term-memory-word-range__unit">字</span>
+            </div>
+          </div>
+          <div class="msg-settings-avatar-divider"></div>
+          <div class="msg-settings-chat-control-item msg-long-term-memory-custom-prompt-item" data-role="settings-long-term-memory-custom-prompt-item">
+            <button
+              class="msg-settings-row msg-settings-chat-control-toggle msg-long-term-memory-custom-prompt-toggle"
+              data-action="toggle-settings-sticker-drawer"
+              type="button"
+              aria-label="展开自定义总结词"
+              aria-expanded="false">
+              <span class="msg-settings-card__title">自定义总结词</span>
+              <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+                ${ICONPARK_ARROW_RIGHT}
+              </span>
+            </button>
+            <div class="msg-settings-chat-control-drawer" data-role="settings-long-term-memory-custom-prompt-drawer">
+              <div class="msg-settings-chat-control-drawer__inner">
+                <textarea class="msg-settings-textarea msg-long-term-memory-custom-prompt-textarea" data-role="msg-long-term-memory-custom-summary-prompt" placeholder="不填写时使用默认长期记忆总结提示词">${escapeHtml(settings.longTermMemoryCustomSummaryPrompt)}</textarea>
+              </div>
+            </div>
+          </div>
           <div class="msg-settings-avatar-divider"></div>
           <div class="msg-settings-row msg-settings-chat-control-console-row">
             <div class="msg-settings-card__title">自动总结</div>
@@ -729,6 +798,17 @@ function renderLongTermMemoryItem(chatSettings = {}) {
               type="button"
               aria-label="立即手动总结">${settings.longTermMemoryManualSummaryEnabled ? '总结中…' : '立即总结'}</button>
           </div>
+          <div class="msg-settings-avatar-divider"></div>
+          <button
+            class="msg-settings-row msg-long-term-memory-manage-row"
+            data-action="open-long-term-memory-manager"
+            type="button"
+            aria-label="管理记忆">
+            <span class="msg-settings-card__title">管理记忆</span>
+            <span class="msg-settings-chat-control-arrow" aria-hidden="true">
+              ${ICONPARK_ARROW_RIGHT}
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -747,12 +827,27 @@ export function syncLongTermMemorySettingsSection(container, state) {
 
   const settings = ensureLongTermMemorySettings(state);
   const roundsInput = item.querySelector('[data-role="msg-long-term-memory-summary-rounds"]');
+  const minWordsInput = item.querySelector('[data-role="msg-long-term-memory-summary-min-words"]');
+  const maxWordsInput = item.querySelector('[data-role="msg-long-term-memory-summary-max-words"]');
+  const customPromptInput = item.querySelector('[data-role="msg-long-term-memory-custom-summary-prompt"]');
   const autoSwitch = item.querySelector('[data-action="toggle-long-term-memory-auto-summary"]');
   const manualButton = item.querySelector('[data-action="toggle-long-term-memory-manual-summary"]');
   const personButtons = item.querySelectorAll('[data-action="set-long-term-memory-summary-person"]');
 
   if (roundsInput && String(roundsInput.value) !== String(settings.longTermMemorySummaryRounds)) {
     roundsInput.value = String(settings.longTermMemorySummaryRounds);
+  }
+
+  if (minWordsInput && String(minWordsInput.value) !== String(settings.longTermMemorySummaryMinWords)) {
+    minWordsInput.value = String(settings.longTermMemorySummaryMinWords);
+  }
+
+  if (maxWordsInput && String(maxWordsInput.value) !== String(settings.longTermMemorySummaryMaxWords)) {
+    maxWordsInput.value = String(settings.longTermMemorySummaryMaxWords);
+  }
+
+  if (customPromptInput && String(customPromptInput.value) !== String(settings.longTermMemoryCustomSummaryPrompt)) {
+    customPromptInput.value = String(settings.longTermMemoryCustomSummaryPrompt);
   }
 
   if (autoSwitch) {
@@ -773,26 +868,39 @@ export function syncLongTermMemorySettingsSection(container, state) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·本次4项修改：长期记忆输入事件接线]
+   [区域标注·已完成·长期记忆自定义输入事件接线]
    说明：
-   1. 处理“长期记忆 → 总结轮数”的输入保存。
-   2. 输入允许留空；留空保存为空字符串，表示不执行长期记忆总结，不强制回填默认轮数。
-   3. 持久化统一走 DB.js / IndexedDB；不使用 localStorage/sessionStorage。
+   1. 处理“长期记忆 → 总结轮数 / 自定义字数范围 / 自定义总结词”的输入保存。
+   2. “总结轮数”允许留空；留空保存为空字符串，表示不执行长期记忆总结。
+   3. “自定义字数范围”和“自定义总结词”不做输入限制、不截断，原样写入 DB.js / IndexedDB。
+   4. 不使用 localStorage/sessionStorage，不写双份兜底，不使用长文本字段过滤。
    ========================================================================== */
 export function handleChatMemorySettingsInput(e, state, container, db) {
   const target = e?.target;
-  if (!target?.matches?.('[data-role="msg-long-term-memory-summary-rounds"]')) return false;
+  if (!target?.matches?.([
+    '[data-role="msg-long-term-memory-summary-rounds"]',
+    '[data-role="msg-long-term-memory-summary-min-words"]',
+    '[data-role="msg-long-term-memory-summary-max-words"]',
+    '[data-role="msg-long-term-memory-custom-summary-prompt"]'
+  ].join(','))) return false;
 
   ensureLongTermMemorySettings(state);
-  const rawText = String(target.value ?? '').trim();
-  const rawNumber = Number(rawText);
-  const nextValue = rawText === ''
-    ? ''
-    : (Number.isFinite(rawNumber) ? Math.max(0, Math.floor(rawNumber)) : '');
 
-  state.chatPromptSettings.longTermMemorySummaryRounds = nextValue;
+  if (target.matches('[data-role="msg-long-term-memory-summary-rounds"]')) {
+    const rawText = String(target.value ?? '').trim();
+    const rawNumber = Number(rawText);
+    state.chatPromptSettings.longTermMemorySummaryRounds = rawText === ''
+      ? ''
+      : (Number.isFinite(rawNumber) ? Math.max(0, Math.floor(rawNumber)) : '');
+  } else if (target.matches('[data-role="msg-long-term-memory-summary-min-words"]')) {
+    state.chatPromptSettings.longTermMemorySummaryMinWords = String(target.value ?? '');
+  } else if (target.matches('[data-role="msg-long-term-memory-summary-max-words"]')) {
+    state.chatPromptSettings.longTermMemorySummaryMaxWords = String(target.value ?? '');
+  } else if (target.matches('[data-role="msg-long-term-memory-custom-summary-prompt"]')) {
+    state.chatPromptSettings.longTermMemoryCustomSummaryPrompt = String(target.value ?? '');
+  }
+
   ensureLongTermMemorySettings(state);
-
   dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
   syncLongTermMemorySettingsSection(container, state);
   return true;
@@ -811,7 +919,8 @@ export async function handleChatMemorySettingsClick({
   state = {},
   container = null,
   db = null,
-  settingsManager = null
+  settingsManager = null,
+  eventBus = null
 } = {}) {
   if (action === 'toggle-long-term-memory-auto-summary') {
     ensureLongTermMemorySettings(state);
@@ -831,6 +940,30 @@ export async function handleChatMemorySettingsClick({
     ensureLongTermMemorySettings(state);
     await persistLongTermMemorySettings(state, db);
     syncLongTermMemorySettingsSection(container, state);
+    return true;
+  }
+
+  if (action === 'open-long-term-memory-manager') {
+    const session = getCurrentSessionForMemory(state);
+    const contact = getContactForMemory(state, session);
+    const character = getCharacterForMemory(state, session, contact);
+    const characterId = String(character?.id || contact?.roleId || session?.roleId || '').trim();
+
+    if (!characterId) {
+      showLongTermMemoryResultModal(container, {
+        title: '管理记忆',
+        message: '当前聊天未找到对应角色，无法跳转旧事记忆库。'
+      });
+      return true;
+    }
+
+    const openPayload = {
+      stage: 'chat-memory',
+      characterId,
+      identityId: String(state.activeMaskId || '').trim()
+    };
+
+    (eventBus || state?.eventBus)?.emit?.('app:open', { appId: 'memory', openPayload });
     return true;
   }
 

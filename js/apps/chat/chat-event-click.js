@@ -2363,6 +2363,8 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
        2. 实际副 API 调用、旧事写入、应用内完成/失败提示与 DB.js / IndexedDB 持久化均在独立模块内完成。
        3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不改动其它聊天设置分支。
        ======================================================================== */
+    case 'toggle-long-term-memory-custom-prompt':
+    case 'open-long-term-memory-manager':
     case 'toggle-long-term-memory-auto-summary':
     case 'set-long-term-memory-summary-person':
     case 'toggle-long-term-memory-manual-summary':
@@ -2372,7 +2374,8 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
         state,
         container,
         db,
-        settingsManager
+        settingsManager,
+        eventBus
       });
       break;
 

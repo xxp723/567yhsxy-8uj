@@ -306,7 +306,7 @@
   will-change: max-height, opacity, transform;
 }
 
-.msg-settings-chat-control-item.is-open .msg-settings-chat-control-drawer {
+.msg-settings-chat-control-item.is-open > .msg-settings-chat-control-drawer {
   max-height: 220px;
   opacity: 1;
   transform: translateY(0);
@@ -331,27 +331,27 @@
 }
 
 @media (max-width: 360px) {
-  .msg-settings-chat-control-item.is-open .msg-settings-chat-control-drawer {
+  .msg-settings-chat-control-item.is-open > .msg-settings-chat-control-drawer {
     max-height: 260px;
   }
 }
 
 /* ==========================================================================
-   [区域标注·已完成·长期记忆控件与抽屉显示修复]
+   [区域标注·已完成·本次长期记忆自定义字数/总结词/管理记忆样式]
    说明：
-   1. 仅服务聊天设置页“记忆设置”板块内长期记忆的人称分段按钮、自动总结开关与手动总结椭圆按钮。
-   2. 第一人称/第三人称使用应用内分段按钮，不使用浏览器原生选择器；选中态用暖棕底色与浅色文字区分。
-   3. 手动总结为椭圆形立即执行按钮，运行中保持主题色加载态；自动总结继续复用 iPhone 风格滑动开关。
-   4. 已为长期记忆抽屉单独提高展开高度，修复“手动总结”行和按钮被裁切的问题，不影响其它聊天控制抽屉。
+   1. 仅服务聊天设置页“记忆设置 → 长期记忆”小版块。
+   2. 已补齐“自定义字数范围”“自定义总结词”抽屉与“管理记忆”入口样式，视觉延续暖棕主题。
+   3. “自定义总结词”使用应用内抽屉式展开，不使用原生浏览器弹窗或原生选择器。
+   4. 已为长期记忆抽屉提高展开高度，并使用直接子级选择器避免嵌套抽屉默认展开，减少页面闪屏。
    5. 本区域只改目标控件样式，不涉及任何持久化逻辑；保存仍由 JS 通过 DB.js / IndexedDB 处理。
    ========================================================================== */
-.msg-settings-chat-control-item[data-role="settings-long-term-memory-item"].is-open .msg-settings-chat-control-drawer {
-  max-height: 360px;
+.msg-settings-chat-control-item[data-role="settings-long-term-memory-item"].is-open > .msg-settings-chat-control-drawer {
+  max-height: 720px;
 }
 
 @media (max-width: 360px) {
-  .msg-settings-chat-control-item[data-role="settings-long-term-memory-item"].is-open .msg-settings-chat-control-drawer {
-    max-height: 420px;
+  .msg-settings-chat-control-item[data-role="settings-long-term-memory-item"].is-open > .msg-settings-chat-control-drawer {
+    max-height: 820px;
   }
 }
 
@@ -395,6 +395,63 @@
 
 .msg-long-term-memory-person-btn:active {
   transform: scale(0.96);
+}
+
+.msg-long-term-memory-word-range {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.62);
+}
+
+.msg-long-term-memory-word-range__inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.msg-long-term-memory-word-range__dash,
+.msg-long-term-memory-word-range__unit {
+  color: rgba(74, 52, 42, 0.58);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.msg-long-term-memory-custom-prompt-item {
+  margin: 0;
+}
+
+.msg-long-term-memory-custom-prompt-toggle {
+  min-height: 42px;
+  padding: 12px 0;
+}
+
+.msg-long-term-memory-custom-prompt-textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.msg-long-term-memory-manage-row {
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0;
+  border: none;
+  background: transparent;
+  color: #4A342A;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg-long-term-memory-manage-row .msg-settings-card__title {
+  margin-bottom: 0;
+}
+
+.msg-long-term-memory-manage-row:active {
+  opacity: 0.72;
 }
 
 .msg-long-term-memory-manual-btn {

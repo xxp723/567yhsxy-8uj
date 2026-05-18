@@ -49,9 +49,9 @@ export class AppManager {
   }
 
   bindEvents() {
-    this.eventBus.on('app:open', async ({ appId }) => {
+    this.eventBus.on('app:open', async ({ appId, openPayload }) => {
       if (!appId) return;
-      await this.open(appId);
+      await this.open(appId, openPayload);
     });
 
     this.eventBus.on('app:close', async ({ appId }) => {
@@ -60,15 +60,19 @@ export class AppManager {
     });
   }
 
-  async open(appId) {
+  async open(appId, openPayload = null) {
     const appMeta = this.registry.get(appId);
     if (!appMeta) {
       Logger.warn(`应用未注册: ${appId}`);
       return;
     }
 
-    // 已打开则直接聚焦
+    // 已打开则直接聚焦；如传入定向打开参数，则交给应用实例做内部跳转。
     if (this.mountedInstances.has(appId)) {
+      const instance = this.mountedInstances.get(appId);
+      if (openPayload && instance && typeof instance.handleOpenPayload === 'function') {
+        await instance.handleOpenPayload(openPayload);
+      }
       this.windowManager.focus(appId);
       return;
     }
@@ -113,7 +117,8 @@ export class AppManager {
           globalMemory: this.globalMemory,
           settings: this.settings,
           db: this.db,
-          windowManager: this.windowManager
+          windowManager: this.windowManager,
+          openPayload
         };
 
         const instance = await moduleRef.mount(contentEl, context);

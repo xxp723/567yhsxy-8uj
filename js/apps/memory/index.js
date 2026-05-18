@@ -688,6 +688,43 @@ export async function mount(container, context) {
     state.grandSummaryMessage = '';
   };
 
+  /* ========================================================================
+     [区域标注·已完成·闲谈管理记忆定向打开旧事闲谈记忆库]
+     说明：
+     1. 支持 AppManager 通过 openPayload 定向打开旧事应用到指定角色的“闲谈应用”记忆库页面。
+     2. 本区只切换旧事应用运行时页面状态，不新增任何持久化读写。
+     3. 仍然只使用 memory-db.js → DB.js / IndexedDB 读取启动数据；不使用 localStorage/sessionStorage。
+     ======================================================================== */
+  const handleOpenPayload = async (openPayload = {}) => {
+    const characterId = String(openPayload?.characterId || '').trim();
+    if (!characterId) return false;
+
+    if (state.loading) {
+      await refreshRecordsOnly().catch(() => {});
+      state.loading = false;
+    }
+
+    const identityId = String(openPayload?.identityId || '').trim();
+    if (identityId && state.identityGroups.some((item) => String(item.key || '') === identityId)) {
+      state.selectedIdentityKey = identityId;
+    } else {
+      const matchedIdentity = state.identityGroups.find((identity) =>
+        (Array.isArray(identity.characters) ? identity.characters : [])
+          .some((character) => String(character?.id || '') === characterId)
+      );
+      state.selectedIdentityKey = matchedIdentity?.key || state.selectedIdentityKey || state.identityGroups[0]?.key || '';
+    }
+
+    state.selectedCharacterId = characterId;
+    state.stage = String(openPayload?.stage || '') === 'role-library' ? 'role-library' : 'chat-memory';
+    resetSearchState(state);
+    state.searchExpanded = false;
+    resetGrandSummaryState();
+    state.modal = null;
+    renderApp(container, state);
+    return true;
+  };
+
   const getGrandSummarySelectedItems = () => {
     const ids = state.grandSummarySelectedIds || new Set();
     return getSelectedItems(state)
@@ -1009,8 +1046,12 @@ export async function mount(container, context) {
   container.addEventListener('submit', handleSubmit);
 
   await refreshBootData({ keepSelection: false });
+  if (context.openPayload) {
+    await handleOpenPayload(context.openPayload);
+  }
 
   return {
+    handleOpenPayload,
     destroy() {
       container.removeEventListener('click', handleClick);
       container.removeEventListener('input', handleInput);
