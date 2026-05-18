@@ -54,6 +54,14 @@ const PROVIDER_DEFAULT_BASE_URL = {
 const STORE_NAME = 'appsData';
 const ARCHIVE_DB_RECORD_ID = 'archive::archive-data';
 const WORLDBOOK_DB_RECORD_ID = 'worldbook::all-books';
+/* ========================================================================
+   [区域标注·已完成·旧事闲谈长期记忆接入] 旧事应用 IndexedDB 记录规则
+   说明：
+   1. 只读取旧事应用 memory 下“角色 → 闲谈记忆库”的 chat-memory 记录。
+   2. 不读取其它应用记忆，不使用 localStorage/sessionStorage，不写双份存储兜底。
+   ======================================================================== */
+const MEMORY_CHAT_RECORD_PREFIX = 'memory::character:';
+const MEMORY_CHAT_RECORD_SUFFIX = ':chat-memory';
 
 /* ==========================================================================
    [区域标注] 世界书递归扫描规则
@@ -873,6 +881,102 @@ function formatUserPersonaRelationNetwork(context = {}, mask = null) {
 }
 
 /* ==========================================================================
+   [区域标注·已完成·旧事闲谈长期记忆接入]
+   说明：
+   1. 只读取旧事应用 memory::character:{角色ID}:chat-memory 中的 chatMemory.items。
+   2. 只注入当前用户面具 roleBindingIds 对应的当前聊天角色记忆，避免串入其它角色。
+   3. 只注入 type === 'longterm' 且 injectionEnabled === true 的闲谈长期记忆。
+   4. 不读取其它应用记忆，不使用 localStorage/sessionStorage，不写双份存储兜底，不做长文本字段过滤。
+   ========================================================================== */
+function buildOldStoryChatMemoryRecordId(characterId = '') {
+  const safeCharacterId = String(characterId || '').trim();
+  return safeCharacterId ? `${MEMORY_CHAT_RECORD_PREFIX}${safeCharacterId}${MEMORY_CHAT_RECORD_SUFFIX}` : '';
+}
+
+function isCharacterBoundToCurrentMaskForMemory(context = {}, characterId = '') {
+  const safeCharacterId = String(characterId || '').trim();
+  if (!safeCharacterId) return false;
+
+  const mask = context.currentMask || getCurrentMask(context);
+  const roleBindingIds = Array.isArray(mask?.roleBindingIds)
+    ? mask.roleBindingIds.map(item => String(item || '').trim()).filter(Boolean)
+    : [];
+
+  return roleBindingIds.includes(safeCharacterId);
+}
+
+function normalizeOldStoryLongTermMemoryItems(rawRecord = null) {
+  const items = Array.isArray(rawRecord?.chatMemory?.items) ? rawRecord.chatMemory.items : [];
+  return items
+    .filter(item => item && item.type === 'longterm' && item.injectionEnabled === true)
+    .sort((a, b) => {
+      if (Boolean(b.isPermanent) !== Boolean(a.isPermanent)) return Boolean(b.isPermanent) ? 1 : -1;
+      return Number(b.timelineAt || 0) - Number(a.timelineAt || 0);
+    });
+}
+
+async function loadOldStoryChatLongTermMemoriesForPrompt(context = {}) {
+  const characterId = String(context.currentCharacterId || getCurrentCharacterId(context)).trim();
+  if (!context.db || !characterId || !isCharacterBoundToCurrentMaskForMemory(context, characterId)) return [];
+
+  const recordId = buildOldStoryChatMemoryRecordId(characterId);
+  const recordValue = recordId ? await readDbRecordValue(context.db, recordId) : null;
+  return normalizeOldStoryLongTermMemoryItems(recordValue);
+}
+
+function formatOldStoryLongTermMemoryDate(timestamp) {
+  const value = Number(timestamp || 0);
+  if (!Number.isFinite(value) || value <= 0) return '';
+
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(value));
+  } catch {
+    return '';
+  }
+}
+
+function formatOldStoryChatLongTermMemoriesForPrompt(context = {}) {
+  const items = Array.isArray(context.oldStoryChatLongTermMemories)
+    ? context.oldStoryChatLongTermMemories
+    : [];
+  if (!items.length) return '';
+
+  const character = context.currentCharacter || getCurrentCharacter(context);
+  const mask = context.currentMask || getCurrentMask(context);
+  const roleName = normalizePlainText(character?.name || context.currentContact?.name || context.currentSession?.name) || '当前角色';
+  const userName = normalizePlainText(mask?.name || context.userName) || '当前用户';
+
+  const memoryLines = items.map((item, index) => {
+    const title = normalizePlainText(item?.title);
+    const summary = normalizePlainText(item?.summary);
+    const dateText = formatOldStoryLongTermMemoryDate(item?.timelineAt);
+    const tags = Array.isArray(item?.emotionTags)
+      ? item.emotionTags.map(tag => normalizePlainText(tag)).filter(Boolean)
+      : [];
+    const meta = [dateText ? `时间：${dateText}` : '', tags.length ? `标签：${tags.join('、')}` : ''].filter(Boolean).join('；');
+
+    return [
+      `${index + 1}. ${title || '长期记忆'}`,
+      meta ? `   ${meta}` : '',
+      summary ? `   ${summary}` : ''
+    ].filter(Boolean).join('\n');
+  });
+
+  return [
+    `旧事闲谈长期记忆（角色：${roleName}；用户面具：${userName}）：`,
+    '以下是当前角色在旧事应用「闲谈记忆库」中已允许注入的长期记忆，是当前角色已经经历过、必须记住的事实。',
+    '必须当作角色自己的经历/关系/承诺/情绪转折；不能当作用户面具的经历，不能混淆角色身份和用户身份。',
+    '若短期历史与长期记忆冲突，按最近短期历史判断当前状态，但不得否认长期记忆中已发生的事实。',
+    memoryLines.join('\n')
+  ].filter(Boolean).join('\n');
+}
+
+/* ==========================================================================
    [区域标注·已完成·本次需求1] 角色卡绑定关系网络格式化
    说明：读取档案应用写入 IndexedDB 的 relations，注入当前要扮演角色的关系网与关系对象档案摘要。
    ========================================================================== */
@@ -941,12 +1045,23 @@ async function collectPromptRuntimeContext({
     asideHistory
   };
 
-  return {
+  const enrichedContext = {
     ...context,
     currentCharacterId: getCurrentCharacterId(context),
     currentCharacter: getCurrentCharacter(context),
     currentMask: getCurrentMask(context)
   };
+
+  /* ========================================================================
+     [区域标注·已完成·旧事闲谈长期记忆接入] 发送前读取当前角色旧事记忆
+     说明：
+     1. 仅通过 DB.js / IndexedDB 读取旧事应用 memory 下当前角色的 chat-memory。
+     2. 只把当前用户面具绑定角色中已允许注入的 longterm 记忆放入 prompt 运行时上下文。
+     3. 本区不读取其它应用记忆，不使用 localStorage/sessionStorage，不写双份存储兜底。
+     ======================================================================== */
+  enrichedContext.oldStoryChatLongTermMemories = await loadOldStoryChatLongTermMemoriesForPrompt(enrichedContext);
+
+  return enrichedContext;
 }
 
 /* ==========================================================================
@@ -1249,12 +1364,12 @@ export function getUserPersona(context = {}) {
 }
 
 /* ==========================================================================
-   [提示词区域 4·已完成·角色记忆 / 长期记忆 / 短期记忆说明]
+   [提示词区域 4·已完成·旧事闲谈长期记忆接入 / 短期记忆说明]
    说明：
-   1. 本区域负责当前会话、联系人备注等角色记忆，并作为后续长期记忆入口。
-   2. 本区域同时注入短期记忆说明，让 AI 知道随后追加的 user/assistant 历史是最近短期对话历史。
+   1. 本区域负责当前会话、联系人备注、旧事闲谈长期记忆与短期记忆说明。
+   2. 旧事长期记忆只来自 memory 应用当前角色 chat-memory 中允许注入的 longterm 条目。
    3. 短期历史正文不塞进本 system 区域，仍由 buildChatMessages -> getChatHistory 以真实 user/assistant messages 追加。
-   4. 本区只处理本轮请求提示词；不读写持久化存储，不使用 localStorage/sessionStorage。
+   4. 本区只处理本轮请求提示词；不写持久化存储，不使用 localStorage/sessionStorage。
    ========================================================================== */
 export function getMemories(context = {}) {
   const lines = [];
@@ -1280,10 +1395,12 @@ export function getMemories(context = {}) {
     if (contactText) lines.push(`联系人资料：\n${contactText}`);
   }
 
+  const oldStoryLongTermMemories = formatOldStoryChatLongTermMemoriesForPrompt(context);
   const shortTermMemoryNotice = buildShortTermMemoryNotice(context.history);
 
-  return createPromptSection('角色记忆 / 长期记忆 / 短期记忆说明', [
+  return createPromptSection('角色记忆 / 旧事长期记忆 / 短期记忆说明', [
     lines.join('\n\n'),
+    oldStoryLongTermMemories,
     shortTermMemoryNotice
   ].filter(Boolean).join('\n\n'));
 }
