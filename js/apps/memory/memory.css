@@ -946,6 +946,35 @@ button.memory-chat-top-bar__title:active {
   flex: 0 0 auto;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·旧事单个应用记忆库透明小号图标按钮区]
+   说明：
+   1. 仅作用于单个应用记忆库的“搜索 / 添加 / 切换 / 羽毛笔 / 删除”图标按钮。
+   2. 已去除按钮周围方形边框和背景，参考返回上一级“<”按钮，仅保留透明点击区与 IconPark 图标。
+   3. 已缩小按钮与图标尺寸，不影响弹窗确认按钮、筛选按钮和其它通用按钮。
+   ========================================================================== */
+.memory-icon-btn.memory-top-action,
+.memory-icon-btn.memory-card-action {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.memory-icon-btn.memory-top-action svg,
+.memory-icon-btn.memory-card-action svg {
+  width: 11px;
+  height: 11px;
+}
+
+.memory-icon-btn.memory-top-action:active,
+.memory-icon-btn.memory-card-action:active {
+  background: transparent;
+  opacity: 0.78;
+}
+
 .memory-icon-btn svg {
   width: 18px;
   height: 18px;
@@ -1037,6 +1066,26 @@ button.memory-chat-top-bar__title:active {
 
 .memory-ios-switch.is-on .memory-ios-switch__thumb {
   transform: translateX(18px);
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事记忆总结卡片小号允许注入开关区]
+   说明：
+   1. 仅缩小单个应用记忆库记忆总结方框底部“允许注入”滑动开关。
+   2. 保持 iPhone 风格滑动开关，不影响新增/编辑弹窗内其它开关。
+   ========================================================================== */
+.memory-item-card__footer .memory-ios-switch__track {
+  width: 38px;
+  height: 23px;
+}
+
+.memory-item-card__footer .memory-ios-switch__thumb {
+  width: 19px;
+  height: 19px;
+}
+
+.memory-item-card__footer .memory-ios-switch.is-on .memory-ios-switch__thumb {
+  transform: translateX(15px);
 }
 
 /* ==========================================================================

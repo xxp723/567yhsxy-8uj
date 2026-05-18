@@ -59,6 +59,7 @@ const WORLDBOOK_DB_RECORD_ID = 'worldbook::all-books';
    说明：
    1. 只读取旧事应用 memory 下“角色 → 闲谈记忆库”的 chat-memory 记录。
    2. 不读取其它应用记忆，不使用 localStorage/sessionStorage，不写双份存储兜底。
+   3. 发送给聊天 AI 的旧事长期记忆只包含记忆摘要和情绪标签，不发送记忆时间。
    ======================================================================== */
 const MEMORY_CHAT_RECORD_PREFIX = 'memory::character:';
 const MEMORY_CHAT_RECORD_SUFFIX = ':chat-memory';
@@ -924,22 +925,6 @@ async function loadOldStoryChatLongTermMemoriesForPrompt(context = {}) {
   return normalizeOldStoryLongTermMemoryItems(recordValue);
 }
 
-function formatOldStoryLongTermMemoryDate(timestamp) {
-  const value = Number(timestamp || 0);
-  if (!Number.isFinite(value) || value <= 0) return '';
-
-  try {
-    return new Intl.DateTimeFormat('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(new Date(value));
-  } catch {
-    return '';
-  }
-}
-
 function formatOldStoryChatLongTermMemoriesForPrompt(context = {}) {
   const items = Array.isArray(context.oldStoryChatLongTermMemories)
     ? context.oldStoryChatLongTermMemories
@@ -951,19 +936,23 @@ function formatOldStoryChatLongTermMemoriesForPrompt(context = {}) {
   const roleName = normalizePlainText(character?.name || context.currentContact?.name || context.currentSession?.name) || '当前角色';
   const userName = normalizePlainText(mask?.name || context.userName) || '当前用户';
 
+  /* ==========================================================================
+     [区域标注·已完成·旧事长期记忆发送内容精简区]
+     说明：
+     1. 聊天 AI 只接收记忆摘要 summary 和情绪标签 emotionTags。
+     2. 不发送 timelineAt / 格式化时间，也不发送标题，避免时间信息进入聊天消息页面的 AI 上下文。
+     ========================================================================== */
   const memoryLines = items.map((item, index) => {
-    const title = normalizePlainText(item?.title);
     const summary = normalizePlainText(item?.summary);
-    const dateText = formatOldStoryLongTermMemoryDate(item?.timelineAt);
     const tags = Array.isArray(item?.emotionTags)
       ? item.emotionTags.map(tag => normalizePlainText(tag)).filter(Boolean)
       : [];
-    const meta = [dateText ? `时间：${dateText}` : '', tags.length ? `标签：${tags.join('、')}` : ''].filter(Boolean).join('；');
+    const tagText = tags.length ? `   标签：${tags.join('、')}` : '';
 
     return [
-      `${index + 1}. ${title || '长期记忆'}`,
-      meta ? `   ${meta}` : '',
-      summary ? `   ${summary}` : ''
+      `${index + 1}. 记忆摘要`,
+      summary ? `   ${summary}` : '',
+      tagText
     ].filter(Boolean).join('\n');
   });
 
