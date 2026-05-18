@@ -271,12 +271,33 @@ function extractJsonObjectFromAiText(text = '') {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·长期记忆消息轮次截取]
+   [区域标注·已完成·长期记忆消息轮次截取与日期来源同步]
    说明：
    1. 一轮 = 连续 user 消息组 + 后续连续 assistant 消息组；系统提示类消息不单独计轮。
    2. 自动总结截取“总结轮数”设定的最新 N 轮；手动总结截取“最新一轮 + 之前 N 轮”。
-   3. 这里只读取当前 state.currentMessages 或 IndexedDB 中当前聊天消息，不写聊天记录。
+   3. 每条待总结消息会附带真实发送日期时间，确保旧事“记忆摘要”可总结出年月日。
+   4. 这里只读取当前 state.currentMessages 或 IndexedDB 中当前聊天消息，不写聊天记录。
    ========================================================================== */
+function formatMemorySummaryDateTime(timestamp = Date.now()) {
+  const date = new Date(Number(timestamp || 0) || Date.now());
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatMemorySummaryDate(timestamp = Date.now()) {
+  const date = new Date(Number(timestamp || 0) || Date.now());
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function getRoundMemoryTimestamp(round = {}) {
+  const timestamps = [
+    ...(Array.isArray(round.userMessages) ? round.userMessages : []),
+    ...(Array.isArray(round.assistantMessages) ? round.assistantMessages : [])
+  ].map(item => Number(item?.timestamp || 0) || 0).filter(Boolean);
+
+  return timestamps.length ? Math.min(...timestamps) : Number(round.startedAt || Date.now()) || Date.now();
+}
+
 function getMessageMemoryText(message = {}) {
   const type = String(message?.type || '').trim();
   if (type === 'sticker') return `[表情包] ${String(message?.stickerName || message?.content || '').trim()}`;
@@ -322,16 +343,25 @@ function buildConversationRounds(messages = []) {
 }
 
 function formatRoundsForSummary(rounds = [], session = {}, mask = {}, character = null) {
-  /* [区域标注·已完成·本次4项修改：长期记忆角色大名锁定]
-     说明：长期记忆总结里的角色姓名优先使用档案 characters[].name，不使用用户给角色的备注，也不使用人设里的昵称。 */
+  /* [区域标注·已完成·旧事摘要年月日同步 + 长期记忆角色大名锁定]
+     说明：
+     1. 长期记忆总结里的角色姓名优先使用档案 characters[].name，不使用用户给角色的备注，也不使用人设里的昵称。
+     2. 每条消息前附带“YYYY年M月D日 HH:mm”，让副 API 有明确日期来源，旧事“记忆摘要”可保留年月日。 */
   const roleName = String(character?.name || session?.name || '角色').trim() || '角色';
   const userName = String(mask?.name || mask?.nickname || '用户').trim() || '用户';
 
+  const formatLine = (name, item) => {
+    const timestamp = Number(item?.timestamp || 0) || 0;
+    const timeText = timestamp ? `（${formatMemorySummaryDateTime(timestamp)}）` : '';
+    return `- ${timeText}${name}：${item.__memoryText}`;
+  };
+
   return (Array.isArray(rounds) ? rounds : [])
     .map((round, index) => {
-      const userText = round.userMessages.map(item => `- ${userName}：${item.__memoryText}`).join('\n') || `- ${userName}：（无）`;
-      const assistantText = round.assistantMessages.map(item => `- ${roleName}：${item.__memoryText}`).join('\n') || `- ${roleName}：（无）`;
-      return `【第 ${index + 1} 轮】\n${userText}\n${assistantText}`;
+      const roundDate = formatMemorySummaryDate(getRoundMemoryTimestamp(round));
+      const userText = round.userMessages.map(item => formatLine(userName, item)).join('\n') || `- ${userName}：（无）`;
+      const assistantText = round.assistantMessages.map(item => formatLine(roleName, item)).join('\n') || `- ${roleName}：（无）`;
+      return `【第 ${index + 1} 轮｜${roundDate}】\n${userText}\n${assistantText}`;
     })
     .join('\n\n');
 }
@@ -364,6 +394,13 @@ function getMaskForMemory(state = {}) {
   return (Array.isArray(state.archiveMasks) ? state.archiveMasks : []).find(mask => String(mask?.id || '') === maskId) || null;
 }
 
+function ensureSummaryContainsMemoryDate(summary = '', timestamp = Date.now()) {
+  const text = String(summary || '').trim();
+  if (!text) return '';
+  if (/\d{4}年\d{1,2}月\d{1,2}日/.test(text)) return text;
+  return `${formatMemorySummaryDate(timestamp)}，${text}`;
+}
+
 function buildLongTermMemoryPrompt({
   roundsText = '',
   session = {},
@@ -375,18 +412,18 @@ function buildLongTermMemoryPrompt({
   maxWords = DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMaxWords,
   customSummaryPrompt = ''
 } = {}) {
-  /* [区域标注·已完成·本次自定义长期记忆总结提示词]
+  /* [区域标注·已完成·旧事记忆摘要新口径同步]
      说明：
-     1. 默认总结提示词已按用户给定 Core Memory 要求精简为客观、完整、无主观臆测版本。
+     1. 默认总结提示词已同步为旧事“记忆摘要”口径：摘要正文必须带年月日，不再要求生成标题。
      2. 必须覆盖时间（年月日）、地点、人物、经过、情绪；不遗漏输入中明确出现的信息。
-     3. “自定义总结词”填写后会替代默认总结提示词主体；输出 JSON 格式、人称和角色大名规则仍保留。
+     3. “自定义总结词”填写后会替代默认长期记忆总结提示词主体；输出 JSON 格式、人称和角色大名规则仍保留。
      4. “自定义字数范围”原样写入提示词，不限制输入框内容，不使用 localStorage/sessionStorage。
   */
   const roleName = String(character?.name || session?.name || '当前角色').trim() || '当前角色';
   const userName = String(mask?.name || mask?.nickname || '用户').trim() || '用户';
   const summaryRangeText = `${String(minWords ?? '').trim() || DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMinWords}到${String(maxWords ?? '').trim() || DEFAULT_LONG_TERM_MEMORY_SETTINGS.longTermMemorySummaryMaxWords}字`;
   const customPrompt = String(customSummaryPrompt || '').trim();
-  const defaultSummaryPrompt = `请生成客观、完整的长期记忆摘要。不要使用单个词概括；使用包含“主体+动作+上下文”的详细短语或连贯句子。重点记录关键事件、约定、关系变化与情绪状态。必须写清楚输入中明确出现的时间（年月日）、地点、人物、经过、情绪；没有明确出现的项目写“未明确”，不要编造。`;
+  const defaultSummaryPrompt = `请生成客观、完整的长期记忆摘要。不要使用单个词概括；使用包含“主体+动作+上下文”的详细短语或连贯句子。重点记录关键事件、约定、关系变化与情绪状态。摘要正文必须写清楚输入中的年月日、地点、人物、经过、情绪；没有明确出现的项目写“未明确”，不要编造。`;
   const summaryPrompt = customPrompt || defaultSummaryPrompt;
   const personRule = summaryPerson === 'first'
     ? `总结人称：使用角色第一人称。摘要中把角色「${roleName}」写作“我”，并以第三人称「${userName}」指代用户，保持客观长期记忆口吻。`
@@ -407,8 +444,8 @@ ${summaryPrompt}
 4. 不要出现“AI、模型、API、系统、提示词、自动解析”等出戏词。
 5. 不要使用 Markdown，不要解释。
 6. 只输出一个 JSON 对象，格式严格为：
-{"title":"18字以内标题","summary":"${summaryRangeText}长期记忆摘要","emotionTags":["标签1","标签2"],"type":"longterm","isPermanent":false,"isHighPriority":false}
-7. emotionTags 最多 6 个，短词即可。
+{"summary":"包含年月日的${summaryRangeText}长期记忆摘要","emotionTags":["标签1","标签2"],"type":"longterm","isPermanent":false,"isHighPriority":false}
+7. 不要输出 title；emotionTags 最多 6 个，短词即可。
 8. ${personRule}
 9. 角色姓名必须是「${roleName}」这个大名；禁止把用户备注、联系人备注或昵称当作角色姓名。`
     },
@@ -431,17 +468,21 @@ ${roundsText}
   ];
 }
 
-function normalizeMemorySummaryPayload(rawPayload = {}, fallbackText = '') {
-  const summary = String(rawPayload?.summary || rawPayload?.content || fallbackText || '').trim();
+function normalizeMemorySummaryPayload(rawPayload = {}, fallbackText = '', fallbackTimestamp = Date.now()) {
+  /* [区域标注·已完成·旧事记忆摘要保存新口径同步]
+     说明：
+     1. 闲谈长期记忆保存到旧事时不再生成/传入 title，跟随旧事应用当前“记忆摘要”口径。
+     2. 如果副 API 漏掉年月日，这里只给 summary 前补本次总结轮次的真实日期，避免旧事“记忆摘要”缺日期。
+     3. 仍通过 memory-db.js / DB.js / IndexedDB 写入；不使用 localStorage/sessionStorage，不写双份兜底。 */
+  const rawSummary = String(rawPayload?.summary || rawPayload?.content || fallbackText || '').trim();
+  const summary = ensureSummaryContainsMemoryDate(rawSummary, fallbackTimestamp);
   if (!summary) return null;
 
-  const title = String(rawPayload?.title || summary.slice(0, 18)).trim();
   const tags = Array.isArray(rawPayload?.emotionTags)
     ? rawPayload.emotionTags
     : (Array.isArray(rawPayload?.tags) ? rawPayload.tags : []);
 
   return {
-    title: title.slice(0, 32),
     summary,
     emotionTags: tags.map(item => String(item || '').trim()).filter(Boolean).slice(0, 6),
     type: 'longterm',
@@ -537,13 +578,16 @@ async function summarizeAndSaveLongTermMemory({
       customSummaryPrompt: settings.longTermMemoryCustomSummaryPrompt
     })
   );
-  const parsed = normalizeMemorySummaryPayload(extractJsonObjectFromAiText(rawText), rawText);
+  const parsed = normalizeMemorySummaryPayload(
+    extractJsonObjectFromAiText(rawText),
+    rawText,
+    getRoundMemoryTimestamp(rounds[0])
+  );
   if (!parsed) throw new Error('副 API 没有返回可保存的长期记忆内容');
 
   await upsertMemoryItem(db, characterId, {
     ...parsed,
     id: `chat-longterm-${String(state.activeMaskId || 'default')}-${String(session.id || 'chat')}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title: parsed.title,
     summary: parsed.summary,
     timelineAt: summaryTriggeredAt
   });
