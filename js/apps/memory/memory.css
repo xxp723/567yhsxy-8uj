@@ -691,7 +691,7 @@ button.memory-chat-top-bar__title:active {
    说明：
    1. 记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
    2. 单个应用记忆页底部已增加安全留白，滑到底部时最后一个记忆总结方框下边框完整可见。
-   3. 记忆卡片右上角已加入缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮；右下角保留缩小后的删除图标按钮。
+   3. 记忆卡片右上角已加入缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮；删除图标按钮已与“允许注入”开关保持同一行靠右显示。
    ========================================================================== */
 .memory-stats {
   display: grid;
@@ -955,6 +955,18 @@ button.memory-chat-top-bar__title:active {
 .memory-primary-btn.is-danger {
   color: #fff;
   background: var(--memory-danger);
+}
+
+/* [区域标注·已完成·旧事记忆卡片删除按钮浅红区]
+   说明：仅调整记忆总结方框右下角删除图标按钮，颜色参考闲谈设置页“清空聊天消息”的 #9d3f31 浅红文字风格，不影响弹窗确认按钮。 */
+.memory-icon-btn.memory-card-action.is-danger {
+  color: #9d3f31;
+  background: rgba(157, 63, 49, 0.08);
+  border-color: rgba(157, 63, 49, 0.18);
+}
+
+.memory-icon-btn.memory-card-action.is-danger:active {
+  background: rgba(157, 63, 49, 0.12);
 }
 
 .memory-primary-btn,
@@ -1299,8 +1311,8 @@ button.memory-chat-top-bar__title:active {
   }
 
   .memory-item-card__footer {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
   }
 
   .memory-item-card__title-row {
