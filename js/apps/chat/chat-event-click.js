@@ -2357,13 +2357,14 @@ export async function handleClick(e, state, container, db, eventBus, windowManag
        3. 不使用 localStorage/sessionStorage，不改动其它聊天设置分支。
        ======================================================================== */
     /* ========================================================================
-       [区域标注·已完成·长期记忆设置点击接线]
+       [区域标注·已完成·本次4项修改：长期记忆设置点击接线]
        说明：
-       1. 本区只把“长期记忆”的自动总结/手动总结开关转交给 chat-memory-settings.js。
-       2. 实际副 API 调用、旧事写入、应用内完成弹窗与 DB.js / IndexedDB 持久化均在独立模块内完成。
+       1. 本区只把“长期记忆”的自动总结、手动立即总结、人称按钮转交给 chat-memory-settings.js。
+       2. 实际副 API 调用、旧事写入、应用内完成/失败提示与 DB.js / IndexedDB 持久化均在独立模块内完成。
        3. 不使用 localStorage/sessionStorage，不使用原生浏览器弹窗，不改动其它聊天设置分支。
        ======================================================================== */
     case 'toggle-long-term-memory-auto-summary':
+    case 'set-long-term-memory-summary-person':
     case 'toggle-long-term-memory-manual-summary':
       await handleChatMemorySettingsClick({
         action,

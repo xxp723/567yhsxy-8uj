@@ -142,6 +142,13 @@ export function handleInput(e, state, container, db) {
     return;
   }
 
+  /* ==========================================================================
+     [区域标注·已完成·本次4项修改：短期记忆轮数允许留空]
+     说明：
+     1. 仅调整“短期记忆”输入保存：允许用户清空输入框，不再强制回填 0 或默认 8。
+     2. 留空保存为空字符串；发送时由 prompt 构建链路按 0 轮处理，即不携带短期历史。
+     3. 仍写入当前面具 + 当前聊天对象的 chatPromptSettings，经 DB.js / IndexedDB 持久化。
+     ========================================================================== */
   if (target.matches('[data-role="msg-reply-bubble-min"], [data-role="msg-reply-bubble-max"], [data-role="msg-short-term-memory-rounds"]')) {
     const minInput = container.querySelector('[data-role="msg-reply-bubble-min"]');
     const maxInput = container.querySelector('[data-role="msg-reply-bubble-max"]');
@@ -149,7 +156,11 @@ export function handleInput(e, state, container, db) {
 
     const min = Math.max(1, Math.floor(Number(minInput?.value || 1)) || 1);
     const max = Math.max(min, Math.floor(Number(maxInput?.value || min)) || min);
-    const rounds = Math.max(0, Math.floor(Number(memoryInput?.value || 0)) || 0);
+    const rawMemoryText = String(memoryInput?.value ?? '').trim();
+    const rawMemoryNumber = Number(rawMemoryText);
+    const rounds = rawMemoryText === ''
+      ? ''
+      : (Number.isFinite(rawMemoryNumber) ? Math.max(0, Math.floor(rawMemoryNumber)) : '');
 
     state.chatPromptSettings.replyBubbleMin = min;
     state.chatPromptSettings.replyBubbleMax = max;
@@ -157,7 +168,7 @@ export function handleInput(e, state, container, db) {
 
     if (minInput && String(minInput.value) !== String(min)) minInput.value = String(min);
     if (maxInput && String(maxInput.value) !== String(max)) maxInput.value = String(max);
-    if (memoryInput && String(memoryInput.value) !== String(rounds)) memoryInput.value = String(rounds);
+    if (memoryInput && rawMemoryText !== '' && String(memoryInput.value) !== String(rounds)) memoryInput.value = String(rounds);
 
     dbPut(db, getCurrentChatPromptSettingsKey(state), state.chatPromptSettings);
   }

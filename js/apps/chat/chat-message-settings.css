@@ -337,6 +337,84 @@
 }
 
 /* ==========================================================================
+   [区域标注·已完成·本次4项修改：记忆设置长期记忆控件样式]
+   说明：
+   1. 仅服务聊天设置页“记忆设置”板块内长期记忆的人称分段按钮与手动总结椭圆按钮。
+   2. 第一人称/第三人称使用应用内分段按钮，不使用浏览器原生选择器；选中态用暖棕底色与浅色文字区分。
+   3. 手动总结为椭圆形立即执行按钮，运行中保持主题色加载态；自动总结继续复用 iPhone 风格滑动开关。
+   4. 本区域只改目标控件样式，不涉及任何持久化逻辑；保存仍由 JS 通过 DB.js / IndexedDB 处理。
+   ========================================================================== */
+.msg-long-term-memory-person-field {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(74, 52, 42, 0.62);
+}
+
+.msg-long-term-memory-person-group {
+  min-height: 40px;
+  padding: 3px;
+  border-radius: 16px;
+  background: rgba(74, 52, 42, 0.08);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.msg-long-term-memory-person-btn {
+  min-width: 0;
+  border: none;
+  border-radius: 13px;
+  background: transparent;
+  color: rgba(74, 52, 42, 0.58);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.msg-long-term-memory-person-btn.is-active {
+  background: #4A342A;
+  color: #fffaf4;
+  box-shadow: 0 6px 14px rgba(74, 52, 42, 0.18);
+}
+
+.msg-long-term-memory-person-btn:active {
+  transform: scale(0.96);
+}
+
+.msg-long-term-memory-manual-btn {
+  min-width: 86px;
+  min-height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(74, 52, 42, 0.1);
+  color: #4A342A;
+  padding: 7px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(74, 52, 42, 0.06);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.msg-long-term-memory-manual-btn:active {
+  transform: scale(0.96);
+}
+
+.msg-long-term-memory-manual-btn.is-loading,
+.msg-long-term-memory-manual-btn:disabled {
+  background: #4A342A;
+  color: #fffaf4;
+  opacity: 0.82;
+  cursor: default;
+}
+
+/* ==========================================================================
    [区域标注·本次需求] 聊天设置独立页面
    说明：三点按钮进入；不使用浏览器原生弹窗。
    ========================================================================== */

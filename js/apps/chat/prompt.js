@@ -971,9 +971,25 @@ export function getDefaultChatPromptSettings() {
     replyBubbleMax: 3,
     /* ===== 闲谈应用：AI每轮回复气泡数量设置 END ===== */
 
+    /* ==========================================================================
+       [区域标注·已完成·本次4项修改：短期/长期记忆设置默认值]
+       说明：
+       1. 短期记忆默认仍为 8；用户清空输入后会保存为空字符串，发送时按 0 轮处理。
+       2. 长期记忆默认总结轮数为 3，修复重新进入后回到旧默认 8 的问题。
+       3. 自动总结开关、人称选项和上次自动总结轮次均属于当前面具 + 当前聊天对象设置。
+       4. 本默认值区不读写持久化存储；实际保存仍由 DB.js / IndexedDB 完成。
+       ========================================================================== */
     /* ===== 闲谈应用：短期记忆轮数设置 START ===== */
     shortTermMemoryRounds: 8,
     /* ===== 闲谈应用：短期记忆轮数设置 END ===== */
+
+    /* ===== 闲谈应用：长期记忆设置 START ===== */
+    longTermMemorySummaryRounds: 3,
+    longTermMemoryAutoSummaryEnabled: false,
+    longTermMemoryManualSummaryEnabled: false,
+    longTermMemoryLastAutoSummaryRoundIndex: 0,
+    longTermMemorySummaryPerson: 'third',
+    /* ===== 闲谈应用：长期记忆设置 END ===== */
 
     /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
     htmlCardEnabled: false,
@@ -1019,11 +1035,35 @@ export function normalizeChatPromptSettings(rawSettings) {
   const source = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
   const replyBubbleMin = Math.max(1, Math.floor(Number(source.replyBubbleMin ?? defaults.replyBubbleMin)) || defaults.replyBubbleMin);
   const replyBubbleMax = Math.max(replyBubbleMin, Math.floor(Number(source.replyBubbleMax ?? defaults.replyBubbleMax)) || defaults.replyBubbleMax);
-  /* [区域标注·已修改] 短期记忆轮数允许为 0；0 表示不发送历史正文，但时间感知仍保留必要时间戳上下文。 */
-  const rawShortTermMemoryRounds = Number(source.shortTermMemoryRounds ?? defaults.shortTermMemoryRounds);
-  const shortTermMemoryRounds = Number.isFinite(rawShortTermMemoryRounds)
-    ? Math.max(0, Math.floor(rawShortTermMemoryRounds))
-    : defaults.shortTermMemoryRounds;
+  /* ==========================================================================
+     [区域标注·已完成·本次4项修改：短期/长期记忆设置规范化]
+     说明：
+     1. 短期记忆轮数允许为空字符串；留空时发送链路按 0 轮处理，不强制回填默认数字。
+     2. 长期记忆轮数允许为空字符串；留空时不自动总结、不手动总结。
+     3. 长期记忆默认轮数已改为 3；自动总结开关按已保存布尔值恢复，只有用户手动关闭才关闭。
+     4. 这里只规范化设置对象，不读写 localStorage/sessionStorage，也不写双份存储兜底。
+     ========================================================================== */
+  const hasShortTermMemoryRounds = Object.prototype.hasOwnProperty.call(source, 'shortTermMemoryRounds');
+  const rawShortTermMemoryText = hasShortTermMemoryRounds ? String(source.shortTermMemoryRounds ?? '').trim() : '';
+  const rawShortTermMemoryRounds = Number(rawShortTermMemoryText);
+  const shortTermMemoryRounds = hasShortTermMemoryRounds && rawShortTermMemoryText === ''
+    ? ''
+    : (Number.isFinite(rawShortTermMemoryRounds)
+        ? Math.max(0, Math.floor(rawShortTermMemoryRounds))
+        : defaults.shortTermMemoryRounds);
+
+  const hasLongTermMemorySummaryRounds = Object.prototype.hasOwnProperty.call(source, 'longTermMemorySummaryRounds');
+  const rawLongTermMemorySummaryText = hasLongTermMemorySummaryRounds ? String(source.longTermMemorySummaryRounds ?? '').trim() : '';
+  const rawLongTermMemorySummaryRounds = Number(rawLongTermMemorySummaryText);
+  const longTermMemorySummaryRounds = hasLongTermMemorySummaryRounds && rawLongTermMemorySummaryText === ''
+    ? ''
+    : (Number.isFinite(rawLongTermMemorySummaryRounds)
+        ? Math.max(0, Math.floor(rawLongTermMemorySummaryRounds))
+        : defaults.longTermMemorySummaryRounds);
+  const rawLongTermMemoryLastAutoRoundIndex = Number(source.longTermMemoryLastAutoSummaryRoundIndex ?? defaults.longTermMemoryLastAutoSummaryRoundIndex);
+  const longTermMemorySummaryPerson = ['first', 'third'].includes(String(source.longTermMemorySummaryPerson || '').trim())
+    ? String(source.longTermMemorySummaryPerson || '').trim()
+    : defaults.longTermMemorySummaryPerson;
 
   const mountedStickerGroupIds = Array.isArray(source.mountedStickerGroupIds)
     ? Array.from(new Set(source.mountedStickerGroupIds.map(item => String(item || '').trim()).filter(Boolean)))
@@ -1064,6 +1104,23 @@ export function normalizeChatPromptSettings(rawSettings) {
     /* ===== 闲谈应用：短期记忆轮数设置 START ===== */
     shortTermMemoryRounds,
     /* ===== 闲谈应用：短期记忆轮数设置 END ===== */
+
+    /* ==========================================================================
+       [区域标注·已完成·本次4项修改：长期记忆设置规范化输出]
+       说明：
+       1. 输出长期记忆总结轮数、自动总结开关、手动总结运行态、上次自动总结轮次和总结人称。
+       2. 这些字段供记忆设置页渲染/保存，以及长期记忆自动总结入口读取。
+       3. 不使用 localStorage/sessionStorage，不写双份存储兜底。
+       ========================================================================== */
+    /* ===== 闲谈应用：长期记忆设置 START ===== */
+    longTermMemorySummaryRounds,
+    longTermMemoryAutoSummaryEnabled: Boolean(source.longTermMemoryAutoSummaryEnabled),
+    longTermMemoryManualSummaryEnabled: Boolean(source.longTermMemoryManualSummaryEnabled),
+    longTermMemoryLastAutoSummaryRoundIndex: Number.isFinite(rawLongTermMemoryLastAutoRoundIndex)
+      ? Math.max(0, Math.floor(rawLongTermMemoryLastAutoRoundIndex))
+      : defaults.longTermMemoryLastAutoSummaryRoundIndex,
+    longTermMemorySummaryPerson,
+    /* ===== 闲谈应用：长期记忆设置 END ===== */
 
     /* ===== 闲谈应用：HTML卡片开关设置 START ===== */
     htmlCardEnabled: Boolean(source.htmlCardEnabled),
