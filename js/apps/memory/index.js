@@ -44,13 +44,13 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-four-stats-mask-scroll-types';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-grand-summary';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为“四项统计一排显示、图标按钮透明缩小、弹窗滚动保持、记忆类型精简”刷新 CSS 版本号；
+   2. 本次为“单个应用记忆库大总结多选合并”刷新 CSS 版本号；
       如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
@@ -155,7 +155,7 @@ function getRoleCardMemoryCount(state, characterId) {
    3. 首页、“xxx的记忆库”和“闲谈应用”页标题均可按需作为按钮，点击后返回小手机桌面。
    4. 本区只负责 UI 渲染与 data-action 标记，不涉及任何持久化读写。
    ========================================================================== */
-function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '', rightActions = '' } = {}) {
+function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '', leftActions = '', rightActions = '' } = {}) {
   const titleNode = titleAction
     ? `<button class="memory-chat-top-bar__title" type="button" data-action="${escapeHtml(titleAction)}" aria-label="返回小手机桌面">${escapeHtml(title)}</button>`
     : `<div class="memory-chat-top-bar__title">${escapeHtml(title)}</div>`;
@@ -165,6 +165,7 @@ function renderMemoryTopBar({ title = 'Memory', backAction = '', titleAction = '
       ${backAction
         ? `<button class="memory-top-back" type="button" data-action="${escapeHtml(backAction)}" aria-label="返回上一级">${MEMORY_ICONS.back}</button>`
         : ''}
+      ${leftActions ? `<div class="memory-chat-top-bar__left-actions">${leftActions}</div>` : ''}
       <div class="memory-chat-top-bar__title-wrap">
         ${titleNode}
       </div>
@@ -186,6 +187,149 @@ function renderStats(items) {
       ${renderStatCard('允许注入', stats.injected)}
       ${renderStatCard('重点长期', stats.focusLongterm)}
       ${renderStatCard('补充候选', stats.supplemental)}
+    </section>
+  `;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事副API大总结调用区]
+   说明：
+   1. 大总结只读取设置应用“API设置”的副 API 配置，经 context.settings.getAll() 进入 SettingsStore/DB.js/IndexedDB 链路。
+   2. 不使用 localStorage/sessionStorage，不写双份存储，也不做长文本字段过滤兜底。
+   3. 请求结果由 index.js 写回 memory-db.js → AppDataStore → DB.js → IndexedDB。
+   ========================================================================== */
+const GRAND_SUMMARY_PROMPT = `你是【记忆档案管理员】。请清洗并重组以下 AI 记忆碎片：
+1. 时间轴合并：提取日期；同一日期的事件必须合并为一条，禁止重复日期标题；按时间先后排序。
+2. 去噪精简：剔除问候、吃喝拉撒、无意义打闹和流水账；保留关系确立、准确金额、重大争吵/和好、称呼变化、亲密互动（隐晦概括）、重要承诺或决定；每天不超过60字。
+3. 人称适配：原文以“我”互动为主则用第一人称；原文全是名字则用第三人称。
+4. 只输出纯文本，不要开场白或结束语；格式：[日期]:[事件概括]
+
+现在处理以下记忆文本：`;
+
+function trimApiSlash(url) {
+  return String(url || '').replace(/\/+$/, '');
+}
+
+function extractApiText(payload) {
+  return (
+    payload?.choices?.[0]?.message?.content ||
+    payload?.candidates?.[0]?.content?.parts?.[0]?.text ||
+    payload?.content?.find?.((item) => item?.type === 'text')?.text ||
+    payload?.content?.[0]?.text ||
+    ''
+  );
+}
+
+function extractApiError(payload, fallback = '副 API 请求失败') {
+  return payload?.error?.message || payload?.error?.msg || payload?.message || payload?.detail || fallback;
+}
+
+async function requestGrandSummaryOpenAiLike(profile, global, promptText) {
+  const response = await fetch(`${trimApiSlash(profile.baseUrl)}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${profile.apiKey}`
+    },
+    body: JSON.stringify({
+      model: profile.model,
+      temperature: Number(global?.temperature ?? 0.7),
+      max_tokens: Number(global?.maxTokens ?? 2048),
+      stream: false,
+      messages: [{ role: 'user', content: promptText }]
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(extractApiError(payload, `HTTP ${response.status}`));
+  return extractApiText(payload);
+}
+
+async function requestGrandSummaryGemini(profile, global, promptText) {
+  const response = await fetch(`${trimApiSlash(profile.baseUrl)}/models/${encodeURIComponent(profile.model)}:generateContent?key=${encodeURIComponent(profile.apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig: {
+        temperature: Number(global?.temperature ?? 0.7),
+        maxOutputTokens: Number(global?.maxTokens ?? 2048)
+      }
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(extractApiError(payload, `HTTP ${response.status}`));
+  return extractApiText(payload);
+}
+
+async function requestGrandSummaryClaude(profile, global, promptText) {
+  const response = await fetch(`${trimApiSlash(profile.baseUrl)}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': profile.apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: profile.model,
+      temperature: Number(global?.temperature ?? 0.7),
+      max_tokens: Number(global?.maxTokens ?? 2048),
+      messages: [{ role: 'user', content: promptText }]
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(extractApiError(payload, `HTTP ${response.status}`));
+  return extractApiText(payload);
+}
+
+async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems) {
+  const allSettings = await settingsStore?.getAll?.();
+  const api = allSettings?.api || {};
+  const profile = api.secondary || {};
+  const provider = profile.provider || 'gemini';
+
+  if (!profile.apiKey) throw new Error('请先在设置应用的 API设置 中填写副 API Key');
+  if (!profile.baseUrl) throw new Error('请先在设置应用的 API设置 中填写副 API 地址');
+  if (!profile.model) throw new Error('请先在设置应用的 API设置 中选择副 API 模型');
+
+  const memoryText = selectedItems
+    .map((item, index) => `记忆#${index + 1}\n日期：${formatDateTime(item.timelineAt)}\n摘要：${item.summary || ''}`)
+    .join('\n\n---\n\n');
+  const promptText = `${GRAND_SUMMARY_PROMPT}\n\n${memoryText}`;
+
+  const text = provider === 'gemini'
+    ? await requestGrandSummaryGemini(profile, api.global, promptText)
+    : provider === 'claude'
+      ? await requestGrandSummaryClaude(profile, api.global, promptText)
+      : await requestGrandSummaryOpenAiLike(profile, api.global, promptText);
+
+  const summary = String(text || '').trim();
+  if (!summary) throw new Error('副 API 没有返回大总结内容');
+  return summary;
+}
+
+/* ==========================================================================
+   [区域标注·已完成·旧事大总结多选操作条区]
+   说明：本区只渲染应用内自绘操作条，不使用浏览器原生弹窗/选择器；具体写入仍在点击事件里走 IndexedDB。
+   ========================================================================== */
+function renderGrandSummaryBar(state) {
+  if (!state.grandSummaryMode) return '';
+
+  const count = state.grandSummarySelectedIds?.size || 0;
+  const busy = Boolean(state.grandSummaryBusy);
+  const message = state.grandSummaryMessage || '选择 2 条以上记忆后，使用副 API 合并去重精简。';
+
+  return `
+    <section class="memory-grand-summary-bar" aria-live="polite">
+      <div class="memory-grand-summary-bar__main">
+        <span class="memory-grand-summary-bar__icon">${MEMORY_ICONS.summarize}</span>
+        <span class="memory-grand-summary-bar__text">已选 ${escapeHtml(count)} 条 · ${escapeHtml(message)}</span>
+      </div>
+      <div class="memory-grand-summary-bar__actions">
+        <button class="memory-secondary-btn memory-grand-summary-mini-btn" type="button" data-action="cancel-grand-summary" ${busy ? 'disabled' : ''}>取消</button>
+        <button class="memory-primary-btn memory-grand-summary-mini-btn" type="button" data-action="run-grand-summary" ${busy ? 'disabled' : ''}>
+          ${MEMORY_ICONS.summarize}<span>${busy ? '总结中' : '开始大总结'}</span>
+        </button>
+      </div>
     </section>
   `;
 }
@@ -323,6 +467,18 @@ function renderChatMemory(state) {
   const filteredItems = filterMemoryItems(items, state.search);
   const searchExpanded = Boolean(state.searchExpanded);
 
+  /* [区域标注·已完成·旧事大总结入口区]
+     说明：大总结按钮位于单个应用记忆库标题栏左侧，进入应用内多选模式；
+     后续调用设置应用 API设置 的副 API，不使用 localStorage/sessionStorage。 */
+  const leftActions = `
+    ${renderIconButton({
+      action: 'open-grand-summary',
+      icon: MEMORY_ICONS.summarize,
+      label: state.grandSummaryMode ? '正在大总结多选' : '大总结',
+      extraClass: `memory-top-action memory-grand-summary-entry ${state.grandSummaryMode ? 'is-active' : ''}`
+    })}
+  `;
+
   /* [区域标注·已完成·旧事记忆库标题栏操作按钮渲染区]
      说明：放大镜按钮在“+”左侧；“+”按钮复用原 open-add 应用内弹窗逻辑，右下角新增按钮已移除。 */
   const topBarActions = `
@@ -346,12 +502,17 @@ function renderChatMemory(state) {
         title: '闲谈应用',
         backAction: 'back-to-library',
         titleAction: 'close-memory',
+        leftActions,
         rightActions: topBarActions
       })}
       ${searchExpanded ? renderSearchPanel(state.search) : ''}
+      ${renderGrandSummaryBar(state)}
       ${renderStats(items)}
       <section class="memory-items">
-        ${renderTimeline(filteredItems)}
+        ${renderTimeline(filteredItems, {
+          grandSummaryMode: state.grandSummaryMode,
+          selectedIds: state.grandSummarySelectedIds
+        })}
       </section>
     </section>
   `;
@@ -406,6 +567,11 @@ export async function mount(container, context) {
     stage: 'home',
     search: createDefaultSearchState(),
     searchExpanded: false,
+    grandSummaryMode: false,
+    grandSummarySelectedIds: new Set(),
+    grandSummaryBusy: false,
+    grandSummaryMessage: '',
+    settings: context.settings,
     modal: null,
     timePicker: null,
     loading: true
@@ -515,6 +681,20 @@ export async function mount(container, context) {
 
   const getItemById = (id) => getSelectedItems(state).find((item) => item.id === id) || null;
 
+  const resetGrandSummaryState = () => {
+    state.grandSummaryMode = false;
+    state.grandSummarySelectedIds = new Set();
+    state.grandSummaryBusy = false;
+    state.grandSummaryMessage = '';
+  };
+
+  const getGrandSummarySelectedItems = () => {
+    const ids = state.grandSummarySelectedIds || new Set();
+    return getSelectedItems(state)
+      .filter((item) => ids.has(item.id))
+      .sort((a, b) => Number(a.timelineAt || 0) - Number(b.timelineAt || 0));
+  };
+
   const closeModal = () => {
     const scrollTop = Number(state.modal?.returnScrollTop) || getChatPageScrollTop();
     state.modal = null;
@@ -545,6 +725,7 @@ export async function mount(container, context) {
       state.stage = 'role-library';
       resetSearchState(state);
       state.searchExpanded = false;
+      resetGrandSummaryState();
       state.modal = null;
       renderApp(container, state);
       return;
@@ -555,6 +736,7 @@ export async function mount(container, context) {
       state.stage = 'chat-memory';
       resetSearchState(state);
       state.searchExpanded = false;
+      resetGrandSummaryState();
       state.modal = null;
       renderApp(container, state);
       return;
@@ -565,6 +747,7 @@ export async function mount(container, context) {
       state.selectedCharacterId = '';
       resetSearchState(state);
       state.searchExpanded = false;
+      resetGrandSummaryState();
       state.modal = null;
       renderApp(container, state);
       return;
@@ -574,8 +757,85 @@ export async function mount(container, context) {
       state.stage = 'role-library';
       resetSearchState(state);
       state.searchExpanded = false;
+      resetGrandSummaryState();
       state.modal = null;
       renderApp(container, state);
+      return;
+    }
+
+    if (action === 'open-grand-summary') {
+      state.grandSummaryMode = !state.grandSummaryMode;
+      state.grandSummarySelectedIds = new Set();
+      state.grandSummaryBusy = false;
+      state.grandSummaryMessage = state.grandSummaryMode ? '选择 2 条以上记忆后开始大总结。' : '';
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'cancel-grand-summary') {
+      resetGrandSummaryState();
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'toggle-grand-summary-item') {
+      if (!state.grandSummaryMode || state.grandSummaryBusy || !id) return;
+      const next = new Set(state.grandSummarySelectedIds || []);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      state.grandSummarySelectedIds = next;
+      state.grandSummaryMessage = '选择完成后点击“开始大总结”。';
+      renderApp(container, state);
+      return;
+    }
+
+    if (action === 'run-grand-summary') {
+      if (!state.grandSummaryMode || state.grandSummaryBusy) return;
+      const selectedItems = getGrandSummarySelectedItems();
+      if (selectedItems.length < 2) {
+        state.grandSummaryMessage = '至少选择 2 条记忆才能合并。';
+        toast.show('至少选择 2 条记忆');
+        renderApp(container, state);
+        return;
+      }
+
+      const scrollTop = getChatPageScrollTop();
+      state.grandSummaryBusy = true;
+      state.grandSummaryMessage = '正在调用副 API 合并去重精简...';
+      renderKeepingChatScroll(scrollTop);
+
+      try {
+        const summary = await runGrandSummaryWithSecondaryApi(state.settings, selectedItems);
+        const keeper = selectedItems[0];
+        await patchMemoryItem(state.db, state.selectedCharacterId, keeper.id, {
+          summary,
+          title: summary.slice(0, 18),
+          type: 'longterm',
+          isPermanent: true,
+          isHighPriority: true,
+          injectionEnabled: true,
+          timelineAt: keeper.timelineAt
+        });
+
+        const removeIds = selectedItems.map((item) => item.id).filter((itemId) => itemId !== keeper.id);
+        for (const removeId of removeIds) {
+          await removeMemoryItem(state.db, state.selectedCharacterId, removeId);
+        }
+
+        await refreshRecordsOnly();
+        resetGrandSummaryState();
+        toast.show('大总结已替换选中记忆');
+        renderKeepingChatScroll(scrollTop);
+      } catch (error) {
+        state.grandSummaryBusy = false;
+        state.grandSummaryMessage = error?.message || '大总结失败，请检查副 API 设置';
+        toast.show(state.grandSummaryMessage);
+        renderKeepingChatScroll(scrollTop);
+        console.error('[memory] grand summary failed', error);
+      }
       return;
     }
 

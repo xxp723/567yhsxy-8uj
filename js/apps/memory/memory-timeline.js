@@ -42,13 +42,26 @@ function renderStatusBadges(item) {
    2. 时间线卡片已去除三种记忆类型图标；右上角保留缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮。
    3. 底部保留“允许注入”iPhone 风格滑动开关；右下角保留缩小后的删除图标按钮，仍走原应用内确认弹窗入口，不使用原生浏览器弹窗。
    ========================================================================== */
-export function renderMemoryItem(item) {
+export function renderMemoryItem(item, { grandSummaryMode = false, selectedIds = new Set() } = {}) {
   const meta = getMemoryTypeMeta(item.type);
   const tags = Array.isArray(item.emotionTags) ? item.emotionTags : [];
   const typeLabel = item.type === 'longterm' && item.isPermanent ? '重点长期' : meta.label;
+  const selected = selectedIds.has(item.id);
 
   return `
-    <article class="memory-item-card" data-id="${escapeHtml(item.id)}">
+    <article class="memory-item-card ${grandSummaryMode ? 'is-grand-summary-selectable' : ''} ${selected ? 'is-grand-summary-selected' : ''}" data-id="${escapeHtml(item.id)}">
+      ${grandSummaryMode ? `
+        <button
+          class="memory-grand-summary-check ${selected ? 'is-selected' : ''}"
+          type="button"
+          data-action="toggle-grand-summary-item"
+          data-id="${escapeHtml(item.id)}"
+          aria-pressed="${selected ? 'true' : 'false'}"
+          aria-label="${selected ? '取消选择这条记忆' : '选择这条记忆'}"
+        >
+          ${selected ? MEMORY_ICONS.save : MEMORY_ICONS.clear}
+        </button>
+      ` : ''}
       <div class="memory-item-card__top">
         <div class="memory-item-card__body">
           <div class="memory-item-card__title-row">
@@ -80,7 +93,13 @@ export function renderMemoryItem(item) {
   `;
 }
 
-export function renderTimeline(items = []) {
+/* ==========================================================================
+   [区域标注·已完成·旧事大总结多选时间线渲染区]
+   说明：
+   1. 大总结模式下每条记忆显示应用内自绘选择按钮，不使用浏览器原生 checkbox/select。
+   2. 多选按钮只输出 data-action，由 index.js 统一调用副 API 与 IndexedDB 写入逻辑。
+   ========================================================================== */
+export function renderTimeline(items = [], options = {}) {
   const sorted = sortTimelineItems(items);
   if (!sorted.length) {
     return renderEmptyState(
@@ -91,8 +110,8 @@ export function renderTimeline(items = []) {
   }
 
   return `
-    <section class="memory-timeline">
-      ${sorted.map((item) => renderMemoryItem(item)).join('')}
+    <section class="memory-timeline ${options.grandSummaryMode ? 'is-grand-summary-mode' : ''}">
+      ${sorted.map((item) => renderMemoryItem(item, options)).join('')}
     </section>
   `;
 }
