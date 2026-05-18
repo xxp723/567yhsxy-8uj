@@ -79,7 +79,6 @@ export function renderTypeOptions(item = {}) {
   const activeKey = getFormTypeKey(item);
   return MEMORY_FORM_TYPE_OPTIONS.map((option) => `
     <button class="memory-type-option ${option.key === activeKey ? 'is-active' : ''}" type="button" data-action="choose-memory-type" data-type="${escapeHtml(option.type)}" data-permanent="${option.isPermanent ? 'true' : 'false'}" data-desc="${escapeHtml(option.desc)}">
-      ${option.icon}
       <span>${escapeHtml(option.label)}</span>
     </button>
   `).join('');
@@ -106,7 +105,7 @@ function renderFormToggle({ field, active, label, hint }) {
    1. 新增/编辑闲谈记忆的弹窗已完成模块化，后续改表单只改本区。
    2. “发生时间”已改为应用内时间选择器，不允许手动输入，不使用浏览器原生选择器。
    3. 新增/编辑弹窗底部“取消”按钮已移除，关闭请使用右上角 IconPark 关闭按钮。
-   4. 本区已去除事件标题输入；“记忆类型 + 开关”已精简为类型按钮 + 单个“允许注入”开关。
+   4. 本区已去除事件标题输入；“记忆类型 + 开关”已精简为类型文字按钮 + 单个“允许注入”开关，类型按钮不再展示图标。
    ========================================================================== */
 export function renderMemoryFormModal(state) {
   if (!state.modal || state.modal.kind !== 'form') return '';

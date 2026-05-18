@@ -38,8 +38,9 @@ function renderStatusBadges(item) {
 /* ==========================================================================
    [区域标注·已完成·旧事时间线条目渲染区]
    说明：
-   1. 每条记忆已去除事件标题展示，仅展示摘要、时间、情绪标签、注入状态与编辑入口。
-   2. 条目底部只保留“允许注入”滑动开关；重点长期由编辑弹窗中的类型按钮维护。
+   1. 每条记忆已去除事件标题展示，仅展示类型文字、时间、摘要、情绪标签与注入状态。
+   2. 时间线卡片已去除三种记忆类型图标；右上角保留“切换类型 / 羽毛笔编辑”IconPark 图标按钮。
+   3. 底部保留“允许注入”iPhone 风格滑动开关；删除仍走原应用内确认弹窗入口，不使用原生浏览器弹窗。
    ========================================================================== */
 export function renderMemoryItem(item) {
   const meta = getMemoryTypeMeta(item.type);
@@ -49,13 +50,12 @@ export function renderMemoryItem(item) {
   return `
     <article class="memory-item-card" data-id="${escapeHtml(item.id)}">
       <div class="memory-item-card__top">
-        <span class="memory-item-card__type" title="${escapeHtml(typeLabel)}">${meta.icon}</span>
         <div class="memory-item-card__body">
           <div class="memory-item-card__title-row">
             <div class="memory-item-card__meta">${escapeHtml(typeLabel)} · ${escapeHtml(formatDateTime(item.timelineAt))}</div>
-            <div class="memory-actions">
-              ${renderIconButton({ action: 'open-edit', id: item.id, icon: MEMORY_ICONS.edit, label: '编辑记忆' })}
-              ${renderIconButton({ action: 'open-delete', id: item.id, icon: MEMORY_ICONS.remove, label: '删除记忆', danger: true })}
+            <div class="memory-item-actions memory-item-actions--top">
+              ${renderIconButton({ action: 'cycle-memory-type', id: item.id, icon: MEMORY_ICONS.cycle, label: '切换记忆类型', extraClass: 'memory-card-action' })}
+              ${renderIconButton({ action: 'open-edit', id: item.id, icon: MEMORY_ICONS.feather, label: '编辑这段记忆', extraClass: 'memory-card-action' })}
             </div>
           </div>
           ${renderStatusBadges(item)}

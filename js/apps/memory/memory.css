@@ -688,7 +688,10 @@ button.memory-chat-top-bar__title:active {
 
 /* ==========================================================================
    [区域标注·已完成·旧事统计与时间线串联区]
-   说明：记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
+   说明：
+   1. 记忆事件按时间排序并通过竖线视觉串联，保持简洁杂志排版层级。
+   2. 单个应用记忆页底部已增加安全留白，滑到底部时最后一个记忆总结方框下边框完整可见。
+   3. 记忆卡片右上角已加入“切换类型 / 羽毛笔编辑”IconPark 图标按钮；本区已同步去除卡片内类型图标与右下角删除按钮样式残留。
    ========================================================================== */
 .memory-stats {
   display: grid;
@@ -734,7 +737,7 @@ button.memory-chat-top-bar__title:active {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0 16px 96px;
+  padding: 0 16px 128px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -748,6 +751,7 @@ button.memory-chat-top-bar__title:active {
   display: grid;
   gap: 10px;
   padding-left: 14px;
+  padding-bottom: 12px;
 }
 
 .memory-timeline::before {
@@ -809,6 +813,30 @@ button.memory-chat-top-bar__title:active {
   gap: 10px;
   align-items: flex-start;
   justify-content: space-between;
+}
+
+.memory-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.memory-item-actions--top {
+  margin-top: -3px;
+}
+
+.memory-card-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--memory-card) 72%, #ffffff);
+  border-color: color-mix(in srgb, var(--memory-border) 42%, transparent);
+}
+
+.memory-card-action svg {
+  width: 15px;
+  height: 15px;
 }
 
 .memory-item-card__title {
@@ -1266,9 +1294,13 @@ button.memory-chat-top-bar__title:active {
     gap: 10px;
   }
 
-  .memory-item-card__footer,
-  .memory-item-card__title-row {
+  .memory-item-card__footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .memory-item-card__title-row {
+    flex-direction: row;
+    align-items: flex-start;
   }
 }

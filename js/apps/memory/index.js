@@ -44,7 +44,7 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260517-memory-editor-injection-slim';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-card-actions-scroll';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
@@ -459,6 +459,53 @@ export async function mount(container, context) {
     state.identityGroups = buildIdentityGroups(state.masks, state.characters, state.recordsByCharacterId);
   };
 
+  /* ========================================================================
+     [区域标注·已完成·旧事记忆卡片快捷操作与滚动保持区]
+     说明：
+     1. 允许注入、切换类型均写入 memory-db.js → IndexedDB，不使用同步存储或双份兜底。
+     2. 允许注入与切换类型重新渲染后恢复单个应用记忆页滚动位置，避免页面闪回顶部。
+     3. 切换类型按“长期记忆 → 重点长期 → 待确认 → 长期记忆”循环。
+     ======================================================================== */
+  const getChatPageScrollTop = () => container.querySelector('.memory-chat-page')?.scrollTop || 0;
+
+  const renderKeepingChatScroll = (scrollTop) => {
+    renderApp(container, state);
+    const page = container.querySelector('.memory-chat-page');
+    if (page) {
+      page.scrollTop = scrollTop;
+      requestAnimationFrame(() => {
+        page.scrollTop = scrollTop;
+      });
+    }
+  };
+
+  const getNextMemoryTypePatch = (item) => {
+    if (item?.type === 'longterm' && !item.isPermanent) {
+      return {
+        type: 'longterm',
+        isPermanent: true,
+        isHighPriority: true,
+        injectionEnabled: true
+      };
+    }
+
+    if (item?.type === 'longterm' && item.isPermanent) {
+      return {
+        type: 'pending',
+        isPermanent: false,
+        isHighPriority: false,
+        injectionEnabled: false
+      };
+    }
+
+    return {
+      type: 'longterm',
+      isPermanent: false,
+      isHighPriority: false,
+      injectionEnabled: true
+    };
+  };
+
   const getItemById = (id) => getSelectedItems(state).find((item) => item.id === id) || null;
 
   const closeModal = () => {
@@ -627,12 +674,24 @@ export async function mount(container, context) {
       return;
     }
 
+    if (action === 'cycle-memory-type') {
+      const item = getItemById(id);
+      if (!item) return;
+      const scrollTop = getChatPageScrollTop();
+      await patchMemoryItem(state.db, state.selectedCharacterId, id, getNextMemoryTypePatch(item));
+      await refreshRecordsOnly();
+      toast.show('已切换记忆类型');
+      renderKeepingChatScroll(scrollTop);
+      return;
+    }
+
     if (action === 'toggle-injection') {
       const item = getItemById(id);
       if (!item) return;
+      const scrollTop = getChatPageScrollTop();
       await patchMemoryItem(state.db, state.selectedCharacterId, id, { injectionEnabled: !item.injectionEnabled });
       await refreshRecordsOnly();
-      renderApp(container, state);
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 
