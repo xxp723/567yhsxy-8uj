@@ -36,31 +36,27 @@ function renderStatusBadges(item) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事时间线条目渲染区]
+   [区域标注·已完成·本次旧事大总结卡片多选态渲染区]
    说明：
-   1. 每条记忆已去除事件标题展示，仅展示类型文字、时间、摘要、情绪标签与注入状态。
-   2. 时间线卡片已去除三种记忆类型图标；右上角保留缩小后的“切换类型 / 羽毛笔编辑”IconPark 图标按钮。
-   3. 底部保留“允许注入”iPhone 风格滑动开关；右下角保留缩小后的删除图标按钮，仍走原应用内确认弹窗入口，不使用原生浏览器弹窗。
+   1. 大总结模式下整张记忆卡片可点选，选中态用清晰的小圆点勾选与卡片描边显示。
+   2. 不再在页面主体显示大号“大总结”图标；底部操作栏负责全选、总结、删除。
+   3. 编辑、删除、开关动作仍只输出 data-action，由 index.js 统一走应用内逻辑与 IndexedDB 持久化。
    ========================================================================== */
 export function renderMemoryItem(item, { grandSummaryMode = false, selectedIds = new Set() } = {}) {
   const meta = getMemoryTypeMeta(item.type);
   const tags = Array.isArray(item.emotionTags) ? item.emotionTags : [];
   const typeLabel = item.type === 'longterm' && item.isPermanent ? '重点长期' : meta.label;
   const selected = selectedIds.has(item.id);
+  const grandSummaryAttrs = grandSummaryMode
+    ? `data-action="toggle-grand-summary-item" aria-pressed="${selected ? 'true' : 'false'}" aria-label="${selected ? '取消选择这条记忆' : '选择这条记忆'}"`
+    : '';
 
   return `
-    <article class="memory-item-card ${grandSummaryMode ? 'is-grand-summary-selectable' : ''} ${selected ? 'is-grand-summary-selected' : ''}" data-id="${escapeHtml(item.id)}">
+    <article class="memory-item-card ${grandSummaryMode ? 'is-grand-summary-selectable' : ''} ${selected ? 'is-grand-summary-selected' : ''}" data-id="${escapeHtml(item.id)}" ${grandSummaryAttrs}>
       ${grandSummaryMode ? `
-        <button
-          class="memory-grand-summary-check ${selected ? 'is-selected' : ''}"
-          type="button"
-          data-action="toggle-grand-summary-item"
-          data-id="${escapeHtml(item.id)}"
-          aria-pressed="${selected ? 'true' : 'false'}"
-          aria-label="${selected ? '取消选择这条记忆' : '选择这条记忆'}"
-        >
-          ${selected ? MEMORY_ICONS.save : MEMORY_ICONS.clear}
-        </button>
+        <span class="memory-grand-summary-check ${selected ? 'is-selected' : ''}" aria-hidden="true">
+          ${selected ? MEMORY_ICONS.save : ''}
+        </span>
       ` : ''}
       <div class="memory-item-card__top">
         <div class="memory-item-card__body">

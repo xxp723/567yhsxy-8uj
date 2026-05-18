@@ -44,13 +44,13 @@ import {
 } from './memory-ui.js';
 
 const MEMORY_CSS_ID = 'memory-app-css';
-const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-memory-delete-center-icons-up';
+const MEMORY_CSS_HREF = './js/apps/memory/memory.css?v=20260518-grand-summary-bottom-bar';
 
 /* ==========================================================================
    [区域标注·已完成·本次旧事防闪屏与样式版本刷新区]
    说明：
    1. 挂载旧事页面前先加载独立 CSS，避免应用窗口先显示无样式内容。
-   2. 本次为“删除确认居中 + 单个应用记忆库图标按钮放大”刷新 CSS 版本号；
+   2. 本次为“大总结入口右侧对齐 + 底部多选操作栏”刷新 CSS 版本号；
       如果页面里已有旧 link，会替换 href，避免继续使用缓存旧样式。
    ========================================================================== */
 function ensureMemoryStyles() {
@@ -308,28 +308,37 @@ async function runGrandSummaryWithSecondaryApi(settingsStore, selectedItems) {
 }
 
 /* ==========================================================================
-   [区域标注·已完成·旧事大总结多选操作条区]
-   说明：本区只渲染应用内自绘操作条，不使用浏览器原生弹窗/选择器；具体写入仍在点击事件里走 IndexedDB。
+   [区域标注·已完成·本次旧事大总结底部多选操作栏区]
+   说明：
+   1. 大总结模式参考聊天消息页多选界面，底部固定显示“全选 / 总结 / 删除”操作栏。
+   2. 本区只渲染应用内自绘按钮，不显示大号图标，不使用浏览器原生弹窗/选择器。
+   3. 总结与删除的持久化仍由点击事件统一走 memory-db.js → DB.js / IndexedDB。
    ========================================================================== */
-function renderGrandSummaryBar(state) {
+function renderGrandSummaryBar(state, visibleItems = []) {
   if (!state.grandSummaryMode) return '';
 
   const count = state.grandSummarySelectedIds?.size || 0;
   const busy = Boolean(state.grandSummaryBusy);
-  const message = state.grandSummaryMessage || '选择 2 条以上记忆后，使用副 API 合并去重精简。';
+  const total = Array.isArray(visibleItems) ? visibleItems.length : 0;
+  const allSelected = total > 0 && count >= total;
+  const message = state.grandSummaryMessage || '可多选/全选记忆后进行总结或删除。';
 
   return `
     <section class="memory-grand-summary-bar" aria-live="polite">
-      <div class="memory-grand-summary-bar__main">
-        <span class="memory-grand-summary-bar__icon">${MEMORY_ICONS.summarize}</span>
-        <span class="memory-grand-summary-bar__text">已选 ${escapeHtml(count)} 条 · ${escapeHtml(message)}</span>
-      </div>
-      <div class="memory-grand-summary-bar__actions">
-        <button class="memory-secondary-btn memory-grand-summary-mini-btn" type="button" data-action="cancel-grand-summary" ${busy ? 'disabled' : ''}>取消</button>
-        <button class="memory-primary-btn memory-grand-summary-mini-btn" type="button" data-action="run-grand-summary" ${busy ? 'disabled' : ''}>
-          ${MEMORY_ICONS.summarize}<span>${busy ? '总结中' : '开始大总结'}</span>
-        </button>
-      </div>
+      <span class="memory-grand-summary-bar__count">已选 ${escapeHtml(count)} 条</span>
+      <button class="memory-grand-summary-bar__btn" type="button" data-action="select-all-grand-summary" ${busy || !total ? 'disabled' : ''}>
+        ${MEMORY_ICONS.save}<span>${allSelected ? '取消全选' : '全选'}</span>
+      </button>
+      <button class="memory-grand-summary-bar__btn" type="button" data-action="run-grand-summary" ${busy ? 'disabled' : ''}>
+        ${MEMORY_ICONS.summarize}<span>${busy ? '总结中' : '总结'}</span>
+      </button>
+      <button class="memory-grand-summary-bar__btn memory-grand-summary-bar__btn--danger" type="button" data-action="delete-grand-summary-selected" ${busy || !count ? 'disabled' : ''}>
+        ${MEMORY_ICONS.remove}<span>删除</span>
+      </button>
+      <button class="memory-grand-summary-bar__btn" type="button" data-action="cancel-grand-summary" ${busy ? 'disabled' : ''}>
+        ${MEMORY_ICONS.close}<span>取消</span>
+      </button>
+      <span class="memory-grand-summary-bar__message">${escapeHtml(message)}</span>
     </section>
   `;
 }
@@ -467,21 +476,16 @@ function renderChatMemory(state) {
   const filteredItems = filterMemoryItems(items, state.search);
   const searchExpanded = Boolean(state.searchExpanded);
 
-  /* [区域标注·已完成·旧事大总结入口区]
-     说明：大总结按钮位于单个应用记忆库标题栏左侧，进入应用内多选模式；
+  /* [区域标注·已完成·本次旧事大总结入口右侧对齐区]
+     说明：大总结按钮已移到标题栏右侧，与“搜索”和“+”保持同组间距，避免和左侧返回“<”按钮重叠；
      后续调用设置应用 API设置 的副 API，不使用 localStorage/sessionStorage。 */
-  const leftActions = `
+  const topBarActions = `
     ${renderIconButton({
       action: 'open-grand-summary',
       icon: MEMORY_ICONS.summarize,
       label: state.grandSummaryMode ? '正在大总结多选' : '大总结',
       extraClass: `memory-top-action memory-grand-summary-entry ${state.grandSummaryMode ? 'is-active' : ''}`
     })}
-  `;
-
-  /* [区域标注·已完成·旧事记忆库标题栏操作按钮渲染区]
-     说明：放大镜按钮在“+”左侧；“+”按钮复用原 open-add 应用内弹窗逻辑，右下角新增按钮已移除。 */
-  const topBarActions = `
     ${renderIconButton({
       action: 'toggle-search',
       icon: MEMORY_ICONS.search,
@@ -502,11 +506,9 @@ function renderChatMemory(state) {
         title: '闲谈应用',
         backAction: 'back-to-library',
         titleAction: 'close-memory',
-        leftActions,
         rightActions: topBarActions
       })}
       ${searchExpanded ? renderSearchPanel(state.search) : ''}
-      ${renderGrandSummaryBar(state)}
       ${renderStats(items)}
       <section class="memory-items">
         ${renderTimeline(filteredItems, {
@@ -514,6 +516,7 @@ function renderChatMemory(state) {
           selectedIds: state.grandSummarySelectedIds
         })}
       </section>
+      ${renderGrandSummaryBar(state, filteredItems)}
     </section>
   `;
 }
@@ -725,6 +728,8 @@ export async function mount(container, context) {
     return true;
   };
 
+  const getGrandSummarySelectableItems = () => filterMemoryItems(getSelectedItems(state), state.search);
+
   const getGrandSummarySelectedItems = () => {
     const ids = state.grandSummarySelectedIds || new Set();
     return getSelectedItems(state)
@@ -815,6 +820,18 @@ export async function mount(container, context) {
       return;
     }
 
+    if (action === 'select-all-grand-summary') {
+      if (!state.grandSummaryMode || state.grandSummaryBusy) return;
+      const selectableItems = getGrandSummarySelectableItems();
+      const selectableIds = selectableItems.map((item) => item.id);
+      const current = state.grandSummarySelectedIds || new Set();
+      const allSelected = selectableIds.length > 0 && selectableIds.every((itemId) => current.has(itemId));
+      state.grandSummarySelectedIds = allSelected ? new Set() : new Set(selectableIds);
+      state.grandSummaryMessage = allSelected ? '已取消全选。' : '已全选当前筛选结果。';
+      renderApp(container, state);
+      return;
+    }
+
     if (action === 'toggle-grand-summary-item') {
       if (!state.grandSummaryMode || state.grandSummaryBusy || !id) return;
       const next = new Set(state.grandSummarySelectedIds || []);
@@ -826,6 +843,32 @@ export async function mount(container, context) {
       state.grandSummarySelectedIds = next;
       state.grandSummaryMessage = '选择完成后点击“开始大总结”。';
       renderApp(container, state);
+      return;
+    }
+
+    if (action === 'delete-grand-summary-selected') {
+      if (!state.grandSummaryMode || state.grandSummaryBusy) return;
+      const selectedItems = getGrandSummarySelectedItems();
+      if (!selectedItems.length) {
+        state.grandSummaryMessage = '请先选择要删除的记忆。';
+        toast.show('请先选择记忆');
+        renderApp(container, state);
+        return;
+      }
+
+      const scrollTop = getChatPageScrollTop();
+      state.grandSummaryBusy = true;
+      state.grandSummaryMessage = '正在删除选中的记忆...';
+      renderKeepingChatScroll(scrollTop);
+
+      for (const item of selectedItems) {
+        await removeMemoryItem(state.db, state.selectedCharacterId, item.id);
+      }
+
+      await refreshRecordsOnly();
+      resetGrandSummaryState();
+      toast.show('已删除选中记忆');
+      renderKeepingChatScroll(scrollTop);
       return;
     }
 

@@ -1322,6 +1322,128 @@ button.memory-chat-top-bar__title:active {
   object-fit: cover;
 }
 
+/* ==========================================================================
+   [区域标注·已完成·本次旧事大总结入口与底部多选栏样式区]
+   说明：
+   1. 大总结入口已加入标题栏右侧操作组，和搜索、“+”保持统一间距，避免与左侧返回“<”重叠。
+   2. 大总结模式不显示页面主体大号图标；参考聊天多选交互，在页面底部固定显示“全选 / 总结 / 删除 / 取消”操作栏。
+   3. 记忆卡片多选态使用应用内自绘圆点勾选和卡片描边，不使用浏览器原生 checkbox/select。
+   ========================================================================== */
+.memory-chat-top-bar__actions .memory-grand-summary-entry {
+  margin-right: 2px;
+}
+
+.memory-chat-page:has(.memory-grand-summary-bar) .memory-items {
+  padding-bottom: 104px;
+}
+
+.memory-timeline.is-grand-summary-mode {
+  padding-bottom: 8px;
+}
+
+.memory-item-card.is-grand-summary-selectable {
+  cursor: pointer;
+  padding-left: 42px;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.memory-item-card.is-grand-summary-selected {
+  border-color: var(--memory-primary);
+  background: color-mix(in srgb, var(--memory-primary) 12%, var(--memory-card));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--memory-primary) 18%, transparent);
+}
+
+.memory-grand-summary-check {
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--memory-border) 55%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--memory-card) 86%, #fff);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.memory-grand-summary-check.is-selected {
+  border-color: var(--memory-primary);
+  background: var(--memory-primary);
+}
+
+.memory-grand-summary-check svg {
+  width: 10px;
+  height: 10px;
+}
+
+.memory-grand-summary-bar {
+  position: sticky;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 18;
+  margin: 0 10px 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 55%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--memory-card) 92%, #ffffff);
+  box-shadow: 0 -8px 26px rgba(74, 52, 42, 0.12);
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(0, auto));
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.memory-grand-summary-bar__count {
+  color: var(--memory-text);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.memory-grand-summary-bar__btn {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--memory-border) 62%, transparent);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--memory-bg);
+  color: var(--memory-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.memory-grand-summary-bar__btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.memory-grand-summary-bar__btn--danger {
+  color: #9d3f31;
+}
+
+.memory-grand-summary-bar__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.memory-grand-summary-bar__message {
+  grid-column: 1 / -1;
+  color: var(--memory-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .memory-plan,
 .memory-plan-card,
 .memory-header,
