@@ -6,10 +6,10 @@
  */
 
 import {
+  TAB_ICONS,
   dbPut,
   escapeHtml,
-  getCurrentChatPromptSettingsKey,
-  renderModalNotice
+  getCurrentChatPromptSettingsKey
 } from './chat-utils.js';
 import { upsertMemoryItem } from '../memory/memory-db.js';
 
@@ -422,11 +422,47 @@ function normalizeMemorySummaryPayload(rawPayload = {}, fallbackText = '') {
   };
 }
 
+/* ========================================================================
+   [区域标注·已完成·长期记忆总结结果应用内弹窗]
+   说明：
+   1. 手动总结与自动总结的完成/失败提示统一走闲谈应用 chat-modal 样式。
+   2. 不使用 alert/confirm/prompt，不使用浏览器原生选择器。
+   3. 仅展示总结结果，不读写任何持久化存储；旧事写入仍由 memory-db.js / DB.js / IndexedDB 处理。
+   ======================================================================== */
+function showLongTermMemoryResultModal(container, { title = '长期记忆', message = '' } = {}) {
+  const mask = container?.querySelector?.('[data-role="modal-mask"]');
+  const panel = container?.querySelector?.('[data-role="modal-panel"]');
+  if (!mask || !panel) return false;
+
+  panel.innerHTML = `
+    <!-- [区域标注·已完成·长期记忆总结结果弹窗] -->
+    <div class="chat-modal-header">
+      <span>${escapeHtml(title)}</span>
+      <button class="chat-modal-close" data-action="close-modal" type="button">${TAB_ICONS.close}</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="chat-modal-hint">${escapeHtml(message || '操作已完成。')}</div>
+    </div>
+    <div class="chat-modal-footer">
+      <button class="chat-modal-btn chat-modal-btn--primary" data-action="close-modal" type="button">知道了</button>
+    </div>
+  `;
+  mask.classList.remove('is-hidden');
+  return true;
+}
+
 function showLongTermMemoryCompletionModal(container, { source = 'auto', count = 1 } = {}) {
-  renderModalNotice(
-    container,
-    `${source === 'manual' ? '手动总结' : '自动总结'}完成：已保存 ${count} 条长期记忆到旧事应用。`
-  );
+  showLongTermMemoryResultModal(container, {
+    title: `${source === 'manual' ? '手动总结' : '自动总结'}完成`,
+    message: `已保存 ${count} 条长期记忆到旧事应用。`
+  });
+}
+
+function showLongTermMemoryFailureModal(container, { source = 'auto', message = '' } = {}) {
+  showLongTermMemoryResultModal(container, {
+    title: `${source === 'manual' ? '手动总结' : '自动总结'}失败`,
+    message: message || '没有生成可保存的长期记忆，请检查副 API 配置后重试。'
+  });
 }
 
 async function summarizeAndSaveLongTermMemory({
@@ -437,6 +473,7 @@ async function summarizeAndSaveLongTermMemory({
   source = 'auto',
   rounds = []
 } = {}) {
+  const summaryTriggeredAt = Date.now();
   const session = getCurrentSessionForMemory(state);
   if (!session || !rounds.length) return false;
 
@@ -468,7 +505,7 @@ async function summarizeAndSaveLongTermMemory({
     id: `chat-longterm-${String(state.activeMaskId || 'default')}-${String(session.id || 'chat')}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     title: parsed.title,
     summary: parsed.summary,
-    timelineAt: Number(rounds[rounds.length - 1]?.startedAt || Date.now()) || Date.now()
+    timelineAt: summaryTriggeredAt
   });
 
   showLongTermMemoryCompletionModal(container, { source, count: 1 });
@@ -516,11 +553,17 @@ export async function maybeRunAutoLongTermMemorySummary({
     if (saved) {
       state.chatPromptSettings.longTermMemoryLastAutoSummaryRoundIndex = totalRounds;
       await persistLongTermMemorySettings(state, db);
+    } else {
+      showLongTermMemoryFailureModal(container, { source: 'auto' });
     }
 
     return saved;
   } catch (error) {
     console.warn('[Chat] 长期记忆自动总结失败:', error);
+    showLongTermMemoryFailureModal(container, {
+      source: 'auto',
+      message: error?.message || '请检查副 API 配置后重试。'
+    });
     return false;
   }
 }
@@ -803,11 +846,14 @@ export async function handleChatMemorySettingsClick({
     try {
       const saved = await runManualLongTermMemorySummary({ state, container, db, settingsManager });
       if (!saved) {
-        renderModalNotice(container, '手动总结失败：没有生成可保存的长期记忆。');
+        showLongTermMemoryFailureModal(container, { source: 'manual' });
       }
     } catch (error) {
       console.warn('[Chat] 长期记忆手动总结失败:', error);
-      renderModalNotice(container, `手动总结失败：${error?.message || '请检查副 API 配置后重试。'}`);
+      showLongTermMemoryFailureModal(container, {
+        source: 'manual',
+        message: error?.message || '请检查副 API 配置后重试。'
+      });
     } finally {
       state.chatPromptSettings.longTermMemoryManualSummaryEnabled = false;
       await persistLongTermMemorySettings(state, db);
